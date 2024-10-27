@@ -1,0 +1,268 @@
+<html>
+<head>
+<title>UgDrawingDimensions.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProDimension.h>
+#include &lt;ProArray.h>
+#include &lt;ProSolid.h>
+<a name="anchor-2"></a>#include &lt;ProFeature.h>
+#include &lt;ProPoint.h>
+#include &lt;ProMessage.h>
+#include &lt;ProAnnotation.h>
+int UsrPointGeomitemsCollect(ProSolid solid, ProGeomitem **points);
+<a name="anchor-3"></a>
+/*====================================================================*\ 
+FUNCTION: UsrDimPoints() 
+PURPOSE  : Command to create a table of datum points 
+\*====================================================================*/ 
+<a name="anchor-4"></a>int UsrDimPoints() {
+     ProError status;
+     ProSelection *sel, csys_sel;
+     int n_sel, n_points, p;
+     ProSolid solid;
+<a name="anchor-5"></a>     ProGeomitem csys_geom;
+     ProAsmcomppath csys_comppath;
+     ProMatrix trf;
+     ProVector csys_pos, csys_3dpos, pnt_pos, dim_pos, outline[2];
+     ProGeomitem *points;
+<a name="anchor-6"></a>     ProDrawing drawing;
+     ProSelection *attachments;
+     ProDimSense *senses;
+     ProDimension dimension, vbase_dim, hbase_dim;
+     ProPoint point;
+<a name="anchor-7"></a>     ProView view;
+     ProFileName msgfil;
+
+     ProStringToWstring (msgfil, &quot;msg_ugdrawing.txt&quot;);
+    
+<a name="anchor-8"></a>     ProMdlCurrentGet((ProMdl*)&amp;drawing);
+
+/*--------------------------------------------------------------------*\ 
+    Select a coordinate system. This defines the model (the top one
+     in that view), and the common attachments for the dimensions 
+<a name="anchor-9"></a>\*--------------------------------------------------------------------*/ 
+     ProMessageDisplay(msgfil,&quot;USER Select csys&quot;);
+     status = ProSelect(&quot;csys&quot;,1,NULL,NULL,NULL,NULL,&amp;sel,&amp;n_sel);
+     if(status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+         return(0);
+<a name="anchor-10"></a>
+     ProSelectionCopy(sel[0], &amp;csys_sel);
+     ProSelectionModelitemGet(csys_sel, &amp;csys_geom);
+     ProSelectionAsmcomppathGet(csys_sel, &amp;csys_comppath);
+
+<a name="anchor-11"></a>/*--------------------------------------------------------------------*\ 
+    Get the root solid 
+\*--------------------------------------------------------------------*/ 
+     if(csys_comppath.table_num > 0)
+         solid = csys_comppath.owner;
+<a name="anchor-12"></a>
+     else
+         solid = csys_geom.owner;
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-13"></a>    Get a list of datum points in the model 
+\*--------------------------------------------------------------------*/ 
+     UsrPointGeomitemsCollect(solid, &amp;points);
+     ProArraySizeGet(points, &amp;n_points);
+     if(n_points &lt; 1)
+<a name="anchor-14"></a>         return(0);
+
+/*--------------------------------------------------------------------*\ 
+    Calculate where the csys is located on the drawing 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-15"></a>     ProSelectionPoint3dGet(csys_sel, csys_pos);
+     if(csys_comppath.table_num > 0)
+     {
+         ProAsmcomppathTrfGet(&amp;csys_comppath, PRO_B_TRUE, trf);
+         ProPntTrfEval(csys_pos, trf, csys_pos);
+<a name="anchor-16"></a>     }
+
+     memcpy(csys_3dpos, csys_pos, sizeof(ProVector));     
+     ProSelectionViewGet(csys_sel, &amp;view);     
+     ProDrawingViewTransformGet(drawing, view, PRO_B_TRUE, trf);     
+<a name="anchor-17"></a>     ProPntTrfEval(csys_pos, trf, csys_pos);
+
+/*--------------------------------------------------------------------*\ 
+    Get the view outline 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-18"></a>     ProDrawingViewOutlineGet(drawing, view, outline);
+
+/*--------------------------------------------------------------------*\ 
+    Allocate the attachment arrays 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-19"></a>     ProArrayAlloc(2, sizeof(ProSelection), 1, (ProArray*)&amp;attachments);
+     ProArrayAlloc(2, sizeof(ProDimSense), 1, (ProArray*)&amp;senses);
+
+/*--------------------------------------------------------------------*\ 
+    For each datum point... 
+<a name="anchor-20"></a>\*--------------------------------------------------------------------*/ 
+    for(p=0;p&lt;n_points;p++)
+     { 
+/*--------------------------------------------------------------------*\ 
+        Calculate the position of the point on the drawing 
+<a name="anchor-21"></a>\*--------------------------------------------------------------------*/ 
+         ProPointInit(points[p].owner, points[p].id, &amp;point);
+         ProPointCoordGet(point, pnt_pos);
+         ProPntTrfEval(pnt_pos, trf, pnt_pos);
+
+<a name="anchor-22"></a>/*--------------------------------------------------------------------*\ 
+        Set up the &quot;sense&quot; information for the point attachment
+         (Specify a vertical dimension) 
+\*--------------------------------------------------------------------*/ 
+         senses[0].type = PRO_DIM_SNS_TYP_PNT;
+<a name="anchor-23"></a>         senses[0].sense = PRO_POINT_TYP_CENTER;
+         senses[0].orient_hint = PRO_DIM_ORNT_VERT;
+
+/*--------------------------------------------------------------------*\ 
+        Set up the &quot;sense&quot; information for the csys attachment 
+<a name="anchor-24"></a>\*--------------------------------------------------------------------*/ 
+         senses[1].type = PRO_DIM_SNS_TYP_PNT;
+         senses[1].sense = PRO_POINT_TYP_CENTER;
+         senses[1].orient_hint = PRO_DIM_ORNT_NONE;
+
+<a name="anchor-25"></a>/*--------------------------------------------------------------------*\ 
+        Set the attachment information 
+\*--------------------------------------------------------------------*/ 
+         ProSelectionAlloc(NULL, &amp;points[p], &amp;attachments[0]);
+         ProSelectionViewSet(view, &amp;attachments[0]);
+<a name="anchor-26"></a>         ProSelectionCopy(csys_sel, &amp;attachments[1]);
+
+/*--------------------------------------------------------------------*\ 
+        Calculate the dim position to be just to the left of the
+         drawing view, midway between the point and csys 
+<a name="anchor-27"></a>\*--------------------------------------------------------------------*/ 
+         dim_pos[0] = outline[0][0] - 20.0;
+         dim_pos[1] = (csys_pos[1] + pnt_pos[1]) / 2.0;
+         dim_pos[2] = 0.0;
+
+<a name="anchor-28"></a>/*--------------------------------------------------------------------*\ 
+        Create and display the dimension 
+\*--------------------------------------------------------------------*/ 
+         ProDrawingDimCreate(drawing, attachments, senses, dim_pos,
+                         PRO_B_FALSE, &amp;dimension);
+<a name="anchor-29"></a>
+         ProAnnotationShow ((ProAnnotation*)&amp;dimension, NULL, view);
+
+/*--------------------------------------------------------------------*\ 
+        If this is the first vertical dim, create an ordinate base
+<a name="anchor-30"></a>        line from it, else just convert it to ordinate 
+\*--------------------------------------------------------------------*/ 
+         if(p==0)
+             ProDrawingOrdbaselineCreate(drawing, &amp;dimension,
+                         csys_3dpos, &amp;vbase_dim);
+<a name="anchor-31"></a>         else
+             ProDrawingDimToOrdinate(drawing, &amp;dimension, &amp;vbase_dim);
+
+/*--------------------------------------------------------------------*\ 
+        Set this dimension to be horizontal 
+<a name="anchor-32"></a>\*--------------------------------------------------------------------*/ 
+         senses[0].orient_hint = PRO_DIM_ORNT_HORIZ;
+
+/*--------------------------------------------------------------------*\ 
+        Calculate the dim position to be just to the bottom of the
+<a name="anchor-33"></a>        drawing view, midway between the point and csys 
+\*--------------------------------------------------------------------*/ 
+         dim_pos[0] = (csys_pos[0] + pnt_pos[0]) / 2.0;
+         dim_pos[1] = outline[0][1] - 20.0;
+
+<a name="anchor-34"></a>/*--------------------------------------------------------------------*\ 
+        Create and display the dimension 
+\*--------------------------------------------------------------------*/ 
+         ProDrawingDimCreate(drawing, attachments, senses,dim_pos,
+                         PRO_B_FALSE, &amp;dimension);
+<a name="anchor-35"></a>
+         ProAnnotationShow ((ProAnnotation*)&amp;dimension, NULL, view);
+
+/*--------------------------------------------------------------------*\ 
+        If this is the first horizontal dim, create an ordinate base line
+<a name="anchor-36"></a>         from it, else just convert it to ordinate 
+\*--------------------------------------------------------------------*/ 
+         if(p==0)
+             ProDrawingOrdbaselineCreate(drawing, &amp;dimension,
+                         csys_3dpos, &amp;hbase_dim);
+<a name="anchor-37"></a>
+         else
+             ProDrawingDimToOrdinate(drawing, &amp;dimension, &amp;hbase_dim);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-38"></a>        Free the attachment selection objects 
+\*--------------------------------------------------------------------*/ 
+         ProSelectionFree(&amp;attachments[0]);
+         ProSelectionFree(&amp;attachments[1]);
+     }
+<a name="anchor-39"></a>
+    return(1);
+ }
+
+/*====================================================================*\ 
+<a name="anchor-40"></a>FUNCTION : UsrPointAddAction() 
+PURPOSE  : Visit action function called for each datum point 
+\*====================================================================*/ 
+ProError UsrPointAddAction(
+     ProGeomitem *geomitem,
+<a name="anchor-41"></a>     ProError filt_status,
+     ProAppData data) 
+{ 
+/*--------------------------------------------------------------------*\ 
+    Add the point to the array 
+<a name="anchor-42"></a>\*--------------------------------------------------------------------*/ 
+    ProArrayObjectAdd((ProArray*)data, -1, 1, geomitem);
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-43"></a>/*====================================================================*\ 
+FUNCTION : UsrFeatureGetPointsAction() 
+PURPOSE: Visit action function called for each feature 
+\*====================================================================*/ 
+ProError UsrFeatureGetPointsAction(
+<a name="anchor-44"></a>     ProFeature *feature,
+     ProError filt_status,
+     ProAppData data)
+ {
+     ProFeatStatus fstatus;
+<a name="anchor-45"></a>
+/*--------------------------------------------------------------------*\ 
+    If the feature is not active, skip it 
+\*--------------------------------------------------------------------*/ 
+     ProFeatureStatusGet(feature, &amp;fstatus);
+<a name="anchor-46"></a>     if(fstatus != PRO_FEAT_ACTIVE)
+         return(PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\ 
+    Visit the datum points in the feature 
+<a name="anchor-47"></a>\*--------------------------------------------------------------------*/ 
+     ProFeatureGeomitemVisit(feature, PRO_POINT, UsrPointAddAction, NULL,
+                              data);
+
+     return(PRO_TK_NO_ERROR);
+<a name="anchor-48"></a> }
+
+/*====================================================================*\ 
+FUNCTION : UsrPointGeomitemsCollect() 
+PURPOSE: Collect an array of datum points in the solid 
+<a name="anchor-49"></a>\*====================================================================*/ 
+int UsrPointGeomitemsCollect(
+     ProSolid solid,
+     ProGeomitem **points)
+ { 
+<a name="anchor-50"></a>   /*--------------------------------------------------------------------*\ 
+    Allocate the array 
+   \*--------------------------------------------------------------------*/ 
+    ProArrayAlloc(0, sizeof(ProGeomitem), 1, (ProArray*)points);
+
+<a name="anchor-51"></a>   /*--------------------------------------------------------------------*\ 
+    Visit the features 
+   \*--------------------------------------------------------------------*/ 
+    ProSolidFeatVisit(solid, UsrFeatureGetPointsAction, NULL, points);
+ }
+</pre>
+</body>
+</html>

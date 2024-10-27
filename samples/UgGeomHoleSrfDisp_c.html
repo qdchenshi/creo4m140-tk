@@ -1,0 +1,139 @@
+<html>
+<head>
+<title>UgGeomHoleSrfDisp.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProFeature.h>
+<a name="anchor-2"></a>#include &lt;ProFeatType.h>
+#include &lt;ProGeomitem.h>
+#include &lt;ProUtil.h>
+
+/*---------------------- Application Includes ------------------------*/
+<a name="anchor-3"></a>#include &lt;TestError.h>
+
+/*---------------------- Function Prototypes -------------------------*/
+ProError UserHoleSrfDisp();
+ProError UserEdgeNeighborsEval(ProGeomitem *p_handle,
+<a name="anchor-4"></a>                               ProError    status,
+                               ProAppData  app_data);
+ 
+typedef struct uappdata
+{
+<a name="anchor-5"></a>    int feature_id;
+    ProMdl solid;
+} UappData;
+
+
+<a name="anchor-6"></a>/*============================================================================*\
+    Function: UserHoleSrfDisp()
+    Purpose: Display surfaces adjacent to selected hole
+\*============================================================================*/
+ProError UserHoleSrfDisp()
+<a name="anchor-7"></a>{
+    int n, sel_count, feat_id;
+    ProFeattype feat_type;
+    ProError status;
+    ProFeature feat;
+<a name="anchor-8"></a>    ProFileName msgfile;
+    ProSelection *psels=NULL;
+    ProMdl p_solid;
+    ProModelitem p_surf, p_edge, p_mdl_item;
+    UappData appdata;
+<a name="anchor-9"></a>
+/*----------------------------------------------------------------------------*\
+	Prompt user for hole selection
+\*----------------------------------------------------------------------------*/
+    ProStringToWstring(msgfile,&quot;msg_uggeom.txt&quot;);
+<a name="anchor-10"></a>    ProMessageDisplay(msgfile,&quot;USER Select Hole Feature:&quot;);
+    if((ProSelect(&quot;feature&quot;,1,NULL,NULL,NULL,NULL,&amp;psels, &amp;sel_count) != 
+       PRO_TK_NO_ERROR) || (sel_count &lt; 1))
+       return((int) PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-11"></a>    status = ProSelectionModelitemGet(psels[0],&amp;p_mdl_item);
+    ERROR_CHECK( &quot;UserHoleSrfDisp&quot;, &quot;ProSelectionModelitemGet&quot;, status );
+    
+/*----------------------------------------------------------------------------*\
+	Verify selection of hole feature
+<a name="anchor-12"></a>\*----------------------------------------------------------------------------*/
+    status = ProFeatureTypeGet(&amp;p_mdl_item,&amp;feat_type);
+    ERROR_CHECK( &quot;UserHoleSrfDisp&quot;, &quot;ProFeatureTypeGet&quot;, status );
+
+    if(feat_type != PRO_FEAT_HOLE)
+<a name="anchor-13"></a>    {
+       ProMessageDisplay(msgfile,&quot;USER Feature is not a hole&quot;);
+       ERROR_CHECK( &quot;UserHoleSrfDisp&quot;, &quot;ProMessageDisplay(Feature is not)&quot;,status);
+       return((int) PRO_TK_GENERAL_ERROR);
+    }
+<a name="anchor-14"></a>
+/*----------------------------------------------------------------------------*\
+	Use UappData structure (cast to ProAppData type)
+        to pass data between visit function and here
+\*----------------------------------------------------------------------------*/
+<a name="anchor-15"></a>
+    appdata.feature_id = p_mdl_item.id;
+    status = ProMdlCurrentGet(&amp;(appdata.solid));
+    ERROR_CHECK( &quot;UserHoleSrfDisp&quot;, &quot;ProMdlCurrentGet&quot;,status);
+    status = ProFeatureGeomitemVisit(&amp;p_mdl_item, PRO_EDGE,UserEdgeNeighborsEval,NULL,
+<a name="anchor-16"></a>                                    (ProAppData) &amp;appdata);
+    ERROR_CHECK( &quot;UserHoleSrfDisp&quot;, &quot;ProFeatureGeomitemVisit&quot;,status);
+    return((int)PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-17"></a>/*============================================================================*\
+    Function : UserEdgeNeighborsEval()
+    Purpose  : Evaluate surfaces adjacent to edges by comparing feature id 
+	       to feature id of hole
+\*============================================================================*/
+<a name="anchor-18"></a>ProError UserEdgeNeighborsEval(
+  ProGeomitem *p_edge,   /* input from visit function */
+  ProError status,       /* output from filter function */
+  ProAppData p_inp       /* user application data - input in this case */
+)
+<a name="anchor-19"></a>{
+    int n;
+    UappData *ud = (UappData *)p_inp;
+    ProEdge this_edge, next1, next2;
+    ProSurface surf[2];
+<a name="anchor-20"></a>    ProGeomitem geom_item;
+    ProSelection selection;
+    ProFeature feat;
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-21"></a>    Look at both surfaces attached to this edge and  highlight whichever
+    doesn't belong to this feature.
+\*----------------------------------------------------------------------------*/
+    status = ProGeomitemToEdge(p_edge,&amp;this_edge);
+    ERROR_CHECK(&quot;UserEdgeNeighborsEval&quot;,&quot;ProGeomitemToEdge&quot;,status);
+<a name="anchor-22"></a>    status = ProEdgeNeighborsGet(this_edge,&amp;next1,&amp;next2,&amp;surf[0],&amp;surf[1]);
+    ERROR_CHECK(&quot;UserEdgeNeighborsEval&quot;,&quot;ProEdgeNeighborsGet&quot;,status);
+    for(n=0; n &lt; 2; n++)
+    {
+        status = ProSurfaceToGeomitem(ud->solid,surf[n],&amp;geom_item);
+<a name="anchor-23"></a>        ERROR_CHECK(&quot;UserEdgeNeighborsEval&quot;,&quot;ProSurfaceToGeomitem&quot;,status);
+        status = ProGeomitemFeatureGet(&amp;geom_item,&amp;feat);
+        ERROR_CHECK(&quot;UserEdgeNeighborsEval&quot;,&quot;ProGeomitemFeatureGet&quot;,status);
+        if(feat.id != ud->feature_id)
+        {
+<a name="anchor-24"></a>	    status = ProSelectionAlloc(NULL,&amp;geom_item,&amp;selection);
+	    ERROR_CHECK(&quot;UserEdgeNeighborsEval&quot;,&quot;ProSelectionAlloc&quot;,status);
+	    status = ProSelectionHighlight(selection, PRO_COLOR_HIGHLITE);
+	    ERROR_CHECK(&quot;UserEdgeNeighborsEval&quot;,&quot;ProSelectionHighlight&quot;,status);
+	    status = ProSelectionFree(&amp;selection);
+<a name="anchor-25"></a>	    ERROR_CHECK(&quot;UserEdgeNeighborsEval&quot;,&quot;ProSelectionFree&quot;,status);
+        }
+    }
+      
+    return((int)PRO_TK_NO_ERROR);
+<a name="anchor-26"></a>}
+</pre>
+</body>
+</html>

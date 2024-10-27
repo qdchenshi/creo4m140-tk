@@ -1,0 +1,1742 @@
+<html>
+<head>
+<title>TestExtobj.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-2"></a>#include &lt;ProToolkit.h>
+#include &lt;ProArray.h>
+#include &lt;ProExtobj.h>
+#include &lt;ProExtobjCB.h>
+#include &lt;ProExtobjDisp.h>
+<a name="anchor-3"></a>#include &lt;ProExtobjRef.h>
+#include &lt;ProExtobjSel.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMdl.h>
+#include &lt;ProModelitem.h>
+<a name="anchor-4"></a>#include &lt;ProObjects.h>
+#include &lt;ProSelection.h>
+#include &lt;ProSurface.h>
+#include &lt;ProUtil.h>
+#include &lt;ProVerstamp.h>
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-6"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilFiles.h&quot;
+<a name="anchor-7"></a>#include &quot;UtilMatrix.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;UtilVisit.h&quot;
+<a name="anchor-8"></a>#include &quot;UtilMath.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+<a name="anchor-9"></a>#ifndef FALSE
+#define FALSE 0
+#endif
+
+#ifndef TRUE
+<a name="anchor-10"></a>#define TRUE  1
+#endif
+
+#define ARROW_NUM_SEGMENTS 9
+#define HW	0.05
+<a name="anchor-11"></a>#define HL	0.3
+
+/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+<a name="anchor-12"></a>typedef struct
+{
+    int   ref_id;
+    char *stamp_str;
+} RefVersion;
+<a name="anchor-13"></a>
+typedef struct
+{
+    ProMdl model;
+    FILE *fp;
+<a name="anchor-14"></a>    ProLinedata *lines;
+    ProMatrix *transf;
+} AppData;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-15"></a>Application global/external data
+\*--------------------------------------------------------------------*/
+static ProExtobjClass mesh_class, arrow_class, extobjclass;
+
+static ProMatrix identity_matrix = { {1.0, 0.0, 0.0, 0.0},
+<a name="anchor-16"></a>                                     {0.0, 1.0, 0.0, 0.0},
+                                     {0.0, 0.0, 1.0, 0.0},
+                                     {0.0, 0.0, 0.0, 1.0}};
+static RefVersion *refVersionTable = NULL;
+static int tableSize = 0;
+<a name="anchor-17"></a>static AppData app_data;
+static ProLinedata line;
+static int is_mesh_class = 0, is_arrow_class = 0;
+
+typedef int (*ProUtilMeshAct)( 
+<a name="anchor-18"></a>    ProSurface *surface,
+    double uv[2],	/* I - The UV values */
+    int start,		/* I - 1 if this is the start of a new mesh line */
+    ProAppData tmp_app_data);
+    
+<a name="anchor-19"></a>ProError ProTestDeleteExtobj(
+    ProExtobj *p_extobj,    /*In  : external object */
+    ProError  status,	    /*In  : status */ 
+    ProAppData app_data);    /*In  : app data */
+    
+<a name="anchor-20"></a>/*====================================================================*\
+    FUNCTION :	ProTestMeshPointsAct()
+    PURPOSE  :	Test function (to be called at each surface mesh point)
+		to draw and dump mesh coordinates.
+\*====================================================================*/
+<a name="anchor-21"></a>int ProTestMeshPointsAct(
+    ProSurface *surface,/* I - The surface */
+    double uv[2],	/* I - The UV values */
+    int start,		/* I - 1 if this is the start of a new mesh line */
+    ProAppData tmp_app_data)/* I - General data */
+<a name="anchor-22"></a>			/* Return 0        - continue,
+				  non-zero - terminate meshing */
+{
+    ProError status;
+    ProVector xyz, der1[2], der2[3], normal;
+<a name="anchor-23"></a>    AppData *data = (AppData *) tmp_app_data;
+
+    if (data->lines == NULL)
+    {
+        status = ProArrayAlloc (0, sizeof (ProLinedata), 1,
+<a name="anchor-24"></a>            (ProArray*)&amp;(data->lines));
+    }
+/*--------------------------------------------------------------------*\
+    Get the xyz location for this surface point.
+\*--------------------------------------------------------------------*/
+<a name="anchor-25"></a>    status = ProSurfaceXyzdataEval(*surface, uv, xyz, der1, der2, normal);
+    TEST_CALL_REPORT(&quot;ProSurfaceXyzdataEval()&quot;, &quot;ProTestMeshAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-26"></a>    Draw (or start) a line
+\*--------------------------------------------------------------------*/
+    if(start)
+    {
+        line.end1[0] = xyz[0];
+<a name="anchor-27"></a>        line.end1[1] = xyz[1];
+        line.end1[2] = xyz[2];
+        line.type = PRO_ENT_LINE;
+    }
+    else
+<a name="anchor-28"></a>    {
+        line.end2[0] = xyz[0];
+        line.end2[1] = xyz[1];
+        line.end2[2] = xyz[2];
+	status = ProArrayObjectAdd((ProArray*)&amp;(data->lines), PRO_VALUE_UNUSED,
+<a name="anchor-29"></a>            1, &amp;line);
+        line.end1[0] = xyz[0];
+        line.end1[1] = xyz[1];
+        line.end1[2] = xyz[2];
+        line.type = PRO_ENT_LINE;
+<a name="anchor-30"></a>    }
+
+    return(0);
+}
+
+<a name="anchor-31"></a>/*====================================================================*\
+    FUNCTION :	ProTestArrowPointsAct()
+    PURPOSE  :	Test function (to be called at each surface arrow point)
+		to draw and dump arrow coordinates.
+\*====================================================================*/
+<a name="anchor-32"></a>int ProTestArrowPointsAct(
+    ProSurface *surface,/* I - The surface */
+    double uv[2],	/* I - The UV values */
+    int start,		/* I - 1 if this is the start of a new mesh line */
+    ProAppData tmp_app_data)/* I - General data */
+<a name="anchor-33"></a>			/* Return 0        - continue,
+				  non-zero - terminate meshing */
+{
+    ProError status;
+    ProVector xyz, der1[2], der2[3], normal;
+<a name="anchor-34"></a>    AppData *data = (AppData *) tmp_app_data;
+    ProMatrix transf;
+
+    if (data->transf == NULL)
+    {
+<a name="anchor-35"></a>        status = ProArrayAlloc (0, sizeof (ProMatrix), 1,
+            (ProArray*)&amp;(data->transf));
+    }
+/*--------------------------------------------------------------------*\
+    Get the xyz location for this surface point.
+<a name="anchor-36"></a>\*--------------------------------------------------------------------*/
+    status = ProSurfaceXyzdataEval(*surface, uv, xyz, der1, der2, normal);
+    TEST_CALL_REPORT(&quot;ProSurfaceXyzdataEval()&quot;, &quot;ProTestMeshAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+    ProUtilVectorNormalize (normal, normal);
+<a name="anchor-37"></a>    ProUtilVectorNormalize (der1[0], der1[0]);
+    ProUtilVectorNormalize (der1[1], der1[1]);
+    status = ProUtilVectorsToTransf (normal, der1[0], der1[1], xyz, transf);
+    status = ProArrayObjectAdd((ProArray*)&amp;(data->transf), PRO_VALUE_UNUSED,
+            1, &amp;transf);
+<a name="anchor-38"></a>    return(0);
+}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilCollectMeshPoints()
+<a name="anchor-39"></a>    PURPOSE  :  Make a UV mesh over a specified surface
+\*====================================================================*/
+int ProUtilCollectMeshPoints(
+    ProSurface *surface,
+    double resolution,          /* The step size in model unit */
+<a name="anchor-40"></a>    int nlines[2],              /* No of U and V lines */
+    ProUtilMeshAct action,      /* Function to call at each mesh point */
+    ProAppData tmp_app_data)    /* General data */
+{
+    ProError status;
+<a name="anchor-41"></a>    ProGeomitemdata  *sdata;
+    double u_min, v_min, u_max, v_max, u_step, v_step, u_res, v_res,
+                                uv[2], last_uv[2], der1[2][3];
+    ProUvStatus uvstatus;
+    int start = 0, error;
+<a name="anchor-42"></a>    ProSolid solid;
+
+    solid = (ProSolid) ((AppData*)tmp_app_data)->model;
+/*--------------------------------------------------------------------*\
+    Get the maxmum and minium U and V for the surface
+<a name="anchor-43"></a>\*--------------------------------------------------------------------*/
+    status = ProSurfaceDataGet(*surface, &amp;sdata);
+    TEST_CALL_REPORT(&quot;ProSurfaceDataGet()&quot;,&quot;ProUtilSurfaceMesh()&quot;,
+                        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-44"></a>/*--------------------------------------------------------------------*\
+    Calculate the U and V parameters
+\*--------------------------------------------------------------------*/
+    u_min = sdata->data.p_surface_data->uv_min[0];
+    v_min = sdata->data.p_surface_data->uv_min[1];
+<a name="anchor-45"></a>    u_max = sdata->data.p_surface_data->uv_max[0];
+    v_max = sdata->data.p_surface_data->uv_max[1];
+
+    ProGeomitemdataFree(&amp;sdata);
+    TEST_CALL_REPORT(&quot;ProGeomitemdataFree()&quot;,&quot;ProUtilSurfaceMesh()&quot;,
+<a name="anchor-46"></a>                        status, status != PRO_TK_NO_ERROR);
+
+    u_step = (u_max - u_min) / (nlines[0] + 1);
+    v_step = (v_max - v_min) / (nlines[1] + 1);
+
+<a name="anchor-47"></a>/*--------------------------------------------------------------------*\
+    Calculate the U and V resolution to give the correct resolution in
+    model units.
+\*--------------------------------------------------------------------*/
+    uv[0] = (u_max + u_min) / 2.0;
+<a name="anchor-48"></a>    uv[1] = (v_max + v_min) / 2.0;
+    status = ProSurfaceXyzdataEval(*surface, uv, NULL, der1, NULL, NULL);
+    TEST_CALL_REPORT(&quot;ProSurfaceXyzdataEval()&quot;,&quot;ProUtilSurfaceMesh()&quot;,
+                        status, status != PRO_TK_NO_ERROR);
+    if (resolution == 0.0)
+<a name="anchor-49"></a>    {
+        u_res = u_step;
+        v_res = v_step;
+    }
+    else
+<a name="anchor-50"></a>    {
+        u_res = resolution / ProUtilVectorLength(der1[0]);
+        v_res = resolution / ProUtilVectorLength(der1[1]);
+    }
+/*--------------------------------------------------------------------*\
+<a name="anchor-51"></a>        Adjust the upper limits to ensure that we get a mesh line at the max
+\*--------------------------------------------------------------------*/
+        u_max += u_res/ 2.00;
+        v_max += v_res/ 2.00;
+    
+<a name="anchor-52"></a>
+/*--------------------------------------------------------------------*\
+    Do lines of constant U
+\*--------------------------------------------------------------------*/
+    
+<a name="anchor-53"></a>    for(uv[0] =  u_min;
+        uv[0] &lt;= u_max;
+        uv[0] += u_step)
+    {
+        last_uv[1] = -1000000.0;
+<a name="anchor-54"></a>        for(uv[1] =  v_min;
+            uv[1] &lt;= v_max;
+            uv[1] += v_res)
+        {
+/*--------------------------------------------------------------------*\
+<a name="anchor-55"></a>            If this point is outside the domain, skip it
+\*--------------------------------------------------------------------*/
+            status = ProSurfaceUvpntVerify(solid, *surface, uv, &amp;uvstatus);
+            TEST_CALL_REPORT(&quot;ProSurfaceUvpntVerify()&quot;, &quot;ProUtilSurfaceMesh()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-56"></a>            if(uvstatus == PRO_UV_OUTSIDE)
+            {
+                continue;
+            }
+
+<a name="anchor-57"></a>            start = (uv[1] - last_uv[1]) > (u_res + EPSM6);
+
+            error = (*action)(surface, uv, start, tmp_app_data);
+            if(error != 0)
+                return(error);
+<a name="anchor-58"></a>
+            last_uv[1] = uv[1];
+        }
+    }
+/*--------------------------------------------------------------------*\
+<a name="anchor-59"></a>    Return if collect arrow points
+\*--------------------------------------------------------------------*/ 
+if (u_step == u_res &amp;&amp; v_step == v_res)
+    return (0);
+/*--------------------------------------------------------------------*\
+<a name="anchor-60"></a>    Do lines of constant V
+\*--------------------------------------------------------------------*/
+    for(uv[1] =  v_min;
+        uv[1] &lt;= v_max;
+        uv[1] += v_step)
+<a name="anchor-61"></a>    {
+        last_uv[0] = -1000000.0;
+        for(uv[0] =  u_min;
+            uv[0] &lt;= u_max;
+            uv[0] += u_res)
+<a name="anchor-62"></a>        {
+/*--------------------------------------------------------------------*\
+            If this point is outside the domain, skip it
+\*--------------------------------------------------------------------*/
+            status = ProSurfaceUvpntVerify(solid, *surface, uv, &amp;uvstatus);
+<a name="anchor-63"></a>            TEST_CALL_REPORT(&quot;ProSurfaceUvpntVerify()&quot;, &quot;ProUtilSurfaceMesh()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+            if(uvstatus == PRO_UV_OUTSIDE)
+            {
+                continue;
+<a name="anchor-64"></a>            }
+
+            start = (uv[0] - last_uv[0]) > (v_res + EPSM6);
+            
+            error = (*action)(surface, uv, start, tmp_app_data);
+<a name="anchor-65"></a>            if(error != 0)
+                return(error);
+
+            last_uv[0] = uv[0];
+        }
+<a name="anchor-66"></a>    }
+
+    return(0);
+}
+
+<a name="anchor-67"></a>/*====================================================================*\
+  Function : FindRefIndex
+  Purpose  : Searches the refVersionTable for an external object reference
+             If an entry does not exist, space is allocated for it
+\*====================================================================*/
+<a name="anchor-68"></a>int FindRefIndex( int ref_id)
+{
+    int i;
+
+    if( refVersionTable == NULL )
+<a name="anchor-69"></a>    {
+	refVersionTable = (RefVersion *)calloc(1, sizeof(RefVersion));
+	refVersionTable[0].ref_id = ref_id;
+	refVersionTable[0].stamp_str = NULL;
+
+<a name="anchor-70"></a>	tableSize = 1;
+	i = 0;
+    }
+    else
+    {
+<a name="anchor-71"></a>	i = 0;
+
+	while( i &lt; tableSize &amp;&amp; refVersionTable[i].ref_id != ref_id )
+	    i++;
+        
+<a name="anchor-72"></a>	if( i >= tableSize )
+	{
+	    refVersionTable = (RefVersion *)realloc((void *)refVersionTable,
+						    (sizeof(RefVersion) * (i+1)));
+	    refVersionTable[i].ref_id = ref_id;
+<a name="anchor-73"></a>	    refVersionTable[i].stamp_str = NULL;
+
+	    tableSize++;
+	}
+    }
+<a name="anchor-74"></a>
+    return(i);
+}
+
+/*====================================================================*\
+<a name="anchor-75"></a>  Function : get_vectors
+  Purpose  : Get components of local system
+\*====================================================================*/
+void get_vectors(
+    double loc_sys[4][3],   /* Matrix to extract data from.
+<a name="anchor-76"></a>                                 == NULL iff unit
+                                  transformation is needed. */
+    double  x_vec[3],       /* == NULL iff no output needed */
+    double  y_vec[3],       /* == NULL iff no output needed */
+    double  z_vec[3],       /* == NULL iff no output needed */
+<a name="anchor-77"></a>    double  o_pnt[3])       /* == NULL iff no output needed */
+
+{
+
+    if( loc_sys != NULL )
+<a name="anchor-78"></a>    {
+        if( x_vec != NULL )
+        {
+            x_vec[0] = loc_sys[0][0];
+            x_vec[1] = loc_sys[1][0];
+<a name="anchor-79"></a>            x_vec[2] = loc_sys[2][0];
+        }
+        if( y_vec != NULL )
+        {
+            y_vec[0] = loc_sys[0][1];
+<a name="anchor-80"></a>            y_vec[1] = loc_sys[1][1];
+            y_vec[2] = loc_sys[2][1];
+        }
+        if( z_vec != NULL )
+        {
+<a name="anchor-81"></a>            z_vec[0] = loc_sys[0][2];
+            z_vec[1] = loc_sys[1][2];
+            z_vec[2] = loc_sys[2][2];
+        }
+        if( o_pnt != NULL )
+<a name="anchor-82"></a>        {
+            o_pnt[0] = loc_sys[3][0];
+            o_pnt[1] = loc_sys[3][1];
+            o_pnt[2] = loc_sys[3][2];
+        }
+<a name="anchor-83"></a>    }
+    else
+    {
+        if( x_vec != NULL )
+        {
+<a name="anchor-84"></a>            x_vec[0] = 1.0;
+            x_vec[1] = 0.0;
+            x_vec[2] = 0.0;
+        }
+        if( y_vec != NULL )
+<a name="anchor-85"></a>        {
+            y_vec[0] = 0.0;
+            y_vec[1] = 1.0;
+            y_vec[2] = 0.0;
+        }
+<a name="anchor-86"></a>        if( z_vec != NULL )
+        {
+            z_vec[0] = 0.0;
+            z_vec[1] = 0.0;
+            z_vec[2] = 1.0;
+<a name="anchor-87"></a>        }
+        if( o_pnt != NULL )
+        {
+            o_pnt[0] = 0.0;
+            o_pnt[1] = 0.0;
+<a name="anchor-88"></a>            o_pnt[2] = 0.0;
+        }
+    }
+}
+
+<a name="anchor-89"></a>
+/*====================================================================*\
+  Function : put_vectors
+  Purpose  : Put components of a local system
+  Note     : NULL may be passed instead of any of:
+<a name="anchor-90"></a>             x_vec , y_vec, z_vec, o_pnt.
+             In this case corresponding elements in
+             loc_sys WILL NOT BE SET
+\*====================================================================*/
+void put_vectors(
+<a name="anchor-91"></a>    double  loc_sys[4][3],	/* Matrix to put data into.       */
+    double  x_vec[3],
+    double  y_vec[3],
+    double  z_vec[3],
+    double  o_pnt[3])
+<a name="anchor-92"></a>
+{
+
+    if( x_vec != NULL )
+    {
+<a name="anchor-93"></a>        loc_sys[0][0] = x_vec[0];
+        loc_sys[1][0] = x_vec[1];
+        loc_sys[2][0] = x_vec[2];
+    }
+    if( y_vec != NULL )
+<a name="anchor-94"></a>    {
+        loc_sys[0][1] = y_vec[0];
+        loc_sys[1][1] = y_vec[1];
+        loc_sys[2][1] = y_vec[2];
+    }
+<a name="anchor-95"></a>    if( z_vec != NULL )
+    {
+        loc_sys[0][2] = z_vec[0];
+        loc_sys[1][2] = z_vec[1];
+        loc_sys[2][2] = z_vec[2];
+<a name="anchor-96"></a>    }
+    if( o_pnt != NULL )
+    {
+        loc_sys[3][0] = o_pnt[0];
+        loc_sys[3][1] = o_pnt[1];
+<a name="anchor-97"></a>        loc_sys[3][2] = o_pnt[2];
+    }
+}
+
+/*====================================================================*\
+<a name="anchor-98"></a>  Function : matrix_to_matrix4
+  Purpose  : Convert 4x3 matrix to a 4x4 matrix
+\*====================================================================*/
+void matrix_to_matrix4(double input[4][3], ProMatrix output)
+{
+<a name="anchor-99"></a>   int i,j;
+
+    if( input != NULL )
+    {
+        for (i = 0; i &lt; 3; i++)
+<a name="anchor-100"></a>        {
+            for (j = 0; j &lt; 3; j++)
+                output[i][j] = input[j][i];
+            output[i][3] = 0.0;
+        }
+<a name="anchor-101"></a>
+        for (j = 0; j &lt; 3; j++)
+            output[3][j] = input[3][j];
+
+        output[3][3] = 1.0;
+<a name="anchor-102"></a>    }
+    else
+    {
+	ProUtilMatrixCopy(identity_matrix, output);
+    }
+<a name="anchor-103"></a>}
+
+/*====================================================================*\
+  Function : ProTestExtobjCB
+  Purpose  : Callback function for external object
+<a name="anchor-104"></a>\*====================================================================*/
+ProError ProTestExtobjCB(ProExtobj **extobject, ProExtobjClass *extobjclass,
+			 ProAppData *ntf_data, int n_objects)
+{
+    return( PRO_TK_NO_ERROR );
+<a name="anchor-105"></a>}
+
+/*====================================================================*\
+  Function : ProTestExtobjRefCB
+  Purpose  : Callback function for external object references
+<a name="anchor-106"></a>\*====================================================================*/
+ProError ProTestExtobjRefCB(ProExtobj **extobject, ProExtobjClass *extobjclass,
+			    ProAppData *ntf_data, int n_objects)
+{
+    ProError status;
+<a name="anchor-107"></a>    ProMdl model;
+    char fname[PRO_NAME_SIZE];
+
+    if( app_data.fp == NULL )
+    {
+<a name="anchor-108"></a>        status = ProMdlCurrentGet(&amp;model);
+        TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestExtobj()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+        ProTestQcrName(&amp;model, (char *)EXTERNAL_OBJ, fname);
+        app_data.fp = PTApplsUnicodeFopen(fname, &quot;a&quot;);
+<a name="anchor-109"></a>
+        ProTKFprintf(app_data.fp, &quot;External object reference has been modified, deleted, or &quot;
+                    &quot;suppressed...\n&quot;);
+	fclose(app_data.fp);
+	app_data.fp = NULL;
+<a name="anchor-110"></a>    }
+    else
+    {
+        ProTKFprintf(app_data.fp, &quot;External object reference has been modified, deleted, or &quot;
+                    &quot;suppressed...\n&quot;);
+<a name="anchor-111"></a>    }
+
+    return( PRO_TK_NO_ERROR );
+}
+
+<a name="anchor-112"></a>/*====================================================================*\
+  Function : ProTestExtobjRefCBDelete
+  Purpose  : Callback function for external object references
+\*====================================================================*/
+ProError ProTestExtobjRefCBDelete(ProExtobj **extobject, 
+<a name="anchor-113"></a>    ProExtobjClass *extobjclass,
+    ProAppData *ntf_data, int n_objects)
+{
+    ProError status;
+    int i;
+<a name="anchor-114"></a>    
+    TEST_CALL_REPORT (&quot;ProExtobjCBAct()&quot;, &quot;ProTestExtobjRefCBDelete()&quot;,
+        PRO_TK_NO_ERROR, 0);
+    for (i = 0; i &lt; n_objects; i++)
+    {
+<a name="anchor-115"></a>        status = ProTestDeleteExtobj (extobject[i], PRO_TK_NO_ERROR,
+            (ProAppData)NULL);
+    }
+    
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-116"></a>}
+
+/*====================================================================*\
+  Function : ProTestExtobjRefCBModify
+  Purpose  : Callback function for external object references
+<a name="anchor-117"></a>\*====================================================================*/
+ProError ProTestExtobjRefCBModify(ProExtobj **extobject, 
+    ProExtobjClass *extobjclass,
+    ProAppData *ntf_data, int n_objects)
+{
+<a name="anchor-118"></a>    TEST_CALL_REPORT (&quot;ProExtobjCBAct()&quot;, &quot;ProTestExtobjRefCBModify()&quot;,
+        PRO_TK_NO_ERROR, 0);
+        
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-119"></a>
+/*====================================================================*\
+  Function : ProTestExtobjOwnCBModify
+  Purpose  : Callback function for external object references
+\*====================================================================*/
+<a name="anchor-120"></a>ProError ProTestExtobjOwnCBModify(ProExtobj **extobject, 
+    ProExtobjClass *extobjclass,
+    ProAppData *ntf_data, int n_objects)
+{
+
+<a name="anchor-121"></a>    TEST_CALL_REPORT (&quot;ProExtobjCBAct()&quot;, &quot;ProTestExtobjOwnCBModify()&quot;,
+        PRO_TK_NO_ERROR, 0);
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-122"></a>/*====================================================================*\
+  Function : ProTestExtobjOwnCBSuppress
+  Purpose  : Callback function for external object references
+\*====================================================================*/
+ProError ProTestExtobjOwnCBSuppress(ProExtobj **extobject, 
+<a name="anchor-123"></a>    ProExtobjClass *extobjclass,
+    ProAppData *ntf_data, int n_objects)
+{
+
+    TEST_CALL_REPORT (&quot;ProExtobjCBAct()&quot;, &quot;ProTestExtobjOwnCBSuppress()&quot;,
+<a name="anchor-124"></a>        PRO_TK_NO_ERROR, 0);
+    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-125"></a>  Function : ProTestExtobjOwnCBDelete
+  Purpose  : Callback function for external object references
+\*====================================================================*/
+ProError ProTestExtobjOwnCBDelete(ProExtobj **extobject, 
+    ProExtobjClass *extobjclass,
+<a name="anchor-126"></a>    ProAppData *ntf_data, int n_objects)
+{
+
+    TEST_CALL_REPORT (&quot;ProExtobjCBAct()&quot;, &quot;ProTestExtobjOwnCBDelete()&quot;,
+        PRO_TK_NO_ERROR, 0);
+<a name="anchor-127"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+  Function : ProTestExtobjRefCBSuppress
+<a name="anchor-128"></a>  Purpose  : Callback function for external object references
+\*====================================================================*/
+ProError ProTestExtobjRefCBSuppress(ProExtobj **extobject, 
+    ProExtobjClass *extobjclass,
+    ProAppData *ntf_data, int n_objects)
+<a name="anchor-129"></a>{
+    ProError status;
+    int i ;
+    ProWExtobjdata extobj_data;
+    ProExtobjDispprops props[1] = {PRO_EXTOBJ_BLANKED};
+<a name="anchor-130"></a>    
+    TEST_CALL_REPORT (&quot;ProExtobjCBAct()&quot;, &quot;ProTestExtobjRefCBSuppress()&quot;,
+        PRO_TK_NO_ERROR, 0);
+    for (i = 0; i &lt; n_objects; i++)
+    {
+<a name="anchor-131"></a>        status = ProExtobjdataGet (extobject[i], extobjclass, 
+            PRO_EXTOBJDAT_DISPLAY, &amp;extobj_data);
+        TEST_CALL_REPORT (&quot;ProExtobjdataGet()&quot;, &quot;ProTestExtobjRefCBSuppress()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProDispdatPropsSet (extobj_data, props, 1);
+<a name="anchor-132"></a>        TEST_CALL_REPORT (&quot;ProDispdatPropsSet()&quot;, 
+            &quot;ProTestExtobjRefCBSuppress()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProExtobjdataSet (extobject[i], extobjclass, 
+            extobj_data);
+<a name="anchor-133"></a>        TEST_CALL_REPORT (&quot;ProExtobjdataSet()&quot;, &quot;ProTestExtobjRefCBSuppress()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+    }
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-134"></a>
+/*====================================================================*\
+  Function : ProTestExtobjCreate
+  Purpose  : Creates an external object 
+\*====================================================================*/
+<a name="anchor-135"></a>int ProTestExtobjCreate (
+    ProSelection surface,
+    ProExtobjClass *class_name, 
+    ProLinedata *lines,
+    ProMatrix   transf)
+<a name="anchor-136"></a>{
+    ProError    status;
+    ProMdl      model;
+    ProModelitem    owner;
+    ProExtobj   result_obj;
+<a name="anchor-137"></a>    ProWExtobjdata disp_data = NULL;
+    int         lines_num, i, j, num_box;
+    ProCurvedata *curvedata;
+    ProWExtobjdata	sel_data = NULL;
+    ProSelbox		sel_box[16], *sel_box_ptr;
+<a name="anchor-138"></a>    ProWExtobjRef  newRef2;
+    static ProExtobjDispprops props[2] = {PRO_EXTOBJ_SPIN_INVARIANT,
+				      PRO_EXTOBJ_ZOOM_INVARIANT};
+       
+    status = ProMdlCurrentGet (&amp;model);
+<a name="anchor-139"></a>    TEST_CALL_REPORT (&quot;ProMdlCurrentGet()&quot;, &quot;ProTestExtobjCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMdlToModelitem(model, &amp;owner);
+    TEST_CALL_REPORT(&quot;ProModelitemInit()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+        status != PRO_TK_NO_ERROR);
+<a name="anchor-140"></a>    status = ProExtobjCreate(class_name, &amp;owner, &amp;result_obj);
+    TEST_CALL_REPORT(&quot;ProExtobjCreate()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProExtobjExtidSet (&amp;result_obj, 12345);
+    TEST_CALL_REPORT(&quot;ProExtobjExtidSet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+<a name="anchor-141"></a>					status != PRO_TK_NO_ERROR);
+    status = ProExtobjExtidGet (&amp;result_obj, &amp;i);
+    TEST_CALL_REPORT(&quot;ProExtobjExtidGet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+					status != PRO_TK_NO_ERROR);
+    status = ProExtobjReusableSet (&amp;result_obj);
+<a name="anchor-142"></a>    TEST_CALL_REPORT(&quot;ProExtobjReusableSet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProExtobjReusableClear(&amp;result_obj);
+    TEST_CALL_REPORT(&quot;ProExtobjReusableClear()&quot;, &quot;ProTestExtobjCreate()&quot;, 
+        status,	status != PRO_TK_NO_ERROR);
+<a name="anchor-143"></a>    status = ProExtobjExttypeSet(&amp;result_obj, 1);
+    TEST_CALL_REPORT(&quot;ProExtobjExttypeSet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProExtobjExttypeGet(&amp;result_obj, &amp;i);
+    TEST_CALL_REPORT(&quot;ProExtobjExttypeGet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+<a name="anchor-144"></a>        status != PRO_TK_NO_ERROR);
+    status = ProDispdatAlloc (&amp;disp_data);    
+    TEST_CALL_REPORT(&quot;ProDispdatAlloc()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProExtobjdataAdd (&amp;result_obj, class_name, disp_data);
+<a name="anchor-145"></a>    TEST_CALL_REPORT(&quot;ProExtobjdataAdd()&quot;, &quot;ProTestExtobjCreate()&quot;, 
+        status, status != PRO_TK_NO_ERROR);
+    status = ProDispdatScaleSet (disp_data, 1.0);
+    TEST_CALL_REPORT(&quot;ProDispdatScaleSet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+        status != PRO_TK_NO_ERROR);
+<a name="anchor-146"></a>    status = ProDispdatColorSet (disp_data, PRO_COLOR_LETTER);
+    TEST_CALL_REPORT(&quot;ProDispdatColorSet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProDispdatLinestyleSet (disp_data, PRO_LINESTYLE_SOLID);
+    TEST_CALL_REPORT(&quot;ProDispdatLinestyleSet()&quot;, &quot;ProTestExtobjCreate()&quot;, 
+<a name="anchor-147"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProDispdatPropsSet(disp_data, &amp;props[0], 0);
+    TEST_CALL_REPORT(&quot;ProDispdatPropsSet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+    status = ProDispdatTrfSet (disp_data, transf);
+<a name="anchor-148"></a>    TEST_CALL_REPORT(&quot;ProDispdatTrfSet()&quot;, &quot;ProTestExtobjCreate()&quot;, 
+        status, status != PRO_TK_NO_ERROR);
+    status = ProArraySizeGet ((ProArray)lines, &amp;lines_num);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestExtobjCreate()&quot;, 
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-149"></a>    curvedata = (ProCurvedata*)calloc (sizeof(ProCurvedata), lines_num);
+    for (i = 0; i &lt; lines_num; i++)
+    {
+        (curvedata+i)->line.type = lines[i].type;
+        for (j = 0; j &lt; 3; j++)
+<a name="anchor-150"></a>        {
+            (curvedata+i)->line.end1[j] = lines[i].end1[j];
+            (curvedata+i)->line.end2[j] = lines[i].end2[j];
+        }
+    }
+<a name="anchor-151"></a>    status = ProDispdatEntsSet (disp_data, curvedata, lines_num);
+    TEST_CALL_REPORT(&quot;ProDispdatEntsSet()&quot;, &quot;ProTestExtobjCreate()&quot;, 
+        status, status != PRO_TK_NO_ERROR);
+    status = ProExtobjdataSet(&amp;result_obj, class_name, disp_data);
+    TEST_CALL_REPORT(&quot;ProExtobjdataSet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+<a name="anchor-152"></a>	status != PRO_TK_NO_ERROR);
+
+    free (curvedata);
+    status = ProExtobjdataFree (&amp;disp_data);
+    TEST_CALL_REPORT (&quot;ProExtobjdataFree&quot;, &quot;ProTestExtobjCreate()&quot;,
+<a name="anchor-153"></a>		      status, status != PRO_TK_NO_ERROR);
+		     
+/*--------------------------------------------------------------------*\
+Exercise select data funcs
+\*--------------------------------------------------------------------*/
+<a name="anchor-154"></a>
+    status = ProSeldatAlloc (&amp;sel_data);
+    TEST_CALL_REPORT(&quot;ProSeldatAlloc()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+					status != PRO_TK_NO_ERROR);
+
+<a name="anchor-155"></a>    sel_box_ptr = &amp;sel_box[0];
+    (*sel_box_ptr)[0][0] = 0.0;
+    (*sel_box_ptr)[0][1] = 0.0;
+    (*sel_box_ptr)[0][2] = 0.0;
+    (*sel_box_ptr)[1][0] = 0.5;
+<a name="anchor-156"></a>    (*sel_box_ptr)[1][1] = 0.5;
+    (*sel_box_ptr)[1][2] = 0.5;
+    num_box = 1;
+   
+    status = ProSeldatSelboxesSet (sel_data, sel_box, num_box);
+<a name="anchor-157"></a>    TEST_CALL_REPORT(&quot;ProSeldatSelboxesSet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+					status != PRO_TK_NO_ERROR);
+    if ( status != PRO_TK_NO_ERROR ) 
+      ProTKPrintf(&quot;ProSeldatSelboxesSet failed with status %d\n&quot;, status);
+
+<a name="anchor-158"></a>
+    status = ProExtobjdataAdd (&amp;result_obj, class_name, sel_data);
+    TEST_CALL_REPORT(&quot;ProExtobjdataAdd()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+					status != PRO_TK_NO_ERROR);
+    if ( status != PRO_TK_NO_ERROR ) 
+<a name="anchor-159"></a>      ProTKPrintf(&quot;ProExtobjdataAdd failed to add select data with status %d\n&quot;,
+		    status);
+
+    status = ProExtobjdataFree (&amp;sel_data);
+    TEST_CALL_REPORT (&quot;ProExtobjdataFree&quot;, &quot;ProTestExtobjCreate()&quot;,
+<a name="anchor-160"></a>		      status, status != PRO_TK_NO_ERROR);
+
+ 
+    
+    status = ProExtobjRefAlloc(&amp;newRef2);
+<a name="anchor-161"></a>    TEST_CALL_REPORT(&quot;ProExtobjRefAlloc()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+    status = ProExtobjReftypeSet(newRef2, 1);
+    TEST_CALL_REPORT(&quot;ProExtobjReftypeSet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-162"></a>    status = ProExtobjReftypeGet(newRef2, &amp;i);
+    TEST_CALL_REPORT(&quot;ProExtobjReftypeGet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+    status = ProExtobjRefselectionSet(newRef2, surface);
+    TEST_CALL_REPORT(&quot;ProExtobjRefselectionSet()&quot;, &quot;ProTestExtobjCreate()&quot;,
+<a name="anchor-163"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProExtobjRefAdd(&amp;result_obj, newRef2);
+    TEST_CALL_REPORT(&quot;ProExtobjRefAdd()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+    	status != PRO_TK_NO_ERROR);
+    status = ProExtobjRefFree(&amp;newRef2);
+<a name="anchor-164"></a>    TEST_CALL_REPORT(&quot;ProExtobjRefFree()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+    if (class_name->type == 0)
+    {
+<a name="anchor-165"></a>        status = ProExtobjWarningEnable (&amp;result_obj, 
+            (ProExtobjAction) (PRO_EO_ACT_REF_SUPPR|PRO_EO_ACT_REF_DELETE));
+        TEST_CALL_REPORT(&quot;ProExtobjWarningEnable()&quot;, 
+            &quot;ProTestExtobjCreate()&quot;, status,
+            status != PRO_TK_NO_ERROR);
+<a name="anchor-166"></a>    }
+    else
+    {
+        status = ProExtobjWarningDisable (&amp;result_obj, 
+            (ProExtobjAction) (PRO_EO_ACT_REF_SUPPR|PRO_EO_ACT_REF_DELETE));
+<a name="anchor-167"></a>        TEST_CALL_REPORT(&quot;ProExtobjWarningDisable()&quot;, 
+            &quot;ProTestExtobjCreate()&quot;, status,
+            status != PRO_TK_NO_ERROR);
+    }
+    status = ProExtobjOwnerobjSet(&amp;result_obj, class_name, &amp;owner);
+<a name="anchor-168"></a>    TEST_CALL_REPORT(&quot;ProExtobjOwnerobjSet()&quot;, &quot;ProTestExtobjCreate()&quot;, status,
+	status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_BAD_INPUTS);
+    return (0);
+}
+
+<a name="anchor-169"></a>/*====================================================================*\
+  Function : ProTestClassCreate
+  Purpose  : Creates an external object class 
+\*====================================================================*/
+int ProTestClassCreate(ProExtobjClass *class_name)
+<a name="anchor-170"></a>{
+    ProError status;
+    ProExtobjCallbacks	callbacks;
+    
+    status = ProExtobjClassCreate(class_name);
+<a name="anchor-171"></a>    TEST_CALL_REPORT(&quot;ProExtobjClassCreate()&quot;, &quot;ProTestClassCreate()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+    callbacks.enabled_cbs = 0;
+    callbacks.display_CB = (ProExtobjCBAct)ProTestExtobjCB;
+    callbacks.select_CB = (ProExtobjCBAct)ProTestExtobjCB;
+<a name="anchor-172"></a>    callbacks.owner_modify_CB = (ProExtobjCBAct)ProTestExtobjOwnCBModify;
+    callbacks.owner_suppress_CB = (ProExtobjCBAct)ProTestExtobjOwnCBSuppress;
+    callbacks.owner_delete_CB = (ProExtobjCBAct)ProTestExtobjOwnCBDelete;
+    callbacks.ref_modify_CB = (ProExtobjCBAct)ProTestExtobjRefCBModify;
+    callbacks.ref_suppress_CB = (ProExtobjCBAct)ProTestExtobjRefCBSuppress;
+<a name="anchor-173"></a>    callbacks.ref_delete_CB = (ProExtobjCBAct)ProTestExtobjRefCBDelete;
+    status = ProExtobjCallbacksSet(class_name, &amp;callbacks);
+    TEST_CALL_REPORT(&quot;ProExtobjCallbacksSet()&quot;, &quot;ProTestClassCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProExtobjCBEnable(class_name,
+<a name="anchor-174"></a>        PRO_EO_ACT_REF_SUPPR|PRO_EO_ACT_REF_DELETE|PRO_EO_ACT_REF_MODIF,
+        TRUE);
+    TEST_CALL_REPORT(&quot;ProExtobjCBEnable()&quot;, &quot;ProTestClassCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    return (0);
+<a name="anchor-175"></a>}
+
+/*====================================================================*\
+  Function : ProTestCreateIcon
+  Purpose  : Creates an external object owned by the current model
+<a name="anchor-176"></a>\*====================================================================*/
+int ProTestCreateIcon(ProAppData app_data, int b)
+{
+    ProError            status;
+    int                 i, transf_num;
+<a name="anchor-177"></a>    ProMatrix           *transf, comp_trf, end_trf;    
+    ProMdl		model = ((AppData *)app_data)->model;
+    AppData		tmp_app_data;
+    ProSelection	*sels;
+    ProModelitem	surface_item;
+<a name="anchor-178"></a>    ProSurface		surface;
+    double		resolution;
+    int			nlines[2], num;
+    ProMdlType		mdl_type;
+    ProLinedata		*mesh_lines;
+<a name="anchor-179"></a>    ProAsmcomppath	comp_path;
+    static ProLinedata arrow[9] =  {    
+        {PRO_ENT_LINE, {0.0,0.0,0.0}, {1.0,0.0,0.0}},
+        {PRO_ENT_LINE, {1.0,0.0,0.0}, {1.0-HL,HW,0.0}},
+        {PRO_ENT_LINE, {1.0,0.0,0.0}, {1.0-HL,0.0,HW}},
+<a name="anchor-180"></a>        {PRO_ENT_LINE, {1.0,0.0,0.0}, {1.0-HL,-HW,0.0}},
+        {PRO_ENT_LINE, {1.0,0.0,0.0}, {1.0-HL,0.0,-HW}},
+        {PRO_ENT_LINE, {1.0-HL,HW,0.0}, {1.0-HL,0.0,HW}},
+        {PRO_ENT_LINE, {1.0-HL,0.0,HW}, {1.0-HL,-HW,0.0}},
+        {PRO_ENT_LINE, {1.0-HL,-HW,0.0}, {1.0-HL,0.0,-HW}},
+<a name="anchor-181"></a>        {PRO_ENT_LINE, {1.0-HL,0.0,-HW}, {1.0-HL,HW,0.0}}};
+    ProLinedata *arrow_lines;
+    ProMatrix mesh_transf = {
+        {1.0, 0.0, 0.0, 0.0},
+        {0.0, 1.0, 0.0, 0.0},
+<a name="anchor-182"></a>        {0.0, 0.0, 1.0, 0.0},
+        {0.0, 0.0, 0.0, 0.0}};
+
+    status = ProArrayAlloc (0, sizeof (ProLinedata), 1,
+        (ProArray*)&amp;arrow_lines);
+<a name="anchor-183"></a>    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProTestCreateIcon()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+    status = ProArrayObjectAdd ((ProArray*)&amp;arrow_lines, PRO_VALUE_UNUSED,
+        9, &amp;arrow[0]);
+    TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestCreateIcon()&quot;, status,
+<a name="anchor-184"></a>	status != PRO_TK_NO_ERROR);
+    
+    tmp_app_data.fp = ((AppData *)app_data)->fp;
+    tmp_app_data.model = model;
+    tmp_app_data.lines = NULL;
+<a name="anchor-185"></a>    tmp_app_data.transf = NULL;
+    
+    status = ProMdlTypeGet (model, &amp;mdl_type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestCreateIcon()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-186"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select surface for mesh&quot;);
+    status = ProSelect ((char*)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;num);
+    if (status != PRO_TK_NO_ERROR || num != 1)
+        return status;
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestCreateIcon()&quot;, status,
+<a name="anchor-187"></a>					status != PRO_TK_NO_ERROR);
+    if (mdl_type == PRO_ASSEMBLY)
+    {
+        status = ProSelectionAsmcomppathGet (sels[0], &amp;comp_path);
+        status = ProAsmcomppathTrfGet (&amp;comp_path, PRO_B_TRUE, comp_trf);
+<a name="anchor-188"></a>    }
+    status = ProSelectionModelitemGet (sels[0], &amp;surface_item);
+    if (status != PRO_TK_NO_ERROR)
+        return status;
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestCreateIcon()&quot;, 
+<a name="anchor-189"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProSurfaceInit (surface_item.owner, surface_item.id, &amp;surface);
+    TEST_CALL_REPORT(&quot;ProSurfaceInit()&quot;, &quot;ProTestCreateIcon()&quot;, status,
+					status != PRO_TK_NO_ERROR);
+    resolution = 0.1;
+<a name="anchor-190"></a>    nlines[0] = 5;
+    nlines[1] = 5;
+    ProUtilCollectMeshPoints (&amp;surface,
+			resolution,
+			nlines,
+<a name="anchor-191"></a>			ProTestMeshPointsAct,
+			(ProAppData)&amp;tmp_app_data);
+    resolution = 0.0;
+    ProUtilCollectMeshPoints (&amp;surface,
+			resolution,
+<a name="anchor-192"></a>			nlines,
+			ProTestArrowPointsAct,
+			(ProAppData)&amp;tmp_app_data);
+    if (is_mesh_class == 0) 
+    {
+<a name="anchor-193"></a>	ProStringToWstring (mesh_class.name, (char*)&quot;Mesh&quot;);
+        mesh_class.type = 0;
+        ProTestClassCreate (&amp;mesh_class);
+        status = ProExtobjClassWarningDisable(&amp;mesh_class, 
+            (ProExtobjAction) (PRO_EO_ACT_REF_SUPPR|PRO_EO_ACT_REF_DELETE));
+<a name="anchor-194"></a>        TEST_CALL_REPORT(&quot;ProExtobjClassWarningDisable()&quot;, 
+            &quot;ProTestCreateIcon()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        is_mesh_class = 1;
+    }
+<a name="anchor-195"></a>    if (is_arrow_class == 0) 
+    {
+	ProStringToWstring (arrow_class.name, (char*)&quot;Arrow&quot;);
+        arrow_class.type = 1;
+        ProTestClassCreate (&amp;arrow_class);
+<a name="anchor-196"></a>        status = ProExtobjClassWarningEnable(&amp;arrow_class, 
+            (ProExtobjAction) (PRO_EO_ACT_REF_SUPPR|PRO_EO_ACT_REF_DELETE));
+        TEST_CALL_REPORT(&quot;ProExtobjClassWarningEnable()&quot;, 
+            &quot;ProTestCreateIcon()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-197"></a>	is_arrow_class = 1;
+    }			
+    
+    transf = tmp_app_data.transf;
+    mesh_lines = tmp_app_data.lines;
+<a name="anchor-198"></a>    status = ProArraySizeGet (transf, &amp;transf_num);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestCreateIcon()&quot;, 
+        status, status != PRO_TK_NO_ERROR);
+    for (i = 0; i &lt; transf_num; i++)
+    {
+<a name="anchor-199"></a>        if (mdl_type == PRO_ASSEMBLY)
+            ProUtilMatrixProduct (transf[i], comp_trf, end_trf);
+        else
+            ProUtilMatrixCopy (transf[i], end_trf);
+        ProTestExtobjCreate (sels[0], &amp;arrow_class, arrow_lines, end_trf);
+<a name="anchor-200"></a>    }
+    if (mdl_type == PRO_ASSEMBLY)
+        ProUtilMatrixProduct (comp_trf, mesh_transf, end_trf);
+    else
+        ProUtilMatrixCopy (mesh_transf, end_trf);
+<a name="anchor-201"></a>    status = ProArraySizeGet (mesh_lines, &amp;transf_num);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestCreateIcon()&quot;, 
+        status, status != PRO_TK_NO_ERROR);
+    ProTestExtobjCreate (sels[0], &amp;mesh_class, mesh_lines, end_trf);
+    status = ProArrayFree ((ProArray*)&amp;transf);
+<a name="anchor-202"></a>    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestCreateIcon()&quot;, 
+        status, status != PRO_TK_NO_ERROR);
+    status = ProArrayFree ((ProArray*)&amp;mesh_lines);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestCreateIcon()&quot;, 
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-203"></a>    status = ProWindowRepaint(PRO_VALUE_UNUSED);
+    TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;, &quot;ProTestCreateIcon()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+    status = ProArrayFree ((ProArray*)&amp;arrow_lines);
+<a name="anchor-204"></a>    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestCreateIcon()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+    return (0);
+}
+
+<a name="anchor-205"></a>/*====================================================================*\
+  Function : ProTestDeleteRef
+  Purpose  : Delete Ext Obj Reference
+\*====================================================================*/
+ProError ProTestDeleteRef(
+<a name="anchor-206"></a>    ProExtobj	*p_extobj,	    /* In : external object */
+    ProWExtobjRef ext_obj_ref,      /* In : ext obj reference */
+    ProError status,		    /* In : status */
+    ProExtobjrefStatus ref_status,  /* In : */
+    ProAppData app_data)	    /* In : */
+<a name="anchor-207"></a>{
+    status = ProExtobjRefRemove(p_extobj, ext_obj_ref);
+    TEST_CALL_REPORT(&quot;ProExtobjRefRemove()&quot;, &quot;ProTestDeleteRef()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-208"></a>}
+
+/*====================================================================*\
+  Function : TestDeleteExtobj
+  Purpose  : Delete External Object and all it data
+<a name="anchor-209"></a>\*====================================================================*/
+ProError ProTestDeleteExtobj(
+    ProExtobj *p_extobj,    /*In  : external object */
+    ProError  status,	    /*In  : status */ 
+    ProAppData app_data)    /*In  : app data */
+<a name="anchor-210"></a>{
+    ProWExtobjdata extobjdata;
+    ExtobjReference *references;
+    int i, references_num;
+    ProExtobjClass *class_name = (ProExtobjClass*)app_data;
+<a name="anchor-211"></a>
+    status = ProUtilCollectExtobjReferences (p_extobj, &amp;references);
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)references, &amp;references_num);
+<a name="anchor-212"></a>        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestDeleteExtobj()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; references_num; i++)
+        {
+	    status = ProTestDeleteRef (p_extobj, references[i].p_extobj_ref, 
+<a name="anchor-213"></a>	        PRO_TK_NO_ERROR, references[i].ref_status, (ProAppData)NULL);
+        }
+        status = ProArrayFree ((ProArray*)&amp;references);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestDeleteExtobj()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-214"></a>    }
+    status = ProExtobjdataGet(p_extobj, class_name, PRO_EXTOBJDAT_DISPLAY,
+	&amp;extobjdata);
+    TEST_CALL_REPORT(&quot;ProExtobjdataGet()&quot;, &quot;ProTestDeleteExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-215"></a>    status = ProExtobjdataFree(&amp;extobjdata);
+    TEST_CALL_REPORT(&quot;ProExtobjdataFree()&quot;, &quot;ProTestDeleteExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+    status = ProExtobjdataRemove(p_extobj, class_name, PRO_EXTOBJDAT_SELBOX);
+    TEST_CALL_REPORT(&quot;ProExtobjdataRemove()&quot;, &quot;TestDeleteExtobj()&quot;, status,
+<a name="anchor-216"></a>	status != PRO_TK_NO_ERROR);
+    status = ProExtobjDelete(p_extobj, class_name);
+    TEST_CALL_REPORT(&quot;ProExtobjDelete()&quot;, &quot;TestDeleteExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+ 
+<a name="anchor-217"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+  Function : ProTestMenuAct
+<a name="anchor-218"></a>  Purpose  : Menu action function
+\*====================================================================*/
+int ProTestMenuAct(ProAppData app_data, int action)
+{
+    return (ProMenuDeleteWithStatus (action));
+<a name="anchor-219"></a>}
+
+/*====================================================================*\
+  Function : ProTestExtobjClassSelect
+  Purpose  : Select extobj class
+<a name="anchor-220"></a>\*====================================================================*/
+ProError ProTestExtobjClassSelect (ProExtobjClass **class_name)
+{
+    ProError status;
+    int menu_id, action;
+<a name="anchor-221"></a>
+    status = ProMenuFileRegister((char*)&quot;TkExtobjClass&quot;, (char*)&quot;tkextobjclass.mnu&quot;, &amp;menu_id);
+    TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, &quot;ProTestExtobjClassSelect()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkExtobjClass&quot;, (char*)&quot;Arrow&quot;, 
+<a name="anchor-222"></a>        (ProMenubuttonAction)ProTestMenuAct,
+        &amp;app_data, 1);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestExtobjClassSelect()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkExtobjClass&quot;, (char*)&quot;Mesh&quot;, 
+<a name="anchor-223"></a>        (ProMenubuttonAction)ProTestMenuAct,
+        &amp;app_data, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestExtobjClassSelect()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkExtobjClass&quot;, (char*)&quot;TkExtobjClass&quot;, 
+<a name="anchor-224"></a>        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestExtobjClassSelect()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    /* Display Menu and set it into action. */
+<a name="anchor-225"></a>    status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkExtobjClass&quot;, &amp;menu_id);
+    TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;, &quot;ProTestExtobjClassSelect()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess((char*)&quot;TkExtobjClass&quot;, &amp;action);
+    TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;, &quot;ProTestExtobjClassSelect()&quot;,
+<a name="anchor-226"></a>        status, status != PRO_TK_NO_ERROR);
+                      
+    if (action)
+        *class_name = &amp;arrow_class;
+    else
+<a name="anchor-227"></a>        *class_name = &amp;mesh_class;
+
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-228"></a>/*====================================================================*\
+  Function : ProTestDeleteAll
+  Purpose  : Delete all external objects and delete external obj class
+\*====================================================================*/
+int ProTestDeleteAll(ProAppData app_data, int b)
+<a name="anchor-229"></a>{
+    ProError status;
+    ProMdl model = ((AppData *)app_data)->model;
+    ProExtobj	    *extobjs;
+    int extobjs_num, i;
+<a name="anchor-230"></a>    ProExtobjClass *class_name;
+
+    status = ProTestExtobjClassSelect (&amp;class_name);
+    if (status != PRO_TK_NO_ERROR)
+        return (0);
+<a name="anchor-231"></a>
+    status = ProUtilCollectExtobj (model, class_name, &amp;extobjs);
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)extobjs, &amp;extobjs_num);
+<a name="anchor-232"></a>        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestDeleteAll()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; extobjs_num; i++)
+        {
+            status = ProTestDeleteExtobj (extobjs+i, PRO_TK_NO_ERROR,
+<a name="anchor-233"></a>	        (ProAppData)class_name);
+        }
+        status = ProArrayFree ((ProArray*)&amp;extobjs);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestDeleteAll()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-234"></a>    }
+
+    status = ProExtobjClassDelete(class_name);
+    TEST_CALL_REPORT(&quot;ProExtobjClassDelete()&quot;, &quot;ProTestDeleteAll()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-235"></a>    if (class_name->type == 0)
+        is_mesh_class = 0;
+    else
+        is_arrow_class = 0;
+    return (0);
+<a name="anchor-236"></a>}
+
+/*====================================================================*\
+  Function : ProTestDeleteOne
+  Purpose  : Delete all external objects and delete external obj class
+<a name="anchor-237"></a>\*====================================================================*/
+int ProTestDeleteOne(ProAppData app_data, int b)
+{
+    ProError status;
+    ProExtobj	    ext_obj;
+<a name="anchor-238"></a>    int extobjs_num;
+    ProSelection *p_sel_list;
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select an external object&quot;);
+    status = ProSelect((char*)&quot;ext_obj&quot;, 1, NULL, NULL,
+<a name="anchor-239"></a>                        NULL, NULL, &amp;p_sel_list, &amp;extobjs_num);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestDeleteOne()&quot;, status,
+                                                status == PRO_TK_NO_ERROR);
+    if( status != PRO_TK_NO_ERROR )
+	return(-1);
+<a name="anchor-240"></a>
+    status = ProSelectionModelitemGet(p_sel_list[0], (ProExtobj *)&amp;ext_obj);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestDeleteOne()&quot;,
+		    status, status == PRO_TK_NO_ERROR);
+    status = ProTestDeleteExtobj (&amp;ext_obj, PRO_TK_NO_ERROR,
+<a name="anchor-241"></a>	        (ProAppData)NULL/*class*/);
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-242"></a>  Function : ProTestAddRef
+  Purpose  : Prompts the user to select references for an external object
+\*====================================================================*/
+ProError ProTestAddRef(ProAppData app_data, int b)
+{
+<a name="anchor-243"></a>    ProError status;
+    ProWExtobjRef newRef;
+    ProSelection *p_sel_list;
+    ProExtobj ext_obj;
+    int p_sel_num, i;
+<a name="anchor-244"></a>    FILE *fp = ((AppData*)app_data)->fp;
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select an external object&quot;);
+    status = ProSelect((char*)&quot;ext_obj&quot;, 1, NULL, NULL,
+                        NULL, NULL, &amp;p_sel_list, &amp;p_sel_num);
+<a name="anchor-245"></a>    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProtestAddRef()&quot;, status,
+                                                status == PRO_TK_NO_ERROR);
+    if( status != PRO_TK_NO_ERROR )
+	   return (PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-246"></a>    status = ProSelectionModelitemGet(p_sel_list[0], (ProExtobj *)&amp;ext_obj);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProtestAddRef()&quot;,
+		    status, status == PRO_TK_NO_ERROR);
+
+    status = ProExtobjRefAlloc(&amp;newRef);
+<a name="anchor-247"></a>    TEST_CALL_REPORT(&quot;ProExtobjRefAlloc()&quot;, &quot;ProtestAddRef()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+    
+    status = ProExtobjReftypeSet(newRef, 1);
+    TEST_CALL_REPORT(&quot;ProExtobjReftypeSet()&quot;, &quot;ProtestAddRef()&quot;, status,
+<a name="anchor-248"></a>						status != PRO_TK_NO_ERROR);
+
+    status = ProExtobjReftypeGet(newRef, &amp;i);
+    TEST_CALL_REPORT(&quot;ProExtobjReftypeGet()&quot;, &quot;ProtestAddRef()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+<a name="anchor-249"></a>    status = ProSelect((char*)&quot;surface&quot;, 1, NULL, NULL,
+                        NULL, NULL, &amp;p_sel_list, &amp;p_sel_num);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProtestAddRef()&quot;, status,
+                                                status == PRO_TK_NO_ERROR);
+
+<a name="anchor-250"></a>    if( status != PRO_TK_NO_ERROR )
+	return PRO_TK_GENERAL_ERROR;
+
+    status = ProExtobjRefselectionSet(newRef, p_sel_list[0]);
+    TEST_CALL_REPORT(&quot;ProExtobjRefselectionSet()&quot;, &quot;ProtestAddRef()&quot;, status,
+<a name="anchor-251"></a>						status != PRO_TK_NO_ERROR);
+
+    status = ProExtobjRefAdd(&amp;ext_obj, newRef);
+    TEST_CALL_REPORT(&quot;ProExtobjRefAdd()&quot;, &quot;ProtestAddRef()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+<a name="anchor-252"></a>
+    ProTKFprintf(fp, &quot;Extobj id:\t%d\t Ref type:\t%d\n&quot;, ext_obj.id, i);
+
+    status = ProExtobjRefFree(&amp;newRef);
+    TEST_CALL_REPORT(&quot;ProExtobjRefFree()&quot;, &quot;ProtestAddRef()&quot;, status,
+<a name="anchor-253"></a>	status != PRO_TK_NO_ERROR);
+    return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+<a name="anchor-254"></a>  Function : ProTestRefCheck
+  Purpose  : Checks to see if the owner of an external object reference
+	     has been modified.
+\*====================================================================*/
+ProError ProTestRefCheck(ProExtobj *object, ProWExtobjRef ext_obj_ref, 
+<a name="anchor-255"></a>		       ProError in_status, ProExtobjrefStatus ref_status, 
+		       ProAppData app_data)
+{
+    ProWVerstamp stamp1, stamp2, stamp3;
+    ProError status;
+<a name="anchor-256"></a>    int flag;
+    ProSelection ref_sel;
+    FILE *fp = (FILE *)app_data;
+    int i;
+    ProModelitem model_item;
+<a name="anchor-257"></a>
+    status = ProMdlVerstampGet(object->owner, &amp;stamp1);
+    TEST_CALL_REPORT(&quot;ProMdlVerstampGet()&quot;, &quot;ProTestRefCheck()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+    status = ProExtobjRefselectionGet(object, ext_obj_ref, &amp;ref_sel);
+<a name="anchor-258"></a>    TEST_CALL_REPORT(&quot;ProExtobjRefselectionGet()&quot;, &quot;ProTestRefCheck()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+    status = ProSelectionModelitemGet(ref_sel, &amp;model_item);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestRefCheck()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-259"></a>
+    i = FindRefIndex(model_item.id);
+
+    if( refVersionTable[i].stamp_str == NULL )
+    {
+<a name="anchor-260"></a>	status = ProVerstampStringGet(stamp1, &amp;(refVersionTable[i].stamp_str));
+        TEST_CALL_REPORT(&quot;ProVerstampStringGet()&quot;, &quot;ProTestRefCheck()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-261"></a>    status = ProStringVerstampGet(refVersionTable[i].stamp_str, &amp;stamp2);
+    TEST_CALL_REPORT(&quot;ProStringVerstampGet()&quot;, &quot;ProTestRefCheck()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+
+    flag = ProVerstampEqual(stamp1, stamp2);
+<a name="anchor-262"></a>    TEST_CALL_REPORT(&quot;ProVerstampEqual()&quot;, &quot;ProTestRefCheck()&quot;, 
+	(ProError) (1-flag), flag != 0 &amp;&amp; flag != 1);
+    
+    flag = 0;
+    if( flag == 0 )
+<a name="anchor-263"></a>    {
+	status = ProVerstampStringFree(&amp;(refVersionTable[i].stamp_str));
+        TEST_CALL_REPORT(&quot;ProVerstampStringFree()&quot;, &quot;ProTestRefCheck()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+	status = ProVerstampStringGet(stamp1, &amp;(refVersionTable[i].stamp_str));
+<a name="anchor-264"></a>        TEST_CALL_REPORT(&quot;ProVerstampStringGet()&quot;, &quot;ProTestRefCheck()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+    }
+
+    status = ProVerstampFree(&amp;stamp1);
+<a name="anchor-265"></a>    TEST_CALL_REPORT(&quot;ProVerstampFree()&quot;, &quot;ProTestRefCheck()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+    status = ProVerstampFree(&amp;stamp2);
+    TEST_CALL_REPORT(&quot;ProVerstampFree()&quot;, &quot;ProTestRefCheck()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+<a name="anchor-266"></a>    status = ProVerstampAlloc(&amp;stamp3);
+    TEST_CALL_REPORT(&quot;ProVerstampAlloc()&quot;, &quot;ProTestRefCheck()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+    status = ProVerstampFree(&amp;stamp3);
+    TEST_CALL_REPORT(&quot;ProVerstampFree()&quot;, &quot;ProTestRefCheck()&quot;, status,
+<a name="anchor-267"></a>						status != PRO_TK_NO_ERROR);
+
+    ProTKFprintf(fp, &quot;Extobj id:\t%d\t Version stamp unchanged:\t%d\n&quot;, 
+							object->id, flag);
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-268"></a>}
+
+/*====================================================================*\
+  Function : ProTestRefsChanged
+  Purpose  : Visits the external object references to determine if they
+<a name="anchor-269"></a>             have changed.
+\*====================================================================*/
+ProError ProTestRefsChanged(ProExtobj *extobj, ProError in_status, 
+			  ProAppData app_data)
+{
+<a name="anchor-270"></a>    ProError status;
+    ExtobjReference *references;
+    int i, references_num;
+
+    status = ProUtilCollectExtobjReferences (extobj, &amp;references);
+<a name="anchor-271"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)references, &amp;references_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestRefsChanged()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-272"></a>        for (i = 0; i &lt; references_num; i++)
+        {
+            status = ProTestRefCheck (extobj, references[i].p_extobj_ref, 
+                PRO_TK_NO_ERROR, references[i].ref_status, (ProAppData)app_data);
+        }
+<a name="anchor-273"></a>        status = ProArrayFree ((ProArray*)&amp;references);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestRefsChanged()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+    }
+
+<a name="anchor-274"></a>    return(status);
+}
+
+/*====================================================================*\
+  Function : ProTestExtobjUpdate
+<a name="anchor-275"></a>  Purpose  : Visits all external objects in the current model and checks
+             if references have been changed
+\*====================================================================*/
+int ProTestExtobjUpdate( ProAppData app_data, int b )
+{
+<a name="anchor-276"></a>    ProMdl model = ((AppData*)app_data)->model;
+    ProError status;
+    FILE *fp = ((AppData*)app_data)->fp;
+    ProExtobj	    *extobjs;
+    int extobjs_num, i;
+<a name="anchor-277"></a>
+    status = ProUtilCollectExtobj (model, &amp;mesh_class, &amp;extobjs);
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)extobjs, &amp;extobjs_num);
+<a name="anchor-278"></a>        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestExtobjUpdate()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; extobjs_num; i++)
+        {
+            status = ProTestRefsChanged (extobjs+i, PRO_TK_NO_ERROR,
+<a name="anchor-279"></a>	        (ProAppData)fp);
+        }
+        status = ProArrayFree ((ProArray*)&amp;extobjs);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestExtobjUpdate()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-280"></a>    }
+    return(0);
+}
+
+/*====================================================================*\
+<a name="anchor-281"></a>  Function : ProTestInfoDispdat
+  Purpose  : Write Display data info into file
+\*====================================================================*/
+void ProTestInfoDispdat(
+    ProWExtobjdata disp_data,	/* In : display data */
+<a name="anchor-282"></a>    FILE *fp)			/* In : file */
+{
+    int i, num_ents = 0, num_props;
+    ProMatrix matr;
+    ProColortype color;
+<a name="anchor-283"></a>    double scale;
+    ProLinestyle line_style;
+    ProExtobjDispprops *disp_props;
+    ProError status;
+    ProCurvedata *entity;
+<a name="anchor-284"></a>
+    status = ProDispdatEntsGet(disp_data,  &amp;entity, &amp;num_ents);
+    TEST_CALL_REPORT(&quot;ProDispdatEntsGet()&quot;, &quot;ProTestInfoDispdat()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+<a name="anchor-285"></a>    if ( status == PRO_TK_NO_ERROR )
+    {
+	ProTKFprintf(fp, &quot;    Number of entities %d\n&quot;, num_ents);
+
+	status = ProCurvedataArrayFree(&amp;entity, num_ents);
+<a name="anchor-286"></a>	TEST_CALL_REPORT(&quot;ProCurvedataArrayFree()&quot;, &quot;ProTestInfoDispdat()&quot;, 
+	    status, status != PRO_TK_NO_ERROR);
+    }
+    
+    status = ProDispdatTrfGet(disp_data, matr);
+<a name="anchor-287"></a>    TEST_CALL_REPORT(&quot;ProDispdatTrfGet()&quot;, &quot;ProTestInfoDispdat()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+    status = ProDispdatColorGet(disp_data, &amp;color);
+    TEST_CALL_REPORT(&quot;ProDispdatColorGet()&quot;, &quot;ProTestInfoDispdat()&quot;, status,
+<a name="anchor-288"></a>	status != PRO_TK_NO_ERROR);
+
+    status = ProDispdatScaleGet(disp_data, &amp;scale);
+    TEST_CALL_REPORT(&quot;ProDispdatScaleGet()&quot;, &quot;ProTestInfoDispdat()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-289"></a>
+    status = ProDispdatLinestyleGet(disp_data, &amp;line_style);
+    TEST_CALL_REPORT(&quot;ProDispdatLinestyleGet()&quot;, &quot;ProTestInfoDispdat()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+<a name="anchor-290"></a>    ProTKFprintf(fp, &quot;    Color %d   Scale %6.3f   Line Style %d\n&quot;, color, scale, 
+	 line_style);
+
+    status = ProDispdatPropsGet(disp_data, &amp;disp_props, &amp;num_props);
+    TEST_CALL_REPORT(&quot;ProDispdatPropsGet()&quot;, &quot;ProTestInfoDispdat()&quot;, status,
+<a name="anchor-291"></a>	status != PRO_TK_NO_ERROR);
+
+    ProTKFprintf(fp, &quot;    Properties&quot;);
+    for (i=0; i&lt;num_props; i++)
+	ProTKFprintf(fp, &quot;  %d&quot;, disp_props[i]);
+<a name="anchor-292"></a>    ProTKFprintf(fp, &quot;\n&quot;);
+     
+    if (status == PRO_TK_NO_ERROR)
+    {
+	status = ProArrayFree((ProArray*)&amp;disp_props);
+<a name="anchor-293"></a>	TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestInfoDispdat()&quot;, status,
+	    status != PRO_TK_NO_ERROR);
+    }
+}
+
+<a name="anchor-294"></a>/*====================================================================*\
+  Function : ProTestInfoSeldat
+  Purpose  : Write Selection data info into file
+\*====================================================================*/
+void ProTestInfoSeldat(
+<a name="anchor-295"></a>    ProWExtobjdata sel_data,	/* In : display data */
+    FILE *fp)			/* In : file */
+{
+    ProSelbox *selbox;
+    int num_box, i;
+<a name="anchor-296"></a>    ProError status;
+
+    status = ProSeldatSelboxesGet(sel_data, &amp;selbox, &amp;num_box);
+    TEST_CALL_REPORT(&quot;ProSeldatSelboxesGet()&quot;, &quot;ProTestInfoSeldat()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-297"></a>
+    for (i=0; i&lt;num_box; i++)
+    {
+	ProTKFprintf(fp, &quot;    SelBox[%d] %6.2f %6.2f %6.2f    %6.2f %6.2f %6.2f\n&quot;,
+            i,
+<a name="anchor-298"></a>	    selbox[i][0][0], selbox[i][0][1], selbox[i][0][2], 
+	    selbox[i][1][0], selbox[i][1][1], selbox[i][1][2]);
+    }
+    
+    status = ProArrayFree((ProArray*)&amp;selbox);
+<a name="anchor-299"></a>    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestInfoSeldat()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-300"></a>  Function : ProTestInfoRef
+  Purpose  : Write References info into file
+\*====================================================================*/
+ProError ProTestInfoRef(
+    ProExtobj	*p_extobj,	    /* In : external object */
+<a name="anchor-301"></a>    ProWExtobjRef ext_obj_ref,      /* In : ext obj reference */
+    ProError status,		    /* In : status */
+    ProExtobjrefStatus ref_status,  /* In : */
+    ProAppData app_data)	    /* In : file */
+{
+<a name="anchor-302"></a>    int ref_type;
+    ProSelection ref;
+    ProModelitem mdlitem;
+    FILE *fp = (FILE *)app_data;
+
+<a name="anchor-303"></a>    status = ProExtobjReftypeGet(ext_obj_ref, &amp;ref_type);
+    TEST_CALL_REPORT(&quot;ProExtobjReftypeGet()&quot;, &quot;ProTestInfoRef()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+    status = ProExtobjRefselectionGet(p_extobj, ext_obj_ref, &amp;ref);
+<a name="anchor-304"></a>    TEST_CALL_REPORT(&quot;ProExtobjRefselectionGet()&quot;, &quot;ProTestInfoRef()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+    status = ProSelectionModelitemGet(ref, &amp;mdlitem);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestInfoRef()&quot;, status,
+<a name="anchor-305"></a>	status != PRO_TK_NO_ERROR);
+
+    ProTKFprintf(fp, &quot;        Reference Id %d  Type %d  Status %d\n&quot;, mdlitem.id,
+	mdlitem.type, ref_status); 
+
+<a name="anchor-306"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+  Function : ProTestInfoExtobj
+<a name="anchor-307"></a>  Purpose  : Write External Object info into file
+\*====================================================================*/
+ProError ProTestInfoExtobj(
+    ProExtobj *p_extobj,    /*In  : external object */
+    ProError  status,	    /*In  : status */ 
+<a name="anchor-308"></a>    ProAppData app_data)    /*In  : file */
+{
+    ProExtobjClass extobjcl;
+    char	name[PRO_MDLNAME_SIZE];
+    ProModelitem owner;
+<a name="anchor-309"></a>    ProMdlName w_name;
+    ProType type;
+    int id, obj_type;
+    ProWExtobjdata extobjdata;
+    ProMatrix matr_sc;
+<a name="anchor-310"></a>    FILE *fp = (FILE*)app_data;
+    ExtobjReference *references;
+    int references_num, i;
+
+    ProTKFprintf(fp, &quot;External Object Id %d\n&quot;, p_extobj->id);
+<a name="anchor-311"></a>
+    status = ProExtobjClassGet(p_extobj, &amp;extobjcl); 
+    TEST_CALL_REPORT(&quot;ProExtobjClassGet()&quot;, &quot;ProTestInfoExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+    ProWstringToString(name, extobjcl.name);
+<a name="anchor-312"></a>    ProTKFprintf(fp, &quot;    Class %20s Type %d\n&quot;, name, extobjcl.type);
+
+    status  = ProExtobjOwnerobjGet(p_extobj, &amp;mesh_class, &amp;owner);
+    TEST_CALL_REPORT(&quot;ProExtobjOwnerobjGet()&quot;, &quot;ProTestInfoExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-313"></a>
+    status = ProMdlMdlnameGet(owner.owner, w_name);
+    TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProTestInfoExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+<a name="anchor-314"></a>    status = ProMdlTypeGet(owner.owner, (ProMdlType *)&amp;type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestInfoExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+    ProWstringToString(name, w_name);
+<a name="anchor-315"></a>    ProTKFprintf(fp, &quot;    Owner %s Type %d\n&quot;, name, type);
+
+    status = ProExtobjExtidGet(p_extobj, &amp;id);
+    TEST_CALL_REPORT(&quot;ProExtobjExtidGet()&quot;, &quot;ProTestInfoExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-316"></a>
+    status = ProExtobjExttypeGet(p_extobj, &amp;obj_type);
+    TEST_CALL_REPORT(&quot;ProExtobjExttypeGet()&quot;, &quot;ProTestInfoExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+<a name="anchor-317"></a>    status = ProExtobjReusableGet(p_extobj);
+    TEST_CALL_REPORT(&quot;ProExtobjReusableGet()&quot;, &quot;ProTestInfoExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+    ProTKFprintf(fp, &quot;    ExtId %6d  ExtType %6d  Reusable is %s\n&quot;, id, obj_type, 
+	status == PRO_TK_NO_ERROR ? &quot;set&quot; : &quot;not set&quot;);
+<a name="anchor-318"></a>
+    status = ProExtobjdataGet(p_extobj, &amp;mesh_class, PRO_EXTOBJDAT_DISPLAY,
+	&amp;extobjdata);
+    TEST_CALL_REPORT(&quot;ProExtobjdataGet()&quot;, &quot;ProTestInfoExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-319"></a>    ProTestInfoDispdat(extobjdata, fp);
+
+    ProExtobjdataFree (&amp;extobjdata);
+
+    status = ProExtobjScreentrfGet(p_extobj, matr_sc);
+<a name="anchor-320"></a>    TEST_CALL_REPORT(&quot;ProExtobjScreentrfGet()&quot;, &quot;ProTestInfoExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+    status = ProExtobjdataGet(p_extobj, &amp;mesh_class, PRO_EXTOBJDAT_SELBOX,
+	&amp;extobjdata);
+<a name="anchor-321"></a>    TEST_CALL_REPORT(&quot;ProExtobjdataGet()&quot;, &quot;ProTestInfoExtobj()&quot;, status,
+	status != PRO_TK_NO_ERROR);
+
+    ProTestInfoSeldat(extobjdata, fp);
+
+<a name="anchor-322"></a>    ProExtobjdataFree (&amp;extobjdata);
+    
+    status = ProUtilCollectExtobjReferences (p_extobj, &amp;references);
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-323"></a>        status = ProArraySizeGet ((ProArray)references, &amp;references_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestInfoExtobj()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; references_num; i++)
+        {
+<a name="anchor-324"></a>            status = ProTestInfoRef (p_extobj, references[i].p_extobj_ref, 
+                PRO_TK_NO_ERROR, references[i].ref_status, (ProAppData)fp);
+        }
+        status = ProArrayFree ((ProArray*)&amp;references);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestInfoExtobj()&quot;, 
+<a name="anchor-325"></a>            status, status != PRO_TK_NO_ERROR );
+    }
+
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-326"></a>
+/*====================================================================*\
+  Function : ProTestInfoExtobj
+  Purpose  : Visit all external objects in the current model and create
+	    info file
+<a name="anchor-327"></a>\*====================================================================*/
+int ProTestInfoAll(ProAppData app_data, int b)
+{
+    ProError status;
+    FILE *fp =  ((AppData*)app_data)->fp;
+<a name="anchor-328"></a>    ProMdl model = ((AppData*)app_data)->model;
+    ProExtobj	    *extobjs;
+    int extobjs_num, i;
+    
+    status = ProUtilCollectExtobj (model, &amp;mesh_class, &amp;extobjs);
+<a name="anchor-329"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)extobjs, &amp;extobjs_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestInfoAll()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-330"></a>        for (i = 0; i &lt; extobjs_num; i++)
+        {
+            status = ProTestInfoExtobj(extobjs+i, PRO_TK_NO_ERROR,
+	        (ProAppData)fp);
+        }
+<a name="anchor-331"></a>        status = ProArrayFree ((ProArray*)&amp;extobjs);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestInfoAll()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+    }
+
+<a name="anchor-332"></a>    return (0);
+}
+
+
+/*====================================================================*\
+<a name="anchor-333"></a>  Function : ProTestExtobj
+  Purpose  : Tests the external object functions
+\*====================================================================*/
+int ProTestExtobj()
+{
+<a name="anchor-334"></a>    ProMdl model;
+    ProError status;
+    char fname[PRO_NAME_SIZE];
+    int menu_id, action;
+
+<a name="anchor-335"></a>    status = ProMdlCurrentGet(&amp;model);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestExtobj()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+    ProTestQcrName(&amp;model, (char *)EXTERNAL_OBJ, fname);
+    app_data.fp = PTApplsUnicodeFopen(fname, &quot;a&quot;);
+<a name="anchor-336"></a>
+    if( app_data.fp == NULL )
+	return( -1 );
+
+    status = ProMdlCurrentGet(&amp;app_data.model);
+<a name="anchor-337"></a>    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestExtobj()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+
+    status = ProMenuFileRegister((char*)&quot;TkExtobj&quot;, (char*)&quot;tkextobj.mnu&quot;, &amp;menu_id);
+    TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, &quot;ProTestExtobj()&quot;,
+<a name="anchor-338"></a>                      status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkExtobj&quot;, (char*)&quot;Create&quot;, (ProMenubuttonAction)ProTestCreateIcon,
+                                     (ProAppData) &amp;app_data, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestExtobj()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+<a name="anchor-339"></a>    status = ProMenubuttonActionSet((char*)&quot;TkExtobj&quot;, (char*)&quot;AddReference&quot;, (ProMenubuttonAction)ProTestAddRef,
+                                     (ProAppData) &amp;app_data, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestExtobj()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkExtobj&quot;, (char*)&quot;UpdateVersion&quot;, 
+<a name="anchor-340"></a>				    (ProMenubuttonAction)ProTestExtobjUpdate, (ProAppData)&amp;app_data, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestExtobj()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkExtobj&quot;, (char*)&quot;Info&quot;, 
+                    (ProMenubuttonAction)ProTestInfoAll, (ProAppData)&amp;app_data, 0);
+<a name="anchor-341"></a>    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestExtobj()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkExtobj&quot;, (char*)&quot;Delete All&quot;,
+                    (ProMenubuttonAction)ProTestDeleteAll, (ProAppData)&amp;app_data, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestExtobj()&quot;,
+<a name="anchor-342"></a>                      status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkExtobj&quot;, (char*)&quot;TkExtobj&quot;, 
+                                    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestExtobj()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+<a name="anchor-343"></a>
+    /* Display Menu and set it into action. */
+    status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkExtobj&quot;, &amp;menu_id);
+    TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;, &quot;ProTestExtobj()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+<a name="anchor-344"></a>    status = ProMenuProcess((char*)&quot;TkExtobj&quot;, &amp;action);
+    TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;, &quot;ProTestExtobj()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+
+    fclose(app_data.fp);
+<a name="anchor-345"></a>    app_data.fp = NULL;
+    if (refVersionTable != NULL)
+    {
+	free(refVersionTable);
+	refVersionTable = NULL;
+<a name="anchor-346"></a>    }
+    return(0);
+}
+
+</pre>
+</body>
+</html>

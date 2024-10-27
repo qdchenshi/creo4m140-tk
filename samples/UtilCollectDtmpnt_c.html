@@ -1,0 +1,225 @@
+<html>
+<head>
+<title>UtilCollectDtmpnt.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProAsmcomppath.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProMdl.h>
+<a name="anchor-2"></a>#include &lt;ProSolid.h>
+#include &lt;ProSelection.h>
+
+#include &lt;UtilMath.h>
+#include &lt;UtilMatrix.h>
+<a name="anchor-3"></a>#include &lt;UtilCollect.h>
+
+
+/*====================================================================*\
+    FUNCTION :	ProUtilCollectOneLevelAsmcomppath()
+<a name="anchor-4"></a>    PURPOSE  :	Collect Asmcomppathes on one level only.
+		Util function to be call from ProUtilCollectAsmcomppath
+    NOTE     :  Do not call it directly
+\*====================================================================*/
+static ProError ProUtilCollectOneLevelAsmcomppath(
+<a name="anchor-5"></a>    ProAssembly assy,
+    ProAsmcomppath *p_path,
+    int level,
+    ProAsmcomppath **pp_path)
+{
+<a name="anchor-6"></a>    ProError err;
+    ProAsmcomp *p_comps;
+    int i, n_comps;
+    ProMdl mdl;
+    ProMdlType mdl_type;
+<a name="anchor-7"></a>
+    err = ProUtilCollectAsmcomp(assy, &amp;p_comps);
+    if (err != PRO_TK_NO_ERROR)
+	return (err);
+
+<a name="anchor-8"></a>    err = ProArraySizeGet((ProArray)p_comps, &amp;n_comps);
+    for (i=0; i&lt;n_comps; i++)
+    {
+	/* Fill full Asmcomppath structure for component */ 
+	p_path->comp_id_table[level] = p_comps[i].id;
+<a name="anchor-9"></a>	p_path->comp_id_table[level + 1] = -1;
+	p_path->table_num = level + 1;
+
+	/* Add Asmcomppath to the array */
+	ProArrayObjectAdd((ProArray*)pp_path, PRO_VALUE_UNUSED, 1, p_path);
+<a name="anchor-10"></a>
+	/* Check if components is assembly for recursive checking */
+	err = ProAsmcompMdlGet(p_comps+i, &amp;mdl);
+	err = ProMdlTypeGet(mdl, &amp;mdl_type);
+	if (mdl_type == PRO_MDL_ASSEMBLY)
+<a name="anchor-11"></a>	{
+	    err = ProUtilCollectOneLevelAsmcomppath((ProAssembly)mdl, p_path, 
+		level+1, pp_path);
+	}
+    }
+<a name="anchor-12"></a>    err = ProArrayFree((ProArray*)&amp;p_comps);
+    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-13"></a>    FUNCTION :	ProUtilCollectAsmcomppath()
+    PURPOSE  :	Collect asmcomppathes for all levels of assembly,
+		including parts and subassemblies
+\*====================================================================*/
+ProError ProUtilCollectAsmcomppath(
+<a name="anchor-14"></a>    ProAssembly assy,		/* In : Assembly */
+    ProAsmcomppath **pp_path,	/* Out: The ProArray of collected pathes.
+					The function allocates memory for 
+					this argument, but you must free it. 
+					To free the memory, call the function 
+<a name="anchor-15"></a>					ProArrayFree() */
+    int *p_n_pathes)		/* Out: The number of pathes in the array */
+{
+    ProError err;
+    ProAsmcomppath path;
+<a name="anchor-16"></a>    int n_pathes;
+    
+    if((assy == (ProAssembly)NULL) || pp_path == NULL )
+	return (PRO_TK_BAD_INPUTS);
+
+<a name="anchor-17"></a>    err = ProArrayAlloc(0, sizeof(ProAsmcomppath), 10, (ProArray*)pp_path);
+    path.owner = (ProSolid)assy;
+    
+    err = ProUtilCollectOneLevelAsmcomppath(assy, &amp;path, 0, pp_path);
+    err = ProArraySizeGet((ProArray)*pp_path, &amp;n_pathes);
+<a name="anchor-18"></a>    if (n_pathes&lt;=0)
+    {	
+	err = ProArrayFree((ProArray*)pp_path);
+	return (PRO_TK_E_NOT_FOUND);
+    }
+<a name="anchor-19"></a>
+    p_n_pathes[0] = n_pathes;
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-20"></a>
+/*====================================================================*\
+    FUNCTION :	ProUtilCollectOneLevelDtmPnts()
+    PURPOSE  :	Collect Datum points in top level solid only.
+		Util function to be call from ProUtilCollectSolidDtmPnts
+<a name="anchor-21"></a>    NOTE     :  Do not call it directly
+\*====================================================================*/
+static ProError ProUtilCollectOneLevelDtmPnts(
+    ProSolid solid,
+    ProAsmcomppath *p_path,
+<a name="anchor-22"></a>    ProSelection    **p_sel)
+{
+    ProError err;
+    ProFeature *p_features;
+    ProModelitem *p_points;
+<a name="anchor-23"></a>    int i, j, n_points, n_feats;
+    ProSelection sel;
+
+    err = ProUtilCollectSolidFeaturesWithFilter (solid, 
+        (ProFeatureFilterAction)ProUtilCollectDtmPointFeatFilter, &amp;p_features);
+<a name="anchor-24"></a>
+    if (err != PRO_TK_NO_ERROR)
+	return (err);
+    err = ProArraySizeGet((ProArray)p_features, &amp;n_feats);
+
+<a name="anchor-25"></a>    for (i=0; i&lt;n_feats; i++)
+    {
+	err = ProUtilCollectFeatureGeomitems(p_features + i, PRO_POINT,
+	    (ProGeomitem**)&amp;p_points);
+	if (err != PRO_TK_NO_ERROR)
+<a name="anchor-26"></a>	    continue;
+	err = ProArraySizeGet((ProArray)p_points, &amp;n_points);
+	for (j=0; j&lt;n_points; j++)
+	{
+	    err = ProSelectionAlloc(p_path, p_points+j, &amp;sel);
+<a name="anchor-27"></a>	    err = ProArrayObjectAdd((ProArray*)p_sel, PRO_VALUE_UNUSED, 1,
+		&amp;sel); 
+	}
+	err = ProArrayFree((ProArray*)&amp;p_points);
+    }
+<a name="anchor-28"></a>    err = ProArrayFree((ProArray*)&amp;p_features);
+    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-29"></a>    FUNCTION :  ProUtilCollectSolidDtmPnts()
+    PURPOSE  :  Collect solid's  datum points. The solid can be part or
+                assembly. In case of assebly all level points will be
+                collected
+\*====================================================================*/
+<a name="anchor-30"></a>ProError ProUtilCollectSolidDtmPnts(
+    ProSolid solid,	    /* In : solid */
+    ProSelection **pp_sel,  /* Out: ProArray of Selection. The function 
+				    allocates memory for this argument, but 
+				    you must free it. To free the memory, 
+<a name="anchor-31"></a>				    call the function 
+				    ProUtilCollectionArrayFree() */
+    int *p_n_pnts)	    /* Out: The number of points in the array */ 
+{
+    ProError err;
+<a name="anchor-32"></a>    ProMdlType mdl_type;
+    ProAsmcomppath *p_pathes;
+    int i, n_pathes, n_sel;
+
+    if ((solid == (ProSolid)NULL) || (pp_sel == NULL))
+<a name="anchor-33"></a>	return (PRO_TK_BAD_INPUTS);
+
+    err = ProArrayAlloc(0, sizeof(ProSelection), 10, (ProArray*)pp_sel);
+
+    /* First collect Datum points in the model */
+<a name="anchor-34"></a>    err = ProUtilCollectOneLevelDtmPnts(solid, NULL, pp_sel);
+
+    /* Check the model type */
+    err = ProMdlTypeGet((ProMdl)solid, &amp;mdl_type);
+    if (mdl_type == PRO_MDL_ASSEMBLY)
+<a name="anchor-35"></a>    {
+	err = ProUtilCollectAsmcomppath((ProAssembly)solid, &amp;p_pathes,
+	    &amp;n_pathes);
+	if (err == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-36"></a>	    for (i=0; i&lt;n_pathes; i++)
+	    {
+		err = ProAsmcomppathMdlGet(p_pathes + i, (ProMdl*)&amp;solid);
+		err = ProUtilCollectOneLevelDtmPnts(solid, p_pathes+i, pp_sel);
+	    }
+<a name="anchor-37"></a>	    err = ProArrayFree((ProArray*)&amp;p_pathes);
+	}
+    }
+    err = ProArraySizeGet((ProArray)*pp_sel, &amp;n_sel);
+    if (n_sel &lt;=0)
+<a name="anchor-38"></a>    {
+	err  = ProArrayFree((ProArray*)pp_sel);
+	return (PRO_TK_E_NOT_FOUND);
+    }
+    
+<a name="anchor-39"></a>    p_n_pnts[0] = n_sel;
+    return (PRO_TK_NO_ERROR);
+}
+
+
+<a name="anchor-40"></a>/*====================================================================*\
+    FUNCTION :	ProUtilSelectionArrayFree()
+    PURPOSE  :	Free ProArray of ProSelection allocated by collection 
+\*====================================================================*/
+ProError ProUtilSelectionArrayFree(
+<a name="anchor-41"></a>    ProSelection **pp_sel)  /* In:ProArray  to free memory */
+{
+    ProError err;
+    int i, n_sel;
+
+<a name="anchor-42"></a>    err = ProArraySizeGet((ProArray)*pp_sel, &amp;n_sel);
+    for (i=0; i&lt;n_sel; i++)
+	err = ProSelectionFree(pp_sel[0]+i);
+    err = ProArrayFree((ProArray*)pp_sel);
+    pp_sel[0] = (ProSelection*)NULL;
+<a name="anchor-43"></a>    return (PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

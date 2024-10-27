@@ -1,0 +1,175 @@
+<html>
+<head>
+<title>TestSecerr.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+<a name="anchor-2"></a>#include &quot;ProObjects.h&quot;
+#include &quot;ProSecerror.h&quot;
+#include &quot;ProUtil.h&quot;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-3"></a>C System includes
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-4"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;TestSect.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-6"></a>Application data types
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+<a name="anchor-7"></a>\*--------------------------------------------------------------------*/
+
+/*====================================================================*\
+    FUNCTION :  ProTestSecerrAlloc()
+    PURPOSE  :  Allocates a work-space table of section errors
+<a name="anchor-8"></a>\*====================================================================*/
+ProError ProTestSecerrAlloc(ProWSecerror *error_tbl)
+{
+    ProError status;
+
+<a name="anchor-9"></a>    status = ProSecerrorAlloc(error_tbl);
+    TEST_CALL_REPORT(&quot;ProSecerrorAlloc()&quot;, &quot;ProTestSecerrAlloc()&quot;,
+                               status, status != PRO_TK_NO_ERROR);
+    return (status);
+}
+<a name="anchor-10"></a>
+/*====================================================================*\
+    FUNCTION :  ProTestSecerrFree()
+    PURPOSE  :  Free the work-space table of section errors
+\*====================================================================*/
+<a name="anchor-11"></a>ProError ProTestSecerrFree(ProWSecerror *error_tbl)
+{
+    ProError status;
+
+    status = ProSecerrorFree(error_tbl);
+<a name="anchor-12"></a>    TEST_CALL_REPORT(&quot;ProSecerrorFree()&quot;, &quot;ProTestSecerrFree()&quot;,
+                              status, status != PRO_TK_NO_ERROR);
+    return (status);
+}
+
+<a name="anchor-13"></a>/*====================================================================*\
+    FUNCTION :  ProTestSecerrCount()
+    PURPOSE  :  Counts the number of entries in the errors table
+\*====================================================================*/
+ProError ProTestSecerrCount(ProWSecerror *error_tbl, int *r_count)
+<a name="anchor-14"></a>{
+    ProError status;
+
+    status = ProSecerrorCount(error_tbl, r_count);
+    TEST_CALL_REPORT(&quot;ProSecerrorCount()&quot;, &quot;ProTestSecerrCount()&quot;,
+<a name="anchor-15"></a>                                status, status != PRO_TK_NO_ERROR);
+    return (status);
+}
+
+/*====================================================================*\
+<a name="anchor-16"></a>    FUNCTION :  ProTestSecerrAdd()
+    PURPOSE  :  Add a user-composed error to the errors table
+\*====================================================================*/
+ProError ProTestSecerrAdd(ProWSecerror *error_tbl, ProSecerrCode user_error,
+		    wchar_t *msg, ProSecerrSever severity, int ent_id,
+<a name="anchor-17"></a>		    ProSecerrAttr attribute)
+{
+    ProError status;
+
+    status = ProSecerrorAdd(error_tbl, user_error, msg, severity, ent_id,
+<a name="anchor-18"></a>			    attribute);
+    TEST_CALL_REPORT(&quot;ProSecerrorAdd()&quot;, &quot;ProTestSecerrAdd()&quot;,
+                            status, status != PRO_TK_NO_ERROR);
+    return (status);
+}
+<a name="anchor-19"></a>
+/*====================================================================*\
+    FUNCTION :  ProTestSecerrMsgGet()
+    PURPOSE  :  Get the error message from ith error table entry
+\*====================================================================*/
+<a name="anchor-20"></a>ProError ProTestSecerrMsgGet(ProWSecerror error_tbl, int ith, ProMsg PMsg)
+{
+    ProError status;
+
+    status = ProSecerrorMsgGet(error_tbl, ith, PMsg);
+<a name="anchor-21"></a>    TEST_CALL_REPORT(&quot;ProSecerrorMsgGet()&quot;, &quot;ProTestSecerrMsgGet()&quot;,
+                              status, status != PRO_TK_NO_ERROR);
+    return (status);
+}
+
+<a name="anchor-22"></a>/*====================================================================*\
+    FUNCTION :  ProTestSecerrItemGet()
+    PURPOSE  :  Get the entity-in-trouble from ith error table entry
+\*====================================================================*/
+ProError ProTestSecerrItemGet(ProWSecerror error_tbl, int ith, int *r_item)
+<a name="anchor-23"></a>{
+    ProError status;
+
+    status = ProSecerrorItemGet(error_tbl, ith, r_item);
+    TEST_CALL_REPORT(&quot;ProSecerrorItemGet()&quot;, &quot;ProTestSecerrItemGet()&quot;,
+<a name="anchor-24"></a>                                   status, status != PRO_TK_NO_ERROR);
+    return (status);
+}
+
+/*====================================================================*\
+<a name="anchor-25"></a>    FUNCTION :  ProTestSecerrShow()
+    PURPOSE  :  Show the errors given a handle to error table
+\*====================================================================*/
+ProError ProTestSecerrShow(ProWSecerror error_tbl)
+{
+<a name="anchor-26"></a>    ProError status;
+    int i, err_count, entity_id;
+    ProMsg err_msg;
+    FILE *fp;
+    char fname[] = &quot;sec_err.txt&quot;;
+<a name="anchor-27"></a>    char astr[PRO_PATH_SIZE];
+    wchar_t wstr[PRO_PATH_SIZE];
+
+    if (error_tbl == NULL)
+	return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-28"></a>
+    status = ProTestSecerrCount(&amp;error_tbl, &amp;err_count);
+    if (err_count &lt;= 0)
+        return (PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-29"></a>    if ((fp = PTApplsUnicodeFopen(fname, &quot;w&quot;)) == NULL)
+    {
+	ProTKFprintf(stderr, &quot;Error, failed to open file %s.\n&quot;, fname);
+	return (PRO_TK_GENERAL_ERROR);
+    }
+<a name="anchor-30"></a>
+    ProTKFprintf(fp, &quot;\n*** Errors of section solving and regenerating ***\n&quot;);
+    ProTKFprintf(fp, &quot;__________________________________________________\n\n&quot;);
+    ProTKFprintf(fp, &quot;Index   Entity ID       Error Message\n\n&quot;);
+    for (i = 0; i &lt; err_count; i++)
+<a name="anchor-31"></a>    {
+	ProTestSecerrMsgGet(error_tbl, i, err_msg);
+	ProTestSecerrItemGet(error_tbl, i, &amp;entity_id);
+	ProTKFprintf(fp, &quot;%3d    %10d       %s\n&quot;, i, entity_id, 
+		ProWstringToString(astr, err_msg));
+<a name="anchor-32"></a>    }
+    fclose(fp);
+    status = ProInfoWindowDisplay(ProStringToWstring(wstr, fname), NULL, NULL);
+    TEST_CALL_REPORT (&quot;ProInfoWindowDisplay&quot;, &quot;ProTestSecerrShow&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-33"></a>    return (PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

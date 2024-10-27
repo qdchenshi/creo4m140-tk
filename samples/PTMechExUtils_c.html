@@ -1,0 +1,452 @@
+<html>
+<head>
+<title>PTMechExUtils.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>/*--------------------------------------------------------------------*\
+  Pro/Toolkit includes 
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+<a name="anchor-2"></a>#include &lt;ProGeomitemdata.h>
+#include &lt;ProMechanica.h>
+#include &lt;ProMechConstraint.h>
+#include &lt;ProMechLoad.h>
+#include &lt;ProMechMaterialOrient.h>
+<a name="anchor-3"></a>#include &lt;ProMechMass.h>
+#include &lt;ProMechValue.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProUtil.h>
+#include &lt;ProWstring.h>
+<a name="anchor-4"></a>#include &lt;ProTKRunTime.h>
+
+#include &lt;math.h>
+#include &lt;ProMechLoadset.h>
+
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &lt;PTMechExamples.h>
+
+<a name="anchor-6"></a>/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+
+static ProError status;
+<a name="anchor-7"></a>
+/*=============================================================*\
+  FUNCTION: PTMechExGeomReferenceCreate 
+  PURPOSE:  This fn is used to get the geom reference. 
+\*=============================================================*/
+<a name="anchor-8"></a>
+ProError PTMechExGeomReferenceCreate (PTMechExGeomRef* reference , ProMechGeomref *geom_ref)
+{
+  ProMechGeomref geomref_entity;
+  
+<a name="anchor-9"></a>  status = ProMechgeomrefAlloc (&amp;geomref_entity);
+  PT_TEST_LOG_SUCC (&quot;ProMechgeomrefAlloc&quot;);
+
+/*--------------------------------------------------------------------*\
+Set the geomref type, subtype,id and asmcomppath
+<a name="anchor-10"></a>\*--------------------------------------------------------------------*/
+  
+  status = ProMechgeomrefTypeSet (geomref_entity, reference->type);
+  PT_TEST_LOG_SUCC (&quot;ProMechgeomrefTypeSet&quot;);
+  
+<a name="anchor-11"></a>  if (reference->subtype != PRO_VALUE_UNUSED ) /* Only For Ref.: Curve, Edge, Point, Surface */
+    {
+      status = ProMechgeomrefSubtypeSet (geomref_entity, reference->subtype);
+      PT_TEST_LOG_SUCC (&quot;ProMechgeomrefSubtypeSet&quot;);
+    }
+<a name="anchor-12"></a>  
+  if (reference->id != PRO_VALUE_UNUSED)  /* For Ref. other than Part */
+    {
+      status = ProMechgeomrefIdSet (geomref_entity, reference->id);
+      PT_TEST_LOG_SUCC (&quot;ProMechgeomrefIdSet&quot;);
+<a name="anchor-13"></a>    }
+  
+  if ( reference->path != NULL) /* Only For Ref. in Assembly */
+    {
+      status = ProMechgeomrefPathSet (geomref_entity, reference->path);
+<a name="anchor-14"></a>      PT_TEST_LOG_SUCC (&quot;ProMechgeomrefPathSet&quot;);
+    }
+  
+  *geom_ref = geomref_entity;
+  
+<a name="anchor-15"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*=============================================================================*\
+  FUNCTION: PTMechExGeomReferenceArrayCreate 
+<a name="anchor-16"></a>  PURPOSE:This fn creates a ProArray of ProMechGeomref items and outputs the same.
+\*=============================================================================*/
+
+ProError PTMechExGeomReferenceArrayCreate (int num_ents, PTMechExGeomRef* array_refs,
+        ProMechGeomref **geom_refs)
+<a name="anchor-17"></a>{
+    ProMechGeomref *array_geomrefs;
+    int i;
+
+    if ( num_ents == 0 || array_refs == NULL)
+<a name="anchor-18"></a>        return PRO_TK_BAD_INPUTS;
+    else
+    {
+/*--------------------------------------------------------------------*\
+Craeate array of geomref
+<a name="anchor-19"></a>\*--------------------------------------------------------------------*/
+        status = ProArrayAlloc ( num_ents, sizeof (ProMechGeomref), 1,
+                (ProArray *) &amp;array_geomrefs);
+        PT_TEST_LOG_SUCC (&quot;ProArrayAlloc&quot;);
+	
+<a name="anchor-20"></a>        for (i=0; i&lt;num_ents; i++)
+	  {
+            ProMechGeomref geomref_entity;
+	    
+            status = PTMechExGeomReferenceCreate ( &amp;array_refs[i], &amp;geomref_entity);
+<a name="anchor-21"></a>            PT_TEST_LOG_SUCC (&quot;PTMechExGeomReferenceCreate&quot;);
+	    
+            array_geomrefs[i] = geomref_entity;
+        }
+        *geom_refs = array_geomrefs;
+<a name="anchor-22"></a>    }
+
+    return PRO_TK_NO_ERROR;
+}
+/*============================================================================
+<a name="anchor-23"></a>  FUNCTION: PTMechExGetMechItemByName 
+  PURPOSE: This fn is used to get the ProMechItem of a specific ProType
+           from the Mechanica UI.
+=============================================================================*/
+
+<a name="anchor-24"></a>ProError PTMechExGetMechItemByName (ProSolid solid, ProType type, char* item_name, ProMechItem *item)
+{
+	mechItemData item_data;
+
+    ProAppData data;
+<a name="anchor-25"></a>
+	item_data.item_name = item_name;
+	item_data.item = item;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-26"></a>Visit the solid and collect the names of the items  
+\*--------------------------------------------------------------------*/
+
+    status = ProSolidMechitemVisit ( solid, type, MechItem_ActionFn_name , NULL, &amp;item_data);
+    PT_TEST_LOG (&quot;ProSolidMechitemVisit&quot;, status, (status != PRO_TK_E_FOUND &amp;&amp; status != PRO_TK_NO_ERROR));
+<a name="anchor-27"></a>
+    if (status == PRO_TK_E_FOUND)
+    {
+        return PRO_TK_NO_ERROR;
+    }
+<a name="anchor-28"></a>    else
+        return PRO_TK_E_NOT_FOUND;
+
+}
+
+<a name="anchor-29"></a>/*============================================================================
+  FUNCTION: MechItem_ActionFn_name 
+  PURPOSE:  Visits the mech item and copies the data of mech item  
+=============================================================================*/
+ProError MechItem_ActionFn_name (ProMechItem* item, ProError filter_status, ProAppData app_data)
+<a name="anchor-30"></a>{
+	mechItemData *item_data = (mechItemData *)app_data;
+    ProName item_wname;
+    char item_name[100];
+
+<a name="anchor-31"></a>    status = ProMechitemNameGet (item, item_wname);
+    PT_TEST_LOG_SUCC (&quot;ProMechitemNameGet&quot;);
+
+    ProWstringToString ( item_name, item_wname);
+
+<a name="anchor-32"></a>    if (strcmp (item_data->item_name, item_name) == 0)
+      {
+
+		item_data->item->id = item->id;
+        item_data->item->type = item->type;
+<a name="anchor-33"></a>        item_data->item->owner = item->owner;
+		
+		return PRO_TK_E_FOUND;
+      }
+    
+<a name="anchor-34"></a>    return PRO_TK_NO_ERROR;
+}
+
+/*============================================================================
+  FUNCTION: PTMechExMagValueIncrease 
+<a name="anchor-35"></a>  PURPOSE: Increase the value 5 times  
+=============================================================================*/
+
+ProError PTMechExMagValueIncrease(ProLine input_val,ProLine output_val)
+{
+<a name="anchor-36"></a>  double mag;
+  char  res[PRO_LINE_SIZE];
+  wchar_t w_res[PRO_LINE_SIZE];
+
+  ProWstringToString(res,input_val);
+<a name="anchor-37"></a>
+  mag =  (double )atof (res);
+
+  mag = mag * 5;
+
+<a name="anchor-38"></a>  ProTKSprintf(res,&quot;%f&quot;,mag);
+ 
+  ProStringToWstring(w_res,res);
+  ProWstringCopy (w_res,output_val, PRO_VALUE_UNUSED);
+  
+<a name="anchor-39"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*============================================================================*\
+ FUNCTION: PTMechExConstraintAddinConstraintset 
+<a name="anchor-40"></a>  PURPOSE: Add Constrint to a Constraintset. 
+\*============================================================================*/
+
+ProError PTMechExConstraintAddinConstraintset (ProMdl part, char *constrset_name,
+					     ProMechItem *constraint)
+<a name="anchor-41"></a>{
+  
+     ProMechItem ui_constraint_item;
+
+     status = PTMechExGetMechItemByName (part, PRO_SIMULATION_CONSTR_SET,constrset_name,
+<a name="anchor-42"></a>                                       &amp;ui_constraint_item);
+     PT_TEST_LOG_SUCC (&quot;PTMechExGetMechItemByName&quot;);
+
+     status = ProMechconstrConstrsetAssign ( constraint, ui_constraint_item.id, PRO_B_TRUE);
+     PT_TEST_LOG_SUCC (&quot;ProMechconstrConstrsetAssign&quot;);
+<a name="anchor-43"></a>
+     return status;
+}
+
+/*============================================================================*\
+<a name="anchor-44"></a> FUNCTION: PTMechExConstraintsetNameGet
+ PURPOSE: Get the constrain set name from the mech item 
+\*============================================================================*/
+ProError PTMechExConstraintsetNameGet (ProMechItem *item, ProCharLine constrset_name) 
+{
+<a name="anchor-45"></a>  ProName item_proname;
+  char    item_name [PRO_NAME_SIZE];
+  int num_constrset;
+  int *array_constrset;
+
+<a name="anchor-46"></a>  status = ProMechconstrConstrsetsGet ( item, &amp;array_constrset);
+  PT_TEST_LOG_SUCC (&quot;ProMechconstrConstrsetsGet&quot;);
+
+  if (status == PRO_TK_NO_ERROR )
+  {
+<a name="anchor-47"></a>      status = ProArraySizeGet (array_constrset, &amp;num_constrset);
+      PT_TEST_LOG_SUCC (&quot;ProArraySizeGet&quot;);
+
+      if (num_constrset > 0)
+      {
+<a name="anchor-48"></a>          ProMechItem *constrset_item;
+          ProName constrset_proname;
+
+          status = PTMechExGetMechItemNameById (item->owner, PRO_SIMULATION_CONSTR_SET, array_constrset[0],
+			  constrset_proname);
+<a name="anchor-49"></a>          PT_TEST_LOG_SUCC (&quot;PTMechExGetMechItemNameById&quot;);
+
+          ProWstringToString ( constrset_name, constrset_proname);
+       }
+
+<a name="anchor-50"></a>  }
+  return status;
+ }
+
+/*============================================================================*\
+<a name="anchor-51"></a>FUNCTION:PTMechExGetMechItemNameById
+ PURPOSE: Get the mech item from the id
+\*============================================================================*/
+ProError PTMechExGetMechItemNameById(ProSolid solid, ProType type, int item_id, ProName constrset_proname)
+{
+<a name="anchor-52"></a>	mechItemNameData item_data;
+
+	item_data.item_id = item_id;
+	item_data.item_name = constrset_proname;
+
+<a name="anchor-53"></a>
+    status = ProSolidMechitemVisit ( solid, type, MechItem_ActionFn_id , NULL, &amp;item_data);
+    PT_TEST_LOG (&quot;ProSolidMechitemVisit&quot;, status, (status != PRO_TK_E_FOUND &amp;&amp; status != PRO_TK_NO_ERROR));
+
+    if (status == PRO_TK_E_FOUND)
+<a name="anchor-54"></a>    {
+        return PRO_TK_NO_ERROR;
+    }
+    else
+        return PRO_TK_E_NOT_FOUND;
+<a name="anchor-55"></a>}
+/*============================================================================*\
+ FUNCTION:MechItem_ActionFn_id
+ PURPOSE: Visit the mech item and copy the data
+\*============================================================================*/
+<a name="anchor-56"></a>
+ProError MechItem_ActionFn_id (ProMechItem* item, ProError filter_status, ProAppData app_data)
+{
+    int  item_id;
+    char item_name[100];
+<a name="anchor-57"></a>
+	mechItemNameData *item_data;
+
+	item_data = (mechItemNameData*) app_data;
+
+<a name="anchor-58"></a>	item_id = item->id;
+
+    if (item_id == item_data->item_id)
+    {
+		status = ProMechitemNameGet(item, item_data->item_name);
+<a name="anchor-59"></a>		PT_TEST_LOG_SUCC (&quot;ProMechitemNameGet&quot;);
+       return PRO_TK_E_FOUND;
+    }
+
+    return PRO_TK_NO_ERROR;
+<a name="anchor-60"></a>}
+
+/*=============================================================*\
+  FUNCTION : PTMechExComponentsVectoredValueCreate 
+  PURPOSE  : To Create the vector value for component
+<a name="anchor-61"></a>\*=============================================================*/
+ProError PTMechExComponentsVectoredValueCreate (int n_vector, 
+	ProMechExpression exp[], ProMechVectoredValue *vector_val)
+{
+   ProMechVectoredValue value;
+<a name="anchor-62"></a>   ProMechDirectionVector dir_vector;
+   ProMechValue *arr_val, mech_val;
+   int i;
+   
+   status = ProMechvectoredvalueAlloc (&amp;value);
+<a name="anchor-63"></a>   PT_TEST_LOG_SUCC (&quot;ProMechvectoredvalueAlloc&quot;);
+   
+   status = ProMechvectoredvalueDirectiontypeSet (value, PRO_MECH_DIRECTION_BY_VECTOR);
+   PT_TEST_LOG_SUCC (&quot;ProMechvectoredvalueDirectiontypeSet&quot;);  
+    
+<a name="anchor-64"></a>   status = ProMechdirvectorAlloc (&amp;dir_vector);
+   PT_TEST_LOG_SUCC (&quot;ProMechdirvectorAlloc&quot;);   
+   
+   status = ProArrayAlloc (3, sizeof (ProMechValue), 1, (ProArray *)&amp;arr_val);
+   PT_TEST_LOG_SUCC (&quot;ProArrayAlloc&quot;);   
+<a name="anchor-65"></a>   for (i = 0; i &lt; n_vector; i++)
+   {
+      status = ProMechvalueAlloc (&amp;mech_val);
+      PT_TEST_LOG_SUCC (&quot;ProMechvalueAlloc&quot;); 
+      status = ProMechvalueValueSet (mech_val, exp[i]);
+<a name="anchor-66"></a>      PT_TEST_LOG_SUCC (&quot;ProMechvalueValueSet&quot;);
+      arr_val[i] = mech_val;      
+   }
+   status = ProMechdirvectorComponentsSet (dir_vector, arr_val);
+   PT_TEST_LOG_SUCC (&quot;ProMechdirvectorComponentsSet&quot;);
+<a name="anchor-67"></a>   
+   status = ProMechvectoredvalueDirectionvectorSet (value, dir_vector);
+   PT_TEST_LOG_SUCC (&quot;ProMechvectoredvalueDirectionvectorSet&quot;);   
+   
+   *vector_val = value;
+<a name="anchor-68"></a>   return PRO_TK_NO_ERROR;
+}
+
+/*=============================================================*\
+  FUNCTION : PTMechExAddLoadinLoadset 
+<a name="anchor-69"></a>  PURPOSE  : To add created load in specified loadset.
+\*=============================================================*/
+ProError PTMechExAddLoadinLoadset (ProMdl mdl, char* name, ProMechItem *m_item)
+{
+   ProMechItem load_item;
+<a name="anchor-70"></a>   
+   status = PTMechExGetMechItemByName ((ProSolid)mdl, PRO_SIMULATION_LOAD_SET, name, &amp;load_item);   
+   PT_TEST_LOG_SUCC (&quot;PTMechExGetMechItemByName&quot;);
+   
+   status = ProMechloadLoadsetAssign (m_item, load_item.id, PRO_B_TRUE); 
+<a name="anchor-71"></a>   PT_TEST_LOG_SUCC (&quot;ProMechloadLoadsetAssign&quot;);
+    
+   return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-72"></a>/*=============================================================*\
+  FUNCTION : PTMechExValueByExpressionCreate 
+  PURPOSE  : To create mech value for load.
+\*=============================================================*/
+ProError PTMechExValueByExpressionCreate (ProMechExpression exp, ProMechValue *m_value)
+<a name="anchor-73"></a>{
+   ProMechValue m_val;
+   
+   status = ProMechvalueAlloc (&amp;m_val);
+   PT_TEST_LOG_SUCC (&quot;ProMechvalueAlloc&quot;);
+<a name="anchor-74"></a>   
+   status = ProMechvalueValueSet (m_val, exp);
+   PT_TEST_LOG_SUCC (&quot;ProMechvalueValueSet&quot;);
+   *m_value = m_val;
+   
+<a name="anchor-75"></a>    return PRO_TK_NO_ERROR;
+}
+
+/*=============================================================*\
+  FUNCTION : PTMechExDirVectorMagnitudeValueCreate 
+<a name="anchor-76"></a>  PURPOSE  : To create vector.
+\*=============================================================*/
+ProError PTMechExDirVectorMagnitudeValueCreate (int data, ProMechExpression mech_exp[], 
+					ProMechExpression expr, ProMechVectoredValue *vector)
+{
+<a name="anchor-77"></a>   ProMechVectoredValue v_value;
+   ProMechValue mag_val;
+
+   status = PTMechExComponentsVectoredValueCreate (data, mech_exp, &amp;v_value);
+   PT_TEST_LOG_SUCC (&quot;PTMechExComponentsVectoredValueCreate&quot;);
+<a name="anchor-78"></a>
+   status = PTMechExValueByExpressionCreate (expr, &amp;mag_val);
+   PT_TEST_LOG_SUCC (&quot;PTMechExValueByExpressionCreate&quot;);
+
+   status = ProMechvectoredvalueMagnitudeSet (v_value, mag_val);
+<a name="anchor-79"></a>   PT_TEST_LOG_SUCC (&quot;ProMechvectoredvalueMagnitudeSet&quot;);
+
+   *vector = v_value;
+   return PRO_TK_NO_ERROR;
+}
+<a name="anchor-80"></a>
+/*=============================================================*\
+  FUNCTION : PTMechExLoadsetCreate 
+  PURPOSE  : To create loadset for load.
+\*=============================================================*/
+<a name="anchor-81"></a>ProError PTMechExLoadsetCreate (ProSolid model, char* loadset_name)
+{
+   ProMechItem get_item, set_item;
+   ProName w_loadset_name;
+
+<a name="anchor-82"></a>   ProStringToWstring (w_loadset_name, loadset_name);
+
+   status = PTMechExGetMechItemByName (model, PRO_SIMULATION_LOAD_SET, loadset_name, &amp;get_item);
+   PT_TEST_LOG (&quot;PTMechExGetMechItemByName&quot;, status, 
+   			status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+<a name="anchor-83"></a>
+   if (status == PRO_TK_E_NOT_FOUND)
+   {
+     status = ProMechitemCreate (model, PRO_SIMULATION_LOAD_SET, &amp;set_item);
+     PT_TEST_LOG_SUCC (&quot;ProMechitemCreate&quot;);
+<a name="anchor-84"></a>
+     status = ProMechitemNameSet (&amp;set_item, w_loadset_name);
+     PT_TEST_LOG_SUCC (&quot;ProMechitemNameSet&quot;);
+
+     status = ProMechloadsetDescriptionSet (&amp;set_item, L&quot;Loadset for Mechanica Example&quot;);
+<a name="anchor-85"></a>     PT_TEST_LOG_SUCC (&quot;ProMechloadsetDescriptionSet&quot;);
+   }
+   return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-86"></a>/*=============================================================*\
+  FUNCTION : PTMechExDeleteAndPop 
+  PURPOSE  : To delete and pop up the menu.
+\*=============================================================*/
+ProError PTMechExDeleteAndPop()
+<a name="anchor-87"></a>{
+   status = ProMenuDeleteWithStatus (0);
+   PT_TEST_LOG_SUCC (&quot;ProMenuDeleteWithStatus&quot;);
+   
+   status = ProMenuPop();
+<a name="anchor-88"></a>   PT_TEST_LOG_SUCC (&quot;ProMenuPop&quot;);
+   
+   return PRO_TK_NO_ERROR;
+}
+</pre>
+</body>
+</html>

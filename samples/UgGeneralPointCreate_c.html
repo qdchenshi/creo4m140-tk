@@ -1,0 +1,432 @@
+<html>
+<head>
+<title>UgGeneralPointCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProFeature.h&quot;
+<a name="anchor-2"></a>#include &quot;ProElemId.h&quot;
+#include &quot;ProExtrude.h&quot;
+#include &quot;ProModFeat.h&quot;
+#include &quot;ProStdSection.h&quot;
+#include &quot;ProElement.h&quot;
+<a name="anchor-3"></a>#include &quot;ProElempath.h&quot;
+#include &quot;ProFeatType.h&quot;
+#include &quot;ProFeatForm.h&quot;
+#include &quot;ProSelection.h&quot;
+#include &quot;ProSection.h&quot;
+<a name="anchor-4"></a>
+#include &quot;ProDtmPnt.h&quot;
+
+#define C_LOG(a) ProTKPrintf (&quot;Status for %s is = %d\n&quot;, a, status ); \
+	ERROR_CHECK( a, &quot;UgSktExtrusionCreate.c&quot;, status );
+<a name="anchor-5"></a>
+#define C_PRINT(a) ProTKPrintf ( &quot;%s\n&quot;, a);
+
+static ProFileName message_file; 
+
+<a name="anchor-6"></a>/*---------------------- Function Prototypes -------------------------*/
+ProError ProDemoGeneralPointCreate();
+
+/*------------------------- External Data ----------------------------*/
+
+<a name="anchor-7"></a>/*------------------------- Global Data -----------------------------*/
+
+/*===============================================================*\
+FUNCTION : ProDemoGeneralPointCreate
+PURPOSE  : Demonstrates the creation of the General Datum Point
+<a name="anchor-8"></a>\*===============================================================*/
+ProError ProDemoGeneralPointCreate()
+{
+  ProReference REPDEP_ref3;
+  ProReference REPDEP_ref2;
+<a name="anchor-9"></a>  ProReference REPDEP_ref1;
+  ProErrorlist            errors;
+  ProMdl                  model;
+  ProModelitem            model_item;
+  ProSelection            model_sel;
+<a name="anchor-10"></a>  ProFeature              feature;
+  ProFeatureCreateOptions *opts = 0;
+  ProAsmcomppath          *p_comp_path = NULL;
+  ProValue                value;
+  char                    name[PRO_NAME_SIZE];
+<a name="anchor-11"></a>  ProError		    status;
+  
+
+  ProElement pro_e_feature_tree;
+  ProElement pro_e_feature_type;
+<a name="anchor-12"></a>  ProElement pro_e_dpoint_type;
+  ProElement pro_e_std_feature_name;
+  ProElement pro_e_dpoint_points_array;
+  ProElement pro_e_dpoint_point;
+  ProElement pro_e_dpoint_point_name;
+<a name="anchor-13"></a>  ProElement pro_e_dpoint_pla_constraints;
+  ProElement pro_e_dpoint_pla_constraint;
+  ProElement pro_e_dpoint_pla_constr_ref;
+  ProElement pro_e_dpoint_pla_constr_type;
+  ProElement pro_e_dpoint_pla_constr_val;
+<a name="anchor-14"></a>  
+  ProName 	wide_string;
+  ProValueData 	value_data;
+  ProSelection * p_select;
+  int 		n_select;
+<a name="anchor-15"></a>  ProBoolean 	is_interactive = PRO_B_TRUE;
+  
+  ProStringToWstring ( message_file, &quot;utilities.txt&quot; ); 
+  
+  /*---------------------------------------------------------------*\
+<a name="anchor-16"></a>    Populating root element PRO_E_FEATURE_TREE 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_FEATURE_TREE *** &quot; );
+  status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;pro_e_feature_tree ); 
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-17"></a>  
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_FEATURE_TYPE 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_FEATURE_TYPE *** &quot; );
+<a name="anchor-18"></a>  status = ProElementAlloc ( PRO_E_FEATURE_TYPE, &amp;pro_e_feature_type );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_feature_type,PRO_FEAT_DATUM_POINT);
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_feature_type );
+<a name="anchor-19"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_TYPE
+  \*---------------------------------------------------------------*/
+<a name="anchor-20"></a>  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_TYPE *** &quot; );
+  status = ProElementAlloc ( PRO_E_DPOINT_TYPE, &amp;pro_e_dpoint_type );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_dpoint_type,PRO_DPOINT_TYPE_GENERAL);
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+<a name="anchor-21"></a>  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_dpoint_type );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_STD_FEATURE_NAME
+<a name="anchor-22"></a>  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_STD_FEATURE_NAME *** &quot; );
+  status = ProElementAlloc ( PRO_E_STD_FEATURE_NAME, 
+		&amp;pro_e_std_feature_name ); 
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-23"></a>  ProStringToWstring ( wide_string, &quot;MY_PNT0&quot; );
+  status = ProElementWstringSet(pro_e_std_feature_name,wide_string);
+  C_LOG( &quot; ProElementWstringSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+		pro_e_std_feature_name );
+<a name="anchor-24"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+  \*---------------------------------------------------------------*/
+<a name="anchor-25"></a>  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_POINTS_ARRAY *** &quot; );
+  status = ProElementAlloc ( PRO_E_DPOINT_POINTS_ARRAY, 
+		&amp;pro_e_dpoint_points_array );
+  C_LOG( &quot; ProElementAlloc&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+<a name="anchor-26"></a>		pro_e_dpoint_points_array  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+<a name="anchor-27"></a>		       -> PRO_E_DPOINT_POINT
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_POINT *** &quot; );
+  status = ProElementAlloc ( PRO_E_DPOINT_POINT, &amp;pro_e_dpoint_point );
+  C_LOG( &quot; ProElementAlloc&quot; );
+<a name="anchor-28"></a>  status = ProElemtreeElementAdd ( pro_e_dpoint_points_array, NULL, 
+		pro_e_dpoint_point  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  /*---------------------------------------------------------------*\
+<a name="anchor-29"></a>    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+		          -> PRO_E_DPOINT_POINT_NAME
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_POINT_NAME *** &quot; );
+<a name="anchor-30"></a>  status = ProElementAlloc ( PRO_E_DPOINT_POINT_NAME, 
+		&amp;pro_e_dpoint_point_name ); 
+  C_LOG( &quot; ProElementAlloc &quot; );
+  ProStringToWstring ( wide_string, &quot;PNT0&quot; );
+  status = ProElementWstringSet(pro_e_dpoint_point_name,wide_string);
+<a name="anchor-31"></a>  C_LOG( &quot; ProElementWstringSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_point, NULL, 
+		pro_e_dpoint_point_name );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+<a name="anchor-32"></a>  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+  \*---------------------------------------------------------------*/
+<a name="anchor-33"></a>  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTRAINTS *** &quot; );
+  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTRAINTS, 
+		&amp;pro_e_dpoint_pla_constraints );
+  C_LOG( &quot; ProElementAlloc&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_point, NULL, 
+<a name="anchor-34"></a>		pro_e_dpoint_pla_constraints  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+<a name="anchor-35"></a>		       -> PRO_E_DPOINT_POINT
+		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTRAINT *** &quot; );
+<a name="anchor-36"></a>  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTRAINT, 
+		&amp;pro_e_dpoint_pla_constraint );
+  C_LOG( &quot; ProElementAlloc&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraints, NULL, 
+		pro_e_dpoint_pla_constraint  );
+<a name="anchor-37"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+<a name="anchor-38"></a>		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+		                -> PRO_E_DPOINT_PLA_CONSTR_REF
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTR_REF *** &quot; );
+<a name="anchor-39"></a>  status = ProMessageDisplay ( message_file, &quot;Select a reference Surface&quot;);
+  C_LOG( &quot; ProMessageDisplay&quot; );
+  ProTKPrintf ( &quot;Please select datum,surface,sldface,qltface_ID_5 type of Modelitem\n&quot;);
+  status = ProSelect ( &quot;datum,surface,sldface,qltface&quot;, 1, NULL, NULL, NULL, 
+		NULL, &amp;p_select, &amp;n_select );
+<a name="anchor-40"></a>  C_LOG( &quot; ProSelect&quot; );
+  if ( n_select &lt;= 0 ) return -1; 
+  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTR_REF, 
+		&amp;pro_e_dpoint_pla_constr_ref );
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-41"></a>  status = ProSelectionToReference( p_select[0],&amp;REPDEP_ref1 );
+  status = ProElementReferenceSet(pro_e_dpoint_pla_constr_ref,REPDEP_ref1);
+  C_LOG( &quot; ProElementReferenceSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraint, NULL, 
+		pro_e_dpoint_pla_constr_ref );
+<a name="anchor-42"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+ 
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+<a name="anchor-43"></a>		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+		                -> PRO_E_DPOINT_PLA_CONSTR_TYPE
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTR_TYPE *** &quot; );
+<a name="anchor-44"></a>  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTR_TYPE, 
+		&amp;pro_e_dpoint_pla_constr_type );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_dpoint_pla_constr_type,PRO_DTMPNT_CONSTR_TYPE_ON);
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+<a name="anchor-45"></a>  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraint, NULL, 
+		pro_e_dpoint_pla_constr_type );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+ 
+  /*---------------------------------------------------------------*\
+<a name="anchor-46"></a>    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+		                -> PRO_E_DPOINT_PLA_CONSTR_VAL
+<a name="anchor-47"></a>  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTR_VAL *** &quot; );
+  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTR_VAL, 
+		&amp;pro_e_dpoint_pla_constr_val );
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-48"></a>  status = ProElementDecimalsSet( pro_e_dpoint_pla_constr_val,4 );
+  status = ProElementDoubleSet(pro_e_dpoint_pla_constr_val,0.000000);
+  C_LOG( &quot; ProElementDoubleSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraint, NULL, 
+		pro_e_dpoint_pla_constr_val );
+<a name="anchor-49"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+ 
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+<a name="anchor-50"></a>		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTRAINT *** &quot; );
+  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTRAINT, 
+<a name="anchor-51"></a>		&amp;pro_e_dpoint_pla_constraint );
+  C_LOG( &quot; ProElementAlloc&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraints, NULL, 
+		pro_e_dpoint_pla_constraint  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-52"></a>  
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+<a name="anchor-53"></a>		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+		                -> PRO_E_DPOINT_PLA_CONSTR_REF
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTR_REF *** &quot; );
+  status = ProMessageDisplay ( message_file, &quot;Select a reference Surface&quot;);
+<a name="anchor-54"></a>  C_LOG( &quot; ProMessageDisplay&quot; );
+  ProTKPrintf ( &quot;Please select datum,surface,sldface,qltface_ID_5 type of Modelitem\n&quot;);
+  status = ProSelect ( &quot;datum,surface,sldface,qltface&quot;, 1, NULL, NULL, 
+		NULL, NULL, &amp;p_select, &amp;n_select );
+  C_LOG( &quot; ProSelect&quot; );
+<a name="anchor-55"></a>  if ( n_select &lt;= 0 ) return -1; 
+  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTR_REF, 
+		&amp;pro_e_dpoint_pla_constr_ref );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProSelectionToReference( p_select[0],&amp;REPDEP_ref2 );
+<a name="anchor-56"></a>  status = ProElementReferenceSet(pro_e_dpoint_pla_constr_ref,REPDEP_ref2);
+  C_LOG( &quot; ProElementReferenceSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraint, NULL, 
+		pro_e_dpoint_pla_constr_ref );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-57"></a> 
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+<a name="anchor-58"></a>		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+		                -> PRO_E_DPOINT_PLA_CONSTR_TYPE
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTR_TYPE *** &quot; );
+  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTR_TYPE, 
+<a name="anchor-59"></a>		&amp;pro_e_dpoint_pla_constr_type );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_dpoint_pla_constr_type,PRO_DTMPNT_CONSTR_TYPE_ON);
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraint, NULL, 
+<a name="anchor-60"></a>		pro_e_dpoint_pla_constr_type );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+<a name="anchor-61"></a>		       -> PRO_E_DPOINT_POINT
+		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+		                -> PRO_E_DPOINT_PLA_CONSTR_VAL
+  \*---------------------------------------------------------------*/
+<a name="anchor-62"></a>  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTR_VAL *** &quot; );
+  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTR_VAL, 
+		&amp;pro_e_dpoint_pla_constr_val );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementDecimalsSet( pro_e_dpoint_pla_constr_val,4 );
+<a name="anchor-63"></a>  status = ProElementDoubleSet(pro_e_dpoint_pla_constr_val,0.000000);
+  C_LOG( &quot; ProElementDoubleSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraint, NULL, 
+		pro_e_dpoint_pla_constr_val );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-64"></a> 
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+<a name="anchor-65"></a>		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTRAINT *** &quot; );
+  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTRAINT, 
+		&amp;pro_e_dpoint_pla_constraint );
+<a name="anchor-66"></a>  C_LOG( &quot; ProElementAlloc&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraints, NULL, 
+		pro_e_dpoint_pla_constraint  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+<a name="anchor-67"></a>  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+<a name="anchor-68"></a>		                -> PRO_E_DPOINT_PLA_CONSTR_REF
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTR_REF *** &quot; );
+  status = ProMessageDisplay ( message_file, &quot;Select a reference Surface&quot;);
+  C_LOG( &quot; ProMessageDisplay&quot; );
+<a name="anchor-69"></a>  ProTKPrintf ( &quot;Please select datum,surface,sldface,qltface_ID_5 type of Modelitem\n&quot;);
+  status = ProSelect ( &quot;datum,surface,sldface,qltface&quot;, 1, NULL, NULL, 
+		NULL, NULL, &amp;p_select, &amp;n_select );
+  C_LOG( &quot; ProSelect&quot; );
+  if ( n_select &lt;= 0 ) return -1; 
+<a name="anchor-70"></a>  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTR_REF, 
+		&amp;pro_e_dpoint_pla_constr_ref );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProSelectionToReference( p_select[0],&amp;REPDEP_ref3 );
+  status = ProElementReferenceSet(pro_e_dpoint_pla_constr_ref,REPDEP_ref3);
+<a name="anchor-71"></a>  C_LOG( &quot; ProElementReferenceSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraint, NULL, 
+		pro_e_dpoint_pla_constr_ref );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+ 
+<a name="anchor-72"></a>  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+<a name="anchor-73"></a>		                -> PRO_E_DPOINT_PLA_CONSTR_TYPE
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTR_TYPE *** &quot; );
+  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTR_TYPE, 
+		&amp;pro_e_dpoint_pla_constr_type );
+<a name="anchor-74"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_dpoint_pla_constr_type,PRO_DTMPNT_CONSTR_TYPE_ON);
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraint, NULL, 
+		pro_e_dpoint_pla_constr_type );
+<a name="anchor-75"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_DPOINT_POINTS_ARRAY
+		       -> PRO_E_DPOINT_POINT
+<a name="anchor-76"></a>		          -> PRO_E_DPOINT_PLA_CONSTRAINTS
+		             -> PRO_E_DPOINT_PLA_CONSTRAINT
+		                -> PRO_E_DPOINT_PLA_CONSTR_VAL
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DPOINT_PLA_CONSTR_VAL *** &quot; );
+<a name="anchor-77"></a>  status = ProElementAlloc ( PRO_E_DPOINT_PLA_CONSTR_VAL, 
+		&amp;pro_e_dpoint_pla_constr_val );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementDecimalsSet( pro_e_dpoint_pla_constr_val,4 );
+  status = ProElementDoubleSet(pro_e_dpoint_pla_constr_val,0.000000);
+<a name="anchor-78"></a>  C_LOG( &quot; ProElementDoubleSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_dpoint_pla_constraint, NULL, 
+		pro_e_dpoint_pla_constr_val );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+<a name="anchor-79"></a>  /*---------------------------------------------------------------*\
+    Create the feature in the current model.
+  \*---------------------------------------------------------------*/
+  status = ProMdlCurrentGet (&amp;model);
+  if ( status != PRO_TK_NO_ERROR ) return ( status );
+<a name="anchor-80"></a>  status = ProMdlToModelitem( model, &amp;model_item ); 
+  status = ProSelectionAlloc (p_comp_path, &amp;model_item,
+			   &amp;model_sel);
+  
+
+<a name="anchor-81"></a>  status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+    1, (ProArray*)&amp;opts);
+
+  opts[0]= PRO_FEAT_CR_DEFINE_MISS_ELEMS;
+
+<a name="anchor-82"></a>  status = ProFeatureWithoptionsCreate (model_sel, pro_e_feature_tree,
+    opts, PRO_REGEN_NO_FLAGS, &amp;feature, &amp;errors);
+  C_LOG (&quot; ProFeatureWithoptionsCreate&quot;); 
+
+  status = ProArrayFree((ProArray*)&amp;opts);
+<a name="anchor-83"></a>  
+  status = ProElementFree (&amp;pro_e_feature_tree ); 
+  C_LOG (&quot; ProElementFree&quot;); 
+  
+  return (status);
+<a name="anchor-84"></a>}
+
+#undef C_LOG
+#undef C_PRINT
+</pre>
+</body>
+</html>

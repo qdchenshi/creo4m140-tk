@@ -1,0 +1,926 @@
+<html>
+<head>
+<title>UgMfgToolMotions.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkitErrors.h>
+#include &lt;ProSelection.h>
+#include &lt;ProElement.h>
+#include &lt;ProMfg.h>
+<a name="anchor-2"></a>#include &lt;ProMfgOptions.h>
+#include &lt;ProUtil.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;ProCrvcollection.h>
+
+<a name="anchor-3"></a>#include &lt;TestError.h>
+#include &lt;UtilString.h>
+#include &lt;TestConsts.h>
+#include &lt;UgMfg.h>
+
+<a name="anchor-4"></a>
+/*====================================================================*\
+FUNCTION : UserToolMtnOffsetSet
+PURPOSE  : Set &quot;Tool motion offset&quot; element
+\*====================================================================*/
+<a name="anchor-5"></a>ProError UserToolMtnOffsetSet( 
+/*--------------------------------------------------------------------*/
+double		x_offset,
+double		y_offset,
+double		z_offset,
+<a name="anchor-6"></a>ProElement	offset_elem
+
+)
+/*--------------------------------------------------------------------*/
+{
+<a name="anchor-7"></a> ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+ ProValue		value;
+ int			ii = 0, table_size = 0;
+<a name="anchor-8"></a> static ElemTable	elem_table[] = 
+ {
+   { PRO_E_TOOL_MTN_X_OFFSET, PRO_VALUE_TYPE_DOUBLE },
+   { PRO_E_TOOL_MTN_X_OFFSET, PRO_VALUE_TYPE_DOUBLE },
+   { PRO_E_TOOL_MTN_Z_OFFSET, PRO_VALUE_TYPE_DOUBLE }
+<a name="anchor-9"></a> };
+
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+ for ( ii = 0; ii &lt; table_size; ii++ )
+<a name="anchor-10"></a> {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserToolMtnOffsetSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( elem_table[ii].elem_type )
+<a name="anchor-11"></a>   {
+     case PRO_E_TOOL_MTN_X_OFFSET:
+		err = ProElementDoubleSet ( element, x_offset);
+		ERROR_CHECK( &quot;UserToolMtnOffsetSet&quot;, &quot;ProElementDoubleSet&quot;, err );
+        break;
+<a name="anchor-12"></a>
+     case PRO_E_TOOL_MTN_Y_OFFSET:
+		err = ProElementDoubleSet ( element, y_offset);
+		ERROR_CHECK( &quot;UserToolMtnOffsetSet&quot;, &quot;ProElementDoubleSet&quot;, err );
+        break;
+<a name="anchor-13"></a>
+     case PRO_E_TOOL_MTN_Z_OFFSET:
+		err = ProElementDoubleSet ( element, z_offset);
+		ERROR_CHECK( &quot;UserToolMtnOffsetSet&quot;, &quot;ProElementDoubleSet&quot;, err );
+        break;
+<a name="anchor-14"></a>
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserToolMtnOffsetSet&quot;, &quot;UserToolMtnOffsetSet()&quot;, err );
+<a name="anchor-15"></a>        break;
+   }
+   err = ProElemtreeElementAdd( offset_elem, NULL, element );
+   ERROR_CHECK( &quot;UserToolMtnOffsetSet&quot;, &quot;ProElemtreeElementAdd&quot;, err );
+ }
+<a name="anchor-16"></a>
+ return ( err );
+}
+
+/*====================================================================*\
+<a name="anchor-17"></a>FUNCTION : UserToolMtnPlungeSet
+PURPOSE  : Set &quot;Plunge&quot; tool motion
+\*====================================================================*/
+ProError UserToolMtnPlungeSet( 
+/*--------------------------------------------------------------------*/
+<a name="anchor-18"></a>MfgPrmDblValue  dbl_params[],
+int		n_dbl_params,
+MfgPrmStrValue  str_params[],
+int		n_str_params,
+double		x_offset,
+<a name="anchor-19"></a>double		y_offset,
+double		z_offset,
+ProSelection	axis,
+ProElement	tool_mtn_elem
+
+<a name="anchor-20"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+<a name="anchor-21"></a> ProValueData		value_data;
+ ProValue		value;
+ ProSelection		selection;
+ ProReference		reference;
+ int			ii = 0, table_size = 0;
+<a name="anchor-22"></a> static ElemTable	elem_table[] = 
+ {
+   { PRO_E_TOOL_MTN_TYPE,     PRO_VALUE_TYPE_INT       },
+   { PRO_E_MFG_PARAM_ARR,     ARRAY                    },
+   { PRO_E_TOOL_MTN_OFFSET,   COMPOUND                 },
+<a name="anchor-23"></a>   { PRO_E_TOOL_MTN_AXIS_REF, PRO_VALUE_TYPE_SELECTION }
+ };
+
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+<a name="anchor-24"></a> for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserToolMtnPlungeSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+<a name="anchor-25"></a>   switch ( elem_table[ii].elem_type )
+   {
+     case PRO_E_TOOL_MTN_TYPE:
+      break;
+
+<a name="anchor-26"></a>     case PRO_E_MFG_PARAM_ARR:
+      err = UserMfgParamArrSet( dbl_params, n_dbl_params,
+                                str_params, n_str_params,
+                                element );
+      ERROR_CHECK( &quot;UserToolMtnPlungeSet&quot;, &quot;UserMfgParamArrSet()&quot;, err );
+<a name="anchor-27"></a>      break;
+
+     case PRO_E_TOOL_MTN_OFFSET:
+        err = UserToolMtnOffsetSet( x_offset, y_offset, z_offset,
+                                    element );
+<a name="anchor-28"></a>        ERROR_CHECK( &quot;UserToolMtnPlungeSet&quot;, &quot;UserToolMtnOffsetSet()&quot;, err );
+        break;
+
+     case PRO_E_TOOL_MTN_AXIS_REF:
+        if ( axis == NULL )
+<a name="anchor-29"></a>        {
+          err = ProElementFree( &amp;element );
+          continue;
+        }
+        else
+<a name="anchor-30"></a>          selection = axis;
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-31"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserToolMtnPlungeSet&quot;, &quot;UserToolMtnPlungeSet()&quot;, err );
+        break;
+   }
+
+<a name="anchor-32"></a>   if ( elem_table[ii].val_type == PRO_VALUE_TYPE_INT )
+   {
+
+  
+
+<a name="anchor-33"></a>     err = ProElementIntegerSet(element,PRO_TM_TYPE_PLUNGE);
+     ERROR_CHECK( &quot;UserToolMtnPlungeSet&quot;, &quot;ProElementIntegerSet()&quot;, err );
+   }
+   else if ( elem_table[ii].val_type == PRO_VALUE_TYPE_SELECTION )
+   {
+<a name="anchor-34"></a>     err = ProSelectionToReference( selection, &amp;reference );
+     ERROR_CHECK( &quot;UserToolMtnPlungeSet()&quot;, &quot;ProSelectionToReference&quot;, err );
+
+     err = ProElementReferenceSet( element, reference );
+     ERROR_CHECK( &quot;UserToolMtnPlungeSet()&quot;, &quot;ProElementReferenceSet&quot;, err );
+<a name="anchor-35"></a>   }
+
+   err = ProElemtreeElementAdd( tool_mtn_elem, NULL, element );
+   ERROR_CHECK( &quot;UserToolMtnPlungeSet&quot;, &quot;ProElemtreeElementAdd&quot;, err );
+ }
+<a name="anchor-36"></a>
+ return ( err );
+}
+
+/*====================================================================*\
+<a name="anchor-37"></a>FUNCTION : UserToolMtnLeadSet
+PURPOSE  : Set &quot;Lead In&quot; tool motion element
+\*====================================================================*/
+ProError UserToolMtnLeadSet( 
+/*--------------------------------------------------------------------*/
+<a name="anchor-38"></a>ProTmType	lead_tm_type,
+MfgPrmDblValue  dbl_params[],
+int		n_dbl_params,
+MfgPrmStrValue  str_params[],
+int		n_str_params,
+<a name="anchor-39"></a>ProTmSideDir	dir_opt,
+ProSelection	axis,
+ProElement	tool_mtn_elem
+
+)
+<a name="anchor-40"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+<a name="anchor-41"></a> ProValue		value;
+ ProSelection		selection;
+ ProReference		reference;
+ int			ii = 0, table_size = 0;
+ static ElemTable	elem_table[] = 
+<a name="anchor-42"></a> {
+   { PRO_E_TOOL_MTN_TYPE,     PRO_VALUE_TYPE_INT       },
+   { PRO_E_MFG_PARAM_ARR,     ARRAY                    },
+   { PRO_E_MFG_APPR_EXIT_DIR, PRO_VALUE_TYPE_INT       },
+   { PRO_E_TOOL_MTN_AXIS_REF, PRO_VALUE_TYPE_SELECTION }
+<a name="anchor-43"></a> };
+
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+ for ( ii = 0; ii &lt; table_size; ii++ )
+<a name="anchor-44"></a> {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserToolMtnLeadSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( elem_table[ii].elem_type )
+<a name="anchor-45"></a>   {
+     case PRO_E_TOOL_MTN_TYPE:
+		err = ProElementIntegerSet ( element, lead_tm_type);
+		ERROR_CHECK( &quot;UserToolMtnLeadSet&quot;, &quot;ProElementIntegerSet()&quot;, err);
+        break;
+<a name="anchor-46"></a>
+     case PRO_E_MFG_PARAM_ARR:
+        err = UserMfgParamArrSet( dbl_params, n_dbl_params,
+                                  str_params, n_str_params,
+                                  element );
+<a name="anchor-47"></a>        ERROR_CHECK( &quot;UserToolMtnLeadSet&quot;, &quot;UserMfgParamArrSet()&quot;, err );
+        break;
+
+     case PRO_E_MFG_APPR_EXIT_DIR:
+		err = ProElementIntegerSet ( element, dir_opt);
+<a name="anchor-48"></a>		ERROR_CHECK( &quot;UserToolMtnLeadSet&quot;, &quot;ProElementIntegerSet()&quot;, err);
+        break;
+
+     case PRO_E_TOOL_MTN_AXIS_REF:
+        if ( axis == NULL )
+<a name="anchor-49"></a>        {
+          err = ProElementFree( &amp;element );
+          continue;
+        }
+        else
+<a name="anchor-50"></a>          selection = axis;
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-51"></a>        err = PRO_TK_GENERAL_ERROR;
+        break;
+   }
+
+
+<a name="anchor-52"></a>   if ( elem_table[ii].val_type == PRO_VALUE_TYPE_SELECTION )
+   {
+     err = ProSelectionToReference( selection, &amp;reference );
+     ERROR_CHECK( &quot;UserToolMtnLeadSet()&quot;, &quot;ProSelectionToReference&quot;, err );
+
+<a name="anchor-53"></a>     err = ProElementReferenceSet( element, reference );
+     ERROR_CHECK( &quot;UserToolMtnLeadSet()&quot;, &quot;ProElementReferenceSet&quot;, err );
+   }
+
+   err = ProElemtreeElementAdd( tool_mtn_elem, NULL, element );
+<a name="anchor-54"></a>   ERROR_CHECK( &quot;UserToolMtnLeadSet&quot;, &quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+ return ( err );
+}
+<a name="anchor-55"></a>
+/*====================================================================*\
+FUNCTION : UserToolMtnLeadInSet
+PURPOSE  : Set &quot;Lead In&quot; tool motion element
+\*====================================================================*/
+<a name="anchor-56"></a>ProError UserToolMtnLeadInSet(
+/*--------------------------------------------------------------------*/
+MfgPrmDblValue  dbl_params[],
+int             n_dbl_params,
+MfgPrmStrValue  str_params[],
+<a name="anchor-57"></a>int             n_str_params,
+ProTmSideDir    dir_opt,
+ProSelection    axis,
+ProElement      tool_mtn_elem
+
+<a name="anchor-58"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError	err = PRO_TK_NO_ERROR; 
+
+<a name="anchor-59"></a> err = UserToolMtnLeadSet( PRO_TM_TYPE_LEAD_IN,
+                           dbl_params, 
+                           n_dbl_params, 
+                           str_params,
+                           n_str_params,
+<a name="anchor-60"></a>                           dir_opt,
+                           axis,
+                           tool_mtn_elem );
+ return ( err );
+}
+<a name="anchor-61"></a>
+/*====================================================================*\
+FUNCTION : UserToolMtnLeadOutSet
+PURPOSE  : Set &quot;Lead Out&quot; tool motion element
+\*====================================================================*/
+<a name="anchor-62"></a>ProError UserToolMtnLeadOutSet(
+/*--------------------------------------------------------------------*/
+MfgPrmDblValue  dbl_params[],
+int             n_dbl_params,
+MfgPrmStrValue  str_params[],
+<a name="anchor-63"></a>int             n_str_params,
+ProTmSideDir    dir_opt,
+ProSelection    axis,
+ProElement      tool_mtn_elem
+
+<a name="anchor-64"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError	err = PRO_TK_NO_ERROR; 
+
+<a name="anchor-65"></a> err = UserToolMtnLeadSet( PRO_TM_TYPE_LEAD_OUT,
+                           dbl_params, 
+                           n_dbl_params, 
+                           str_params,
+                           n_str_params,
+<a name="anchor-66"></a>                           dir_opt,
+                           axis,
+                           tool_mtn_elem );
+ return ( err );
+}
+<a name="anchor-67"></a>
+/*====================================================================*\
+FUNCTION : UserToolMtnRetractSet
+PURPOSE  : Set &quot;Retract&quot; tool motion element
+\*====================================================================*/
+<a name="anchor-68"></a>ProError UserToolMtnRetractSet( 
+/*--------------------------------------------------------------------*/
+MfgPrmDblValue  dbl_params[],
+int		n_dbl_params,
+MfgPrmStrValue  str_params[],
+<a name="anchor-69"></a>int		n_str_params,
+ProElement	tool_mtn_elem
+
+)
+/*--------------------------------------------------------------------*/
+<a name="anchor-70"></a>{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+ ProValue		value;
+<a name="anchor-71"></a> ProSelection		selection;
+ ProReference		reference;
+ int			ii = 0, table_size = 0;
+ static ElemTable	elem_table[] = 
+ {
+<a name="anchor-72"></a>   { PRO_E_TOOL_MTN_TYPE,     PRO_VALUE_TYPE_INT       },
+   { PRO_E_MFG_PARAM_ARR,     ARRAY                    }
+ };
+
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+<a name="anchor-73"></a>
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserToolMtnRetractSet&quot;,&quot;ProElementAlloc()&quot;, err );
+<a name="anchor-74"></a>
+   switch ( elem_table[ii].elem_type )
+   {
+     case PRO_E_TOOL_MTN_TYPE:
+        break;
+<a name="anchor-75"></a>
+     case PRO_E_MFG_PARAM_ARR:
+        err = UserMfgParamArrSet( dbl_params, n_dbl_params,
+                                  str_params, n_str_params,
+                                  element );
+<a name="anchor-76"></a>        ERROR_CHECK( &quot;UserToolMtnRetractSet&quot;, &quot;UserMfgParamArrSet()&quot;, err );
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-77"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserToolMtnRetractSet&quot;, &quot;UserToolMtnRetractSet()&quot;, 
+                     err );
+        break;
+   }
+<a name="anchor-78"></a>
+   if ( elem_table[ii].val_type == PRO_VALUE_TYPE_INT )
+   {
+
+  
+<a name="anchor-79"></a>
+     err = ProElementIntegerSet(element,PRO_TM_TYPE_GO_RETRACT);
+     ERROR_CHECK( &quot;UserToolMtnRetractSet&quot;, &quot;ProElementIntegerSet()&quot;, err );
+   }
+
+<a name="anchor-80"></a>   err = ProElemtreeElementAdd( tool_mtn_elem, NULL, element );
+   ERROR_CHECK( &quot;UserToolMtnRetractSet&quot;, &quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+ return ( err );
+<a name="anchor-81"></a>}
+
+/*====================================================================*\
+FUNCTION : UserSimpleClCommandSet
+PURPOSE  : Set &quot;CL command&quot; element without datum point or surface 
+<a name="anchor-82"></a>           selection.
+\*====================================================================*/
+ProError UserSimpleClCommandSet( 
+/*--------------------------------------------------------------------*/
+wchar_t		*cl_command_wstr,
+<a name="anchor-83"></a>ProClCmdLocType	location_type,
+double		location_param,
+ProElement	tool_mtn_elem
+
+)
+<a name="anchor-84"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+<a name="anchor-85"></a> ProValue		value;
+ int			ii = 0, table_size = 0;
+ static ElemTable	elem_table[] = 
+ {
+   { PRO_E_TOOL_MTN_CL_CMD_LOC_TYPE,     PRO_VALUE_TYPE_INT       },
+<a name="anchor-86"></a>   { PRO_E_TOOL_MTN_CL_CMD_STR,          PRO_VALUE_TYPE_WSTRING   },
+   { PRO_E_TOOL_MTN_CL_CMD_PARAM,        PRO_VALUE_TYPE_DOUBLE    },
+ };
+
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+<a name="anchor-87"></a>
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserSimpleClCommandSet&quot;,&quot;ProElementAlloc()&quot;, err );
+<a name="anchor-88"></a>
+   switch ( elem_table[ii].elem_type )
+   {
+     case PRO_E_TOOL_MTN_CL_CMD_LOC_TYPE:
+		err = ProElementIntegerSet ( element, location_type);
+<a name="anchor-89"></a>		ERROR_CHECK( &quot;UserSimpleClCommandSet&quot;, &quot;ProElementIntegerSet()&quot;, err);
+        break;
+
+     case PRO_E_TOOL_MTN_CL_CMD_STR:
+		err = ProElementWstringSet( element, cl_command_wstr);
+<a name="anchor-90"></a>		ERROR_CHECK( &quot;UserSimpleClCommandSet&quot;, &quot;ProElementWstringSet()&quot;, err);
+        break;
+
+     case PRO_E_TOOL_MTN_CL_CMD_PARAM:
+		err = ProElementDoubleSet ( element, location_param);
+<a name="anchor-91"></a>		ERROR_CHECK( &quot;UserSimpleClCommandSet&quot;, &quot;ProElementDoubleSet()&quot;, err);
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-92"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserSimpleClCommandSet&quot;, &quot;UserSimpleClCommandSet()&quot;, 
+                     err );
+        break;
+   }
+<a name="anchor-93"></a>
+   err = ProElemtreeElementAdd( tool_mtn_elem, NULL, element );
+   ERROR_CHECK( &quot;UserSimpleClCommandSet&quot;, &quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+<a name="anchor-94"></a> return ( err );
+}
+
+/*====================================================================*\
+FUNCTION : UserToolMtnSimpleClCommandSet
+<a name="anchor-95"></a>PURPOSE  : Set &quot;CL command&quot; tool motion element
+           In this example - simple cl command specification without 
+           referencing datum point or surface.
+\*====================================================================*/
+ProError UserToolMtnSimpleClCommandSet( 
+<a name="anchor-96"></a>/*--------------------------------------------------------------------*/
+wchar_t		*cl_command_wstr,
+ProClCmdLocType	location_type,
+double		param,
+ProElement	tool_mtn_elem
+<a name="anchor-97"></a>
+)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+<a name="anchor-98"></a> ProElement		element;
+ ProValueData		value_data;
+ ProValue		value;
+ int			ii = 0, table_size = 0;
+ static ElemTable	elem_table[] = 
+<a name="anchor-99"></a> {
+   { PRO_E_TOOL_MTN_TYPE,       PRO_VALUE_TYPE_INT },
+   { PRO_E_TOOL_MTN_CL_CMD,     COMPOUND           }
+ };
+
+<a name="anchor-100"></a> table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+<a name="anchor-101"></a>   ERROR_CHECK( &quot;UserToolMtnSimpleClCommandSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( elem_table[ii].elem_type )
+   {
+     case PRO_E_TOOL_MTN_TYPE:
+<a name="anchor-102"></a>        break;
+
+     case PRO_E_TOOL_MTN_CL_CMD:
+        err = UserSimpleClCommandSet( cl_command_wstr, location_type,
+                                      param, element );
+<a name="anchor-103"></a>
+        ERROR_CHECK( &quot;UserToolMtnSimpleClCommandSet&quot;, 
+                     &quot;UserSimpleClCommandSet()&quot;, 
+                     err );
+        break;
+<a name="anchor-104"></a>
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserToolMtnSimpleClCommandSet&quot;, 
+<a name="anchor-105"></a>                     &quot;UserToolMtnSimpleClCommandSet()&quot;, 
+                     err );
+        break;
+   }
+
+<a name="anchor-106"></a>   if ( elem_table[ii].val_type == PRO_VALUE_TYPE_INT )
+   {
+     err = ProElementIntegerSet(element,PRO_TM_TYPE_CL_COMMAND);
+     ERROR_CHECK( &quot;UserToolMtnSimpleClCommandSet&quot;, &quot;ProElementIntegerSet()&quot;, 
+                  err );
+<a name="anchor-107"></a>   }
+
+   err = ProElemtreeElementAdd( tool_mtn_elem, NULL, element );
+   ERROR_CHECK( &quot;UserToolMtnSimpleClCommandSet&quot;, &quot;ProElemtreeElementAdd&quot;, 
+                err );
+<a name="anchor-108"></a> }
+
+ return ( err );
+}
+
+<a name="anchor-109"></a>/*====================================================================*\
+FUNCTION : UserToolMtnFollowCutSet
+PURPOSE  : Set &quot;Follow Cut&quot; tool motion
+\*====================================================================*/
+ProError UserToolMtnFollowCutSet( 
+<a name="anchor-110"></a>/*--------------------------------------------------------------------*/
+MfgPrmDblValue  dbl_params[],
+int		n_dbl_params,
+MfgPrmStrValue  str_params[],
+int		n_str_params,
+<a name="anchor-111"></a>ProTmTrimValOpt trim_option,
+double		start_value,
+double		end_value,
+ProBool		reverse_dir,
+ProElement	tool_mtn_elem
+<a name="anchor-112"></a>
+)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+<a name="anchor-113"></a> ProElement		element;
+ ProValueData		value_data;
+ ProValue		value;
+ ProSelection		selection;
+ ProReference		reference;
+<a name="anchor-114"></a> int			ii = 0, table_size = 0;
+ static ElemTable	elem_table[] = 
+ {
+   { PRO_E_TOOL_MTN_TYPE,           PRO_VALUE_TYPE_INT    },
+   { PRO_E_MFG_PARAM_ARR,           ARRAY                 },
+<a name="anchor-115"></a>   { PRO_E_TOOL_MTN_TRIM_VAL_OPT,   PRO_VALUE_TYPE_INT    },
+   { PRO_E_TOOL_MTN_TRIM_START_VAL, PRO_VALUE_TYPE_DOUBLE },
+   { PRO_E_TOOL_MTN_TRIM_END_VAL,   PRO_VALUE_TYPE_DOUBLE },
+   { PRO_E_TOOL_MTN_TRIM_FLIP_DIR,  PRO_VALUE_TYPE_INT    }
+ };
+<a name="anchor-116"></a>
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+<a name="anchor-117"></a>   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserToolMtnFollowCutSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( elem_table[ii].elem_type )
+   {
+<a name="anchor-118"></a>     case PRO_E_TOOL_MTN_TYPE:
+        value_data.v.i = PRO_TM_TYPE_TRIM;
+        break;
+
+     case PRO_E_MFG_PARAM_ARR:
+<a name="anchor-119"></a>        err = UserMfgParamArrSet( dbl_params, n_dbl_params,
+                                  str_params, n_str_params,
+                                  element );
+        ERROR_CHECK( &quot;UserToolMtnFollowCutSet&quot;, &quot;UserMfgParamArrSet()&quot;, 
+                     err );
+<a name="anchor-120"></a>        break;
+
+     case PRO_E_TOOL_MTN_TRIM_VAL_OPT:
+        value_data.v.i = trim_option;
+        break;
+<a name="anchor-121"></a>
+     case PRO_E_TOOL_MTN_TRIM_START_VAL:
+        value_data.v.d = start_value;
+        break;
+
+<a name="anchor-122"></a>     case PRO_E_TOOL_MTN_TRIM_END_VAL:
+        value_data.v.d = end_value;
+        break;
+
+     case PRO_E_TOOL_MTN_TRIM_FLIP_DIR:
+<a name="anchor-123"></a>        value_data.v.i = (int)reverse_dir;
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-124"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserToolMtnFollowCutSet&quot;,&quot;UserToolMtnFollowCutSet()&quot;, 
+                     err );
+        break;
+   }
+<a name="anchor-125"></a>
+   if ( elem_table[ii].val_type != ARRAY )
+   {
+     err = ProValueAlloc( &amp;value );
+     ERROR_CHECK( &quot;UserToolMtnFollowCutSet&quot;,&quot;ProValueAlloc()&quot;, err );
+<a name="anchor-126"></a>
+     value_data.type = elem_table[ii].val_type;
+
+     err = ProValueDataSet( value, &amp;value_data );
+     ERROR_CHECK( &quot;UserToolMtnFollowCutSet&quot;, &quot;ProValueDataSet()&quot;, err );
+<a name="anchor-127"></a>
+     err = ProElementValueSet( element, value );
+     ERROR_CHECK( &quot;UserToolMtnFollowCutSet&quot;, &quot;ProElementValueSet()&quot;, err );
+   }
+
+<a name="anchor-128"></a>   err = ProElemtreeElementAdd( tool_mtn_elem, NULL, element );
+   ERROR_CHECK( &quot;UserToolMtnFollowCutSet&quot;, &quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+ return ( err );
+<a name="anchor-129"></a>}
+
+/*====================================================================*\
+FUNCTION : UserToolMtnCurveCutSet
+PURPOSE  : Set &quot;Curve Cut&quot; tool motion
+<a name="anchor-130"></a>\*====================================================================*/
+ProError UserToolMtnCurveCutSet( 
+/*--------------------------------------------------------------------*/
+ProSelection	curve,
+MfgPrmDblValue  dbl_params[],
+<a name="anchor-131"></a>int		n_dbl_params,
+MfgPrmStrValue  str_params[],
+int		n_str_params,
+ProElement	tool_mtn_elem
+
+<a name="anchor-132"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+<a name="anchor-133"></a> ProValueData		value_data;
+ ProValue		value;
+ ProSelection		selection;
+ ProReference		reference;
+ int			ii = 0, table_size = 0;
+<a name="anchor-134"></a> static ElemTable	elem_table[] = 
+ {
+   { PRO_E_TOOL_MTN_TYPE, PRO_VALUE_TYPE_INT },
+   { PRO_E_MFG_PARAM_ARR, ARRAY              },
+   { PRO_E_MFG_TRAJ_CRV,  COMPOUND           },
+<a name="anchor-135"></a>   { PRO_E_MFG_OFFSET,    COMPOUND           }
+ };
+
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+<a name="anchor-136"></a> for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserToolMtnCurveCutSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+<a name="anchor-137"></a>   switch ( elem_table[ii].elem_type )
+   {
+     case PRO_E_TOOL_MTN_TYPE:
+        break;
+
+<a name="anchor-138"></a>     case PRO_E_MFG_PARAM_ARR:
+        err = UserMfgParamArrSet( dbl_params, n_dbl_params,
+                                  str_params, n_str_params,
+                                  element );
+        ERROR_CHECK( &quot;UserToolMtnCurveCutSet&quot;, &quot;UserMfgParamArrSet()&quot;, err );
+<a name="anchor-139"></a>        break;
+
+     case PRO_E_MFG_TRAJ_CRV:
+        err = UserTrajCurveSet( curve, element );
+        ERROR_CHECK( &quot;UserToolMtnCurveCutSet&quot;, &quot;UserTrajCurveSet()&quot;, err );
+<a name="anchor-140"></a>        break;
+
+     case PRO_E_MFG_OFFSET:
+        err = UserMfgOffsetSet( PRO_B_TRUE, PRO_MAT_RMV_LEFT, PRO_B_TRUE, 
+                                element );
+<a name="anchor-141"></a>        ERROR_CHECK( &quot;UserToolMtnCurveCutSet&quot;, &quot;UserMfgOffsetSet()&quot;, err );
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-142"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserToolMtnCurveCutSet&quot;, &quot;UserToolMtnCurveCutSet()&quot;,
+                     err );
+        break;
+   }
+<a name="anchor-143"></a>
+   if ( elem_table[ii].val_type == PRO_VALUE_TYPE_INT )
+   {
+     err = ProElementIntegerSet(element,PRO_TM_TYPE_CURVE_TRAJECTORY);
+     ERROR_CHECK( &quot;UserToolMtnCurveCutSet&quot;, &quot;ProElementIntegerSet()&quot;, err );
+<a name="anchor-144"></a>   }
+
+   err = ProElemtreeElementAdd( tool_mtn_elem, NULL, element );
+   ERROR_CHECK( &quot;UserToolMtnCurveCutSet&quot;, &quot;ProElemtreeElementAdd&quot;, err );
+ }
+<a name="anchor-145"></a>
+ return ( err );
+}
+
+/*====================================================================*\
+<a name="anchor-146"></a>FUNCTION : UserTrajToolMtnArrSet
+PURPOSE  : Set array of tool motions for trajectory sequence
+\*====================================================================*/
+ProError UserTrajToolMtnArrSet( 
+/*--------------------------------------------------------------------*/
+<a name="anchor-147"></a>ProSelection	curve,
+ProElement	tm_arr_elem
+
+)
+/*--------------------------------------------------------------------*/
+<a name="anchor-148"></a>{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ int			ii, num = 0;
+ int			n_leadin_dbl_params;
+<a name="anchor-149"></a> int			n_leadout_dbl_params;
+ static ProTmType	tm_types[] =
+ {
+   PRO_TM_TYPE_PLUNGE,              /* optional */
+   PRO_TM_TYPE_LEAD_IN,             /* optional */
+<a name="anchor-150"></a>   PRO_TM_TYPE_CURVE_TRAJECTORY,    /* trajectroy cut tool motion */
+   PRO_TM_TYPE_TRIM,        /* required for PRO_TM_TYPE_CURVE_TRAJECTORY */
+   PRO_TM_TYPE_LEAD_OUT,            /* optional */
+   PRO_TM_TYPE_GO_RETRACT,          /* optional */
+   PRO_TM_TYPE_CL_COMMAND,          /* optional */
+<a name="anchor-151"></a> };
+ static MfgPrmDblValue  leadin_dbl_params[] =
+ {
+   { &quot;ENTRY_ANGLE&quot;,       90.0    },
+   { &quot;LEAD_RADIUS&quot;,       30.0    },
+<a name="anchor-152"></a>   { &quot;TANGENT_LEAD_STEP&quot;, 40.0    },
+   { &quot;NORMAL_LEAD_STEP&quot;,  0.0     }
+ };
+ static MfgPrmDblValue  leadout_dbl_params[] =
+ {
+<a name="anchor-153"></a>   { &quot;EXIT_ANGLE&quot;,        90.0    },
+   { &quot;LEAD_RADIUS&quot;,       30.0    },
+   { &quot;TANGENT_LEAD_STEP&quot;, 0.0     },
+   { &quot;NORMAL_LEAD_STEP&quot;,  0.0     }
+ };
+<a name="anchor-154"></a> wchar_t		*cl_command_wstr = L&quot;OPSTOP&quot;;
+
+ n_leadin_dbl_params  = sizeof( leadin_dbl_params ) /sizeof( MfgPrmDblValue );
+ n_leadout_dbl_params = sizeof( leadout_dbl_params )/sizeof( MfgPrmDblValue );
+
+<a name="anchor-155"></a> num = sizeof( tm_types ) / sizeof( ProTmType );
+
+ for ( ii = 0; ii &lt; num; ii++ )
+ {
+   err = ProElementAlloc( PRO_E_TOOL_MTN, &amp;element );
+<a name="anchor-156"></a>   ERROR_CHECK( &quot;UserTrajToolMtnArrSet&quot;, &quot;ProElementAlloc&quot;, err );
+
+   switch ( tm_types[ii] )
+   {
+     case PRO_TM_TYPE_PLUNGE:
+<a name="anchor-157"></a>       err = UserToolMtnPlungeSet( NULL, 0, NULL, 0, 0., 0., 0., NULL, 
+                                   element );
+       ERROR_CHECK( &quot;UserTrajToolMtnArrSet()&quot;, &quot;UserToolMtnPlungeSet&quot;, err );
+       break;
+
+<a name="anchor-158"></a>     case PRO_TM_TYPE_LEAD_IN:
+       err = UserToolMtnLeadInSet( leadin_dbl_params, 
+                                   n_leadin_dbl_params, 
+                                   NULL, 
+                                   0, 
+<a name="anchor-159"></a>                                   PRO_TM_DIR_RIGHT_SIDE, 
+                                   NULL, 
+                                   element );
+
+       ERROR_CHECK( &quot;UserTrajToolMtnArrSet()&quot;, &quot;UserToolMtnLeadInSet&quot;, err );
+<a name="anchor-160"></a>       break;
+
+     case PRO_TM_TYPE_CURVE_TRAJECTORY:
+       err = UserToolMtnCurveCutSet( curve,
+                                     NULL, 0,  /* use seq params */
+<a name="anchor-161"></a>                                     NULL, 0,
+                                     element );
+       ERROR_CHECK( &quot;UserTrajToolMtnArrSet()&quot;, &quot;UserToolMtnCurveCutSet&quot;, 
+                    err );
+       break;
+<a name="anchor-162"></a>
+     case PRO_TM_TYPE_TRIM:
+       err = UserToolMtnFollowCutSet( NULL, 0,  /* use params from parent */
+                                      NULL, 0,  /* use params from parent */
+                                      PRO_TM_TRIM_VAL_PARAM,
+<a name="anchor-163"></a>                                      0.,
+                                      1.,
+                                      PRO_B_FALSE,
+                                      element );
+       ERROR_CHECK( &quot;UserTrajToolMtnArrSet()&quot;, &quot;UserToolMtnFollowCutSet&quot;, 
+<a name="anchor-164"></a>                    err );
+       break;
+
+     case PRO_TM_TYPE_LEAD_OUT:
+       err = UserToolMtnLeadOutSet( leadout_dbl_params,
+<a name="anchor-165"></a>                                    n_leadout_dbl_params,
+                                    NULL,
+                                    0,
+                                    PRO_TM_DIR_RIGHT_SIDE, 
+                                    NULL,
+<a name="anchor-166"></a>                                    element );
+
+       ERROR_CHECK( &quot;UserTrajToolMtnArrSet()&quot;, &quot;UserToolMtnLeadOutSet&quot;, err );
+       break;
+
+<a name="anchor-167"></a>     case PRO_TM_TYPE_GO_RETRACT:
+       err = UserToolMtnRetractSet( NULL, 0, NULL, 0, element );
+
+       ERROR_CHECK( &quot;UserTrajToolMtnArrSet()&quot;, &quot;UserToolMtnRetractSet&quot;, err );
+       break;
+<a name="anchor-168"></a>
+     case PRO_TM_TYPE_CL_COMMAND:
+        err = UserToolMtnSimpleClCommandSet( cl_command_wstr, 
+                                             PRO_CL_CMD_LOC_TYPE_CURR, 0., 
+                                             element );
+<a name="anchor-169"></a>
+        ERROR_CHECK( &quot;UserTrajToolMtnArrSet&quot;, &quot;UserSimpleClCommandSet()&quot;, 
+                     err );
+        break;
+
+<a name="anchor-170"></a>
+     default:
+       ProTKFprintf( stderr, &quot;Error setting tool motion type\n&quot; );
+       err = PRO_TK_GENERAL_ERROR;
+       ERROR_CHECK( &quot;UserTrajToolMtnArrSet()&quot;, &quot;UserTrajToolMtnArrSet&quot;, err );
+<a name="anchor-171"></a>       break;
+   }
+
+   err = ProElemtreeElementAdd( tm_arr_elem, NULL, element );
+   ERROR_CHECK( &quot;UserTrajToolMtnArrSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+<a name="anchor-172"></a> }
+
+ return ( err );
+}
+
+<a name="anchor-173"></a>/*====================================================================*\
+FUNCTION : UserManualCycleMtnArrSet
+PURPOSE  : Set array of tool motions for manual cycle sequence. 
+           In this example the array has only one tool motion of type 
+           PRO_TM_TYPE_CL_COMMAND
+<a name="anchor-174"></a>\*====================================================================*/
+ProError UserManualCycleMtnArrSet( 
+/*--------------------------------------------------------------------*/
+ProElement	tm_arr_elem
+
+<a name="anchor-175"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+<a name="anchor-176"></a> int			ii, num = 0;
+ static ProTmType	tm_types[] =
+ {
+   PRO_TM_TYPE_CL_COMMAND
+ };
+<a name="anchor-177"></a> wchar_t		*cl_command_str = L&quot;DELAY/REV\nCOMMAND/1\nCOMMAND/2&quot;;
+
+ num = sizeof( tm_types ) / sizeof( ProTmType );
+
+ for ( ii = 0; ii &lt; num; ii++ )
+<a name="anchor-178"></a> {
+   err = ProElementAlloc( PRO_E_TOOL_MTN, &amp;element );
+   ERROR_CHECK( &quot;UserManualCycleMtnArrSet&quot;, &quot;ProElementAlloc&quot;, err );
+
+   switch ( tm_types[ii] )
+<a name="anchor-179"></a>   {
+     case PRO_TM_TYPE_CL_COMMAND:
+       err = UserToolMtnSimpleClCommandSet( cl_command_str, 
+                                            PRO_CL_CMD_LOC_TYPE_CURR, 0.,
+                                            element );
+<a name="anchor-180"></a>       ERROR_CHECK( &quot;UserManualCycleMtnArrSet()&quot;, &quot;UserToolMtnPlungeSet&quot;, 
+                    err );
+       break;
+
+     default:
+<a name="anchor-181"></a>       ProTKFprintf( stderr, &quot;Error setting tool motion type\n&quot; );
+       err = PRO_TK_GENERAL_ERROR;
+       ERROR_CHECK( &quot;UserManualCycleMtnArrSet()&quot;, &quot;UserTrajToolMtnArrSet&quot;, 
+                    err );
+       break;
+<a name="anchor-182"></a>   }
+
+   err = ProElemtreeElementAdd( tm_arr_elem, NULL, element );
+   ERROR_CHECK( &quot;UserManualCycleMtnArrSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+<a name="anchor-183"></a>
+ return ( err );
+}
+</pre>
+</body>
+</html>

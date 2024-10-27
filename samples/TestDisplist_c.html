@@ -1,0 +1,421 @@
+<html>
+<head>
+<title>TestDisplist.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+
+/*--------------------------------------------------------------------*\
+    Pro/TOOLKIT includes
+<a name="anchor-2"></a>\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProMdl.h&quot;
+#include &quot;ProDisplist.h&quot;
+#include &quot;ProMessage.h&quot;
+<a name="anchor-3"></a>#include &quot;ProMenu.h&quot;
+#include &quot;ProUtil.h&quot;
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-4"></a>    Pro/DEVELOP includes
+\*--------------------------------------------------------------------*/
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-5"></a>    C System includes
+\*--------------------------------------------------------------------*/
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-6"></a>    Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestGraphics.h&quot;
+#include &quot;UtilMatrix.h&quot;
+<a name="anchor-7"></a>#include &quot;UtilMessage.h&quot;
+
+
+/*--------------------------------------------------------------------*\
+    Macros
+<a name="anchor-8"></a>\*--------------------------------------------------------------------*/
+
+
+/*--------------------------------------------------------------------*\
+    Data types
+<a name="anchor-9"></a>\*--------------------------------------------------------------------*/
+typedef enum tag_DispListActions
+	{
+	    DISP_LIST_DEL = 0,
+	    DISP_LIST_CREATE,
+<a name="anchor-10"></a>	    DISP_LIST_DISPLAY
+	} DispListActions;
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-11"></a>    Application global/external data
+\*--------------------------------------------------------------------*/
+
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-12"></a>    Functions declaration
+\*---------------------------------------------------------------------*/
+int	    ProTest2dDisplistMenu( void*, int );
+int	    ProTest2dDisplist( void*, int );
+int	    ProTest3dDisplistMenu( void*, int );
+<a name="anchor-13"></a>int	    ProTest3dDisplist( void*, int );
+int	    ProTestDisplistInvalidate( ProMdl*, int );
+int         ProTestDisplistDraw( void );
+int ProTestEntityDrawMenu( void* p_dummy, int int_dummy );
+
+<a name="anchor-14"></a>
+/*---------------------------------------------------------------------*\
+    Function:	ProTest2dDisplistMenu()
+    Purpose:	On-button function. Set up the display list menu
+    Returns:	0 - success; -1 - error. Now ignored.
+<a name="anchor-15"></a>\*---------------------------------------------------------------------*/
+int ProTest2dDisplistMenu( void* p_dummy, int int_dummy )
+{
+    ProError		status;
+    int			menu_id;    /* The identifier of the created menu */
+<a name="anchor-16"></a>    int			action;
+    ProMdl		part;
+
+    
+    /* Get current Pro/E object */
+<a name="anchor-17"></a>    status = ProMdlCurrentGet( &amp;part );
+    TEST_CALL_REPORT( &quot;ProMdlCurrentGet()&quot;, &quot;ProTest2dDisplistMenu()&quot;,
+			status, status != PRO_TK_NO_ERROR);
+
+    if( status == PRO_TK_BAD_CONTEXT )
+<a name="anchor-18"></a>    {
+        ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;An object is required&quot; );
+        return (PRO_TK_GENERAL_ERROR);
+    }
+
+<a name="anchor-19"></a>
+    /*---------------------------------*\
+	Create new menu Disp List
+    \*---------------------------------*/
+
+<a name="anchor-20"></a>    /* Load base menu from file */
+    status = ProMenuFileRegister( (char*)&quot;Disp List&quot;, (char*)&quot;tkdlist.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTest2dDisplistMenu()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-21"></a>    /* Define menu buttons */
+    ProMenubuttonActionSet( (char*)&quot;Disp List&quot;, (char*)&quot;Cre DispList&quot;, 
+	(ProMenubuttonAction)ProTest2dDisplist, NULL, DISP_LIST_CREATE );
+    ProMenubuttonActionSet( (char*)&quot;Disp List&quot;,(char*) &quot;Del DispList&quot;, 
+	(ProMenubuttonAction)ProTest2dDisplist, NULL, DISP_LIST_DEL );
+<a name="anchor-22"></a>    ProMenubuttonActionSet( (char*)&quot;Disp List&quot;,(char*) &quot;Disp DispList&quot;, 
+	(ProMenubuttonAction)ProTest2dDisplist, NULL, DISP_LIST_DISPLAY );
+    ProMenubuttonActionSet( (char*)&quot;Disp List&quot;,(char*) &quot;Invld DispList&quot;, 
+	(ProMenubuttonAction)ProTestDisplistInvalidate, &amp;part, 0 );
+    ProMenubuttonActionSet((char*) &quot;Disp List&quot;,(char*) &quot;Done&quot;, 
+<a name="anchor-23"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+    ProMenubuttonActionSet((char*) &quot;Disp List&quot;,(char*) &quot;Disp List&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+
+<a name="anchor-24"></a>    /*--------------------------*\
+	Run menu Disp List
+    \*--------------------------*/
+    status = ProMenuCreate( PROMENUTYPE_MAIN,(char*) &quot;Disp List&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTest2dDisplistMenu()&quot;, 
+<a name="anchor-25"></a>			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+	status = ProMenuProcess((char*) &quot;Disp List&quot;, &amp;action );
+	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTest2dDisplistMenu()&quot;, 
+<a name="anchor-26"></a>			    status, status != PRO_TK_NO_ERROR );
+    }
+
+
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-27"></a>}
+
+
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-28"></a>    Function:	ProTest2dDisplist()
+    Purpose:	On-button function. Manipulate a 2D diplay list.
+    Returns:	0 - success; Now ignored.
+\*---------------------------------------------------------------------*/
+int ProTest2dDisplist( void* p_dummy, int option )
+<a name="anchor-29"></a>{
+    ProError		status;
+    int			id; /* The disp list id */
+    ProMatrix		matrix;
+
+<a name="anchor-30"></a>
+    /*  Points are in the object's csys  */
+    status = ProWindowCurrentMatrixGet( matrix );
+    TEST_CALL_REPORT( &quot;ProWindowCurrentMatrixGet()&quot;, &quot;ProTest2dDisplist()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-31"></a>
+    switch( option )
+    {
+      case DISP_LIST_DEL:	/* Delete */
+
+<a name="anchor-32"></a>	/* Get the display list id */
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the Display List id: &quot; );
+	status = ProMessageIntegerRead( NULL, &amp;id );
+	TEST_CALL_REPORT( &quot;ProMessageIntegerRead()&quot;, &quot;ProTest2dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-33"></a>	if( status != PRO_TK_NO_ERROR )
+	    break;
+
+	/* Delete the specified display list */
+	status = ProDisplist2dDelete( id );
+<a name="anchor-34"></a>	TEST_CALL_REPORT( &quot;ProDisplist2dDelete()&quot;, &quot;ProTest2dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	break;
+
+
+<a name="anchor-35"></a>      case DISP_LIST_CREATE:	/* Create */
+
+	/* Get the display list id */
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the Display List id: &quot;);
+	status = ProMessageIntegerRead( NULL, &amp;id );
+<a name="anchor-36"></a>	TEST_CALL_REPORT( &quot;ProMessageIntegerRead()&quot;, &quot;ProTest2dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	if( status != PRO_TK_NO_ERROR )
+	    break;
+
+<a name="anchor-37"></a>	status = ProDisplist2dCreate( id, matrix, (ProDisplistCallback)ProTestDisplistDraw );
+	TEST_CALL_REPORT( &quot;ProDisplist2dCreate()&quot;, &quot;ProTest2dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+                            
+        /* bug in the function ProDisplist2dDisplay() */
+<a name="anchor-38"></a>	status = ProDisplist2dDisplay( id, matrix );
+	TEST_CALL_REPORT( &quot;ProDisplist2dDisplay()&quot;, &quot;ProTest2dDisplist()&quot;, 
+			    status, 0 );
+	break;
+
+<a name="anchor-39"></a>
+      case DISP_LIST_DISPLAY:	/* Display */
+
+	/* Get the display list id */
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the Display List id: &quot;);
+<a name="anchor-40"></a>	status = ProMessageIntegerRead( NULL, &amp;id );
+	TEST_CALL_REPORT( &quot;ProMessageIntegerRead()&quot;, &quot;ProTest2dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	if( status != PRO_TK_NO_ERROR )
+	    break;
+<a name="anchor-41"></a>            
+        /* bug in the function ProDisplist2dDisplay() */
+	status = ProDisplist2dDisplay( id, matrix );
+	TEST_CALL_REPORT( &quot;ProDisplist2dDisplay()&quot;, &quot;ProTest2dDisplist()&quot;, 
+			    status, 0 );
+<a name="anchor-42"></a>	break;
+
+
+      default:
+	break;
+<a name="anchor-43"></a>    }
+
+    ProWindowRepaint( PRO_VALUE_UNUSED );
+
+
+<a name="anchor-44"></a>    return (PRO_TK_NO_ERROR);
+}
+
+
+
+<a name="anchor-45"></a>/*---------------------------------------------------------------------*\
+    Function:	ProTest3dDisplistMenu()
+    Purpose:	On-button function. Set up the display list menu
+    Returns:	0 - success; -1 - error. Now ignored.
+\*---------------------------------------------------------------------*/
+<a name="anchor-46"></a>int ProTest3dDisplistMenu( void* p_dummy, int int_dummy )
+{
+    ProError		status;
+    int			menu_id;    /* The identifier of the created menu */
+    int			action;
+<a name="anchor-47"></a>    ProMdl		part;
+
+
+    /* Get current Pro/E object */
+    status = ProMdlCurrentGet( &amp;part );
+<a name="anchor-48"></a>    TEST_CALL_REPORT( &quot;ProMdlCurrentGet()&quot;, &quot;ProTest3dDisplistMenu()&quot;,
+			status, status != PRO_TK_NO_ERROR);
+
+    if( status == PRO_TK_BAD_CONTEXT )
+    {
+<a name="anchor-49"></a>        ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;An object is required&quot; );
+        return (PRO_TK_GENERAL_ERROR);
+    }
+
+
+<a name="anchor-50"></a>    /*---------------------------------*\
+	Create new menu Disp List
+    \*---------------------------------*/
+
+    /* Load base menu from file */
+<a name="anchor-51"></a>    status = ProMenuFileRegister( (char*)&quot;Disp List&quot;, (char*)&quot;tkdlist.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTest3dDisplistMenu()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    /* Define menu buttons */
+<a name="anchor-52"></a>    ProMenubuttonActionSet( (char*)&quot;Disp List&quot;, (char*)&quot;Cre DispList&quot;, 
+				(ProMenubuttonAction)ProTest3dDisplist, NULL, DISP_LIST_CREATE );
+    ProMenubuttonActionSet( (char*)&quot;Disp List&quot;, (char*)&quot;Del DispList&quot;, 
+				(ProMenubuttonAction)ProTest3dDisplist, NULL, DISP_LIST_DEL );
+    ProMenubuttonActionSet( (char*)&quot;Disp List&quot;, (char*)&quot;Disp DispList&quot;, 
+<a name="anchor-53"></a>				(ProMenubuttonAction)ProTest3dDisplist, NULL, DISP_LIST_DISPLAY );
+    ProMenubuttonActionSet( (char*)&quot;Disp List&quot;, (char*)&quot;Invld DispList&quot;, 
+				(ProMenubuttonAction)ProTestDisplistInvalidate, 
+				&amp;part, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Disp List&quot;, (char*)&quot;Done&quot;, 
+<a name="anchor-54"></a>				(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Disp List&quot;, (char*)&quot;Disp List&quot;, 
+				(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+
+<a name="anchor-55"></a>    /*--------------------------*\
+	Run menu Disp List
+    \*--------------------------*/
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;Disp List&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTest3dDisplistMenu()&quot;, 
+<a name="anchor-56"></a>			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+	status = ProMenuProcess( (char*)&quot;Disp List&quot;, &amp;action );
+	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTest3dDisplistMenu()&quot;, 
+<a name="anchor-57"></a>			    status, status != PRO_TK_NO_ERROR );
+    }
+
+
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-58"></a>}
+
+
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-59"></a>    Function:	ProTest3dDisplist()
+    Purpose:	On-button function. Manipulate a 3D diplay list.
+    Returns:	0 - success; Now ignored.
+\*---------------------------------------------------------------------*/
+int ProTest3dDisplist( void* p_dummy, int option )
+<a name="anchor-60"></a>{
+    ProError		status;
+    int			id; /* The disp list id */
+    ProMatrix		matrix;
+
+<a name="anchor-61"></a>
+    /*  Points are in the object's csys  */
+    status = ProWindowCurrentMatrixGet( matrix );
+    TEST_CALL_REPORT( &quot;ProWindowCurrentMatrixGet()&quot;, &quot;ProTest3dDisplist()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-62"></a>
+    switch( option )
+    {
+      case DISP_LIST_DEL:	/* Delete */
+
+<a name="anchor-63"></a>	/* Get the display list id */
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the Display List id: &quot; );
+	status = ProMessageIntegerRead( NULL, &amp;id );
+	TEST_CALL_REPORT( &quot;ProMessageIntegerRead()&quot;, &quot;ProTest3dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-64"></a>	if( status != PRO_TK_NO_ERROR )
+	    break;
+
+	/* Delete the specified display list */
+	status = ProDisplist3dDelete( id );
+<a name="anchor-65"></a>	TEST_CALL_REPORT( &quot;ProDisplist3dDelete()&quot;, &quot;ProTest3dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	break;
+
+
+<a name="anchor-66"></a>      case DISP_LIST_CREATE:	/* Create */
+
+	/* Get the display list id */
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the Display List id: &quot;);
+	status = ProMessageIntegerRead( NULL, &amp;id );
+<a name="anchor-67"></a>	TEST_CALL_REPORT( &quot;ProMessageIntegerRead()&quot;, &quot;ProTest3dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	if( status != PRO_TK_NO_ERROR )
+	    break;
+
+<a name="anchor-68"></a>	status = ProDisplist3dCreate( id, (ProDisplistCallback)ProTestDisplistDraw );
+	TEST_CALL_REPORT( &quot;ProDisplist3dCreate()&quot;, &quot;ProTest3dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+
+	status = ProDisplist3dDisplay( id, matrix );
+<a name="anchor-69"></a>	TEST_CALL_REPORT( &quot;ProDisplist3dDisplay()&quot;, &quot;ProTest3dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	break;
+
+
+<a name="anchor-70"></a>      case DISP_LIST_DISPLAY:	/* Display */
+
+	/* Get the display list id */
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the Display List id: &quot;);
+	status = ProMessageIntegerRead( NULL, &amp;id );
+<a name="anchor-71"></a>	TEST_CALL_REPORT( &quot;ProMessageIntegerRead()&quot;, &quot;ProTest3dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	if( status != PRO_TK_NO_ERROR )
+	    break;
+
+<a name="anchor-72"></a>	status = ProDisplist3dDisplay( id, matrix );
+	TEST_CALL_REPORT( &quot;ProDisplist3dDisplay()&quot;, &quot;ProTest3dDisplist()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	break;
+
+<a name="anchor-73"></a>
+      default:
+	break;
+    }
+
+<a name="anchor-74"></a>    ProWindowRepaint( PRO_VALUE_UNUSED );
+
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-75"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProTestDisplistInvalidate()
+    Purpose:	On-button function. Invalidate the 2 or 3 dimensional 
+<a name="anchor-76"></a>		display list
+    Returns:	0 - success; -1 - error. Now ignored.
+\*---------------------------------------------------------------------*/
+int ProTestDisplistInvalidate( ProMdl* p_model, int int_dummy )
+{
+<a name="anchor-77"></a>    ProError		status;
+
+
+    status = ProDisplistInvalidate( *p_model );
+    TEST_CALL_REPORT( &quot;ProDisplistInvalidate()&quot;, &quot;ProTestDisplistInvalidate()&quot;, 
+<a name="anchor-78"></a>			status, status != PRO_TK_NO_ERROR );
+
+    return (status == PRO_TK_NO_ERROR) ? 0 : (PRO_TK_GENERAL_ERROR);
+}
+
+<a name="anchor-79"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProTestDisplistDraw()
+    Purpose:	Call some graphics functions to create the disp list
+<a name="anchor-80"></a>    Returns:	PRO_TK_NO_ERROR - success;
+\*---------------------------------------------------------------------*/
+int ProTestDisplistDraw( void )
+{
+
+<a name="anchor-81"></a>    TEST_CALL_REPORT(&quot;ProDisplistCallback()&quot;, &quot;ProTestDisplistDraw()&quot;, (ProError)0, 0);
+    
+    ProTestEntityDrawMenu (NULL, 0);
+
+    return PRO_TK_NO_ERROR;
+<a name="anchor-82"></a>}
+
+
+</pre>
+</body>
+</html>

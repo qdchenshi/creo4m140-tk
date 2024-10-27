@@ -1,0 +1,383 @@
+<html>
+<head>
+<title>UgSmtExtendWallCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProFeatType.h>
+#include &lt;ProToolkit.h>
+#include &lt;ProFeature.h>
+#include &lt;ProSelbuffer.h>
+#include &lt;ProReference.h>
+<a name="anchor-2"></a>#include &lt;ProUtil.h>
+#include &lt;ProSmtFlatWall.h>
+#include &lt;ProSmtExtendWall.h>
+#include &lt;ProSheetmetal.h>
+#include &lt;ProMenuBar.h>
+<a name="anchor-3"></a>#include &lt;ProPopupmenu.h>
+#include &lt;ProMdl.h>
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProEdge.h>
+
+<a name="anchor-4"></a>ProBoolean UserEdgeIsSmtFaceEdge (ProGeomitem* edge);
+
+
+/*=====================================================================*\
+FUNCTION: UserSmtExtendWallCreate
+<a name="anchor-5"></a>PURPOSE:  Create sheetmetal extend wall features.
+\*=====================================================================*/
+/*ARGSUSED*/
+int UserSmtExtendWallCreate ( ProReference edge_ref ) 
+{ 
+<a name="anchor-6"></a>  ProElement pro_e_feature_tree;
+  ProElement pro_e_feature_type;
+  ProElement pro_e_smt_wall_type;
+  ProElement pro_e_smt_extend_wall_edge;
+
+<a name="anchor-7"></a>  ProElement pro_e_smt_extend_wall_dist;
+     ProElement pro_e_step_extend_wall_dist_type;
+     ProElement pro_e_smt_extend_dist_ref;
+
+  ProElement pro_e_smt_extend_wall_extensions_cmp;
+<a name="anchor-8"></a>
+     ProElement pro_e_smt_extend_side1_extension_cmp;
+        ProElement pro_e_smt_extend_extension_type_opt;
+        ProElement pro_e_smt_extend_adjust_srf;
+
+<a name="anchor-9"></a>     ProElement pro_e_smt_extend_side2_extension_cmp;
+
+
+  ProMdl model;
+  ProModelitem model_item;
+<a name="anchor-10"></a>  ProFeatureCreateOptions *opts = 0;
+  ProSelection model_sel;
+  ProFeature feature;
+  ProErrorlist errors;
+  ProError status;
+<a name="anchor-11"></a>  ProSelection feat_sel;
+
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_FEATURE_TREE
+<a name="anchor-12"></a>\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;pro_e_feature_tree ); 
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_FEATURE_TYPE
+<a name="anchor-13"></a>\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_FEATURE_TYPE, &amp;pro_e_feature_type );
+  status = ProElementIntegerSet ( pro_e_feature_type, PRO_FEAT_WALL );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				   pro_e_feature_type );
+<a name="anchor-14"></a>
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_WALL_TYPE
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_WALL_TYPE, &amp;pro_e_smt_wall_type );
+<a name="anchor-15"></a>  status = ProElementIntegerSet ( pro_e_smt_wall_type, 
+			          PRO_SMT_WALL_TYPE_EXTEND );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				   pro_e_smt_wall_type );
+
+<a name="anchor-16"></a>/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_EXTEND_WALL_EDGE
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_EXTEND_WALL_EDGE, 
+			     &amp;pro_e_smt_extend_wall_edge );
+<a name="anchor-17"></a>  status = ProElementReferenceSet( pro_e_smt_extend_wall_edge, edge_ref );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				   pro_e_smt_extend_wall_edge );
+
+
+<a name="anchor-18"></a>/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_EXTEND_WALL_DIST
+\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_EXTEND_WALL_DIST,
+                            &amp;pro_e_smt_extend_wall_dist );
+<a name="anchor-19"></a> status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				  pro_e_smt_extend_wall_dist );
+
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-20"></a>Processing Element PRO_E_SMT_EXTEND_DIST_TYPE
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_EXTEND_DIST_TYPE, 
+			     &amp;pro_e_step_extend_wall_dist_type );
+  status = ProElementIntegerSet ( pro_e_step_extend_wall_dist_type,
+<a name="anchor-21"></a>				  PRO_EXTEND_DIST_BY_VALUE );
+  status = ProElemtreeElementAdd ( pro_e_smt_extend_wall_dist, NULL, 
+				   pro_e_step_extend_wall_dist_type );
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-22"></a>Processing Element PRO_E_SMT_EXTEND_DIST_REF
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_EXTEND_DIST_REF, 
+			     &amp;pro_e_smt_extend_dist_ref );
+  status = ProElementReferenceSet( pro_e_smt_extend_dist_ref,
+<a name="anchor-23"></a>                                   (ProReference)NULL );
+  status = ProElemtreeElementAdd ( pro_e_smt_extend_wall_dist, NULL, 
+				   pro_e_smt_extend_dist_ref );
+
+
+<a name="anchor-24"></a>/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_EXTEND_WALL_EXTENSIONS_CMP
+\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_EXTEND_WALL_EXTENSIONS_CMP,
+                            &amp;pro_e_smt_extend_wall_extensions_cmp );
+<a name="anchor-25"></a> status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				  pro_e_smt_extend_wall_extensions_cmp );
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_EXTEND_SIDE1_EXTENSION_CMP
+<a name="anchor-26"></a>\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_EXTEND_SIDE1_EXTENSION_CMP,
+                            &amp;pro_e_smt_extend_side1_extension_cmp );
+ status = ProElemtreeElementAdd ( pro_e_smt_extend_wall_extensions_cmp, NULL, 
+				  pro_e_smt_extend_side1_extension_cmp );
+<a name="anchor-27"></a>
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_EXTEND_SIDE2_EXTENSION_CMP
+\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_EXTEND_SIDE2_EXTENSION_CMP,
+<a name="anchor-28"></a>                            &amp;pro_e_smt_extend_side2_extension_cmp );
+ status = ProElemtreeElementAdd ( pro_e_smt_extend_wall_extensions_cmp, NULL, 
+				  pro_e_smt_extend_side2_extension_cmp );
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-29"></a>Processing Element PRO_E_SMT_EXTEND_EXTENSION_TYPE_OPT
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_EXTEND_ADJUST_SRF, 
+			     &amp;pro_e_smt_extend_extension_type_opt );
+  status = ProElementIntegerSet ( pro_e_smt_extend_extension_type_opt,
+<a name="anchor-30"></a>				  PRO_EXTEND_EXT_NORMAL_TO_EDGE );
+  status = ProElemtreeElementAdd ( pro_e_smt_extend_side1_extension_cmp , NULL, 
+				   pro_e_smt_extend_extension_type_opt );
+  status = ProElemtreeElementAdd ( pro_e_smt_extend_side2_extension_cmp , NULL, 
+				   pro_e_smt_extend_extension_type_opt );
+<a name="anchor-31"></a>
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_EXTEND_ADJUST_SRF
+\*-----------------------------------------------------------------*/
+<a name="anchor-32"></a>  status = ProElementAlloc ( PRO_E_SMT_EXTEND_ADJUST_SRF, 
+			     &amp;pro_e_smt_extend_adjust_srf );
+  status = ProElementIntegerSet ( pro_e_smt_extend_adjust_srf,
+				  PRO_EXTEND_ADJ_SRF_FALSE );
+  status = ProElemtreeElementAdd ( pro_e_smt_extend_side1_extension_cmp , NULL, 
+<a name="anchor-33"></a>				  pro_e_smt_extend_adjust_srf );
+  status = ProElemtreeElementAdd ( pro_e_smt_extend_side2_extension_cmp , NULL, 
+				  pro_e_smt_extend_adjust_srf );
+
+
+<a name="anchor-34"></a>/*-----------------------------------------------------------------*\
+Create the feature using the element tree
+\*-----------------------------------------------------------------*/
+ status = ProMdlCurrentGet (&amp;model);
+ status = ProMdlToModelitem( model, &amp;model_item );
+<a name="anchor-35"></a> status = ProSelectionAlloc (NULL, &amp;model_item, &amp;model_sel);
+
+
+
+  status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+<a name="anchor-36"></a>    1, (ProArray*)&amp;opts);
+
+  opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+ status = ProFeatureWithoptionsCreate (model_sel, pro_e_feature_tree,
+<a name="anchor-37"></a>    opts, PRO_REGEN_NO_FLAGS, &amp;feature, &amp;errors);
+
+  status = ProArrayFree((ProArray*)&amp;opts);
+ if (status == PRO_TK_NO_ERROR)
+ {
+<a name="anchor-38"></a>	 ProSelectionAlloc (NULL, &amp;feature, &amp;feat_sel);
+	 ProSelbufferClear ();
+	 ProSelbufferSelectionAdd (feat_sel);
+	 ProSelectionFree (&amp;feat_sel);
+ }
+<a name="anchor-39"></a>
+ return (PRO_TK_NO_ERROR);
+}
+
+
+<a name="anchor-40"></a>/*=====================================================================*\
+FUNCTION: UserSmtExtendWallCreate_OA_Thickness
+PURPOSE:  Create sheetmetal extend wall features using Object/Action 
+          selection.
+\*=====================================================================*/
+<a name="anchor-41"></a>int UserSmtExtendWallCreate_OA_Thickness ()
+{
+  ProSelection* sel;
+  ProReference reference;
+    
+<a name="anchor-42"></a>/*-----------------------------------------------------------------*\
+Extract the current selected edge or edge chain as the wall attachment
+\*-----------------------------------------------------------------*/
+  ProSelbufferSelectionsGet (&amp;sel);
+
+<a name="anchor-43"></a>  ProSelectionToReference ( sel[0], &amp;reference );
+  
+
+/*-----------------------------------------------------------------*\
+Create the feature with the extracted information
+<a name="anchor-44"></a>\*-----------------------------------------------------------------*/
+  UserSmtExtendWallCreate ( reference );
+
+  ProReferenceFree (reference);
+
+<a name="anchor-45"></a>  return (PRO_TK_NO_ERROR);
+}
+
+#define OA 1  /* Standard OA in the menu system, typically gray out 
+		 the button when not usable*/
+<a name="anchor-46"></a>#define PM 2 /* OA in a popup menu, typically remove the button when 
+	         not usable */
+
+/*=====================================================================*\
+FUNCTION: UserSmtExtendWallCreate_TestLow
+<a name="anchor-47"></a>PURPOSE:  Access function for the button for smt extend wall feature creation
+\*=====================================================================*/
+static uiCmdAccessState UserSmtExtendWallCreate_TestLow (ProSelection* sels, 
+						       int mode)
+{
+<a name="anchor-48"></a>  uiCmdAccessState access_result;
+  ProBoolean should_free = PRO_B_FALSE;
+  ProError status;
+  ProMdl mdl;
+  ProMdlType type;
+<a name="anchor-49"></a>  ProMdlsubtype subtype;
+  ProReference reference;
+  ProModelitem item;
+  ProEdge edge;
+  ProEnttype ent_type;
+<a name="anchor-50"></a>  int size;
+
+/*-----------------------------------------------------------------*\
+  Set the default return if the button is unusable.
+\*-----------------------------------------------------------------*/  
+<a name="anchor-51"></a>  if (mode == OA)
+    access_result = ACCESS_UNAVAILABLE;
+  else 
+    access_result = ACCESS_REMOVE;
+
+<a name="anchor-52"></a>  status = ProMdlCurrentGet (&amp;mdl);
+
+  if (status != PRO_TK_NO_ERROR)
+    return (access_result);
+
+<a name="anchor-53"></a>  status = ProMdlTypeGet (mdl, &amp;type);
+
+  status = ProMdlSubtypeGet (mdl, &amp;subtype);
+  
+  if (type != PRO_MDL_PART || subtype != PROMDLSTYPE_PART_SHEETMETAL)
+<a name="anchor-54"></a>    return (access_result);
+
+/*-----------------------------------------------------------------*\
+  If called without selections, extract the current selections from
+  the buffer.
+<a name="anchor-55"></a>\*-----------------------------------------------------------------*/ 
+  if (sels == NULL)
+    {   
+      status = ProSelbufferSelectionsGet (&amp;sels);
+      
+<a name="anchor-56"></a>      if (status != PRO_TK_NO_ERROR)
+	return access_result;
+
+      if (sels == NULL)
+	return access_result;
+<a name="anchor-57"></a>
+      should_free = PRO_B_TRUE;
+    }
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-58"></a>  This command allows only one selection.
+\*-----------------------------------------------------------------*/   
+  status = ProArraySizeGet (sels, &amp;size);
+  
+  if (status != PRO_TK_NO_ERROR)
+<a name="anchor-59"></a>    return access_result;
+
+  if (size == 1)
+  {
+/*-----------------------------------------------------------------*\
+<a name="anchor-60"></a>Extract the reference edge selected by the user
+\*-----------------------------------------------------------------*/    
+    status = ProSelectionToReference (sels [0], &amp;reference);
+    ProTKPrintf (&quot;Status of ProSelectionCollectionGet: %d\n\n&quot;, status);
+
+<a name="anchor-61"></a>    if (status == PRO_TK_NO_ERROR)
+	{
+/*-----------------------------------------------------------------*\
+Check the reference to ensure that the reference is an edge 
+which borders a sheetmetal face.
+<a name="anchor-62"></a>\*-----------------------------------------------------------------*/
+	  ProReferenceTypeGet (reference, &amp;item.type);
+	  
+	  if (item.type == PRO_EDGE)
+	  {
+<a name="anchor-63"></a>	      
+	      ProReferenceOwnerGet (reference, &amp;item.owner);
+	      ProReferenceIdGet (reference, &amp;item.id);
+	      
+	      ProReferenceFree (reference);
+<a name="anchor-64"></a>	      
+	    if (UserEdgeIsSmtFaceEdge (&amp;item))
+		{
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-65"></a>Extend wall attachment edge must be straight
+\*-----------------------------------------------------------------*/
+		  ProGeomitemToEdge (&amp;item, &amp;edge);
+		  
+		  ProEdgeTypeGet (edge, &amp;ent_type);
+<a name="anchor-66"></a>		  
+		  if (ent_type == PRO_ENT_LINE)
+		  {
+/*-----------------------------------------------------------------*\
+If reference is OK, the button should be active.
+<a name="anchor-67"></a>\*-----------------------------------------------------------------*/
+		      access_result = ACCESS_AVAILABLE;
+		  }
+		}
+	  }
+<a name="anchor-68"></a>    }
+  }
+  
+  if (should_free)
+    ProSelectionarrayFree (sels);
+<a name="anchor-69"></a>      
+  return access_result;
+}
+
+/*=====================================================================*\
+<a name="anchor-70"></a>FUNCTION: UserSmtExtendWallCreate_TestMdlTree
+PURPOSE:  Access function for the model tree popup menu button.	
+\*=====================================================================*/
+/*ARGSUSED*/
+uiCmdAccessState UserSmtExtendWallCreate_TestMdlTree (uiCmdAccessMode mode)
+<a name="anchor-71"></a>{ 
+  return UserSmtExtendWallCreate_TestLow (NULL, PM);
+}
+
+
+<a name="anchor-72"></a>/*=====================================================================*\
+FUNCTION: UserSmtExtendWallCreate_TestPM
+PURPOSE:  Access function for the graphics window popup menu button.	
+\*=====================================================================*/
+/*ARGSUSED*/
+<a name="anchor-73"></a>uiCmdAccessState UserSmtExtendWallCreate_TestPM (uiCmdCmdId id,
+				      ProAppData data,
+				      ProSelection* sels)
+{ 
+  return UserSmtExtendWallCreate_TestLow (sels, PM);
+<a name="anchor-74"></a>}
+
+#undef OA
+
+#undef PM
+</pre>
+</body>
+</html>

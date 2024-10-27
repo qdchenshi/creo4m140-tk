@@ -1,0 +1,154 @@
+<html>
+<head>
+<title>UgGraphZoomAtPoint.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProAsmcomppath.h>
+#include &lt;ProSelection.h>
+#include &lt;ProView.h>
+<a name="anchor-2"></a>#include &lt;ProMessage.h>
+
+/*=====================================================================*\
+FUNCTION: UserZoomAtSelPoint
+PURPOSE:  Zooms window in by factor of 2 at selected point on a solid model.
+<a name="anchor-3"></a>\*=====================================================================*/
+ProError UserZoomAtSelPoint()
+{
+	ProError status;
+	ProSelection *p_sel;
+<a name="anchor-4"></a>	int n_sel;
+	ProAsmcomppath	comp_path;
+	ProPoint3d p3d;
+	ProMatrix	matrix, zoom_matrix;
+	ProPoint3d t_point;
+<a name="anchor-5"></a>	ProFileName msgfile;
+	ProModelitem item;
+	ProMdl top_model;
+
+	ProPoint3d scrpnt;
+<a name="anchor-6"></a>	int i, j, k;
+	int window;
+	double scale;
+
+	/*--------------------------------------------------------------------*\
+<a name="anchor-7"></a>		The Pro/ENGINEER &quot;virtual window&quot;.  Used to calculate the amount
+		of pan needed to center the zoomed window on the chosen point.
+    \*--------------------------------------------------------------------*/
+	double window_outline [2][3] = {{0.0, 0.0, 0.0}, {1000.0, 843.75, 0.0}};
+
+<a name="anchor-8"></a>	ProStringToWstring (msgfile, &quot;msg_uggraph.txt&quot;);
+
+    /*-----------------------------------------------------------------*\
+		Prompt the user to select the center of the zoom
+    \*-----------------------------------------------------------------*/
+<a name="anchor-9"></a>	ProMessageDisplay (msgfile, 
+		&quot;USER Select a location on a solid model for zoom &quot;);
+
+	status = ProSelect (&quot;prt_or_asm&quot;, 1, NULL, NULL, NULL, NULL, 
+						&amp;p_sel, &amp;n_sel); 
+<a name="anchor-10"></a>    if (status != PRO_TK_NO_ERROR)
+		return (status);
+
+	/*-----------------------------------------------------------------*\
+		Get the selected point
+<a name="anchor-11"></a>    \*-----------------------------------------------------------------*/
+    ProSelectionPoint3dGet (p_sel[0], p3d);
+
+	/*-----------------------------------------------------------------*\
+		Get the assembly component path for the selected component 
+<a name="anchor-12"></a>	\*-----------------------------------------------------------------*/
+	status = ProSelectionAsmcomppathGet (p_sel[0], &amp;comp_path);
+	if (status == PRO_TK_NO_ERROR &amp;&amp; comp_path.owner != NULL)
+	{
+
+<a name="anchor-13"></a>		top_model = comp_path.owner;
+	/*-----------------------------------------------------------------*\
+		Get the coordinate transformation matrix for the component to
+			the assembly
+    \*-----------------------------------------------------------------*/
+<a name="anchor-14"></a>		ProAsmcomppathTrfGet (&amp;comp_path, PRO_B_TRUE, matrix);
+	
+	/*-----------------------------------------------------------------*\
+		Transform the selected point into the coordinate system of the 
+			top level assembly
+<a name="anchor-15"></a>    \*-----------------------------------------------------------------*/
+		status = ProPntTrfEval(p3d, matrix, t_point);
+
+	}
+	else
+<a name="anchor-16"></a>	{
+
+    /*-----------------------------------------------------------------*\
+		If the selection is the top level component prepare the needed
+		parameters for zooming
+<a name="anchor-17"></a>    \*-----------------------------------------------------------------*/
+		ProSelectionModelitemGet (p_sel[0], &amp;item);
+		top_model =  item.owner;
+		memcpy (t_point, p3d, sizeof (ProPoint3d));
+	}
+<a name="anchor-18"></a>
+	/*-----------------------------------------------------------------*\
+		Get the view transformation matrix (from the current window)
+    \*-----------------------------------------------------------------*/
+	ProViewMatrixGet (top_model, NULL, matrix);
+<a name="anchor-19"></a>
+	/*-----------------------------------------------------------------*\
+		Transform the solid model point to screen coordinates
+    \*-----------------------------------------------------------------*/
+	ProPntTrfEval (t_point, matrix, scrpnt);
+<a name="anchor-20"></a>
+	/*-----------------------------------------------------------------*\
+		Get the window pan-zoom transformation matrix
+    \*-----------------------------------------------------------------*/
+	ProWindowCurrentMatrixGet (matrix);
+<a name="anchor-21"></a>
+	/*-----------------------------------------------------------------*\
+		Zoom in on the created point
+    \*-----------------------------------------------------------------*/	
+	for (j=0; j&lt;4; j++)
+<a name="anchor-22"></a>	{
+		for (k=0; k&lt;4; k++)
+			zoom_matrix [j][k] = 0.0;
+	}
+
+<a name="anchor-23"></a>	/*-----------------------------------------------------------------*\
+		Double the existing window scale
+    \*-----------------------------------------------------------------*/
+	scale = 2.0 * matrix [0][0];
+
+<a name="anchor-24"></a>	for (j=0; j&lt;3; j++)
+	{
+		zoom_matrix [j][j] = scale;
+		zoom_matrix [3][j] = 
+			(window_outline [1][j] - window_outline [0][j])/2.0 -
+<a name="anchor-25"></a>														scrpnt[j]*scale;
+	}
+
+	zoom_matrix [3][3] = 1.0;
+
+<a name="anchor-26"></a>	ProMdlWindowGet (top_model, &amp;window);
+
+	status = ProWindowPanZoomMatrixSet (window, zoom_matrix);
+
+	/*-----------------------------------------------------------------*\
+<a name="anchor-27"></a>		Repaint the window
+    \*-----------------------------------------------------------------*/
+	ProWindowRepaint (window);
+
+	return (status);
+<a name="anchor-28"></a>}
+
+
+
+
+<a name="anchor-29"></a>
+</pre>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<html>
+<head>
+<title>TestMoldbase.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*----------------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*----------------------------------------------------------------------------*/
+<a name="anchor-2"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMfg.h>
+#include &lt;ProMdl.h>
+#include &lt;ProCsys.h>
+<a name="anchor-3"></a>#include &lt;ProMoldbase.h>
+#include &lt;ProArray.h>
+#include &lt;ProUtil.h>
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-4"></a>C System includes
+\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+Application includes
+<a name="anchor-5"></a>\*----------------------------------------------------------------------------*/
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+#include &lt;UtilFiles.h>
+<a name="anchor-6"></a>#include &lt;TestError.h>
+
+/*----------------------------------------------------------------------------*\
+Application macros
+\*----------------------------------------------------------------------------*/
+<a name="anchor-7"></a>
+/*----------------------------------------------------------------------------*\
+Application prototypes
+\*----------------------------------------------------------------------------*/
+int     ProTestMoldBaseInfo(ProMdl );
+<a name="anchor-8"></a>int     ProTestMoldBaseCreate(ProMdl );
+int     ProTestMoldBaseRedefine(ProMdl );
+
+/*----------------------------------------------------------------------------*\
+Application global/external data
+<a name="anchor-9"></a>\*----------------------------------------------------------------------------*/
+
+/*============================================================================*\
+    FUNCTION : ProTestMoldBase	
+    PURPOSE  : Setup menu for testing
+<a name="anchor-10"></a>\*============================================================================*/
+int ProTestMoldBase(ProMdl mdl)
+{
+    ProError err;
+    int menu_id, action;
+<a name="anchor-11"></a>    ProMoldbaseParams mb_par = NULL;
+        
+    err = ProMenuFileRegister((char *)&quot;TkMoldBase&quot;,(char *)&quot;tkmoldbase.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char *)&quot;TkMoldBase&quot;, (char *)&quot;TkMoldBase&quot;,
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-12"></a>    err = ProMenubuttonActionSet((char *)&quot;TkMoldBase&quot;, (char *)&quot;Add&quot;,
+	(ProMenubuttonAction)ProTestMoldBaseCreate, mdl, 0);
+    err = ProMenubuttonActionSet((char *)&quot;TkMoldBase&quot;, (char *)&quot;Info&quot;,
+	(ProMenubuttonAction)ProTestMoldBaseInfo, mdl, 0);
+    err = ProMenubuttonActionSet((char *)&quot;TkMoldBase&quot;, (char *)&quot;Replace&quot;,
+<a name="anchor-13"></a>	(ProMenubuttonAction)ProTestMoldBaseRedefine, mdl, 0);
+    err = ProMenubuttonActionSet((char *)&quot;TkMoldBase&quot;, (char *)&quot;Done&quot;,
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;TkMoldBase&quot;, NULL);
+       
+<a name="anchor-14"></a>    err = ProMoldbaseFromModelGet (mdl, &amp;mb_par);
+    TEST_CALL_REPORT(&quot;ProMoldbaseFromModelGet()&quot;, &quot;ProTestMoldBase()&quot;, 
+	err, (err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_E_NOT_FOUND));
+    if (err == PRO_TK_E_NOT_FOUND)
+    {
+<a name="anchor-15"></a>        err = ProMenubuttonDeactivate ((char *)&quot;TkMoldBase&quot;, (char *)&quot;Info&quot;);
+        err = ProMenubuttonDeactivate ((char *)&quot;TkMoldBase&quot;, (char *)&quot;Replace&quot;);
+    }    
+    else
+        err = ProMenubuttonDeactivate ((char *)&quot;TkMoldBase&quot;, (char *)&quot;Add&quot;);
+<a name="anchor-16"></a>       
+    err = ProMenuProcess((char *)&quot;&quot;, &amp;action);
+    
+    return (0);
+}
+<a name="anchor-17"></a>
+/*============================================================================*\
+    FUNCTION : ProTestMoldBaseCreate 	
+    PURPOSE  : Creat mold base.	
+\*============================================================================*/
+<a name="anchor-18"></a>int ProTestMoldBaseCreate (ProMdl mdl)
+{
+    ProError err;
+    ProMoldbaseParams mb_par = NULL;
+    ProName vendor, series, length, width;
+<a name="anchor-19"></a>    
+    ProStringToWstring (vendor, (char *)&quot;Futaba&quot;);
+    ProStringToWstring (series, (char *)&quot;SA&quot;);
+    ProStringToWstring (length, (char *)&quot;150&quot;);
+    ProStringToWstring (width,  (char *)&quot;250&quot;);
+<a name="anchor-20"></a>    
+    err =  ProMoldbaseParamsAlloc(&amp;mb_par);
+    TEST_CALL_REPORT(&quot;ProMoldbaseParamsAlloc()&quot;,
+            &quot;ProTestMoldBaseCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+<a name="anchor-21"></a>    err = ProMoldbaseParamsDefaultSet (vendor, series, length, width, mb_par);
+    TEST_CALL_REPORT(&quot;ProMoldbaseParamsDefaultSet()&quot;,
+            &quot;ProTestMoldBaseCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+    err = ProMoldbaseDialog (mdl, mb_par);
+<a name="anchor-22"></a>    TEST_CALL_REPORT(&quot;ProMoldbaseDialog()&quot;,
+            &quot;ProTestMoldBaseCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err == PRO_TK_NO_ERROR)
+    {            
+        err = ProMoldbaseCreate (mb_par);
+<a name="anchor-23"></a>        TEST_CALL_REPORT(&quot;ProMoldbaseCreate()&quot;,
+            &quot;ProTestMoldBaseCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    err = ProMoldbaseParamsFree (&amp;mb_par);
+    TEST_CALL_REPORT(&quot;ProMoldbaseParamsFree()&quot;,
+<a name="anchor-24"></a>            &quot;ProTestMoldBaseCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+    return (0);
+}
+
+<a name="anchor-25"></a>/*============================================================================*\
+    FUNCTION : ProTestMoldBaseRedefine	
+    PURPOSE  : Replace existing mold base.	
+\*============================================================================*/
+int ProTestMoldBaseRedefine (ProMdl mdl)
+<a name="anchor-26"></a>{
+    ProError err;
+    ProMoldbaseParams mb_par = NULL;
+    
+    
+<a name="anchor-27"></a>    err = ProMoldbaseFromModelGet (mdl, &amp;mb_par);
+    TEST_CALL_REPORT(&quot;ProMoldbaseFromModelGet()&quot;,
+            &quot;ProTestMoldBaseRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+        return (-1);
+<a name="anchor-28"></a>        
+    err = ProMoldbaseDialog (mdl, mb_par);
+    TEST_CALL_REPORT(&quot;ProMoldbaseDialog()&quot;,
+            &quot;ProTestMoldBaseRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err == PRO_TK_NO_ERROR)
+<a name="anchor-29"></a>    {            
+        err = ProMoldbaseCreate (mb_par);
+        TEST_CALL_REPORT(&quot;ProMoldbaseCreate()&quot;,
+            &quot;ProTestMoldBaseRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-30"></a>    err = ProMoldbaseParamsFree (&amp;mb_par);
+    TEST_CALL_REPORT(&quot;ProMoldbaseParamsFree()&quot;,
+            &quot;ProTestMoldBaseCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    return (0);
+<a name="anchor-31"></a>}
+
+/*============================================================================*\
+    FUNCTION : ProTestMoldBaseRedefine	
+    PURPOSE  : Get mold base info	
+<a name="anchor-32"></a>\*============================================================================*/
+int ProTestMoldBaseInfo (ProMdl mdl)
+{
+    ProError err;
+    ProMoldbaseParams mb_par = NULL;
+<a name="anchor-33"></a>    ProName vendor, series, length, width, *p_param_values;
+    ProCharName *p_param_names;
+    ProCharLine line, value;
+    double rot_angle;
+    ProMdl owner;
+<a name="anchor-34"></a>    char f_name[PRO_FILE_NAME_SIZE];
+    int i, n_params;
+    FILE *fp;
+    
+    ProTestQcrName(&amp;mdl, (char *)&quot;.inf&quot;, f_name);
+<a name="anchor-35"></a>    fp = PTApplsUnicodeFopen (f_name, &quot;w&quot;);
+    if (fp == NULL)
+        return -1;
+    
+    err = ProMoldbaseFromModelGet (mdl, &amp;mb_par);
+<a name="anchor-36"></a>    TEST_CALL_REPORT(&quot;ProMoldbaseFromModelGet()&quot;,
+            &quot;ProTestMoldBaseInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+        return (-1);
+        
+<a name="anchor-37"></a>    err = ProArrayAlloc (0, sizeof(ProCharName), 1, (ProArray*)&amp;p_param_names);
+    err = ProArrayAlloc (0, sizeof(ProName), 1, (ProArray*)&amp;p_param_values);
+    
+    err = ProMoldbaseParamsGet (mb_par, &amp;owner, vendor, series, length, width, 
+        &amp;p_param_names, &amp;p_param_values, &amp;rot_angle);
+<a name="anchor-38"></a>    TEST_CALL_REPORT(&quot;ProMoldbaseParamsGet()&quot;,
+            &quot;ProTestMoldBaseInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+    ProTKFprintf(fp, &quot;%-20s %s\n&quot;, &quot;Vendor&quot;, ProWstringToString (line, vendor)); 
+    ProTKFprintf(fp, &quot;%-20s %s\n&quot;, &quot;Series&quot;, ProWstringToString (line, series)); 
+<a name="anchor-39"></a>    ProTKFprintf(fp, &quot;%-20s %s\n&quot;, &quot;Length&quot;, ProWstringToString (line, length)); 
+    ProTKFprintf(fp, &quot;%-20s %s\n&quot;, &quot;Width&quot;, ProWstringToString (line, width)); 
+    ProTKFprintf(fp, &quot;%-20s %.3f\n&quot;, &quot;Rotation angle&quot;, rot_angle); 
+    
+    err = ProArraySizeGet ((ProArray)p_param_values, &amp;n_params);
+<a name="anchor-40"></a>    for (i = 0; i &lt; n_params; i++)
+    {
+         strcpy(line, p_param_names[i]);
+         ProWstringToString(value, p_param_values[i]);
+         ProTKFprintf(fp, &quot;    %-20s %s\n&quot;, line, value);
+<a name="anchor-41"></a>    }    
+    err = ProArrayFree ((ProArray*)&amp;p_param_values);    
+    err = ProArrayFree ((ProArray*)&amp;p_param_names);
+    err = ProMoldbaseParamsFree (&amp;mb_par);
+    TEST_CALL_REPORT(&quot;ProMoldbaseParamsFree()&quot;,
+<a name="anchor-42"></a>            &quot;ProTestMoldBaseCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    fclose (fp);
+    
+    ProStringToWstring(vendor, f_name);
+    ProInfoWindowDisplay(vendor, NULL, NULL); 
+<a name="anchor-43"></a>    
+    return (0);
+}
+</pre>
+</body>
+</html>

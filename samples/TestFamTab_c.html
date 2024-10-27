@@ -1,0 +1,1304 @@
+<html>
+<head>
+<title>TestFamTab.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMenu.h>
+#include &lt;ProMessage.h>
+#include &lt;ProMdl.h> 
+#include &lt;ProModelitem.h>
+#include &lt;ProFamtable.h>
+<a name="anchor-3"></a>#include &lt;ProFaminstance.h>
+#include &lt;ProParameter.h>
+#include &lt;ProSelection.h>
+#include &lt;ProFeature.h>
+#include &lt;ProFeatType.h>
+<a name="anchor-4"></a>#include &lt;ProUtil.h>
+#include &lt;ProSolid.h>
+#include &lt;ProGtol.h>
+#include &lt;ProWindows.h>
+#include &lt;ProTKRunTime.h>
+<a name="anchor-5"></a>
+#include &quot;TestFamTab.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;UtilFiles.h&quot;
+#include &quot;UtilMessage.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilString.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &quot;UtilCollect.h&quot;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-7"></a>Application macros
+\*--------------------------------------------------------------------*/
+#define PROERROR_RETURN(error)    if(error != PRO_TK_NO_ERROR) return(error)
+#define  OUT_FILE_EXT           &quot;.ftb&quot;
+
+<a name="anchor-8"></a>#define  PRO_TEST_FAM_EDIT    0
+#define  PRO_TEST_FAM_SHOW    1
+#define  PRO_TEST_FAM_ERASE   2
+
+
+<a name="anchor-9"></a>/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+typedef struct app_data
+{
+<a name="anchor-10"></a>    ProFamtable     *p_famtab;
+    ProFamtableItem *p_item;
+    FILE *fp;
+} ProTestAppData;
+
+<a name="anchor-11"></a> 
+/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+extern int ProTestFamAddInst (ProFamtable  *p_famtab);
+<a name="anchor-12"></a>extern int ProTestFamDelInst (ProFamtable  *p_famtab);
+extern int ProTestFamInstRetrieve (ProFamtable  *p_famtab);
+extern int ProTestFamtabActions(ProFamtable *p_famtab, int action);
+extern int ProTestFamAddColumn (ProFamtable  *p_famtab);
+extern int ProTestFamDelColumn (ProFamtable  *p_famtab);
+<a name="anchor-13"></a>extern int ProTestFamShowInst (ProFamtable  *p_famtab);
+extern int ProTestFamLockInst (ProFamtable  *p_famtab);
+extern int ProTestFamShowGeneric (ProFamtable  *p_famtab);
+extern int ProTestFamShowFile (ProFamtable  *p_famtab);
+extern int ProTestFamTypeMenu ();
+<a name="anchor-14"></a>ProError ProTestModelDisplay( 
+    ProMdl		p_model
+);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-15"></a>Application static data/function
+\*--------------------------------------------------------------------*/
+static int ProTestFamExitActionUp(
+		char *dummy,
+		int type);
+<a name="anchor-16"></a>
+
+
+/*============================================================================*\
+ Function:      ProTestTkFamilyMenu                           
+<a name="anchor-17"></a> Purpose:       To set-up the user's family menu
+\*============================================================================*/
+int ProTestFamlyTabMenu(
+    ProAppData		p_appdata,
+    int			int_dummy
+<a name="anchor-18"></a>)
+{
+    ProMdl		p_model = *((ProMdl*)p_appdata);
+    ProFamtable  	famtable;
+    int          	menu_id, action;
+<a name="anchor-19"></a>    ProError     	status;
+
+
+    status = ProFamtableInit( p_model, &amp;famtable );
+    TEST_CALL_REPORT(&quot;ProFamtableInit()&quot;, &quot;ProTestFamlyTabMenu()&quot;,
+<a name="anchor-20"></a>                      status,  status != PRO_TK_NO_ERROR);
+
+    ProMenuPush();
+
+    ProMenuFileRegister((char *)&quot;TkFamTab&quot;,(char *)&quot;tkfamtab.mnu&quot;, &amp;menu_id);
+<a name="anchor-21"></a>    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;TkFamTab&quot;,
+                  (ProMenubuttonAction)ProMenuDelete, NULL,  0);
+    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Add Column&quot;,
+                  (ProMenubuttonAction)ProTestFamAddColumn, &amp;famtable,  0);
+    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Del Column&quot;,
+<a name="anchor-22"></a>                  (ProMenubuttonAction)ProTestFamDelColumn, &amp;famtable,  0);
+    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Add Instance&quot;,
+                  (ProMenubuttonAction)ProTestFamAddInst, &amp;famtable,  0);
+    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Del Instance&quot;,
+                  (ProMenubuttonAction)ProTestFamDelInst, &amp;famtable,  0);
+<a name="anchor-23"></a>    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Retr Instance&quot;,
+                  (ProMenubuttonAction)ProTestFamInstRetrieve, &amp;famtable,  0);
+    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Edit Table&quot;,
+                  (ProMenubuttonAction)ProTestFamtabActions,
+                                       &amp;famtable, PRO_TEST_FAM_EDIT);
+<a name="anchor-24"></a>    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Show Table&quot;,
+                  (ProMenubuttonAction)ProTestFamtabActions,
+                                       &amp;famtable, PRO_TEST_FAM_SHOW);
+    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Clear Table&quot;,
+                  (ProMenubuttonAction)ProTestFamtabActions,
+<a name="anchor-25"></a>                                       &amp;famtable, PRO_TEST_FAM_ERASE);
+    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Show Instance&quot;,
+                  (ProMenubuttonAction)ProTestFamShowInst, &amp;famtable,  0);
+    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Lock Instance&quot;,
+                  (ProMenubuttonAction)ProTestFamLockInst, &amp;famtable,  0);
+<a name="anchor-26"></a>    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Show generic&quot;,
+                  (ProMenubuttonAction)ProTestFamShowGeneric, &amp;famtable,  0);
+    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Show File&quot;,
+                  (ProMenubuttonAction)ProTestFamShowFile, &amp;famtable,  0);
+    ProMenubuttonActionSet((char *)&quot;TkFamTab&quot;,(char *)&quot;-Done TkFamTab&quot;,
+<a name="anchor-27"></a>                  (ProMenubuttonAction)ProMenuDelete, NULL,  0);
+
+    ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;TkFamTab&quot;, &amp;menu_id);
+    ProMenuProcess((char *)&quot;&quot;, &amp;action);
+
+<a name="anchor-28"></a>    ProMenuPop();
+
+  return (0);
+}
+
+<a name="anchor-29"></a>/*===========================================================================*\
+  Function : TestFamSelectionExtRefFilter
+  Purpose  : Filter for ProSelect function (for PRO_FEAT_GEOM_COPY)
+\*===========================================================================*/
+ProError TestFamSelectionExtRefFilter(
+<a name="anchor-30"></a>    ProSelection selection,
+    Pro3dPnt point,
+    ProMatrix transform,
+    char * option,
+    int level,
+<a name="anchor-31"></a>    ProAppData app_data)
+{
+    ProFeature feat;
+    ProError err;
+    ProFeattype type;
+<a name="anchor-32"></a>
+    err = ProSelectionModelitemGet ( selection, &amp;feat);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+        &quot;TestFamSelectionExtRefFilter()&quot;, err, err != PRO_TK_NO_ERROR );
+
+<a name="anchor-33"></a>    err = ProFeatureTypeGet (&amp;feat, &amp;type);
+    TEST_CALL_REPORT (&quot;ProFeatureTypeGet()&quot;,
+	&quot;TestFamSelectionExtRefFilter()&quot;, err , err != PRO_TK_NO_ERROR);
+
+    ProTKPrintf((char *)&quot;Type: %d\n&quot;, type);
+<a name="anchor-34"></a>        
+    return ((type == PRO_FEAT_GEOM_COPY)?(PRO_TK_NO_ERROR):(PRO_TK_CONTINUE));
+}
+
+/*===========================================================================*\
+<a name="anchor-35"></a>  Function : TestFamSelectionExtRefFilter
+  Purpose  : Filter for ProSelect function (for PRO_FEAT_GEN_MERGE)
+\*===========================================================================*/
+ProError TestFamSelectionMergeFilter(
+    ProSelection selection,
+<a name="anchor-36"></a>    Pro3dPnt point,
+    ProMatrix transform,
+    char * option,
+    int level,
+    ProAppData app_data)
+<a name="anchor-37"></a>{
+    ProFeature feat;
+    ProError err;
+    ProFeattype type;
+
+<a name="anchor-38"></a>    err = ProSelectionModelitemGet ( selection, &amp;feat);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+        &quot;TestFamSelectionExtRefFilter()&quot;, err, err != PRO_TK_NO_ERROR );
+
+    err = ProFeatureTypeGet (&amp;feat, &amp;type);
+<a name="anchor-39"></a>    TEST_CALL_REPORT (&quot;ProFeatureTypeGet()&quot;,
+	&quot;TestFamSelectionExtRefFilter()&quot;, err , err != PRO_TK_NO_ERROR);
+
+    ProTKPrintf((char *)&quot;Type: %d\n&quot;, type);
+        
+<a name="anchor-40"></a>    return ((type == PRO_FEAT_GEN_MERGE)?(PRO_TK_NO_ERROR):(PRO_TK_CONTINUE));
+}
+
+/*===========================================================================*\
+  Function : ProTestFamTypeMenu
+<a name="anchor-41"></a>  Purpose  : Display the family type menu
+\*===========================================================================*/
+int ProTestFamTypeMenu()
+{
+    int action;
+<a name="anchor-42"></a>    static ProUtilMenuButtons col_type[] = {
+	{&quot;TkFamColType&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+	{&quot;-User Param&quot;,  PRO_FAM_USER_PARAM,    0},
+	{&quot;-Dimension&quot;,   PRO_FAM_DIMENSION,     0},
+        {&quot;-Feature&quot;,     PRO_FAM_FEATURE,       0},
+<a name="anchor-43"></a>        {&quot;-Asm Comp&quot;,    PRO_FAM_ASMCOMP,       0},
+        {&quot;-Comp Model&quot;,  PRO_FAM_ASMCOMP_MODEL, 0},
+        {&quot;-Ext. ref&quot;,    PRO_FAM_EXTERNAL_REFERENCE, 0},
+        {&quot;-Merge Part&quot;,  PRO_FAM_MERGE_PART_REF,0},
+	{&quot;&quot;, 0, 0}
+<a name="anchor-44"></a>    };
+
+    /*  Set-up this menu to query the user  */
+    ProUtilMenuIntValueSelect(col_type, &amp;action);
+    
+<a name="anchor-45"></a>    return(action);
+}
+
+/*===========================================================================*\
+ Function:      ProTestFamSelectItem
+<a name="anchor-46"></a> Purpose:       Select a family table item
+\*===========================================================================*/
+ProError ProTestFamSelectItem(  
+    ProFamtable		*p_famtable,	/* In:	Family table */
+    ProFamtableItem	*p_item		/* Out:	Selected fam table item */
+<a name="anchor-47"></a>)
+{
+    ProMdl		p_model;
+    ProModelitem	model_item;
+    ProParameter        param;
+<a name="anchor-48"></a>    ProSelection        *sel;
+    char                option[40];
+    int                 n_sel = 0;
+    int			type;
+    ProError		status;
+<a name="anchor-49"></a>    ProAsmcomppath	comp_path;
+    ProSelFunctions     sel_fun;
+
+    sel_fun.pre_filter = (ProSelectionPreFilter)TestFamSelectionExtRefFilter;
+    sel_fun.post_filter =  NULL;
+<a name="anchor-50"></a>    sel_fun.post_selact = NULL;
+    sel_fun.app_data = NULL;
+    
+    status = ProMdlCurrentGet( &amp;p_model );
+    TEST_CALL_REPORT( &quot;ProMdlCurrentGet()&quot;, &quot;ProTestFamSelectItem()&quot;,
+<a name="anchor-51"></a>	status,  status != PRO_TK_NO_ERROR );
+ 
+    type = ProTestFamTypeMenu();
+
+    switch (type)
+<a name="anchor-52"></a>    {
+      case PRO_FAM_USER_PARAM :
+          status = ProMdlToModelitem( p_model, &amp;model_item );
+          TEST_CALL_REPORT( &quot;ProMdlToModelitem()&quot;, &quot;ProTestFamSelectItem()&quot;,
+                            status,  status != PRO_TK_NO_ERROR);
+<a name="anchor-53"></a>          status = ProParameterSelect(&amp;model_item, p_model, PRO_PARAMSELECT_ANY, PRO_B_FALSE, NULL, &amp;param, NULL);
+          TEST_CALL_REPORT( &quot;ProParameterSelect()&quot;, &quot;ProTestFamSelectItem()&quot;,
+                            status, status != PRO_TK_NO_ERROR);
+
+	  if( status != PRO_TK_NO_ERROR )
+<a name="anchor-54"></a>		return PRO_TK_E_NOT_FOUND;
+
+	  status = ProParameterToFamtableItem( &amp;param, p_item );
+          TEST_CALL_REPORT( &quot;ProParameterToFamtableItem()&quot;, 
+		&quot;ProTestFamSelectItem()&quot;,
+<a name="anchor-55"></a>                status, status != PRO_TK_NO_ERROR);
+	  break;
+ 
+      case PRO_FAM_DIMENSION :
+          ProUtilstrcpy(option, &quot;dimension&quot;);
+<a name="anchor-56"></a>
+          status = ProSelect (option, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+          TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestFamSelectItem()&quot;,
+                            status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-57"></a>	  if( status != PRO_TK_NO_ERROR || n_sel &lt; 1 )
+		return PRO_TK_E_NOT_FOUND;
+
+          status = ProSelectionModelitemGet( sel[0], &amp;model_item );
+          TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+<a name="anchor-58"></a>		&quot;ProTestFamSelectItem()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+
+          status = ProModelitemToFamtableItem( &amp;model_item, p_item );
+          TEST_CALL_REPORT(&quot;ProModelitemToFamtableItem()&quot;, 
+<a name="anchor-59"></a>		&quot;ProTestFamSelectItem()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+          break;
+ 
+      case PRO_FAM_FEATURE :
+<a name="anchor-60"></a>          ProUtilstrcpy(option, &quot;feature&quot;);
+
+          status = ProSelect (option, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+          TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestFamAddColumn()&quot;,
+                            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-61"></a>
+	  if( status != PRO_TK_NO_ERROR || n_sel &lt; 1 )
+		return PRO_TK_E_NOT_FOUND;
+
+          status = ProSelectionModelitemGet(sel[0], &amp;model_item);
+<a name="anchor-62"></a>          TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+		&quot;ProTestFamSelectItem()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+          
+          ProTKPrintf((char *)&quot;Type: %d\n&quot;, model_item.type);
+<a name="anchor-63"></a>
+          status = ProModelitemToFamtableItem( &amp;model_item, p_item );
+          TEST_CALL_REPORT(&quot;ProModelitemToFamtableItem()&quot;, 
+		&quot;ProTestFamSelectItem()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-64"></a>
+          break;
+ 
+      case PRO_FAM_ASMCOMP :
+      case PRO_FAM_ASMCOMP_MODEL :
+<a name="anchor-65"></a>	  ProUtilstrcpy(option, &quot;prt_or_asm&quot;);
+
+          status = ProSelect (option, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+          TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestFamAddColumn()&quot;,
+                            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-66"></a>
+          if( status != PRO_TK_NO_ERROR || n_sel &lt; 1 )
+                return PRO_TK_E_NOT_FOUND;
+
+	  ProSelectionAsmcomppathGet( sel[0], &amp;comp_path );
+<a name="anchor-67"></a>	  if( comp_path.table_num != 1 )
+	  {
+		ProUtilMsgPrint( (char *)&quot;TEST %0s&quot;, 
+			(char *)&quot;First-level assy component must be selected&quot; );
+	  }
+<a name="anchor-68"></a>	  
+	  model_item.type = (ProType)PRO_FEAT_COMPONENT;
+          model_item.owner = p_model;
+          model_item.id =  comp_path.comp_id_table[0];
+          
+<a name="anchor-69"></a>	  status = ProModelitemToFamtableItem( &amp;model_item, p_item );
+          TEST_CALL_REPORT(&quot;ProModelitemToFamtableItem()&quot;,
+                &quot;ProTestFamSelectItem()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-70"></a>          break;
+
+        case PRO_FAM_EXTERNAL_REFERENCE:
+          ProUtilstrcpy(option, &quot;feature&quot;);
+          status = ProSelect (option, 1, NULL, &amp;sel_fun, NULL, NULL, &amp;sel, &amp;n_sel);
+<a name="anchor-71"></a>          TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestFamAddColumn()&quot;,
+                            status, status != PRO_TK_NO_ERROR);
+
+	  if( status != PRO_TK_NO_ERROR || n_sel &lt; 1 )
+		return PRO_TK_E_NOT_FOUND;
+<a name="anchor-72"></a>
+          status = ProSelectionModelitemGet(sel[0], &amp;model_item);
+          TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+		&quot;ProTestFamSelectItem()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-73"></a>
+          status = ProModelitemToFamtableItem( &amp;model_item, p_item );
+          TEST_CALL_REPORT(&quot;ProModelitemToFamtableItem()&quot;, 
+		&quot;ProTestFamSelectItem()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-74"></a>        break;
+        
+        case PRO_FAM_MERGE_PART_REF:
+          sel_fun.pre_filter =
+          	 (ProSelectionPreFilter)TestFamSelectionMergeFilter;
+<a name="anchor-75"></a>          ProUtilstrcpy(option, &quot;feature&quot;);
+          status = ProSelect (option, 1, NULL, &amp;sel_fun, NULL, NULL, &amp;sel, &amp;n_sel);
+          TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestFamAddColumn()&quot;,
+                            status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-76"></a>	  if( status != PRO_TK_NO_ERROR || n_sel &lt; 1 )
+		return PRO_TK_E_NOT_FOUND;
+
+          status = ProSelectionModelitemGet(sel[0], &amp;model_item);
+          TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+<a name="anchor-77"></a>		&quot;ProTestFamSelectItem()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+
+          status = ProModelitemToFamtableItem( &amp;model_item, p_item );
+          TEST_CALL_REPORT(&quot;ProModelitemToFamtableItem()&quot;, 
+<a name="anchor-78"></a>		&quot;ProTestFamSelectItem()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+        break;
+        
+      default :
+<a name="anchor-79"></a>	  status = PRO_TK_GENERAL_ERROR;
+          break;
+    }
+
+
+<a name="anchor-80"></a>    return(status);
+}
+
+/*===========================================================================*\
+ Function:      ProTestFamAddColumn
+<a name="anchor-81"></a> Purpose:       To add a column to a table
+\*===========================================================================*/
+int ProTestFamAddColumn(
+    ProFamtable		*p_famtable
+)
+<a name="anchor-82"></a>{
+    ProFamtableItem	item;
+    ProError		status;
+
+    status = ProTestFamSelectItem( p_famtable, &amp;item );
+<a name="anchor-83"></a>
+    if( status == PRO_TK_NO_ERROR )
+    {
+   	status = ProFamtableItemAdd( p_famtable, &amp;item );
+    	TEST_CALL_REPORT(&quot;ProFamtableItemAdd()&quot;, &quot;ProTestFamAddColumn( )&quot;,
+<a name="anchor-84"></a>		status, 0);
+    }
+
+    return(status);
+}
+<a name="anchor-85"></a>
+/*===========================================================================*\
+ Function:      ProTestFamDelColumn
+ Purpose:       To delete a column from a table
+\*===========================================================================*/
+<a name="anchor-86"></a>int ProTestFamDelColumn(
+    ProFamtable		*p_famtable
+)
+{
+    ProFamtableItem	item;
+<a name="anchor-87"></a>    ProError		status;
+
+    status = ProTestFamSelectItem( p_famtable, &amp;item );
+    
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-88"></a>    {
+   	status = ProFamtableItemRemove( p_famtable, &amp;item );
+    	TEST_CALL_REPORT(&quot;ProFamtableItemRemove()&quot;, &quot;ProTestFamDelColumn( )&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-89"></a>
+    return(status);
+}
+
+/*===========================================================================*\
+<a name="anchor-90"></a> Function:      ProTestFamtabInstNameCompare
+ Purpose:       Compare the fam table instance name with a given string.
+		Used as ProFamtableInstanceAction
+ Return:	PRO_TK_E_FOUND - strings are equal, PRO_TK_NO_ERROR-otherwise
+\*===========================================================================*/
+<a name="anchor-91"></a>ProError ProTestFamtabInstNameCompare( 
+    ProFaminstance	*p_inst,
+    ProError		status,
+    ProAppData          app_data
+)
+<a name="anchor-92"></a>{
+    wchar_t		*p_wname = (wchar_t*)app_data;
+
+
+    if( ProUtilWstrCmp( p_wname, p_inst->name ) == 0 )
+<a name="anchor-93"></a>	return PRO_TK_E_FOUND;
+    else
+	return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-94"></a>
+
+/*===========================================================================*\
+ Function:      ProTestFamtabInstFilter
+ Purpose:       Filter for ProFamtableInstanceVisit 
+<a name="anchor-95"></a>\*===========================================================================*/
+ProError ProTestFamtabInstFilter(
+    ProFaminstance      *p_inst,
+    ProAppData          app_data
+)
+<a name="anchor-96"></a>{
+    return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+<a name="anchor-97"></a>  Function : ProTestFamtabItemSet
+  Purpose  : Set the item values of fam table instance
+\*====================================================================*/
+ProError ProTestFamtabItemSet(
+    ProFamtableItem     *p_item,
+<a name="anchor-98"></a>    ProError         	status,
+    ProAppData       	app_data	/* In:	Instance */
+)
+{
+    ProFaminstance      *p_inst = (ProFaminstance*)app_data;
+<a name="anchor-99"></a>    ProParamvalue   	paramval;
+    ProParamvalueType	paramval_type;
+    wchar_t		w_buffer[ PRO_NAME_SIZE ];
+    char		name[ PRO_NAME_SIZE ];
+    char		str[ PRO_NAME_SIZE ];
+<a name="anchor-100"></a>    double		dbl_value;
+    int			int_value;
+
+    status = ProFaminstanceValueGet( p_inst, p_item, &amp;paramval );
+    TEST_CALL_REPORT( &quot;ProFaminstanceValueGet()&quot;, &quot;ProTestFamtabItemSet()&quot;,
+<a name="anchor-101"></a>	status, status != PRO_TK_NO_ERROR);
+   
+    if( status != PRO_TK_NO_ERROR )
+	return PRO_TK_NO_ERROR;
+
+<a name="anchor-102"></a>    status = ProParamvalueTypeGet( &amp;paramval, &amp;paramval_type ); 
+    TEST_CALL_REPORT( &quot;ProParamvalueTypeGet()&quot;, &quot;ProTestFamtabItemSet()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    ProTKSprintf( str, &quot;Enter %s value [ENTER]: &quot;, 
+<a name="anchor-103"></a>        ProWstringToString( name, p_item->string ) );
+    ProUtilMsgPrint( MSG_FILE_FAM, (char *)&quot;TEST %0s&quot;, str );
+
+    switch( paramval_type )
+    {
+<a name="anchor-104"></a>        case PRO_PARAM_DOUBLE:
+	    status = ProMessageDoubleRead( NULL, &amp;dbl_value );
+	    TEST_CALL_REPORT( &quot;ProMessageDoubleRead()&quot;, 
+		&quot;ProTestFamtabItemSet()&quot;, status, status != PRO_TK_NO_ERROR);
+	    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-105"></a>	    {
+		status = ProParamvalueSet( &amp;paramval, (void*)&amp;dbl_value, 
+			PRO_PARAM_DOUBLE );
+            	TEST_CALL_REPORT( &quot;ProParamvalueSet()&quot;, 
+                    &quot;ProTestFamtabItemSet()&quot;, status, 
+<a name="anchor-106"></a>		    status != PRO_TK_NO_ERROR);
+	    } 
+            break;
+
+        case PRO_PARAM_STRING:
+<a name="anchor-107"></a>            status = ProMessageStringRead( PRO_NAME_SIZE, w_buffer );
+            TEST_CALL_REPORT( &quot;ProMessageStringRead()&quot;, 
+                &quot;ProTestFamtabItemSet()&quot;, status, status != PRO_TK_NO_ERROR);
+            if( status == PRO_TK_NO_ERROR )
+            {
+<a name="anchor-108"></a>                status = ProParamvalueSet( &amp;paramval, (void*)w_buffer, 
+                        PRO_PARAM_STRING );
+                TEST_CALL_REPORT( &quot;ProParamvalueSet()&quot;,
+                    &quot;ProTestFamtabItemSet()&quot;, status, 
+                    status != PRO_TK_NO_ERROR);
+<a name="anchor-109"></a>            }
+
+            break;
+
+        case PRO_PARAM_INTEGER:
+<a name="anchor-110"></a>            status = ProMessageIntegerRead( NULL, &amp;int_value );
+            TEST_CALL_REPORT( &quot;ProMessageIntegerRead()&quot;,
+                &quot;ProTestFamtabItemSet()&quot;, status, status != PRO_TK_NO_ERROR);
+            if( status == PRO_TK_NO_ERROR )
+            {
+<a name="anchor-111"></a>                status = ProParamvalueSet( &amp;paramval, (void*)&amp;int_value,
+                        PRO_PARAM_INTEGER );
+                TEST_CALL_REPORT( &quot;ProParamvalueSet()&quot;,
+                    &quot;ProTestFamtabItemSet()&quot;, status,
+                    status != PRO_TK_NO_ERROR);
+<a name="anchor-112"></a>            }
+
+            break;
+
+        case PRO_PARAM_BOOLEAN:
+<a name="anchor-113"></a>        case PRO_PARAM_NOTE_ID:
+        case PRO_PARAM_VOID:
+            break;
+
+        default:
+<a name="anchor-114"></a>            break;
+    }
+
+    status = ProFaminstanceValueSet( p_inst, p_item, &amp;paramval );
+    TEST_CALL_REPORT( &quot;ProFaminstanceValueSet()&quot;, &quot;ProTestFamtabItemSet()&quot;,
+<a name="anchor-115"></a>        status, status != PRO_TK_NO_ERROR);
+ 
+
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-116"></a>
+
+
+/*===========================================================================*\
+ Function:      ProTestFamtabItemFilter
+<a name="anchor-117"></a> Purpose:       Filter for ProFamtableItemVisit
+\*===========================================================================*/
+ProError ProTestFamtabItemFilter(
+    ProFamtableItem	*p_item,
+    ProAppData          app_data
+<a name="anchor-118"></a>)
+{
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-119"></a>
+
+/*===========================================================================*\
+ Function:      ProTestFamAddInst
+ Purpose:       Add an instance to a family table
+<a name="anchor-120"></a>\*===========================================================================*/
+int ProTestFamAddInst(
+		ProFamtable     *p_famtable)
+{
+    ProError            status;
+<a name="anchor-121"></a>    ProFaminstance      instance;
+    ProName             w_name;
+    ProFaminstance *famt_instance;
+    int famt_items_num, i;
+    ProFamtableItem *famt_item;
+<a name="anchor-122"></a>
+    /* Enter the name of new instance */
+    ProUtilMsgPrint( MSG_FILE_FAM, (char *)&quot;TEST %0s&quot;, (char *)&quot;Enter the instance name: &quot; );
+    status = ProMessageStringRead( PRO_NAME_SIZE - 1, w_name );
+    TEST_CALL_REPORT( &quot;ProMessageStringRead()&quot;, &quot;ProTestFamAddInst()&quot;,
+<a name="anchor-123"></a>        status, status != PRO_TK_NO_ERROR );
+
+    if( status != PRO_TK_NO_ERROR )
+        return PRO_TK_NO_ERROR;
+
+<a name="anchor-124"></a>    /* See if the name already exists */
+        
+    status = ProUtilCollectFamtableInstance (p_famtable, &amp;famt_instance);
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-125"></a>        status = ProArraySizeGet ((ProArray)famt_instance, &amp;famt_items_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestFamAddInst()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; famt_items_num; i++)
+        {
+<a name="anchor-126"></a>            status = ProTestFamtabInstNameCompare (famt_instance+i,
+	        PRO_TK_NO_ERROR, (ProAppData)w_name);
+        }
+        status = ProArrayFree ((ProArray*)&amp;famt_instance);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFamAddInst()&quot;, 
+<a name="anchor-127"></a>            status, status != PRO_TK_NO_ERROR );
+    }
+
+    if( status == PRO_TK_E_FOUND )
+    {
+<a name="anchor-128"></a>        ProUtilMsgPrint( MSG_FILE_FAM, (char *)&quot;TEST %0s&quot;, 
+		(char *)&quot;The instance already exists&quot; );
+        return PRO_TK_NO_ERROR;
+    }
+
+<a name="anchor-129"></a>    /* Initialize the instance handle */
+    status = ProFaminstanceInit( w_name, p_famtable, &amp;instance );
+    TEST_CALL_REPORT( &quot;ProFaminstanceInit()&quot;, &quot;ProTestFamAddInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-130"></a>    /* Add the instance to the family table */
+    status = ProFaminstanceAdd( &amp;instance );
+    TEST_CALL_REPORT( &quot;ProFaminstanceAdd()&quot;, &quot;ProTestFamAddInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-131"></a>    /* Set the instance values */
+    
+    status = ProUtilCollectFamtableItem (p_famtable, &amp;famt_item);
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-132"></a>        status = ProArraySizeGet ((ProArray)famt_item, &amp;famt_items_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestFamAddInst()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; famt_items_num; i++)
+        {
+<a name="anchor-133"></a>            status = ProTestFamtabItemSet (famt_item+i,
+	        PRO_TK_NO_ERROR, (ProAppData)&amp;instance);
+        }
+        status = ProArrayFree ((ProArray*)&amp;famt_item);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFamAddInst()&quot;, 
+<a name="anchor-134"></a>            status, status != PRO_TK_NO_ERROR );
+    }
+
+    return status;
+}
+<a name="anchor-135"></a>
+
+
+/*===========================================================================*\
+ Function:      ProTestFamDelInst
+<a name="anchor-136"></a> Purpose:       Delete the fam table instance  
+\*===========================================================================*/
+int ProTestFamDelInst(
+    ProFamtable		*p_famtable
+)
+<a name="anchor-137"></a>{
+    ProError            status;
+    int			n_sels;
+    ProFaminstanceList	p_inst_list;
+
+<a name="anchor-138"></a>
+    status = ProArrayAlloc( 0, sizeof(ProFaminstance), 1, 
+	(ProArray*)(&amp;p_inst_list) );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestFamDelInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-139"></a>    if( status != PRO_TK_NO_ERROR )
+        return -1;
+
+    status = ProFaminstanceSelect( p_famtable, PRO_B_FALSE, &amp;n_sels, 
+	&amp;p_inst_list );
+<a name="anchor-140"></a>    TEST_CALL_REPORT( &quot;ProFaminstanceSelect()&quot;, &quot;ProTestFamDelInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    if( status != PRO_TK_NO_ERROR || n_sels &lt; 1 )
+	return -1;
+<a name="anchor-141"></a>
+    /* Bug 540831 */
+    status = ProFaminstanceErase( &amp;(p_inst_list[0]) );
+    TEST_CALL_REPORT( &quot;ProFaminstanceErase()&quot;, &quot;ProTestFamDelInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-142"></a>
+    /* Delete the instance from the family table */
+    status = ProFaminstanceRemove( &amp;(p_inst_list[0]) );
+    TEST_CALL_REPORT( &quot;ProFaminstanceRemove()&quot;, &quot;ProTestFamDelInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-143"></a>
+    if( status == PRO_TK_E_NOT_FOUND )
+    {
+        ProUtilMsgPrint( MSG_FILE_FAM, (char *)&quot;TEST %0s&quot;,
+                (char *)&quot;The instance does not exist&quot; );
+<a name="anchor-144"></a>    }
+
+    status = ProArrayFree( (ProArray*)(&amp;p_inst_list) );
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFamDelInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-145"></a>
+
+    return(0);
+}
+
+<a name="anchor-146"></a>
+
+/*===========================================================================*\
+ Function:      ProTestFamShowInst
+ Purpose:	Show instance model
+<a name="anchor-147"></a>\*===========================================================================*/
+int ProTestFamShowInst(
+    ProFamtable  *p_famtable)
+{
+    ProError            status;
+<a name="anchor-148"></a>    int			n_sels;
+    ProFaminstanceList	p_inst_list;
+    ProMdl		p_model;
+
+
+<a name="anchor-149"></a>    status = ProArrayAlloc( 0, sizeof(ProFaminstance), 1, 
+	(ProArray*)(&amp;p_inst_list) );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestFamShowInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+<a name="anchor-150"></a>	return -1;
+
+    status = ProFaminstanceSelect( p_famtable, PRO_B_FALSE, &amp;n_sels, 
+	&amp;p_inst_list );
+    TEST_CALL_REPORT( &quot;ProFaminstanceSelect()&quot;, &quot;ProTestFamShowInst()&quot;,
+<a name="anchor-151"></a>        status, status != PRO_TK_NO_ERROR );
+
+    if( status != PRO_TK_NO_ERROR || n_sels &lt; 1 )
+	return -1;
+
+<a name="anchor-152"></a>    /* Create an instance model of the specified instance handle */
+    status = ProFaminstanceRetrieve( &amp;(p_inst_list[0]), &amp;p_model );
+    TEST_CALL_REPORT( &quot;ProFaminstanceRetrieve()&quot;, &quot;ProTestFamShowInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-153"></a>    if( status == PRO_TK_E_NOT_FOUND )
+    {
+        ProUtilMsgPrint( MSG_FILE_FAM, (char *)&quot;TEST %0s&quot;,
+                (char *)&quot;The instance does not exist&quot; );
+    }
+<a name="anchor-154"></a>
+    if( status == PRO_TK_NO_ERROR )
+    {
+    	/* Retrieve the handle to the instance model, if it is in session */
+    	/* It's unnecessary lines. Only to test ProFaminstanceMdlGet() */
+<a name="anchor-155"></a>    	status = ProFaminstanceMdlGet( &amp;(p_inst_list[0]), &amp;p_model );
+    	TEST_CALL_REPORT( &quot;ProFaminstanceMdlGet()&quot;, &quot;ProTestFamShowInst()&quot;,
+        	status, status != PRO_TK_NO_ERROR );
+
+    	ProTestModelDisplay( p_model );
+<a name="anchor-156"></a>    }
+
+    status = ProArrayFree( (ProArray*)(&amp;p_inst_list) );
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFamShowInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-157"></a>
+
+    return(0);
+}
+
+<a name="anchor-158"></a>
+
+/*===========================================================================*\
+ Function:      ProTestFamLockInst
+ Purpose:	Lock/unlock instance
+<a name="anchor-159"></a>\*===========================================================================*/
+int ProTestFamLockInst(
+    ProFamtable  *p_famtable
+)
+{
+<a name="anchor-160"></a>    ProError            status;
+    int			n_sels;
+    ProFaminstanceList	p_inst_list;
+    int			lock_it;
+
+<a name="anchor-161"></a>
+    status = ProArrayAlloc( 0, sizeof(ProFaminstance), 1, 
+	(ProArray*)(&amp;p_inst_list) );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestFamLockInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-162"></a>    if( status != PRO_TK_NO_ERROR )
+        return -1;
+
+    status = ProFaminstanceSelect( p_famtable, PRO_B_FALSE, &amp;n_sels, 
+	&amp;p_inst_list );
+<a name="anchor-163"></a>    TEST_CALL_REPORT( &quot;ProFaminstanceSelect()&quot;, &quot;ProTestFamLockInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    if( status != PRO_TK_NO_ERROR || n_sels &lt; 1 )
+	return -1;
+<a name="anchor-164"></a>
+    /* Get the lock status */
+    status = ProFaminstanceCheck( &amp;(p_inst_list[0]), &amp;lock_it );
+    TEST_CALL_REPORT( &quot;ProFaminstanceCheck()&quot;, &quot;ProTestFamLockInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-165"></a>
+    lock_it = lock_it == PRO_B_TRUE ? PRO_B_FALSE : PRO_B_TRUE;
+
+    /* Locks or unlocks the specified instance */
+    status = ProFaminstanceLock( &amp;(p_inst_list[0]), lock_it );
+<a name="anchor-166"></a>    TEST_CALL_REPORT( &quot;ProFaminstanceLock()&quot;, &quot;ProTestFamLockInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    if( status == PRO_TK_E_NOT_FOUND )
+    {
+<a name="anchor-167"></a>        ProUtilMsgPrint( MSG_FILE_FAM, (char *)&quot;TEST %0s&quot;,
+                (char *)&quot;The instance does not exist&quot; );
+    }
+
+    status = ProArrayFree( (ProArray*)(&amp;p_inst_list) );
+<a name="anchor-168"></a>    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFamLockInst()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+
+    return(0);
+<a name="anchor-169"></a>}
+
+
+
+/*===========================================================================*\
+<a name="anchor-170"></a> Function:      ProTestFamShowGeneric
+ Purpose:	Show the generic model
+\*===========================================================================*/
+int ProTestFamShowGeneric(
+    ProFamtable  *p_famtable
+<a name="anchor-171"></a>)
+{
+    ProError            status;
+    ProMdl		p_model;
+    ProMdl		p_generic_model;
+<a name="anchor-172"></a>
+
+    status = ProMdlCurrentGet( &amp;p_model );
+    TEST_CALL_REPORT( &quot;ProMdlCurrentGet()&quot;, &quot;ProTestFamShowGeneric()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-173"></a>
+    status = ProFaminstanceGenericGet( p_model, PRO_B_FALSE, &amp;p_generic_model );
+    TEST_CALL_REPORT( &quot;ProFaminstanceGenericGet()&quot;, &quot;ProTestFamShowGeneric()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-174"></a>    if( status == PRO_TK_E_NOT_FOUND )
+    {
+        ProUtilMsgPrint( MSG_FILE_FAM, (char *)&quot;TEST %0s&quot;,
+		(char *)&quot;The specified model is not an instance&quot; );
+        return -1;
+<a name="anchor-175"></a>    }
+
+    ProTestModelDisplay( p_generic_model );
+
+
+<a name="anchor-176"></a>    return(0);
+}
+
+
+
+<a name="anchor-177"></a>/*===========================================================================*\
+  Function : ProTestFamInstRetrieve
+  Purpose  : Retrieve an instance of a model from disk
+\*===========================================================================*/
+int ProTestFamInstRetrieve(
+<a name="anchor-178"></a>    ProFamtable		*p_famtable
+)
+{
+    ProError            status;
+    ProFaminstance      instance;
+<a name="anchor-179"></a>    ProName             w_name;
+    ProMdl		p_model;
+    int			is_lock;
+
+
+<a name="anchor-180"></a>    /* Enter the name of new instance */
+    ProUtilMsgPrint( MSG_FILE_FAM, (char *)&quot;TEST %0s&quot;, (char *)&quot;Enter the instance name: &quot; );
+    status = ProMessageStringRead( PRO_NAME_SIZE - 1, w_name );
+    TEST_CALL_REPORT( &quot;ProMessageStringRead()&quot;, &quot;ProTestFamInstRetrieve()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-181"></a>
+    if( status != PRO_TK_NO_ERROR )
+        return PRO_TK_NO_ERROR;
+
+    status = ProFaminstanceInit( w_name, p_famtable, &amp;instance );
+<a name="anchor-182"></a>    TEST_CALL_REPORT( &quot;ProFaminstanceInit()&quot;, &quot;ProTestFamInstRetrieve()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    status = ProFaminstanceCheck( &amp;instance, &amp;is_lock );
+    TEST_CALL_REPORT( &quot;ProFaminstanceCheck()&quot;, &quot;ProTestFamInstRetrieve()&quot;,
+<a name="anchor-183"></a>        status, status != PRO_TK_NO_ERROR );
+
+    if( status == PRO_TK_E_NOT_FOUND )
+    {
+        ProUtilMsgPrint( MSG_FILE_FAM, (char *)&quot;TEST %0s&quot;,
+<a name="anchor-184"></a>                (char *)&quot;The instance does not exist&quot; );
+	return -1;
+    }
+
+    status = ProFaminstanceRetrieve( &amp;instance, &amp;p_model );
+<a name="anchor-185"></a>    TEST_CALL_REPORT( &quot;ProFaminstanceRetrieve()&quot;, &quot;ProTestFamInstRetrieve()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    ProTestModelDisplay( p_model );
+
+<a name="anchor-186"></a>
+    return 0;
+}
+
+
+<a name="anchor-187"></a>/*===========================================================================*\
+  Function : ProTestFamtabActions
+  Purpose  : Test Edit, Show and Erase of the family table.
+\*===========================================================================*/
+int ProTestFamtabActions(
+<a name="anchor-188"></a>    ProFamtable  *p_famtable,
+    int          action)
+{
+    ProError            status, status2;
+    ProMdl		p_model;
+<a name="anchor-189"></a>
+
+    status = ProFamtableCheck(p_famtable);
+    TEST_CALL_REPORT(&quot;ProFamtableCheck()&quot;, &quot;ProTestFamtabActions()&quot;,
+	status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_EMPTY );
+<a name="anchor-190"></a> 
+    status2 = ProMdlCurrentGet( &amp;p_model );
+    TEST_CALL_REPORT( &quot;ProMdlCurrentGet()&quot;, &quot;ProTestFamtabActions()&quot;,
+    	status2,  status2 != PRO_TK_NO_ERROR );
+    
+<a name="anchor-191"></a>    status2 = ProSolidFamtableCheck ((ProSolid)p_model);
+    TEST_CALL_REPORT(&quot;ProSolidFamtableCheck()&quot;, &quot;ProTestFamActions()&quot;,
+    	status2, status2 != PRO_TK_NO_ERROR &amp;&amp; status2 != PRO_TK_EMPTY );
+
+    if ( status != PRO_TK_NO_ERROR )
+<a name="anchor-192"></a>    {
+        ProUtilMsgPrint( MSG_FILE_FAM, (char *)&quot;TEST %0s&quot;, 
+		(char *)&quot;The family table is empty.&quot;);
+	return status;
+    }
+<a name="anchor-193"></a>
+    switch(action)
+    {
+        case PRO_TEST_FAM_EDIT:
+            status = ProFamtableEdit(p_famtable);
+<a name="anchor-194"></a>            TEST_CALL_REPORT(&quot;ProFamtableEdit()&quot;, &quot;ProTestFamtabActions()&quot;,
+                              status, status != PRO_TK_NO_ERROR);
+            break;
+
+        case PRO_TEST_FAM_SHOW:
+<a name="anchor-195"></a>            status = ProFamtableShow(p_famtable);
+            TEST_CALL_REPORT(&quot;ProFamtableShow()&quot;, &quot;ProTestFamtabActions()&quot;,
+                              status, status != PRO_TK_NO_ERROR);
+            break;
+
+<a name="anchor-196"></a>        case PRO_TEST_FAM_ERASE:
+            status = ProFamtableErase( p_famtable );
+            TEST_CALL_REPORT(&quot;ProFamtableErase()&quot;, &quot;ProTestFamtabActions()&quot;,
+                              status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-197"></a>	    /* Re-init ProFamtable structure */ 
+	    status = ProFamtableInit( p_model, p_famtable );
+    	    TEST_CALL_REPORT(&quot;ProFamtableInit()&quot;, &quot;ProTestFamtabActions()&quot;,
+        	status,  status != PRO_TK_NO_ERROR);
+            break;
+<a name="anchor-198"></a>
+        default:
+            ProUtilMsgPrint( MSG_FILE_FAM, (char *)&quot;TEST %0s&quot;, (char *)&quot;The error in action.&quot;);
+            break;
+    }
+<a name="anchor-199"></a>
+
+  return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-200"></a>/*===========================================================================*\
+  Function : ProTestFamShowFile
+  Purpose  : output the family table to a file
+\*===========================================================================*/
+int ProTestFamShowFile(
+<a name="anchor-201"></a>    ProFamtable     *p_famtable)
+{
+  ProCharName          fname;
+  ProFileName          wfname;
+  ProTestAppData       data;
+<a name="anchor-202"></a>  ProError             status;
+  ProFamtableItem      *famt_items;
+  int famt_items_num, i;
+
+  ProError ProTestVisitFamTabItems(ProFamtableItem *item, ProError status,
+<a name="anchor-203"></a>                                   ProAppData app_data);
+
+    data.p_famtab = p_famtable;
+    data.fp = ProUtilGenFilePtr(p_famtable->owner, (char*)OUT_FILE_EXT, fname, (char*)&quot;w+&quot;); 
+    if(data.fp == NULL)
+<a name="anchor-204"></a>    {
+        ProUtilMsgPrint( MSG_FILE_FAM, &quot;TEST %0s&quot;, 
+		&quot;Cannot open file for write&quot;);
+        return(PRO_TK_GENERAL_ERROR);
+    }
+<a name="anchor-205"></a>    ProTKFprintf(data.fp, &quot;\t\t\tFamily Table Filename : %s\n&quot;, fname);
+
+    status = ProFamtableCheck(p_famtable);
+    TEST_CALL_REPORT(&quot;ProFamtableCheck()&quot;, &quot;ProTestFamShowFile()&quot;,
+                      status, status != PRO_TK_NO_ERROR); 
+<a name="anchor-206"></a>
+    if ( status == PRO_TK_E_NOT_FOUND )
+        ProTKFprintf(data.fp, &quot;\tThe family table is empty.\n&quot;);
+    else if ( status == PRO_TK_NO_ERROR )
+    {                          
+<a name="anchor-207"></a>        status = ProUtilCollectFamtableItem (p_famtable, &amp;famt_items);
+        if (status == PRO_TK_NO_ERROR)
+        {
+            status = ProArraySizeGet ((ProArray)famt_items, &amp;famt_items_num);
+            TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestFamShowFile()&quot;, 
+<a name="anchor-208"></a>                status, status != PRO_TK_NO_ERROR );
+            for (i = 0; i &lt; famt_items_num; i++)
+            {
+                status = ProTestVisitFamTabItems (famt_items+i,
+                    PRO_TK_NO_ERROR, (ProAppData)&amp;data);
+<a name="anchor-209"></a>            }
+            status = ProArrayFree ((ProArray*)&amp;famt_items);
+            TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFamShowFile()&quot;, 
+                status, status != PRO_TK_NO_ERROR );
+        }
+<a name="anchor-210"></a>    }
+
+    fclose(data.fp);
+
+    ProStringToWstring(wfname, fname);
+<a name="anchor-211"></a>    status = ProInfoWindowDisplay(wfname, NULL, NULL);
+    TEST_CALL_REPORT(&quot;ProInfoWindowDisplay()&quot;, &quot;ProTestFamShowFile( )&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+
+ 
+<a name="anchor-212"></a>  return (PRO_TK_NO_ERROR);
+}
+
+
+
+<a name="anchor-213"></a>/*====================================================================*\
+  Function : ProTestFamTabItemFilter
+  Purpose  : Test filter item visit function.
+\*====================================================================*/
+ProError ProTestFamTabItemFilter(
+<a name="anchor-214"></a>    ProFamtableItem *item,
+    ProAppData       app_data)
+{
+  return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-215"></a>
+/*====================================================================*\
+  Function : ProTestVisitFamTabItems
+  Purpose  : Visit Family Table items.
+\*====================================================================*/
+<a name="anchor-216"></a>ProError ProTestVisitFamTabItems(
+    ProFamtableItem *item,
+    ProError         status,
+    ProAppData       app_data)
+{
+<a name="anchor-217"></a>    ProTestAppData 	*data = (ProTestAppData *)app_data;
+    ProModelitem   	model_item;
+    char           	name[PRO_NAME_SIZE];
+    char			str1[PRO_NAME_SIZE];
+    ProParameter		parameter;
+<a name="anchor-218"></a>    ProFaminstance *famt_instance;
+    int famt_instance_num, i;
+
+    ProError ProTestVisitFamTabInst(ProFaminstance *instance, ProError status,
+                                  ProAppData app_data);
+<a name="anchor-219"></a>
+    data->p_item = item;
+
+    ProWstringToString(name, item->string);
+    ProTKFprintf(data->fp, &quot;\n\tFamily Table Item (Column) : %s\n&quot;, name);
+<a name="anchor-220"></a>
+    switch( item->type )
+    {
+        case PRO_FAM_TYPE_UNUSED:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_TYPE_UNUSED&quot;);
+<a name="anchor-221"></a>            break;
+        case PRO_FAM_USER_PARAM:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_USER_PARAM&quot;);
+            break;
+        case PRO_FAM_DIMENSION:
+<a name="anchor-222"></a>            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_DIMENSION&quot;);
+            break;
+        case PRO_FAM_IPAR_NOTE:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_IPAR_NOTE&quot;);
+            break;
+<a name="anchor-223"></a>        case PRO_FAM_FEATURE:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_FEATURE&quot;);
+            break;
+        case PRO_FAM_ASMCOMP:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_ASMCOMP&quot;);
+<a name="anchor-224"></a>            break;
+        case PRO_FAM_UDF:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_UDF&quot;);
+            break;
+        case PRO_FAM_ASMCOMP_MODEL:
+<a name="anchor-225"></a>            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_ASMCOMP_MODEL&quot;);
+            break;
+        case PRO_FAM_GTOL:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_GTOL&quot;);
+            break;
+<a name="anchor-226"></a>        case PRO_FAM_TOL_PLUS:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_TOL_PLUS&quot;);
+            break;
+        case PRO_FAM_TOL_MINUS:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_TOL_MINUS&quot;);
+<a name="anchor-227"></a>            break;
+        case PRO_FAM_TOL_PLUSMINUS:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_TOL_PLUSMINUS&quot;);
+            break;
+        case PRO_FAM_SYSTEM_PARAM:
+<a name="anchor-228"></a>            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_SYSTEM_PARAM&quot;);
+            break;
+        case PRO_FAM_EXTERNAL_REFERENCE:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_EXTERNAL_REFERENCE&quot;);
+            break;
+<a name="anchor-229"></a>        case PRO_FAM_MERGE_PART_REF:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_FAM_MERGE_PART_REF&quot;);
+            break;
+        default:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;No Type.&quot;);
+<a name="anchor-230"></a>            break;
+    }
+
+    ProTKFprintf(data->fp, &quot;\tFamilytabItem Type : %s\n&quot;, str1);
+
+<a name="anchor-231"></a>    if( item->type == PRO_FAM_USER_PARAM || 
+	item->type == PRO_FAM_SYSTEM_PARAM )
+    {
+        status = ProFamtableItemToParameter( item, &amp;parameter );
+        TEST_CALL_REPORT( &quot;ProFamtableItemToParameter()&quot;,
+<a name="anchor-232"></a>                &quot;ProTestVisitFamTabItems( )&quot;,
+                status, status != PRO_TK_NO_ERROR );
+
+	ProWstringToString( str1, parameter.id );
+
+<a name="anchor-233"></a>        ProTKFprintf( data->fp, &quot;\tParameter Type  : %d\n&quot;, parameter.type );
+        ProTKFprintf( data->fp, &quot;\tParameter Id    : %s\n&quot;, str1 );
+    }
+    else
+    {
+<a name="anchor-234"></a>    	status = ProFamtableItemToModelitem(item, &amp;model_item);
+    	TEST_CALL_REPORT( &quot;ProFamtableItemToModelitem()&quot;, 
+		&quot;ProTestVisitFamTabItems( )&quot;,
+                status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-235"></a>        ProTKFprintf(data->fp, &quot;\tModelitem Type  : %d\n&quot;, model_item.type);
+        ProTKFprintf(data->fp, &quot;\tModelitem Id    : %d\n&quot;, model_item.id);
+    }
+                      
+    status = ProUtilCollectFamtableInstance (data->p_famtab, &amp;famt_instance);
+<a name="anchor-236"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)famt_instance, &amp;famt_instance_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestVisitFamTabItems()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-237"></a>        for (i = 0; i &lt; famt_instance_num; i++)
+        {
+            status = ProTestVisitFamTabInst (famt_instance+i,
+	        PRO_TK_NO_ERROR, (ProAppData)app_data);
+        }
+<a name="anchor-238"></a>        status = ProArrayFree ((ProArray*)&amp;famt_instance);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestVisitFamTabItems()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+    }
+
+<a name="anchor-239"></a>
+  return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-240"></a>  Function : ProTestFamTabInstFilter
+  Purpose  : Test filter instance visit function.
+\*====================================================================*/
+ProError ProTestFamTabInstFilter(
+    ProFaminstance  *instance,
+<a name="anchor-241"></a>    ProAppData       app_data)
+{
+  return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-242"></a>/*====================================================================*\
+  Function : ProTestVisitFamTabInst
+  Purpose  : Visit Family Table instances.
+\*====================================================================*/
+ProError ProTestVisitFamTabInst(
+<a name="anchor-243"></a>    ProFaminstance  *instance,
+    ProError         status,
+    ProAppData       app_data)
+{
+  ProTestAppData *data = (ProTestAppData *)app_data;
+<a name="anchor-244"></a>  ProParamvalue   paramval;
+  char            name[PRO_NAME_SIZE], str1[PRO_NAME_SIZE];
+
+    ProWstringToString(name, instance->name);
+    ProTKFprintf(data->fp, &quot;\t\tInstance : %s;    \t&quot;, name);
+<a name="anchor-245"></a>
+/* bug - 536940  4/23/97 */
+    status = ProFaminstanceValueGet(instance, data->p_item, &amp;paramval);
+    TEST_CALL_REPORT(&quot;ProFaminstanceValueGet()&quot;, &quot;ProTestVisitFamTabInst( )&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+<a name="anchor-246"></a>
+    switch( paramval.type )
+    {
+        case PRO_PARAM_DOUBLE:
+            ProTKSprintf(str1, &quot;%lf&quot;, paramval.value.d_val);
+<a name="anchor-247"></a>            break;
+        case PRO_PARAM_STRING:
+	    ProWstringToString( str1,  paramval.value.s_val );
+            break;
+        case PRO_PARAM_INTEGER:
+<a name="anchor-248"></a>            ProTKSprintf(str1, &quot;%d&quot;, paramval.value.i_val);
+            break;
+        case PRO_PARAM_BOOLEAN:
+            ProTKSprintf(str1, &quot;%d&quot;, paramval.value.l_val);
+            break;
+<a name="anchor-249"></a>        case PRO_PARAM_NOTE_ID:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_PARAM_NOTE_ID&quot;);
+            break;
+        case PRO_PARAM_VOID:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;PRO_PARAM_VOID&quot;);
+<a name="anchor-250"></a>            break;
+        default:
+            ProTKSprintf(str1, &quot;%s&quot;, &quot;No Value.&quot;);
+            break;
+    }
+<a name="anchor-251"></a>
+    ProTKFprintf(data->fp, &quot;\t\tValue : %s\n&quot;, str1);
+    ProTKFprintf(data->fp, &quot;\t\t\n&quot;);
+
+  return(PRO_TK_NO_ERROR);
+<a name="anchor-252"></a>}
+
+
+
+ProError ProTestModelDisplay( 
+<a name="anchor-253"></a>    ProMdl		p_model
+)
+{
+    ProError		status = PRO_TK_NO_ERROR;
+
+<a name="anchor-254"></a>#ifndef PT_PRODUCTS_BUILD
+    ProMdlName		w_model_name;
+    ProType		model_type;
+    int			win_id;
+
+<a name="anchor-255"></a>
+    status = ProMdlMdlnameGet( p_model, w_model_name );
+    TEST_CALL_REPORT( &quot;ProMdlMdlnameGet()&quot;, &quot;ProTestModelDisplay()&quot;,
+    	status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-256"></a>    status = ProMdlTypeGet( p_model, (ProMdlType*)&amp;model_type );
+    TEST_CALL_REPORT( &quot;ProMdlTypeGet()&quot;, &quot;ProTestModelDisplay()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    status = ProObjectwindowMdlnameCreate( w_model_name, model_type, &amp;win_id );
+<a name="anchor-257"></a>    TEST_CALL_REPORT( &quot;ProObjectwindowMdlnameCreate()&quot;, &quot;ProTestModelDisplay()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    status = ProSolidDisplay( (ProSolid)p_model );
+    TEST_CALL_REPORT( &quot;ProSolidDisplay()&quot;,  &quot;ProTestModelDisplay()&quot;,
+<a name="anchor-258"></a>	status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_FOUND );
+
+#endif
+    return status;
+}
+<a name="anchor-259"></a>
+</pre>
+</body>
+</html>

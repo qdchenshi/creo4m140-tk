@@ -1,0 +1,246 @@
+<html>
+<head>
+<title>TestMfgNCSeq.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMenu.h>
+#include &lt;ProNcseq.h>
+#include &lt;ProElement.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProNcseqElem.h>
+<a name="anchor-3"></a>#include &lt;ProFeature.h>
+#include &lt;ProSolid.h>
+#include &lt;ProElemId.h>
+#include &lt;ProFeatType.h>
+
+<a name="anchor-4"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;UtilString.h&quot;
+#include &quot;UtilGeom.h&quot;
+<a name="anchor-5"></a>#include &quot;TestError.h&quot;
+#include &quot;TestConsts.h&quot;
+#include &quot;MfgMenu.h&quot;
+#include &lt;ProTKRunTime.h>
+
+<a name="anchor-6"></a>/*====================================================================*\
+FUNCTION : ProTestNCSequenceCreate
+PURPOSE  : ProTestNCSequenceCreate
+\*====================================================================*/
+ProError ProTestNCSequenceCreate(MfgMenuChoice *obj_action)
+<a name="anchor-7"></a>{
+    static char *menu[] = {&quot;TkMfgNCSeq&quot;,&quot;TkMfgNCDQ&quot;,&quot;&quot;};
+    ProError     status = PRO_TK_NO_ERROR;
+    int          nc_type, done_quit;
+    int		id;
+<a name="anchor-8"></a>
+    int ProTestChooseNCSeqType(int *nc_type, int opt);
+    int ProTestNCSeqDQ(int *done_quit, int opt);
+
+
+<a name="anchor-9"></a>    nc_type = PRO_NCSEQ_CONV_SURF_MILL;
+
+    status = ProMenuPush();
+    TEST_CALL_REPORT (&quot;ProMenuPush&quot;, &quot;ProTestNCSequenceCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+<a name="anchor-10"></a>
+    status = ProMenuFileRegister((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;tkmfgncseq.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestNCSequenceCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;TkMfgNCSeq&quot;, (ProMenubuttonAction)ProMenuHold,NULL,0);
+<a name="anchor-11"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestNCSequenceCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-ConvMill&quot;,
+                       (ProMenubuttonAction)ProTestChooseNCSeqType, &amp;nc_type, PRO_NCSEQ_CONV_SURF_MILL);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestNCSequenceCreate&quot;,
+<a name="anchor-12"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-FaceMill&quot;,
+                       (ProMenubuttonAction)ProTestChooseNCSeqType, &amp;nc_type, PRO_NCSEQ_FACE_MILL);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestNCSequenceCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-13"></a>    status = ProMenubuttonActionSet((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-HoleMake&quot;,
+                       (ProMenubuttonAction)ProTestChooseNCSeqType, &amp;nc_type, PRO_NCSEQ_HOLEMAKING);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestNCSequenceCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenuDatamodeSet((char*)&quot;TkMfgNCSeq&quot;, (ProBoolean)0);
+<a name="anchor-14"></a>    TEST_CALL_REPORT (&quot;ProMenuDatamodeSet&quot;, &quot;ProTestNCSequenceCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProMenuFileRegister((char*)&quot;TkMfgNCDQ&quot;,(char*)&quot;tkmfgncdq.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestNCSequenceCreate&quot;, status,
+<a name="anchor-15"></a>        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgNCDQ&quot;,(char*)&quot;TkMfgNCDQ&quot;, (ProMenubuttonAction)ProMenuHold,NULL,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestNCSequenceCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgNCDQ&quot;,(char*)&quot;Done&quot;,
+<a name="anchor-16"></a>                       (ProMenubuttonAction)ProTestNCSeqDQ, &amp;done_quit, MFGTK_DONE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestNCSequenceCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgNCDQ&quot;,(char*)&quot;Quit&quot;,
+                       (ProMenubuttonAction)ProTestNCSeqDQ, &amp;done_quit, MFGTK_QUIT);
+<a name="anchor-17"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestNCSequenceCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProCompoundmenuCreate(menu, &amp;id);
+    TEST_CALL_REPORT (&quot;ProCompoundmenuCreate&quot;, &quot;ProTestNCSequenceCreate&quot;,
+<a name="anchor-18"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonHighlight((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-ConvMill&quot;);
+    TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestNCSequenceCreate&quot;,
+           status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess(menu[0], &amp;id);
+<a name="anchor-19"></a>    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProTestNCSequenceCreate&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+    if( done_quit == MFGTK_QUIT )
+    {
+<a name="anchor-20"></a>        status = ProMenuPop();
+        TEST_CALL_REPORT(&quot;ProMenuPop&quot;, &quot;ProTestNCSequenceCreate&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgDQ&quot;,(char*)&quot;Done&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSequenceCreate&quot;,
+<a name="anchor-21"></a>           status, status != PRO_TK_NO_ERROR);
+        return((ProError)0);
+    }
+
+
+<a name="anchor-22"></a>     switch(nc_type)
+     {
+      case PRO_NCSEQ_CONV_SURF_MILL:
+        ProTKPrintf((char*)&quot;PRO_NCSEQ_CONV_SURF_MILL\n&quot;);
+        break;
+<a name="anchor-23"></a>
+      case PRO_NCSEQ_FACE_MILL:
+        ProTKPrintf((char*)&quot;PRO_NCSEQ_FACE_MILL\n&quot;);
+        break;
+
+<a name="anchor-24"></a>      case PRO_NCSEQ_HOLEMAKING:
+        ProTKPrintf((char*)&quot;PRO_NCSEQ_HOLEMAKING\n&quot;);
+        break;
+
+      default:
+<a name="anchor-25"></a>        break;
+     }
+
+        /* Return to previous menu. */
+    status = ProMenuPop();
+<a name="anchor-26"></a>    TEST_CALL_REPORT (&quot;ProMenuPop&quot;, &quot;ProTestNCSequenceCreate&quot;,
+           status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonUnhighlight((char*)&quot;TkMfgDQ&quot;,(char*)&quot;Done&quot;);
+    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSequenceCreate&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-27"></a>    status = ProMenubuttonActivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestNCSequenceCreate&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+    return ((ProError)1);
+<a name="anchor-28"></a>}
+
+
+
+
+<a name="anchor-29"></a>/*====================================================================*\
+FUNCTION : ProTestChooseNCSeqType
+PURPOSE  : ProTestChooseNCSeqType
+\*====================================================================*/
+int ProTestChooseNCSeqType(int *nc_type, int opt)
+<a name="anchor-30"></a>{
+     ProError status;
+     switch(opt)
+     {
+      case PRO_NCSEQ_CONV_SURF_MILL:
+<a name="anchor-31"></a>        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-FaceMill&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSeqType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-HoleMake&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSeqType&quot;,
+<a name="anchor-32"></a>           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-ConvMill&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestNCSeqType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+           *nc_type = PRO_NCSEQ_CONV_SURF_MILL;
+<a name="anchor-33"></a>        break;
+
+      case PRO_NCSEQ_FACE_MILL:
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-ConvMill&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSeqType&quot;,
+<a name="anchor-34"></a>           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-HoleMake&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSeqType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-35"></a>        status = ProMenubuttonHighlight((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-FaceMill&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestNCSeqType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+           *nc_type = PRO_NCSEQ_FACE_MILL;
+        break;
+<a name="anchor-36"></a>
+      case PRO_NCSEQ_HOLEMAKING:
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-ConvMill&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSeqType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-37"></a>        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-FaceMill&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSeqType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgNCSeq&quot;,(char*)&quot;-HoleMake&quot;);
+<a name="anchor-38"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestNCSeqType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+           *nc_type = PRO_NCSEQ_HOLEMAKING;
+        break;
+
+<a name="anchor-39"></a>      default:
+        break;
+     }
+  return(0);
+}
+<a name="anchor-40"></a>
+
+
+/*====================================================================*\
+FUNCTION : ProTestNCSeqDQ
+<a name="anchor-41"></a>PURPOSE  : ProTestNCSeqDQ
+\*====================================================================*/
+int ProTestNCSeqDQ(int *done_quit, int opt)
+{
+     ProError status;
+<a name="anchor-42"></a>     switch(opt)
+     {
+     case MFGTK_DONE:
+        status = ProMenuDelete();
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSeqDQ&quot;,
+<a name="anchor-43"></a>           status, status != PRO_TK_NO_ERROR);
+        status = ProMenuDelete();
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSeqDQ&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        *done_quit = MFGTK_DONE;
+<a name="anchor-44"></a>        break;
+
+     case MFGTK_QUIT:
+        status = ProMenuDelete();
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSeqDQ&quot;,
+<a name="anchor-45"></a>           status, status != PRO_TK_NO_ERROR);
+        status = ProMenuDelete();
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestNCSeqDQ&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        *done_quit = MFGTK_QUIT;
+<a name="anchor-46"></a>        break;
+
+      default:
+        break;
+     }
+<a name="anchor-47"></a>
+  return(0);
+}
+</pre>
+</body>
+</html>

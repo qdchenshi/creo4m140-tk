@@ -1,0 +1,108 @@
+<html>
+<head>
+<title>UgMfgParamToolCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMfg.h>
+#include &lt;ProTool.h>
+#include &lt;ProParameter.h>
+#include &lt;ProParamval.h>
+<a name="anchor-2"></a>#include &lt;ProElemId.h>
+#include &lt;ProUtil.h>
+#include &lt;ProMfgOptions.h>
+
+#include &lt;TestError.h>
+<a name="anchor-3"></a>#include &lt;UgMfg.h>
+
+/*====================================================================*\
+Function : UserParamToolCreate
+Purpose  : Creates a simple drilling tool from parameters
+<a name="anchor-4"></a>\*====================================================================*/
+ProError UserParamToolCreate (
+/*--------------------------------------------------------------------*/
+ProMfg		mfg_model,
+ProToolType	tool_type,
+<a name="anchor-5"></a>wchar_t		*tool_id,
+MfgPrmDblValue	params[],
+int		num_params,
+ProUnitLength   units, /* PRO_UNITLENGTH_MM or PRO_UNITLENGTH_IN */
+ProTool		*tool
+<a name="anchor-6"></a>
+)
+/*--------------------------------------------------------------------*/
+{
+ ProElement		tool_elem;
+<a name="anchor-7"></a> ProToolinputPtr	tool_input;
+ ProError		status;
+ ProErrorlist		errors;
+ ProParamvalue		param_val;
+ int			ii;
+<a name="anchor-8"></a>
+ /*------------------------------------------------*\
+    Allocate the input structure
+ \*------------------------------------------------*/
+ status = ProToolinputAlloc( &amp;tool_input );
+<a name="anchor-9"></a> ERROR_CHECK( &quot;UserParamToolCreate&quot;, &quot;ProToolinputAlloc&quot;, status );
+    
+ /*------------------------------------------------*\
+	Set the type
+ \*------------------------------------------------*/
+<a name="anchor-10"></a> status = ProToolinputTypeSet( tool_input, tool_type );
+ ERROR_CHECK( &quot;UserParamToolCreate&quot;, &quot;ProToolinputTypeSet&quot;, status );
+	
+ /*------------------------------------------------*\
+	Add tool parameters
+<a name="anchor-11"></a> \*------------------------------------------------*/
+ status = ProElementAlloc( PRO_E_PARAMS, &amp;tool_elem );
+ ERROR_CHECK( &quot;UserParamToolCreate&quot;, &quot;ProElementAlloc&quot;, status );
+	
+ for ( ii = 0; ii &lt; num_params; ii++ )
+<a name="anchor-12"></a> {
+   param_val.type = PRO_PARAM_DOUBLE;
+   param_val.value.d_val = params[ii].dbl_val;
+
+   status = ProToolElemParamAdd( tool_elem, &amp;param_val, 
+<a name="anchor-13"></a>                                 params[ii].param_name ); 
+   ERROR_CHECK( &quot;UserParamToolCreate&quot;, &quot;ProToolElemParamAdd&quot;,status );
+ }
+
+ param_val.type = PRO_PARAM_STRING;
+<a name="anchor-14"></a> if ( units == PRO_UNITLENGTH_IN )
+   ProStringToWstring( param_val.value.s_val, &quot;INCH&quot; );
+ else
+   ProStringToWstring( param_val.value.s_val, &quot;MILLIMETER&quot; );
+
+<a name="anchor-15"></a> status = ProToolElemParamAdd( tool_elem, &amp;param_val, &quot;LENGTH_UNITS&quot; );
+ ERROR_CHECK( &quot;UserParamToolCreate&quot;, &quot;ProToolElemParamAdd&quot;,status );
+
+
+ status = ProToolinputElemAdd( tool_input, tool_elem );
+<a name="anchor-16"></a> ERROR_CHECK( &quot;UserParamToolCreate&quot;, &quot;ProToolinputElemAdd&quot;,status );
+         
+ /*------------------------------------------------*\
+        Create the tool.
+ \*------------------------------------------------*/
+<a name="anchor-17"></a> status = ProToolInit( tool_id, mfg_model, tool );
+ ERROR_CHECK( &quot;UserParamToolCreate&quot;, &quot;ProToolInit&quot;, status );
+	
+ status = ProToolCreate( tool, tool_input, &amp;errors );
+ ERROR_CHECK( &quot;UserParamToolCreate&quot;, &quot;ProToolCreate&quot;, status );
+<a name="anchor-18"></a>
+ /*------------------------------------------------*\
+         Free the input structure
+ \*------------------------------------------------*/
+ status = ProToolinputFree( &amp;tool_input );
+<a name="anchor-19"></a> ERROR_CHECK( &quot;UserParamToolCreate&quot;, &quot;ProToolinputFree&quot;, status );
+
+ return ( status );
+}
+
+</pre>
+</body>
+</html>

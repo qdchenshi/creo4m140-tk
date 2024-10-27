@@ -1,0 +1,802 @@
+<html>
+<head>
+<title>TestParams.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProArray.h>
+#include &lt;ProEdge.h>
+#include &lt;ProFeature.h>
+#include &lt;ProMdl.h>
+<a name="anchor-3"></a>#include &lt;ProMenu.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProParameter.h>
+#include &lt;ProParamval.h>
+#include &lt;ProSelection.h>
+<a name="anchor-4"></a>#include &lt;ProSurface.h>
+#include &lt;ProUtil.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestParams.h&quot;
+<a name="anchor-6"></a>#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilFiles.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilCollect.h&quot;
+<a name="anchor-7"></a>#include &quot;UtilMenu.h&quot;
+
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+<a name="anchor-8"></a>
+#ifndef TRUE
+#define TRUE 1
+#endif
+
+<a name="anchor-9"></a>#ifndef FALSE
+#define FALSE 0
+#endif
+
+#define USER_DELETE 0
+<a name="anchor-10"></a>#define USER_RESET  1
+
+#define USER_DES_ADD	10
+#define USER_DES_REMOVE 11
+
+<a name="anchor-11"></a>/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+
+typedef struct
+<a name="anchor-12"></a>{
+    int num_params;
+    ProParameter *param_list;
+} ParamList;
+
+<a name="anchor-13"></a>/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+
+static int ProTestListParams(ProMdl  model);
+<a name="anchor-14"></a>static int ProTestSetParam(ProMdl  model);
+static int ProTestAddParam(ProMdl  model);
+static int ProTestParamDeleteAction(ProMdl  model, int action);
+static int ProTestParamDesAction(ProMdl  model, int action);
+int ProTestShowList(ProMdl model, ProModelitem *);
+<a name="anchor-15"></a>int ProTestShowParamsList (ProMdl model, ProParameter* pars);
+
+static FILE *fp;
+/*====================================================================*\
+  Function : ProTestParams
+<a name="anchor-16"></a>  Purpose  : Display the parameters menu
+\*====================================================================*/
+int ProTestParams(char *a, int b)
+{
+    ProError status;
+<a name="anchor-17"></a>    ProMdl   model;
+    char fname[PRO_FILE_NAME_SIZE];
+    int id;
+
+    status = ProMdlCurrentGet(&amp;model);
+<a name="anchor-18"></a>    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestParams()&quot;, status,
+                                                status != PRO_TK_NO_ERROR);
+    ProTestQcrName(&amp;model, (char*)PARAMETERS, fname);
+    fp = PTApplsUnicodeFopen(fname, &quot;w&quot;);
+
+<a name="anchor-19"></a>    status = ProMenuFileRegister((char*)&quot;TkParams&quot;, (char*)&quot;tkparams.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestParams&quot;,
+         status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkParams&quot;, (char*)&quot;-ListParams&quot;, 
+	(ProMenubuttonAction)ProTestListParams, model, 0);
+<a name="anchor-20"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestParams&quot;,
+         status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkParams&quot;, (char*)&quot;-SetParam&quot;, 
+	(ProMenubuttonAction)ProTestSetParam, model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestParams&quot;,
+<a name="anchor-21"></a>         status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkParams&quot;, (char*)&quot;-AddParam&quot;, 
+	(ProMenubuttonAction)ProTestAddParam, model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestParams&quot;,
+         status, status != PRO_TK_NO_ERROR);
+<a name="anchor-22"></a>    status = ProMenubuttonActionSet((char*)&quot;TkParams&quot;, (char*)&quot;-DeleteParam&quot;, 
+	(ProMenubuttonAction)ProTestParamDeleteAction, model, USER_DELETE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestParams&quot;,
+         status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkParams&quot;, (char*)&quot;-ResetParam&quot;, 
+<a name="anchor-23"></a>	(ProMenubuttonAction)ProTestParamDeleteAction, model, USER_RESET);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestParams&quot;,
+         status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkParams&quot;, (char*)&quot;-DesignationAdd&quot;, 
+	(ProMenubuttonAction)ProTestParamDesAction, model, USER_DES_ADD);
+<a name="anchor-24"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestParams&quot;,
+         status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkParams&quot;, (char*)&quot;-DesignationDel&quot;, 
+	(ProMenubuttonAction)ProTestParamDesAction, model, USER_DES_REMOVE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestParams&quot;,
+<a name="anchor-25"></a>         status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkParams&quot;, (char*)&quot;Done TkParams&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestParams&quot;,
+         status, status != PRO_TK_NO_ERROR);
+<a name="anchor-26"></a>    status = ProMenubuttonActionSet((char*)&quot;TkParams&quot;, (char*)&quot;TkParams&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestParams&quot;,
+         status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-27"></a>    status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkParams&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate&quot;, &quot;ProTestParams&quot;,
+         status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess ((char*)&quot;TkParams&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProTestParams&quot;,
+<a name="anchor-28"></a>         status, status != PRO_TK_NO_ERROR);
+    fclose(fp);
+    return(0);
+}
+
+<a name="anchor-29"></a>/*====================================================================*\
+  Function : ProTestGetElemType
+  Purpose  : Allow the user to select an element type
+\*====================================================================*/
+static ProType ProTestGetElemType(ProBoolean allow_multi)
+<a name="anchor-30"></a>{
+    ProError status;
+    int	opt;
+    static ProUtilMenuButtons elem_type[] = {
+	{&quot;ElementMenu&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+<a name="anchor-31"></a>	{&quot;Object&quot;, PRO_EXTOBJ, 0},
+	{&quot;Feature&quot;, PRO_FEATURE, 0},
+        {&quot;Surface&quot;, PRO_SURFACE, 0},
+        {&quot;Edge&quot;, PRO_EDGE, 0},
+	{&quot;Annotation Element&quot;, PRO_ANNOTATION_ELEM, 0},
+<a name="anchor-32"></a>	{&quot;Any&quot;, PRO_TYPE_UNUSED, 0},
+	{&quot;&quot;, 0, 0}
+    };
+
+    static ProUtilMenuButtons elem_type_allow_multi[] = {
+<a name="anchor-33"></a>	{&quot;ElementMenu&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+	{&quot;Object&quot;, PRO_EXTOBJ, 0},
+	{&quot;Feature&quot;, PRO_FEATURE, 0},
+        {&quot;Surface&quot;, PRO_SURFACE, 0},
+        {&quot;Edge&quot;, PRO_EDGE, 0},
+<a name="anchor-34"></a>	{&quot;Annotation Element&quot;, PRO_ANNOTATION_ELEM, 0},
+	{&quot;Any&quot;, PRO_TYPE_UNUSED, 0},
+	{&quot;Selected&quot;, PRO_TYPE_INVALID, 0},
+	{&quot;&quot;, 0, 0}
+    };
+<a name="anchor-35"></a>    if (allow_multi)
+      {
+	status = ProUtilMenuIntValueSelect(elem_type_allow_multi, &amp;opt);
+	if (status!=PRO_TK_NO_ERROR) opt=PRO_TYPE_INVALID;
+      }
+<a name="anchor-36"></a>    else
+      {
+	status = ProUtilMenuIntValueSelect(elem_type, &amp;opt);
+	if (status!=PRO_TK_NO_ERROR) opt=PRO_TYPE_INVALID;
+      }
+<a name="anchor-37"></a>
+   return ((ProType)opt);
+}
+
+/*====================================================================*\
+<a name="anchor-38"></a>  Function : ProTestGetContext
+  Purpose  : Allow the user to select the types of items from which you can
+             select parameters.
+\*====================================================================*/
+static int ProTestGetContext()
+<a name="anchor-39"></a>{
+  int opt;
+  ProError status;
+
+  static ProUtilMenuButtons context_type[] = {
+<a name="anchor-40"></a>    {&quot;ContextMenu&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+    {&quot;Any/All&quot;, PRO_PARAMSELECT_ANY, 0},
+    {&quot;Model&quot;, PRO_PARAMSELECT_MODEL, 0},
+    {&quot;Part&quot;, PRO_PARAMSELECT_PART, 0},
+    {&quot;Assembly&quot;, PRO_PARAMSELECT_ASM, 0},
+<a name="anchor-41"></a>    {&quot;Feature&quot;, PRO_PARAMSELECT_FEATURE, 0},
+    {&quot;Component&quot;, PRO_PARAMSELECT_COMPONENT, 0},
+    {&quot;Surface/Edge&quot;, PRO_PARAMSELECT_SURFACE | PRO_PARAMSELECT_EDGE, 0},
+    {&quot;Quilt&quot;, PRO_PARAMSELECT_QUILT, 0},
+    {&quot;Curve/Composite&quot;, PRO_PARAMSELECT_CURVE | PRO_PARAMSELECT_COMPOSITE_CURVE, 0},
+<a name="anchor-42"></a>    {&quot;Inherited&quot;, PRO_PARAMSELECT_INHERITED, 0},
+    {&quot;Skeleton&quot;, PRO_PARAMSELECT_SKELETON, 0},
+    {&quot;&quot;, 0, 0}
+    };
+  
+<a name="anchor-43"></a>  status = ProUtilMenuIntValueSelect(context_type, &amp;opt);
+  if (status!=PRO_TK_NO_ERROR) opt=PRO_PARAMSELECT_ANY;
+
+  return opt;
+}
+<a name="anchor-44"></a>
+/*====================================================================*\
+  Function : ProTestGetParamType
+  Purpose  : Allow the user to select a parameter type
+\*====================================================================*/
+<a name="anchor-45"></a>static ProParamvalueType ProTestGetParamType()
+{
+    ProError status;
+    int	opt;
+    static ProUtilMenuButtons param_type[] = {
+<a name="anchor-46"></a>	{&quot;ParamTypeMenu&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+	{&quot;Double&quot;, PRO_PARAM_DOUBLE, 0},
+	{&quot;String&quot;, PRO_PARAM_STRING, 0},
+        {&quot;Integer&quot;, PRO_PARAM_INTEGER, 0},
+        {&quot;Boolean&quot;, PRO_PARAM_BOOLEAN, 0},
+<a name="anchor-47"></a>	{&quot;&quot;, 0, 0}
+    };
+    status = ProUtilMenuIntValueSelect(param_type, &amp;opt);
+    TEST_CALL_REPORT (&quot;ProUtilMenuIntValueSelect&quot;, &quot;ProTestGetParamType&quot;,
+         status, status != PRO_TK_NO_ERROR);
+<a name="anchor-48"></a>    return ((ProParamvalueType)opt);
+}
+
+/*====================================================================*\
+  Function : ProTestPickItem
+<a name="anchor-49"></a>  Purpose  : Allow the user to choose an item from which to generate
+             a list of parameters
+\*====================================================================*/
+static int ProTestPickItem(
+    ProMdl model,		/* In : current model */
+<a name="anchor-50"></a>    ProType type,		/* In : item type */
+    ProModelitem *p_modelitem)	/* Out: selected feature, User's memory */
+{
+    int p_sel_num;
+    ProError status = PRO_TK_BAD_INPUTS;
+<a name="anchor-51"></a>    char option[80];
+    ProMdlType mdltype;
+    ProSelection *sel;
+    
+    if(type==PRO_TYPE_INVALID) return(FALSE);
+<a name="anchor-52"></a>    switch( type )
+    {
+        case PRO_EXTOBJ:
+            ProTKPrintf((char*)&quot;Getting a Model\n&quot;);
+
+<a name="anchor-53"></a>	    status = ProMdlTypeGet(model, &amp;mdltype);
+	    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestPickItem()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+	    if (mdltype == PRO_MDL_ASSEMBLY)
+	    {
+<a name="anchor-54"></a>		ProUtilstrcpy(option, &quot;prt_or_asm&quot;);
+	    }
+	    else
+	    {
+		status = ProMdlToModelitem(model, p_modelitem);
+<a name="anchor-55"></a>		TEST_CALL_REPORT(&quot;ProMdlToModelitem()&quot;, &quot;ProTestPickItem()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+		return (TRUE);
+	    }
+            break;
+<a name="anchor-56"></a>
+        case PRO_FEATURE:
+	    ProUtilstrcpy(option, &quot;feature&quot;);
+            break;
+
+<a name="anchor-57"></a>        case PRO_EDGE:
+	case PRO_SURFACE:
+
+	    ProUtilstrcpy(option, &quot;edge,surface&quot;);
+        break;
+<a name="anchor-58"></a>	case PRO_ANNOTATION_ELEM:
+	  ProUtilstrcpy (option, &quot;annot_elem&quot;);
+	  break;
+        case PRO_VALUE_UNUSED:
+          ProUtilstrcpy (option, &quot;prt_or_asm,feature,edge,surface,annot_elem,curve,comp_crv,dtmqlt&quot;);
+<a name="anchor-59"></a>          break;
+    }
+
+    status = ProSelect(option, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;p_sel_num);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestPickItem()&quot;,
+<a name="anchor-60"></a>					status, status == PRO_TK_COMM_ERROR);
+    if( status != PRO_TK_NO_ERROR )
+        return( FALSE );
+    else
+    {
+<a name="anchor-61"></a>	status = ProSelectionModelitemGet(sel[0], p_modelitem);
+	TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestPickItem()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	return( TRUE );
+    }
+<a name="anchor-62"></a>}
+
+/*====================================================================*\
+  Function : ProTestListParams
+  Purpose  : Generate a list of parameters for a user-selected item
+<a name="anchor-63"></a>\*====================================================================*/
+static int ProTestListParams(ProMdl model)
+{
+    ProType type;
+    ProModelitem modelitem;
+<a name="anchor-64"></a>
+    type = ProTestGetElemType(PRO_B_TRUE);
+
+    if (type == PRO_TYPE_INVALID)
+      {
+<a name="anchor-65"></a>	int context;
+	ProError status;
+	ProParameter* pars;
+
+	context = ProTestGetContext ();
+<a name="anchor-66"></a>
+	status = ProParameterSelect (NULL, model, context,
+				     PRO_B_TRUE,
+				     (wchar_t *)L&quot;Include params&quot;,
+				     NULL,
+<a name="anchor-67"></a>				     &amp;pars);
+	TEST_CALL_REPORT (&quot;ProParameterSelect()&quot;, &quot;ProTestListParams()&quot;,
+			  status, status != PRO_TK_NO_ERROR);
+
+	if (status == PRO_TK_NO_ERROR)
+<a name="anchor-68"></a>	  {
+	    ProTKFprintf(fp, (char*)&quot;Listing selected params:\n&quot;);
+
+	    ProTestShowParamsList (model, pars);
+	    
+<a name="anchor-69"></a>	    ProArrayFree((ProArray*)&amp;pars);
+	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestShowList()&quot;,
+			     status, status != PRO_TK_NO_ERROR);
+	  }
+	
+<a name="anchor-70"></a>      }
+    else
+      {
+	if( ProTestPickItem(model, type, &amp;modelitem) )
+	ProTestShowList(model, &amp;modelitem);
+<a name="anchor-71"></a>      }
+
+    return( 0 );
+}
+
+<a name="anchor-72"></a>/*====================================================================*\
+  Function : ProTestShowList
+  Purpose  : Generate and display a list of parameters for a chosen
+             item
+\*====================================================================*/
+<a name="anchor-73"></a>int ProTestShowList(ProMdl model, ProModelitem *p_modelitem)
+{
+    ProError status;
+    ProParameter *pars;
+   
+<a name="anchor-74"></a>
+    status = ProUtilCollectParameters(p_modelitem, &amp;pars);
+    if (status!=PRO_TK_NO_ERROR)
+	return (-1);
+
+<a name="anchor-75"></a>    ProTestShowParamsList (model, pars);
+    
+    ProArrayFree((ProArray*)&amp;pars);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestShowList()&quot;,
+		     status, status != PRO_TK_NO_ERROR);
+<a name="anchor-76"></a>    
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-77"></a>  Function : ProTestShowList
+  Purpose  : Display a list of parameters 
+\*====================================================================*/
+int ProTestShowParamsList (ProMdl model, ProParameter* pars)
+{
+<a name="anchor-78"></a>    int i, n;
+    
+    ProError status;
+    ProParamvalue value;
+    char name[PRO_NAME_SIZE];
+<a name="anchor-79"></a>    char astr[PRO_LINE_SIZE];
+    char fname[PRO_FILE_NAME_SIZE];
+    ProPath path;
+    FILE *fv;
+    ProBoolean modif = PRO_B_FALSE;
+<a name="anchor-80"></a>    ProBoolean desig;
+    
+    status = ProArraySizeGet((ProArray)pars, &amp;n);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestShowList()&quot;,
+		     status, status != PRO_TK_NO_ERROR);
+<a name="anchor-81"></a>    
+    ProTestQcrName(&amp;model, (char*)&quot;.inf&quot;, fname);
+    fv = PTApplsUnicodeFopen(fname, &quot;w&quot;);
+
+
+<a name="anchor-82"></a>    ProTKFprintf(fp, (char*)&quot;Name\t\tMod\tValType\t\tValue\t\tDesignated\n&quot;);
+    ProTKFprintf(fv, (char*)&quot;Name\t\tMod\tValType\t\tValue\t\tDesignated\n&quot;);
+
+    for( i = 0; i &lt; n; i++ )
+    {
+<a name="anchor-83"></a>      value.type = PRO_PARAM_VOID;
+        status = ProParameterValueGet(&amp;pars[i], &amp;value);
+        TEST_CALL_REPORT(&quot;ProParameterValueGet()&quot;, &quot;ProTestShowList()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-84"></a>	status = ProParameterIsModified(&amp;pars[i], &amp;modif);
+        TEST_CALL_REPORT(&quot;ProParameterIsModified()&quot;, &quot;ProTestShowList()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+
+        ProWstringToString(name, pars[i].id);
+<a name="anchor-85"></a>        ProTKFprintf(fp, (char*)&quot;%s\t%s&quot;, name, modif ? &quot;Yes&quot; : &quot;No&quot;);
+        ProTKFprintf(fv, (char*)&quot;%s\t%s&quot;, name, modif ? &quot;Yes&quot; : &quot;No&quot;);
+        switch( value.type )
+        {
+            case PRO_PARAM_DOUBLE:
+<a name="anchor-86"></a>                ProTKFprintf(fp, (char*)&quot;\tdouble\t\t%f\t&quot;, value.value.d_val);
+                ProTKFprintf(fv, (char*)&quot;\tdouble\t\t%f\t&quot;, value.value.d_val);
+                break;
+            case PRO_PARAM_STRING:
+                ProWstringToString(astr, value.value.s_val);
+<a name="anchor-87"></a>                ProTKFprintf(fp, (char*)&quot;\tstring\t\t%s\t&quot;, astr);
+                ProTKFprintf(fv, (char*)&quot;\tstring\t\t%s\t&quot;, astr);
+                break;
+            case PRO_PARAM_INTEGER:
+                ProTKFprintf(fp, (char*)&quot;\tinteger\t\t%d\t&quot;, value.value.i_val);
+<a name="anchor-88"></a>                ProTKFprintf(fv, (char*)&quot;\tinteger\t\t%d\t&quot;, value.value.i_val);
+                break;
+            case PRO_PARAM_BOOLEAN:
+                ProTKFprintf(fp, (char*)&quot;\tboolean\t\t%d\t&quot;, value.value.l_val);
+                ProTKFprintf(fv, (char*)&quot;\tboolean\t\t%d\t&quot;, value.value.l_val);
+<a name="anchor-89"></a>                break;
+            default:
+                ProTKFprintf(fp, (char*)&quot;\tvoid\t\tNULL\t&quot;);
+                ProTKFprintf(fv, (char*)&quot;\tvoid\t\tNULL\t&quot;);
+        }
+<a name="anchor-90"></a>
+	status = ProParameterDesignationVerify(&amp;pars[i], &amp;desig);
+        TEST_CALL_REPORT(&quot;ProParameterIsModified()&quot;, &quot;ProTestShowList()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-91"></a>	ProTKFprintf(fp, (char*)&quot;%s\n&quot;, desig ? &quot;Yes&quot; : &quot;No&quot;);
+        ProTKFprintf(fv, (char*)&quot;%s\n&quot;, desig ? &quot;Yes&quot; : &quot;No&quot;);
+
+    }
+
+<a name="anchor-92"></a>    fclose(fv);
+    ProStringToWstring(path, fname);
+    ProInfoWindowDisplay(path, NULL, NULL);
+    return( 0 );
+}
+<a name="anchor-93"></a>
+/*====================================================================*\
+  Function : ProTestNewParam
+  Purpose  : Create a new parameter for a selected item
+\*====================================================================*/
+<a name="anchor-94"></a>static int ProTestNewParam(ProMdl model, ProModelitem *p_modelitem )
+{
+    ProParamvalue new_value;
+    ProParamvalueType new_value_type;
+    ProParamvalueValue user_value;
+<a name="anchor-95"></a>    void* p_value;
+    ProParameter new_param;
+    ProName name;
+    ProError status;
+    char def_bool;
+<a name="anchor-96"></a>    char astr[PRO_NAME_SIZE*sizeof(wchar_t)];
+    char aname[PRO_NAME_SIZE*sizeof(wchar_t)];
+
+    new_value_type = ProTestGetParamType();
+
+<a name="anchor-97"></a>    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Please enter a name: &quot;);
+    ProUtilStringGet(name, NULL, PRO_NAME_SIZE);
+
+    ProTKFprintf(fp, (char*)&quot;Name:\t%s\n&quot;, ProWstringToString(aname, name));
+    switch( new_value_type )
+<a name="anchor-98"></a>    {
+        case PRO_PARAM_DOUBLE:
+            ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Please enter a double value: &quot;);
+            ProUtilDoubleGet(NULL, NULL, &amp;user_value.d_val);
+            ProTKSprintf(astr, (char*)&quot;Value:\t%f\n&quot;, user_value.d_val);
+<a name="anchor-99"></a>            ProTKFprintf(fp, astr);
+            p_value = (void*)&amp;user_value.d_val;
+            break;
+        case PRO_PARAM_STRING:
+            ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+<a name="anchor-100"></a>                                        &quot;Please enter a string value: &quot;);
+            ProUtilStringGet(user_value.s_val, NULL, PRO_LINE_SIZE);
+            ProTKSprintf(astr, (char*)&quot;Value:\t%s\n&quot;,
+                                ProWstringToString(aname, user_value.s_val));
+            ProTKFprintf(fp, astr);
+<a name="anchor-101"></a>            p_value = (void*)&amp;user_value.s_val;
+            break;
+        case PRO_PARAM_INTEGER:
+            ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+                                        &quot;Please enter a integer value: &quot;);
+<a name="anchor-102"></a>            ProUtilIntGet(NULL, NULL, &amp;user_value.i_val);
+            ProTKSprintf(astr, (char*)&quot;Value:\t%d\n&quot;, user_value.i_val);
+            ProTKFprintf(fp, astr);
+            p_value = (void*)&amp;user_value.i_val;
+            break;
+<a name="anchor-103"></a>        case PRO_PARAM_BOOLEAN:
+            def_bool = 0;
+            ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+                                        &quot;Please enter a Yes/No value[NO]: &quot;);
+            user_value.l_val = ProUtilYesnoGet(&amp;def_bool);
+<a name="anchor-104"></a>            ProTKSprintf(astr, (char*)&quot;Value:\t%d\n&quot;, user_value.l_val);
+            ProTKFprintf(fp, astr);
+            p_value = (void*)&amp;user_value.l_val;
+            break;
+        default:
+<a name="anchor-105"></a>            return( -1 );
+    }
+
+    status = ProParamvalueSet( &amp;new_value, p_value, new_value_type );
+    TEST_CALL_REPORT( &quot;ProParamvalueSet()&quot;, &quot;ProTestNewParam()&quot;,
+<a name="anchor-106"></a>				status, status != PRO_TK_NO_ERROR );
+
+    status = ProParameterCreate(p_modelitem, name, &amp;new_value, &amp;new_param);
+    TEST_CALL_REPORT(&quot;ProParameterCreate()&quot;, &quot;ProTestNewParam()&quot;, status,
+                                                status != PRO_TK_NO_ERROR);
+<a name="anchor-107"></a>    return( 0 );
+}
+
+/*====================================================================*\
+  Function : ProTestSetParam
+<a name="anchor-108"></a>  Purpose  : Allow the user to set the value of a parameter
+\*====================================================================*/
+static int ProTestSetParam(ProMdl model)
+{
+    ProName name;
+<a name="anchor-109"></a>    ProType type;
+    ProParameter param;
+    ProParamvalue value;
+    ProParamvalueType value_type;
+    ProParamvalueValue dummy_value;
+<a name="anchor-110"></a>    ProError status;
+    char def_bool;
+    char astr[PRO_LINE_SIZE];
+    char aname[PRO_NAME_SIZE*sizeof(wchar_t)];
+    ProModelitem sel_obj;
+<a name="anchor-111"></a>
+
+    type = ProTestGetElemType(PRO_B_FALSE);
+
+    if( ProTestPickItem(model, type, &amp;sel_obj) )
+<a name="anchor-112"></a>    {
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Enter the name of the parameter: &quot;);
+        ProUtilStringGet(name, NULL, PRO_NAME_SIZE);
+
+        status = ProParameterInit(&amp;sel_obj, name, &amp;param);
+<a name="anchor-113"></a>        TEST_CALL_REPORT(&quot;ProParameterInit()&quot;, &quot;ProTestSetParam()&quot;, status,
+                                                status == PRO_TK_COMM_ERROR);
+
+	if( status == PRO_TK_NO_ERROR )
+	  {
+<a name="anchor-114"></a>	    status = ProParameterValueGet(&amp;param, &amp;value);
+	    TEST_CALL_REPORT(&quot;ProParameterValueGet()&quot;, &quot;ProTestSetParam()&quot;,
+			     status, status == PRO_TK_COMM_ERROR);
+	    
+	    status = ProParamvalueTypeGet( &amp;value, &amp;value_type );
+<a name="anchor-115"></a>	    TEST_CALL_REPORT(&quot;ProParamvalueTypeGet()&quot;, &quot;ProTestSetParam()&quot;,
+                                        status, status == PRO_TK_COMM_ERROR);
+	    
+	    /* Only test call */
+	    status = ProParamvalueValueGet( &amp;value, value_type, &amp;dummy_value);
+<a name="anchor-116"></a>	    TEST_CALL_REPORT( &quot;ProParamvalueValueGet()&quot;, &quot;ProTestSetParam()&quot;,
+			      status, status == PRO_TK_COMM_ERROR);
+	  }
+
+        if( status == PRO_TK_NO_ERROR )
+<a name="anchor-117"></a>        {
+            ProTKSprintf(astr, (char*)&quot;Name:\t%s\n&quot;, ProWstringToString(aname, name));
+            ProTKFprintf(fp, astr);
+            switch( value_type )
+            {
+<a name="anchor-118"></a>                case PRO_PARAM_DOUBLE:
+                    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+                                        &quot;Please enter a double value: &quot;);
+                    ProUtilDoubleGet(NULL, NULL, &amp;value.value.d_val);
+                    ProTKSprintf(astr, (char*)&quot;Value:\t%f\n&quot;, value.value.d_val);
+<a name="anchor-119"></a>                    ProTKFprintf(fp, astr);
+                    break;
+                case PRO_PARAM_STRING:
+                    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+                                        &quot;Please enter a string value: &quot;);
+<a name="anchor-120"></a>                    ProUtilStringGet(value.value.s_val, NULL,
+                                                                PRO_LINE_SIZE);
+                    ProTKSprintf(astr,(char*)&quot;Value:\t%s\n&quot;,
+                                ProWstringToString(aname, value.value.s_val));
+                    ProTKFprintf(fp, astr);
+<a name="anchor-121"></a>                    break;
+                case PRO_PARAM_INTEGER:
+                    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+                                        &quot;Please enter a integer value: &quot;);
+                    ProUtilIntGet(NULL, NULL, &amp;value.value.i_val);
+<a name="anchor-122"></a>                    ProTKSprintf(astr, (char*)&quot;Value:\t%d\n&quot;, value.value.i_val);
+                    ProTKFprintf(fp, astr);
+                    break;
+                case PRO_PARAM_BOOLEAN:
+                    def_bool = 0;
+<a name="anchor-123"></a>                    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+                                        &quot;Please enter a Yes/No value[NO]: &quot;);
+                    value.value.l_val = ProUtilYesnoGet(&amp;def_bool);
+                    ProTKSprintf(astr, (char*)&quot;Value:\t%d\n&quot;, value.value.l_val);
+                    ProTKFprintf(fp, astr);
+<a name="anchor-124"></a>                    break;
+                default:
+                    return( -1 );
+            }
+
+<a name="anchor-125"></a>            status = ProParameterValueSet(&amp;param, &amp;value);
+            TEST_CALL_REPORT(&quot;ProParameterValueSet()&quot;, &quot;ProTestSetParams()&quot;,
+                                        status, status == PRO_TK_COMM_ERROR);
+        }
+        else
+<a name="anchor-126"></a>        {
+            ProTKSprintf(astr, (char*)&quot;Parameter '%s' does not exist\n&quot;,
+                                                ProWstringToString(aname, name));
+            ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, astr);
+
+<a name="anchor-127"></a>        }
+    }
+
+    return( 0 );
+}
+<a name="anchor-128"></a>
+/*====================================================================*\
+  Function : ProTestAddParam
+  Purpose  : Add a parameter to a model item
+\*====================================================================*/
+<a name="anchor-129"></a>static int ProTestAddParam(ProMdl model)
+{
+    ProType type;
+    ProModelitem modelitem;
+
+<a name="anchor-130"></a>    type = ProTestGetElemType(PRO_B_FALSE);
+    ProTKPrintf((char*)&quot;type = %d\n&quot;, type);
+
+    if( ProTestPickItem(model, type, &amp;modelitem) )
+        ProTestNewParam(model, &amp;modelitem);
+<a name="anchor-131"></a>
+    return( 0 );
+}
+
+
+<a name="anchor-132"></a>/*====================================================================*\
+  Function : ProTestParamDeleteAction
+  Purpose  : Allow the user to delete, reset or rename a parameter
+\*====================================================================*/
+static int ProTestParamDeleteAction(ProMdl model, int action)
+<a name="anchor-133"></a>{
+    ProType type;
+    ProParameter param;
+    ProError status;
+    char aname[PRO_NAME_SIZE];
+<a name="anchor-134"></a>    char astr[PRO_LINE_SIZE];
+    ProModelitem sel_obj;
+
+    type = ProTestGetElemType(PRO_B_FALSE);
+
+<a name="anchor-135"></a>    if( ProTestPickItem(model, type, &amp;sel_obj))
+    {
+	  status = ProParameterSelect(&amp;sel_obj, NULL, PRO_PARAMSELECT_ANY,
+								  PRO_B_FALSE, NULL, &amp;param, NULL);
+        TEST_CALL_REPORT(&quot;ProParameterSelect()&quot;, &quot;ProTestParamDeleteAction()&quot;,
+<a name="anchor-136"></a>                                status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_USER_ABORT);
+        if( status == PRO_TK_NO_ERROR )
+        {
+	    ProWstringToString(aname, param.id);
+	    switch (action)
+<a name="anchor-137"></a>	    {
+		case USER_RESET:
+	            ProTKSprintf(astr, (char*)&quot;Parameter '%s' reset...\n&quot;, aname);
+		    ProTKFprintf(fp, astr);
+		    status = ProParameterValueReset(&amp;param);
+<a name="anchor-138"></a>		    TEST_CALL_REPORT(&quot;ProParameterValueReset()&quot;, 
+					    &quot;ProTestParamDeleteAction()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+		    break;
+		case USER_DELETE:
+<a name="anchor-139"></a>                    ProTKSprintf(astr, (char*)&quot;Parameter '%s' deleted...\n&quot;, aname);
+		    ProTKFprintf(fp, astr);
+		    status = ProParameterDelete(&amp;param);
+		    TEST_CALL_REPORT(&quot;ProParameterDelete()&quot;,
+					    &quot;ProTestParamDeleteAction()&quot;,
+<a name="anchor-140"></a>					    status, status != PRO_TK_NO_ERROR);
+		    break;
+		default:
+		    ProTKFprintf(fp, (char*)&quot;Error!\n&quot;);
+		    break;
+<a name="anchor-141"></a>	    }
+        }
+    }
+
+    return(0);
+<a name="anchor-142"></a>}
+
+
+
+/*====================================================================*\
+<a name="anchor-143"></a>  Function : ProTestParamDesAction
+  Purpose  : Allow the user to add/remove designation of param
+\*====================================================================*/
+static int ProTestParamDesAction(ProMdl model, int action)
+{
+<a name="anchor-144"></a>    ProType type;
+    ProParameter param;
+    ProError status;
+    char aname[PRO_NAME_SIZE];
+    char astr[PRO_LINE_SIZE];
+<a name="anchor-145"></a>    ProModelitem sel_obj;
+    ProBoolean des;
+
+    type = ProTestGetElemType(PRO_B_FALSE);
+
+<a name="anchor-146"></a>    if( ProTestPickItem(model, type, &amp;sel_obj))
+    {
+        status = ProParameterSelect(&amp;sel_obj, NULL, PRO_PARAMSELECT_ANY,
+									PRO_B_FALSE, NULL, &amp;param, NULL);
+        TEST_CALL_REPORT(&quot;ProParameterSelect()&quot;, &quot;ProTestParamDeleteAction()&quot;,
+<a name="anchor-147"></a>                                status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_USER_ABORT);
+        if( status == PRO_TK_NO_ERROR )
+        {
+	    ProWstringToString(aname, param.id);
+	    status = ProParameterDesignationVerify(&amp;param, &amp;des);
+<a name="anchor-148"></a>            TEST_CALL_REPORT(&quot;ProParameterDesignationVerify()&quot;,
+					    &quot;ProTestParamDeleteAction()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+
+	    switch (action)
+<a name="anchor-149"></a>	    {
+		case USER_DES_ADD:
+		    if (des)
+		    {
+			ProTKSprintf(astr, (char*)&quot;Parameter %s already designated&quot;, 
+<a name="anchor-150"></a>			    aname); 
+			break;
+		    }
+
+		    status = ProParameterDesignationAdd(&amp;param);
+<a name="anchor-151"></a>		    TEST_CALL_REPORT(&quot;ProParameterDesignationAdd()&quot;, 
+					    &quot;ProTestParamDeleteAction()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+		    if (status == PRO_TK_NO_ERROR)
+		    {
+<a name="anchor-152"></a>			ProTKSprintf(astr, (char*)&quot;Parameter %s designated&quot;, aname);
+		    }
+
+		    break;
+		case USER_DES_REMOVE:
+<a name="anchor-153"></a>		    if (!des)
+		    {
+			ProTKSprintf(astr, (char*)&quot;Parameter %s not designated&quot;, aname);
+			break;
+		    }
+<a name="anchor-154"></a>
+		    status = ProParameterDesignationRemove(&amp;param);
+		    TEST_CALL_REPORT(&quot;ProParameterDesignationRemove()&quot;, 
+					    &quot;ProTestParamDeleteAction()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-155"></a>		    if (status == PRO_TK_NO_ERROR)
+		    {
+			ProTKSprintf(astr, (char*)&quot;Removed designation from parameter %s&quot;,
+			    aname);
+		    }
+<a name="anchor-156"></a>
+		    break;
+		default:
+		    ProUtilstrcpy(astr, &quot;Error!&quot;);
+		    break;
+<a name="anchor-157"></a>	    }
+
+	    ProTKFprintf(fp, (char*)&quot;%s\n&quot;, astr);
+    	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, astr);
+        }
+<a name="anchor-158"></a>    }
+
+    return(0);
+}
+</pre>
+</body>
+</html>

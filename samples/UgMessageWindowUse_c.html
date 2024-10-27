@@ -1,0 +1,116 @@
+<html>
+<head>
+<title>UgMessageWindowUse.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProMessage.h>
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;TestError.h>
+<a name="anchor-2"></a>#include &lt;ProUtil.h>
+
+#define MAX_IN_LEN PRO_NAME_SIZE
+
+/*==================================================================*\
+<a name="anchor-3"></a>FUNCTION: UserMessageDemo()
+PURPOSE:  Display messages and read user input.
+\*==================================================================*/
+ProError UserMessageDemo()
+{
+<a name="anchor-4"></a>  int           i1, i2;
+  const int     default_int = 0;
+  double        d;
+  int           irange[2] = {0, 10};
+  ProName       wstr, default_wstr;
+<a name="anchor-5"></a>  ProCharName   str;
+  ProLine       msg_line;
+  ProCharLine   line;
+  ProError      err;
+  ProFileName   msgfil;
+<a name="anchor-6"></a>  FILE          *msg_test;
+/*------------------------------------------------------------------*\
+  Set up the name of the message file.
+\*------------------------------------------------------------------*/
+  ProStringToWstring (msgfil, &quot;msg_ugmessage.txt&quot;);
+<a name="anchor-7"></a>/*------------------------------------------------------------------*\
+  Read an integer without a default value.  Message will display as a 
+  prompt.
+\*------------------------------------------------------------------*/
+  err = ProMessageDisplay (msgfil, &quot;USER Enter any integer: &quot;);
+<a name="anchor-8"></a>  err = ProMessageIntegerRead (NULL, &amp;i1);
+  if (err != PRO_TK_NO_ERROR)
+      return (err);
+/*------------------------------------------------------------------*\
+  Read an integer with a restricted range and a default value.  Message 
+<a name="anchor-9"></a>  will display as a prompt.
+\*------------------------------------------------------------------*/
+  err = ProMessageDisplay (msgfil,
+      &quot;USER Enter any integer between %0d and %1d: |||%2d&quot;, &amp;irange[0],
+      &amp;irange[1], &amp;default_int);
+<a name="anchor-10"></a>  err = ProMessageIntegerRead (irange, &amp;i2);
+  if (err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_GENERAL_ERROR)
+      return (err);
+/*------------------------------------------------------------------*\
+  If user entered the default value - warn the user.  Message will 
+<a name="anchor-11"></a>  display as a warning.
+\*------------------------------------------------------------------*/
+  if (err == PRO_TK_GENERAL_ERROR)
+    {
+      i2 = default_int;   /*  Using the default  */
+<a name="anchor-12"></a>      err = ProMessageDisplay (msgfil,
+			       &quot;USER Warning: using default value&quot;, &amp;default_int);
+    }
+/*------------------------------------------------------------------*\
+  Read a double without a default value.  Message will display as a 
+<a name="anchor-13"></a>  prompt.
+\*------------------------------------------------------------------*/
+  err = ProMessageDisplay (msgfil, &quot;USER Enter any double: &quot;);
+  err = ProMessageDoubleRead (NULL, &amp;d);
+  if (err != PRO_TK_NO_ERROR)
+<a name="anchor-14"></a>      return (err);
+/*------------------------------------------------------------------*\
+  Read a string with a default value.  Message will display as a 
+  prompt.
+\*------------------------------------------------------------------*/
+<a name="anchor-15"></a>  ProStringToWstring (default_wstr, &quot;default string&quot;);
+  err = ProMessageDisplay (msgfil, &quot;USER Enter any string: |||%0w&quot;,
+      default_wstr);
+  err = ProMessageStringRead (MAX_IN_LEN, wstr);
+  if (err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_GENERAL_ERROR)
+<a name="anchor-16"></a>      return (err);
+  if (err == PRO_TK_GENERAL_ERROR)
+    ProUtilWstrcpy (wstr, default_wstr);  /*  Using the default  */
+/*------------------------------------------------------------------*\
+  Write a message that states the values entered.  Message will display
+<a name="anchor-17"></a>  as info.
+\*------------------------------------------------------------------*/
+  err = ProMessageDisplay (msgfil,
+      &quot;USER Values entered were %0d, %1d, %2(5.3)f, %3w&quot;, &amp;i1, &amp;i2,
+      &amp;d, wstr);
+<a name="anchor-18"></a>/*------------------------------------------------------------------*\
+  Write the values to a file.
+\*------------------------------------------------------------------*/
+  msg_test = PTApplsUnicodeFopen (&quot;msg_test.dat&quot;, &quot;w&quot;);
+  if (msg_test != NULL)
+<a name="anchor-19"></a>  {
+      err = ProMessageToBuffer (msg_line, msgfil,
+          &quot;USER Values entered&quot;, wstr, &amp;d, &amp;i2, &amp;i1);
+
+      ProWstringToString (line, msg_line);
+<a name="anchor-20"></a>      ProTKFprintf (msg_test,
+          &quot;ProMessageToBuffer output |%s|\n&quot;, line);
+      fclose (msg_test);
+  }
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>}
+
+#undef MAX_IN_LEN
+</pre>
+</body>
+</html>

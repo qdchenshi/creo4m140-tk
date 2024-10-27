@@ -1,0 +1,820 @@
+<html>
+<head>
+<title>UgAsmcompConstraint.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProMessage.h>
+#include &lt;ProSolid.h>
+<a name="anchor-2"></a>#include &lt;ProArray.h>
+#include &lt;ProPopupmenu.h>
+#include &lt;ProMenuBar.h>
+#include &lt;ProSelection.h>
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-3"></a>#include &lt;ProModelitem.h>
+#include &lt;ProUtil.h>
+#include &lt;UtilFiles.h>
+#include &lt;TestError.h>
+#include &lt;ProSelbuffer.h>
+<a name="anchor-4"></a>
+#include &lt;UtilString.h>
+
+#define MSGFIL L##&quot;msg_ugasmcomp.txt&quot;
+
+<a name="anchor-5"></a>/*-----------------------------------------------------------------*\
+	Prototypes
+\*-----------------------------------------------------------------*/
+ProError  UserAsmcompConstraintsHighlight (ProAsmcomp* asmcomp);
+ProError UserOpenComponent (ProSolid* solid);
+<a name="anchor-6"></a>
+void UserConstraintTypeToString (ProAsmcompConstrType type, 
+								  char* type_string);
+ProError UgSelectAsmIntent(ProAssembly asm_model, ProSolid comp_model, ProType constr_type, ProAsmcompconstraint** constraints);
+
+<a name="anchor-7"></a>
+
+/*=====================================================================*\
+FUNCTION: UserAssembleByDatums
+PURPOSE:  Assemble a component by aligning named datums.	
+<a name="anchor-8"></a>\*=====================================================================*/
+ProError UserAssembleByDatums (ProAssembly asm_model, ProSolid comp_model)
+{
+	ProError status;
+	ProName asm_datums [3];
+<a name="anchor-9"></a>	ProName comp_datums [3];
+	ProMatrix identity_matrix = {{ 1.0, 0.0, 0.0, 0.0 }, 
+								{0.0, 1.0, 0.0, 0.0}, 
+								{0.0, 0.0, 1.0, 0.0}, 
+								{0.0, 0.0, 0.0, 1.0}};
+<a name="anchor-10"></a>	ProAsmcomp asmcomp;
+	ProAsmcompconstraint* constraints;
+	ProAsmcompconstraint constraint;
+	int i;
+	ProBoolean interact_flag = PRO_B_FALSE;
+<a name="anchor-11"></a>	ProModelitem asm_datum, comp_datum;
+	ProSelection asm_sel, comp_sel;
+	ProAsmcomppath comp_path;
+	ProIdTable c_id_table;
+	c_id_table [0] = -1;
+<a name="anchor-12"></a>
+	/*-----------------------------------------------------------------*\
+		Set up the arrays of datum names
+    \*-----------------------------------------------------------------*/
+	ProStringToWstring (asm_datums [0], &quot;ASM_D_FRONT&quot;);
+<a name="anchor-13"></a>	ProStringToWstring (asm_datums [1], &quot;ASM_D_TOP&quot;);
+	ProStringToWstring (asm_datums [2], &quot;ASM_D_RIGHT&quot;);
+
+	ProStringToWstring (comp_datums [0], &quot;COMP_D_FRONT&quot;);
+	ProStringToWstring (comp_datums [1], &quot;COMP_D_TOP&quot;);
+<a name="anchor-14"></a>	ProStringToWstring (comp_datums [2], &quot;COMP_D_RIGHT&quot;);
+
+	/*-----------------------------------------------------------------*\
+		Package the component initially
+    \*-----------------------------------------------------------------*/
+<a name="anchor-15"></a>	ProAsmcompAssemble (asm_model, comp_model, identity_matrix, &amp;asmcomp);
+
+	/*-----------------------------------------------------------------*\
+		Prepare the constraints array
+    \*-----------------------------------------------------------------*/
+<a name="anchor-16"></a>	ProArrayAlloc (0, sizeof (ProAsmcompconstraint), 1, (ProArray*)&amp;constraints);
+
+	for (i = 0; i &lt; 3; i++)
+	{
+		/*-----------------------------------------------------------------*\
+<a name="anchor-17"></a>			Find the assembly datum 
+		\*-----------------------------------------------------------------*/
+		status = ProModelitemByNameInit (asm_model, PRO_SURFACE, asm_datums [i], &amp;asm_datum);
+		if (status != PRO_TK_NO_ERROR) 
+		{
+<a name="anchor-18"></a>			interact_flag = PRO_B_TRUE;
+			continue;
+		}
+		ProTKPrintf (&quot;Item type = %d, PRO_SURFACE = %d\n&quot;, asm_datum.type, PRO_SURFACE);
+		fflush (stdout);
+<a name="anchor-19"></a>
+		/*-----------------------------------------------------------------*\
+			Find the component datum
+		\*-----------------------------------------------------------------*/
+		status = ProModelitemByNameInit (comp_model, PRO_SURFACE, comp_datums [i], &amp;comp_datum);
+<a name="anchor-20"></a>		if (status != PRO_TK_NO_ERROR) 
+		{
+			interact_flag = PRO_B_TRUE;
+			continue;
+		}
+<a name="anchor-21"></a>		ProTKPrintf (&quot;Item type = %d, PRO_SURFACE = %d\n&quot;, comp_datum.type, PRO_SURFACE);
+		fflush (stdout);
+
+		/*-----------------------------------------------------------------*\
+			For the assembly reference, initialize a component path.
+<a name="anchor-22"></a>			This is necessary even if the reference geometry is in the assembly.
+		\*-----------------------------------------------------------------*/
+		status = ProAsmcomppathInit (asm_model, c_id_table, 0, &amp;comp_path);
+		ERROR_CHECK (&quot;ProAsmcomppathInit()&quot;, &quot;UserAssembleByDatums&quot;, status);
+
+<a name="anchor-23"></a>		/*-----------------------------------------------------------------*\
+			Allocate the references
+		\*-----------------------------------------------------------------*/
+		status = ProSelectionAlloc (&amp;comp_path, &amp;asm_datum, &amp;asm_sel);
+		status = ProSelectionAlloc (NULL, &amp;comp_datum, &amp;comp_sel);
+<a name="anchor-24"></a>
+		/*-----------------------------------------------------------------*\
+			Allocate and fill the constraint.
+		\*-----------------------------------------------------------------*/
+		status = ProAsmcompconstraintAlloc (&amp;constraint);
+<a name="anchor-25"></a>
+		status = ProAsmcompconstraintTypeSet (constraint, PRO_ASM_ALIGN);
+
+		status = ProAsmcompconstraintAsmreferenceSet (constraint, asm_sel, PRO_DATUM_SIDE_YELLOW);
+			
+<a name="anchor-26"></a>		status = ProAsmcompconstraintCompreferenceSet (constraint, comp_sel, PRO_DATUM_SIDE_YELLOW);
+
+		status = ProArrayObjectAdd ((ProArray*)&amp;constraints, -1, 1, &amp;constraint);
+
+	}
+<a name="anchor-27"></a>
+	/*-----------------------------------------------------------------*\
+		Set the assembly component constraints and regenerate the assembly.
+    \*-----------------------------------------------------------------*/
+	status = ProAsmcompConstraintsSet (NULL, &amp;asmcomp, constraints);
+<a name="anchor-28"></a>	ERROR_CHECK (&quot;ProAsmcompConstraintsSet()&quot;, &quot;UserAssembleByDatums&quot;, status);
+
+	ProSolidRegenerate (asmcomp.owner, PRO_REGEN_ALLOW_CONFIRM);
+
+	/*-----------------------------------------------------------------*\
+<a name="anchor-29"></a>		If any of the expect datums was not found, prompt the user to constrain
+		the new component.
+    \*-----------------------------------------------------------------*/
+	if (interact_flag)
+	{
+<a name="anchor-30"></a>		ProMessageDisplay (MSGFIL, 
+			&quot;USER Unable to locate all standard datum references.  New component is packaged.&quot;);
+
+		ProAsmcompConstrRedefUI (&amp;asmcomp);
+	}
+<a name="anchor-31"></a>
+	return (PRO_TK_NO_ERROR);
+}
+
+/*=====================================================================*\
+<a name="anchor-32"></a>FUNCTION: UserAssemble
+PURPOSE:  Menu action to assemble a component
+\*=====================================================================*/
+ProError UserAssemble ()
+{
+<a name="anchor-33"></a>	ProAssembly top_level_asm;
+	ProSolid comp_model;
+	ProError status;
+
+	ProMdlCurrentGet ((ProMdl*)&amp;top_level_asm);
+<a name="anchor-34"></a>
+	status = UserOpenComponent (&amp;comp_model);
+	if (status != PRO_TK_NO_ERROR)
+		return status;
+
+<a name="anchor-35"></a>	UserAssembleByDatums (top_level_asm, comp_model);
+
+	ProWindowRepaint (-1);
+
+	ProTreetoolRefresh (top_level_asm);
+<a name="anchor-36"></a>
+	return PRO_TK_NO_ERROR;
+}
+
+/*=====================================================================*\
+<a name="anchor-37"></a>FUNCTION: UgAssembleByIntent
+PURPOSE:  Set constraints after assembling a component using intents
+\*=====================================================================*/
+ProError UgAssembleByIntent (ProAssembly asm_model, ProSolid comp_model)
+{
+<a name="anchor-38"></a>  ProError status;
+  ProMatrix identity_matrix = {{ 1.0, 0.0, 0.0, 0.0 }, 
+                               {0.0, 1.0, 0.0, 0.0}, 
+                               {0.0, 0.0, 1.0, 0.0}, 
+                               {0.0, 0.0, 0.0, 1.0}};
+<a name="anchor-39"></a>  ProAsmcomp asmcomp;
+  ProAsmcompconstraint* constraints;
+  ProAsmcompconstraint constraint;
+
+  /*-----------------------------------------------------------------*\
+<a name="anchor-40"></a>      Package the component initially
+  \*-----------------------------------------------------------------*/
+  status = ProAsmcompAssemble (asm_model, comp_model, 
+                               identity_matrix, &amp;asmcomp);
+    
+<a name="anchor-41"></a>  /*-----------------------------------------------------------------*\
+      Prepare the constraints array
+  \*-----------------------------------------------------------------*/
+  status = ProArrayAlloc (0, sizeof (ProAsmcompconstraint), 1,
+                          (ProArray*)&amp;constraints);
+<a name="anchor-42"></a>    
+   /*-----------------------------------------------------------------*\
+      Set PRO_LOG_PNT constraint in assembly
+  \*-----------------------------------------------------------------*/
+  status = UgSelectAsmIntent(asm_model, comp_model, PRO_LOG_PNT,
+<a name="anchor-43"></a>                             &amp;constraints);   
+  
+  /*-----------------------------------------------------------------*\
+      Set PRO_LOG_PLANE constraint in assembly
+  \*-----------------------------------------------------------------*/
+<a name="anchor-44"></a>  status = UgSelectAsmIntent(asm_model, comp_model, PRO_LOG_PLANE,
+                             &amp;constraints);
+
+  /*-----------------------------------------------------------------*\
+      Set the assembly component constraints and regenerate the assembly.
+<a name="anchor-45"></a>  \*-----------------------------------------------------------------*/
+  status = ProAsmcompConstraintsSet (NULL, &amp;asmcomp, constraints);
+  
+  if(status == PRO_TK_NO_ERROR)
+    ProMessageDisplay (MSGFIL,&quot;Component assembled successfully&quot;);
+<a name="anchor-46"></a>    
+  else 
+    return status;
+ 
+  ProSolidRegenerate(asmcomp.owner, PRO_REGEN_ALLOW_CONFIRM);
+<a name="anchor-47"></a>    
+  return (PRO_TK_NO_ERROR);
+}
+
+/*=====================================================================*\
+<a name="anchor-48"></a>FUNCTION: UgSelectAsmIntent
+PURPOSE:  Assemble a component using intent point and intent plane
+\*=====================================================================*/
+ProError UgSelectAsmIntent(ProAssembly asm_model, ProSolid comp_model, 
+                           ProType constr_type, 
+<a name="anchor-49"></a>                           ProAsmcompconstraint** constraints)
+{
+  ProError status;
+  ProAsmcompconstraint constraint;
+  int i, n_sels;
+<a name="anchor-50"></a>  int asm_point,asm_plane,comp_point,comp_plane;
+  int constr_point,constr_plane;
+  ProModelitem asm_datum, comp_datum;
+  ProSelection asm_sel, comp_sel;
+  ProAsmcomppath comp_path;
+<a name="anchor-51"></a>  ProSelection* sels = NULL, *sels2 = NULL;
+  ProMdlName selmdl_name, compmdl_name;
+  char c_selmdl_name[PRO_MDLNAME_SIZE], c_compmdl_name[PRO_MDLNAME_SIZE];
+  ProModelitem p_asmintent, p_compintent;
+
+<a name="anchor-52"></a>  /*-----------------------------------------------------------------*\
+     Get the intent datum point for the component
+  \*-----------------------------------------------------------------*/
+  while (1)
+  {
+<a name="anchor-53"></a>    /*-----------------------------------------------------------------*\
+        Find the component intent 
+    \*-----------------------------------------------------------------*/
+    if(constr_type == PRO_LOG_PNT )
+      ProMessageDisplay (MSGFIL,&quot;Select the intent point in component&quot;);
+<a name="anchor-54"></a> 
+    else if(constr_type == PRO_LOG_PLANE)
+      ProMessageDisplay (MSGFIL,&quot;Select the intent plane in component&quot;);
+
+    status = ProSelect (&quot;membfeat&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+<a name="anchor-55"></a>    if ((status != PRO_TK_NO_ERROR) || (n_sels &lt; 1))
+      return status;
+
+    status = ProSelectionModelitemGet (sels[0], &amp;comp_datum);
+    if ((status != PRO_TK_NO_ERROR) || (comp_datum.type != PRO_FEATURE))
+<a name="anchor-56"></a>      return status;
+
+    status = ProMdlMdlnameGet(comp_datum.owner, selmdl_name);
+    ProWstringToString (c_selmdl_name, selmdl_name);
+        
+<a name="anchor-57"></a>    status = ProMdlMdlnameGet(comp_model, compmdl_name);
+    ProWstringToString (c_compmdl_name, compmdl_name);
+
+    if(strcmp(c_compmdl_name,c_selmdl_name) != 0)
+      continue;
+<a name="anchor-58"></a>
+    status = ProModelitemInit(comp_datum.owner,(comp_datum.id+1),constr_type,
+                              &amp;p_compintent);
+    if (status == PRO_TK_NO_ERROR) 
+      break;
+<a name="anchor-59"></a>  }
+    
+    
+  while(1)
+  {
+<a name="anchor-60"></a>    /*-----------------------------------------------------------------*\
+        Find the assembly intent 
+    \*-----------------------------------------------------------------*/
+
+    if(constr_type == PRO_LOG_PNT )
+<a name="anchor-61"></a>      ProMessageDisplay (MSGFIL,&quot;Select the intent point in assembly&quot;);
+ 
+    else if(constr_type == PRO_LOG_PLANE)
+      ProMessageDisplay (MSGFIL,&quot;Select the intent plane in assembly&quot;);
+
+<a name="anchor-62"></a>    status = ProSelect (&quot;membfeat&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels2, 
+                        &amp;n_sels);
+    if ((status != PRO_TK_NO_ERROR) || (n_sels &lt; 1))
+      return status;
+
+<a name="anchor-63"></a>    status = ProSelectionModelitemGet (sels2[0], &amp;asm_datum);
+    if ((status != PRO_TK_NO_ERROR)|| (asm_datum.type != PRO_FEATURE))
+      return status;
+
+    status = ProSelectionAsmcomppathGet(sels2[0], &amp;comp_path); 
+<a name="anchor-64"></a>    if (status != PRO_TK_NO_ERROR)
+      continue;
+          
+    status = ProModelitemInit(asm_datum.owner,(asm_datum.id+1),constr_type,
+                              &amp;p_asmintent);
+<a name="anchor-65"></a>    if (status == PRO_TK_NO_ERROR)
+      break;    
+  }
+
+  /*-----------------------------------------------------------------*\
+<a name="anchor-66"></a>      Allocate the references
+  \*-----------------------------------------------------------------*/
+  status = ProSelectionAlloc (&amp;comp_path, &amp;p_asmintent, &amp;asm_sel);
+  status = ProSelectionAlloc (NULL, &amp;p_compintent, &amp;comp_sel);
+
+<a name="anchor-67"></a>  /*-----------------------------------------------------------------*\
+      Allocate and fill the constraint.
+  \*-----------------------------------------------------------------*/
+  status = ProAsmcompconstraintAlloc (&amp;constraint);
+  if(constr_type == PRO_LOG_PNT)
+<a name="anchor-68"></a>    ProAsmcompconstraintTypeSet (constraint, PRO_ASM_ALIGN);
+
+  else if(constr_type == PRO_LOG_PLANE)
+    ProAsmcompconstraintTypeSet (constraint, PRO_ASM_ORIENT);
+
+<a name="anchor-69"></a>  status = ProAsmcompconstraintAsmreferenceSet (constraint, asm_sel, 
+                                                PRO_DATUM_SIDE_YELLOW);
+  status = ProAsmcompconstraintCompreferenceSet (constraint, comp_sel, 
+                                                 PRO_DATUM_SIDE_YELLOW);
+  status = ProArrayObjectAdd ((ProArray*)constraints, -1, 1, &amp;constraint);
+<a name="anchor-70"></a>
+  return PRO_TK_NO_ERROR;
+}
+
+/*=====================================================================*\
+<a name="anchor-71"></a>FUNCTION: UgAssembleIntent
+PURPOSE:  Menu action to assemble a component using intent feature
+\*=====================================================================*/
+ProError UgAssembleIntent ()
+{
+<a name="anchor-72"></a>  ProAssembly top_level_asm = NULL;
+  ProSolid comp_model = NULL;
+  ProError status;
+
+  status = ProMdlCurrentGet ((ProMdl*)&amp;top_level_asm);
+<a name="anchor-73"></a>  if((status != PRO_TK_NO_ERROR) || (top_level_asm == NULL))
+  {
+    ProMessageDisplay (MSGFIL, &quot;Failed to open the assembly&quot;);
+    return status;
+  }
+<a name="anchor-74"></a>
+  status = UserOpenComponent (&amp;comp_model);
+  if ((status != PRO_TK_NO_ERROR) || comp_model == NULL ) 
+  {
+    ProMessageDisplay (MSGFIL, &quot;Failed to open the component&quot;);
+<a name="anchor-75"></a>    return status;
+  }
+    
+  if(top_level_asm &amp;&amp; comp_model)
+    status = UgAssembleByIntent (top_level_asm, comp_model);
+<a name="anchor-76"></a>
+  ProWindowRepaint (-1);
+
+  ProTreetoolRefresh (top_level_asm);
+
+<a name="anchor-77"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*=====================================================================*\
+FUNCTION: UserOpenComponent
+<a name="anchor-78"></a>PURPOSE:  Prompt the user to select a component.
+\*=====================================================================*/
+ProError UserOpenComponent (ProSolid* solid)
+{
+	ProSolid comp;
+<a name="anchor-79"></a>    ProError err, er1;
+    int version, win_id,sel_n, Oldwin_id;
+    ProCharLine line, str;
+    ProLine buff;
+    ProPath *path_arr, sel_path, def_path, cur_path;
+<a name="anchor-80"></a>    ProName *path_lab_arr;
+	ProMdlName w_name;
+	ProMdlExtension w_type;
+	ProType type;
+    
+<a name="anchor-81"></a>    ProMessageDisplay(MSGFIL, &quot;USER Choose new component to assemble:&quot;);
+
+    /*-----------------------------------------------------------------*\
+		Prompt the user to select the file.
+    \*-----------------------------------------------------------------*/
+<a name="anchor-82"></a>	ProStringToWstring(buff, &quot;*.prt,*.asm&quot;);
+    ProStringToWstring(def_path, &quot;.&quot;);
+
+    err = ProArrayAlloc(0, sizeof(ProPath), 1, (ProArray*)&amp;path_arr);
+   
+<a name="anchor-83"></a>    err = ProArrayAlloc(0, sizeof(ProPath), 1, (ProArray*)&amp;path_lab_arr);
+   
+    err = ProFileMdlnameOpen(NULL, buff, path_arr, path_lab_arr, def_path, NULL,
+        sel_path);
+  
+<a name="anchor-84"></a>    if (err == PRO_TK_NO_ERROR)
+    {
+		/*-----------------------------------------------------------------*\
+			Parse the filename to locate the component model.
+		\*-----------------------------------------------------------------*/
+<a name="anchor-85"></a>        err = ProFileMdlnameParse(sel_path, def_path, w_name, w_type, &amp;version);
+        
+        ProUtilWstrcpy(sel_path, def_path);
+        err = ProPathMdlnameCreate(NULL, w_name, w_type, PRO_VALUE_UNUSED, def_path);
+       
+<a name="anchor-86"></a>        ProWstringToString(str, def_path);
+        if( ProUtilConfirmNameType(str, line, &amp;type) != PRO_TK_BAD_INPUTS)
+        {
+			/*-----------------------------------------------------------------*\
+				Load the component model.
+<a name="anchor-87"></a>			\*-----------------------------------------------------------------*/
+            err = ProDirectoryCurrentGet(cur_path); 
+       
+            err = ProDirectoryChange(sel_path); 
+      
+<a name="anchor-88"></a>            err = ProMdlnameRetrieve(w_name, (ProMdlfileType)type, (ProMdl*)&amp;comp);
+          
+           er1 = ProDirectoryChange(cur_path); 
+           
+            if (err != PRO_TK_NO_ERROR)
+<a name="anchor-89"></a>			{
+                ProMessageDisplay (MSGFIL, &quot;USER Failed to retrieve %0s&quot;, str);
+			}
+        }
+    }
+<a name="anchor-90"></a>	/*------------------------------------------------------------------*\
+		Free allocated memory
+	\*--------------------------------------------------------------------*/
+    er1 = ProArrayFree((ProArray*)&amp;path_arr);
+  
+<a name="anchor-91"></a>    er1 = ProArrayFree((ProArray*)&amp;path_lab_arr);
+   
+    if (err != PRO_TK_NO_ERROR)
+        return (PRO_TK_BAD_CONTEXT);
+
+<a name="anchor-92"></a>	*solid = comp;
+
+	return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-93"></a>
+
+/*=====================================================================*\
+FUNCTION: UserAsmcompConstraintsHighlight
+PURPOSE:  Highlights and labels a component's constraints
+<a name="anchor-94"></a>\*=====================================================================*/
+ProError  UserAsmcompConstraintsHighlight (ProAsmcomp* asmcomp)
+{
+	ProError status, aref_status, cref_status;
+	ProSelection comp_constr, asm_constr;
+<a name="anchor-95"></a>	ProDatumside dtmside;
+	ProAsmcompconstraint* constr_array;
+	int size, i, i_count;	
+	double offset;
+	char offset_str [20];
+<a name="anchor-96"></a>	ProLine entry;
+	char type_str [20];
+	ProAsmcompConstrType type;
+
+	/*-----------------------------------------------------------------*\
+<a name="anchor-97"></a>		Get the constraints for the component.
+    \*-----------------------------------------------------------------*/
+	status = ProAsmcompConstraintsGet (asmcomp, &amp;constr_array);
+	if (status != PRO_TK_NO_ERROR)
+		return PRO_TK_E_NOT_FOUND;
+<a name="anchor-98"></a>
+	ProArraySizeGet (constr_array, &amp;size);
+
+	for (i = 0; i &lt; size; i++)
+	{
+<a name="anchor-99"></a>		/*-----------------------------------------------------------------*\
+			Highlight the assembly reference geometry
+        \*----------------------------------------------------------------*/
+		aref_status = ProAsmcompconstraintAsmreferenceGet (constr_array [i], &amp;asm_constr, &amp;dtmside);
+
+<a name="anchor-100"></a>		if (aref_status == PRO_TK_NO_ERROR)
+		{
+			ProSelectionHighlight (asm_constr, PRO_COLOR_ERROR);
+
+		}
+<a name="anchor-101"></a>
+		/*-----------------------------------------------------------------*\
+			Highlight the component reference geometry
+		\*-----------------------------------------------------------------*/
+		cref_status = ProAsmcompconstraintCompreferenceGet (constr_array [i], &amp;comp_constr, &amp;dtmside);
+<a name="anchor-102"></a>
+		if (cref_status == PRO_TK_NO_ERROR)
+		{
+			ProSelectionHighlight (comp_constr, PRO_COLOR_WARNING);
+		}
+<a name="anchor-103"></a>
+		/*-----------------------------------------------------------------*\
+			Prepare and display the message text.
+		\*----------------------------------------------------------------*/
+		status = ProAsmcompconstraintOffsetGet (constr_array [i], &amp;offset);
+<a name="anchor-104"></a>
+		if (status == PRO_TK_NO_ERROR)
+		{
+			ProTKSprintf (offset_str, &quot; offset = %6.3lf&quot;, offset);
+		}
+<a name="anchor-105"></a>		else
+			strcpy (offset_str, &quot;&quot;);
+
+		status = ProAsmcompconstraintTypeGet (constr_array [i], &amp;type);
+		UserConstraintTypeToString (type, type_str);
+<a name="anchor-106"></a>	
+		i_count = i + 1;
+		ProMessageDisplay (MSGFIL, &quot;USER Showing constraint %0d of %1d %2s%3s.  Hit &lt;CR> to continue.&quot;,
+							&amp;i_count, &amp;size, type_str, offset_str);
+		ProMessageStringRead (1, entry);
+<a name="anchor-107"></a>
+/*-----------------------------------------------------------------*\
+	     Clean up the UI for the next constraint
+\*-----------------------------------------------------------------*/
+		if (aref_status == PRO_TK_NO_ERROR)
+<a name="anchor-108"></a>		{
+			ProSelectionUnhighlight (asm_constr);
+		}
+
+		if (cref_status == PRO_TK_NO_ERROR)
+<a name="anchor-109"></a>		{
+			ProSelectionUnhighlight (comp_constr);
+		}
+	}
+
+<a name="anchor-110"></a>	ProArrayFree ((ProArray*)&amp;constr_array);
+
+       return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-111"></a>/*=====================================================================*\
+FUNCTION: UserAsmcompConstraintsInfo
+PURPOSE:  Menu action for constraint information gathering
+\*=====================================================================*/
+ProError UserAsmcompConstraintsInfo ()
+<a name="anchor-112"></a>{
+	ProError status;
+	ProSelection* component_arr;
+	int size;
+	ProAsmcomp cfeat;
+<a name="anchor-113"></a>
+	ProMessageDisplay (MSGFIL, &quot;USER Select an assembly component:&quot;);
+	status = ProSelect (&quot;membfeat&quot;, 1, NULL, NULL, NULL, NULL, &amp;component_arr, &amp;size);
+	if (status != PRO_TK_NO_ERROR)
+		return status;
+<a name="anchor-114"></a>
+	ProSelectionModelitemGet (component_arr [0], (ProModelitem*)&amp;cfeat);
+
+	ProSelectionUnhighlight (component_arr [0]);
+
+<a name="anchor-115"></a>	ProWindowRepaint (-1);
+
+	UserAsmcompConstraintsHighlight (&amp;cfeat);
+
+	return PRO_TK_NO_ERROR;
+<a name="anchor-116"></a>}
+
+/*=====================================================================*\
+FUNCTION: UserConstraintTypeToString
+PURPOSE:  Utility: convert the constraint type to a string for printing
+<a name="anchor-117"></a>\*=====================================================================*/
+void UserConstraintTypeToString (ProAsmcompConstrType type, 
+								  char* type_string)
+{
+
+<a name="anchor-118"></a>	switch (type)
+	{
+		case   PRO_ASM_MATE:
+			strcpy (type_string, &quot;(Mate)&quot;);
+			break;
+<a name="anchor-119"></a>		case PRO_ASM_MATE_OFF:
+			strcpy (type_string, &quot;(Mate Offset)&quot;);
+			break;
+		case PRO_ASM_ALIGN:
+			strcpy (type_string, &quot;(Align)&quot;);
+<a name="anchor-120"></a>			break;
+		case PRO_ASM_ALIGN_OFF:
+			strcpy (type_string, &quot;(Align Offset)&quot;);
+			break;
+		case PRO_ASM_INSERT:
+<a name="anchor-121"></a>			strcpy (type_string, &quot;(Insert)&quot;);
+			break;
+		case PRO_ASM_ORIENT:			
+			strcpy (type_string, &quot;(Orient)&quot;);
+			break;
+<a name="anchor-122"></a>		case PRO_ASM_CSYS:			
+			strcpy (type_string, &quot;(Csys)&quot;);
+			break;
+		case PRO_ASM_TANGENT:			
+			strcpy (type_string, &quot;(Tangent)&quot;);
+<a name="anchor-123"></a>			break;
+		case PRO_ASM_PNT_ON_SRF:			
+			strcpy (type_string, &quot;(Point on Surf)&quot;);
+			break;
+		case PRO_ASM_EDGE_ON_SRF:			
+<a name="anchor-124"></a>			strcpy (type_string, &quot;(Edge on Surf)&quot;);
+			break;
+		case PRO_ASM_DEF_PLACEMENT:			
+			strcpy (type_string, &quot;(Default)&quot;);
+			break;
+<a name="anchor-125"></a>		case PRO_ASM_SUBSTITUTE:			
+			strcpy (type_string, &quot;(Substitute)&quot;);
+			break;
+		case PRO_ASM_PNT_ON_LINE:			
+			strcpy (type_string, &quot;(Point on Line)&quot;);
+<a name="anchor-126"></a>			break;
+		case PRO_ASM_FIX:			
+			strcpy (type_string, &quot;(Fix)&quot;);
+			break;
+		case PRO_ASM_AUTO:			
+<a name="anchor-127"></a>			strcpy (type_string, &quot;(Auto)&quot;);
+			break;
+		default:
+			strcpy (type_string, &quot;(Unrecognized Type)&quot;);
+			break;
+<a name="anchor-128"></a>	}
+}
+
+/*=====================================================================*\
+FUNCTION: UserAsmcompConstraintsHighlight_OA
+<a name="anchor-129"></a>PURPOSE:  Object/Action style command for highlight assembly component 
+           constraints
+\*=====================================================================*/
+int UserAsmcompConstraintsHighlight_OA()
+{
+<a name="anchor-130"></a>  ProError status;
+  ProSelection* sels;
+  ProAsmcomp asmcomp;
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-131"></a>  Extract the current selected objects from the selection buffer.
+  Because the access functions check the type and number, we 
+  assume that the correctly selected object (a component feature, or
+  part/assembly within the parent assembly) are available.
+\*-----------------------------------------------------------------*/
+<a name="anchor-132"></a>  status = ProSelbufferSelectionsGet (&amp;sels);
+  
+  status = ProSelectionModelitemGet (sels[0], &amp;asmcomp);
+  
+/*-----------------------------------------------------------------*\
+<a name="anchor-133"></a>  If its a selected part or assembly, contstruct the feature handle 
+  using the parent assembly and the component id from the component 
+  path.
+\*-----------------------------------------------------------------*/
+  if (asmcomp.type == PRO_PART || asmcomp.type == PRO_ASSEMBLY)
+<a name="anchor-134"></a>    {
+      ProAsmcomppath path;
+      ProMdl asmcomp_owner;
+      
+      status = ProSelectionAsmcomppathGet (sels [0], &amp;path);
+<a name="anchor-135"></a>
+      asmcomp.type = PRO_FEATURE;
+      asmcomp.id = path.comp_id_table [path.table_num - 1];
+      
+      path.table_num --;
+<a name="anchor-136"></a>
+      status = ProAsmcomppathMdlGet (&amp;path, &amp;asmcomp.owner);      
+    }
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-137"></a>  Call the existing function for highlighting constraints.
+\*-----------------------------------------------------------------*/
+  UserAsmcompConstraintsHighlight (&amp;asmcomp);
+
+  ProSelectionarrayFree (sels);
+<a name="anchor-138"></a>
+  return PRO_TK_NO_ERROR;
+}
+
+#define OA 1  /* Standard OA in the menu system, typically gray out 
+<a name="anchor-139"></a>		 the button when not usable*/
+#define PM 2 /* OA in a popup menu, typically remove the button when 
+	         not usable */
+
+/*=====================================================================*\
+<a name="anchor-140"></a>FUNCTION: UserAsmcompConstraintsHighlight_TestLow
+PURPOSE:  Test function for access for constraint highlighting
+\*=====================================================================*/
+uiCmdAccessState UserAsmcompConstraintsHighlight_TestLow (ProSelection* sels,
+							  int mode)
+<a name="anchor-141"></a>{
+  uiCmdAccessState access_result;
+  ProBoolean should_free = PRO_B_FALSE;
+  ProError status;
+  int size;
+<a name="anchor-142"></a>
+/*-----------------------------------------------------------------*\
+  Set the default return if the button is unusable.
+\*-----------------------------------------------------------------*/  
+  if (mode == OA)
+<a name="anchor-143"></a>    access_result = ACCESS_UNAVAILABLE;
+  else 
+    access_result = ACCESS_REMOVE;
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-144"></a>  If called without selections, extract the current selections from
+  the buffer.
+\*-----------------------------------------------------------------*/ 
+  if (sels == NULL)
+    {   
+<a name="anchor-145"></a>      status = ProSelbufferSelectionsGet (&amp;sels);
+      
+      if (status != PRO_TK_NO_ERROR)
+	return access_result;
+
+<a name="anchor-146"></a>      if (sels == NULL)
+	return access_result;
+
+      should_free = PRO_B_TRUE;
+    }
+<a name="anchor-147"></a>
+/*-----------------------------------------------------------------*\
+  This command allows only one selection.
+\*-----------------------------------------------------------------*/   
+  status = ProArraySizeGet (sels, &amp;size);
+<a name="anchor-148"></a>  
+  if (status != PRO_TK_NO_ERROR)
+    return access_result;
+
+  if (size == 1)
+<a name="anchor-149"></a>    {
+      ProAsmcomp asmcomp;
+
+      status = ProSelectionModelitemGet (sels [0], &amp;asmcomp);
+
+<a name="anchor-150"></a>/*-----------------------------------------------------------------*\
+  If the selected type is feature, its feature type must be component.
+\*-----------------------------------------------------------------*/   
+      if (asmcomp.type == PRO_FEATURE)
+	{
+<a name="anchor-151"></a>	  ProFeattype ftype;
+
+	  status = ProFeatureTypeGet (&amp;asmcomp, &amp;ftype);
+      
+	  if (ftype == PRO_FEAT_COMPONENT)
+<a name="anchor-152"></a>	    {
+	      access_result = ACCESS_AVAILABLE;
+	    }
+	}
+
+<a name="anchor-153"></a>/*-----------------------------------------------------------------*\
+  If the selected type is part or assembly, it must have a parrent
+  assembly to use to construct the component feature handle.
+\*-----------------------------------------------------------------*/  
+      if (asmcomp.type == PRO_PART || asmcomp.type == PRO_ASSEMBLY)
+<a name="anchor-154"></a>	{
+	  ProAsmcomppath path;
+	  
+	  status = ProSelectionAsmcomppathGet (sels [0], &amp;path);
+
+<a name="anchor-155"></a>	  if (path.table_num > 0)
+	    {
+	      access_result = ACCESS_AVAILABLE;
+	    }
+	}
+<a name="anchor-156"></a>    }
+
+  if (should_free)
+    ProSelectionarrayFree (sels);
+  
+<a name="anchor-157"></a>  return access_result;
+}
+
+/*=====================================================================*\
+FUNCTION: UserAsmcompConstraintsHighlight_TestMdlTree
+<a name="anchor-158"></a>PURPOSE:  Test function for access for constraint highlighting from model 
+          tree RMB popup menu.
+\*=====================================================================*/
+uiCmdAccessState UserAsmcompConstraintsHighlight_TestMdlTree(uiCmdAccessMode mode)
+{
+<a name="anchor-159"></a>  return UserAsmcompConstraintsHighlight_TestLow (NULL, PM);
+}
+
+/*=====================================================================*\
+FUNCTION: UserAsmcompConstraintsHighlight_TestPM
+<a name="anchor-160"></a>PURPOSE:  Test function for access for constraint highlighting from
+          graphics window RMB popup menu.
+\*=====================================================================*/
+uiCmdAccessState UserAsmcompConstraintsHighlight_TestPM(uiCmdCmdId id,
+                                                        ProAppData data,
+<a name="anchor-161"></a>							ProSelection* sels)
+{
+ return UserAsmcompConstraintsHighlight_TestLow (sels, PM);
+}
+
+<a name="anchor-162"></a>#undef OA
+#undef PM
+</pre>
+</body>
+</html>

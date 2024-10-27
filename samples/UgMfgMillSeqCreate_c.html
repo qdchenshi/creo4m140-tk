@@ -1,0 +1,2383 @@
+<html>
+<head>
+<title>UgMfgMillSeqCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMfg.h>
+#include &lt;ProSolid.h>
+#include &lt;ProSelection.h>
+#include &lt;ProAsmcomppath.h>
+<a name="anchor-2"></a>#include &lt;ProElement.h>
+#include &lt;ProElemId.h>
+#include &lt;ProValue.h>
+#include &lt;ProFeature.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>#include &lt;ProTool.h>
+#include &lt;ProMfgOptions.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProCrvcollection.h>
+#include &lt;ProFeatType.h>
+<a name="anchor-4"></a>#include &lt;ProWcell.h>
+#include &lt;ProMdlUnits.h>
+#include &lt;ProSrfcollection.h>
+
+#include &lt;TestError.h>
+<a name="anchor-5"></a>#include &lt;UtilString.h>
+#include &lt;UtilTree.h>
+#include &lt;UtilCollect.h>
+#include &lt;UtilVisit.h>
+#include &lt;TestConsts.h>
+<a name="anchor-6"></a>#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProMessage.h>
+#include &lt;ProModelitem.h>
+#include &lt;UtilMessage.h>
+#include &lt;UgMfg.h>
+<a name="anchor-7"></a>
+/***********************************************************************/
+/*  Sequence type                             Function                 */
+/*---------------------------------------------------------------------*/
+/*  PRO_NCSEQ_FACE_MILL                       UserFacingCreate         */
+<a name="anchor-8"></a>/*  PRO_NCSEQ_TRAJ_MILL_STEP                  UserTrajectoryCreate     */
+/*  PRO_NCSEQ_FF_TRAJ_MILL                    UserCurveTrajCreate      */
+/*  PRO_NCSEQ_ROUGHVOL_MILL                   UserRoughingCreate       */
+/*  PRO_NCSEQ_REROUGH_MILL                    UserReRoughingCreate     */
+/*  PRO_NCSEQ_CVNC_FINISH_MILL                UserFinishingCreate      */
+<a name="anchor-9"></a>/*  PRO_NCSEQ_PROF_SURF_MILL                  UserProfilingCreate      */
+/*  PRO_NCSEQ_MANUAL_CYCLE_MILL               UserManualCycleCreate    */
+/*  PRO_NCSEQ_HOLEMAKING (PRO_HOLE_MK_CSINK)  UserCSinkgCreate         */
+/*  PRO_NCSEQ_HOLEMAKING (PRO_HOLE_MK_DRILL)  UserDrillingCreate       */
+/***********************************************************************/
+<a name="anchor-10"></a>
+extern ProLine msg_fil17;
+#define MSG_FIL ProStringToWstring(msg_fil17,&quot;msg_ugmfg.txt&quot;)
+
+
+<a name="anchor-11"></a>typedef struct 
+{ 
+    ProMfg       model;
+    ProSelection operation;
+    ProBoolean   oper_found;
+<a name="anchor-12"></a>    ProSelection retract_plane;
+    ProBoolean   retract_found;
+    ProSelection face_mill_window;
+    ProBoolean   face_mill_wind_found;
+    ProSelection pocket_mill_window;
+<a name="anchor-13"></a>    ProBoolean   pocket_mill_wind_found;
+    ProSelection traj_curve;
+    ProBoolean   traj_curve_found;
+    ProSelection prof_mill_surf;
+    ProBoolean   prof_mill_surf_found;
+<a name="anchor-14"></a>    ProSelection csys;
+    ProBoolean   csys_found;
+
+} NcseqEnts ;
+
+<a name="anchor-15"></a>
+
+/*====================================================================*\
+Function : UserPlaneGeomIdGet
+Purpose  : Get the id of the datum plane feature's geometry
+<a name="anchor-16"></a>\*====================================================================*/
+ProError UserGeomItemGet  ( 
+/*--------------------------------------------------------------------*/
+ProGeomitem	*geomitem,
+ProError	err,
+<a name="anchor-17"></a>ProAppData	app_data 
+
+)
+/*--------------------------------------------------------------------*/
+{
+<a name="anchor-18"></a> *(ProGeomitem*)app_data = *geomitem;
+
+ return ( PRO_TK_E_FOUND );
+}
+
+<a name="anchor-19"></a>/*====================================================================*\
+Function : UserNcseqEntitiesCollect
+Purpose  : Collect sequence references and use them to create a sequence
+\*====================================================================*/
+ProError UserNcseqEntitiesCollect (
+<a name="anchor-20"></a>/*--------------------------------------------------------------------*/
+ProFeature	*feature,
+ProError	status,
+ProAppData	entities 
+
+<a name="anchor-21"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError	err;
+ ProFeattype	feat_type;
+<a name="anchor-22"></a> ProWcellType	wcell_type;
+ NcseqEnts	*seq_ents = (NcseqEnts*)entities;
+ ProSelection	selection;
+ ProGeomitem    geom_item;
+ ProName	w_name;
+<a name="anchor-23"></a> ProCharName	name;
+ int		id;
+
+ err = ProFeatureTypeGet( feature, &amp;feat_type );
+ ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProFeatureTypeGet()&quot;,err );
+<a name="anchor-24"></a>
+ if ( !seq_ents->oper_found &amp;&amp; feat_type == PRO_FEAT_OPERATION )
+ {
+   err = ProSelectionAlloc( NULL, feature, &amp;selection );
+   ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProSelectionAlloc()&quot;, err );
+<a name="anchor-25"></a>
+   ProSelectionCopy( selection, &amp;seq_ents->operation );
+   seq_ents->oper_found = PRO_B_TRUE;
+ }
+ else if ( !seq_ents->prof_mill_surf_found &amp;&amp; 
+<a name="anchor-26"></a>           feat_type == PRO_FEAT_DATUM_SURF )
+ {
+   err = ProModelitemNameGet( feature, w_name );
+   ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProModelitemNameGet()&quot;, err );
+
+<a name="anchor-27"></a>   ProWstringToString( name, w_name );
+
+   if ( !strcmp( name,&quot;PROF_MILL_SURF&quot; ) )
+   {
+     err = ProFeatureGeomitemVisit( feature, PRO_QUILT, UserGeomItemGet,
+<a name="anchor-28"></a>                                    NULL, (ProAppData)&amp;geom_item );
+     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProFeatureGeomitemVisit()&quot;,
+                   err );
+
+     err = ProSelectionAlloc( NULL, (ProModelitem*)&amp;geom_item, &amp;selection );
+<a name="anchor-29"></a>     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProSelectionAlloc()&quot;, err );
+
+     ProSelectionCopy( selection, &amp;seq_ents->prof_mill_surf );
+     seq_ents->prof_mill_surf_found = PRO_B_TRUE;
+   }
+<a name="anchor-30"></a> }
+ else if ( feat_type == PRO_FEAT_CURVE )
+ {
+   err = ProModelitemNameGet( feature, w_name );
+   ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProModelitemNameGet()&quot;, err );
+<a name="anchor-31"></a>
+   ProWstringToString( name, w_name );
+
+   if ( !seq_ents->face_mill_wind_found &amp;&amp; 
+        !strcmp( name,&quot;FACE_MILL_WINDOW&quot; ) )
+<a name="anchor-32"></a>   {
+     err = ProSelectionAlloc( NULL, feature, &amp;selection );
+     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProSelectionAlloc()&quot;, err );
+
+     ProSelectionCopy( selection, &amp;seq_ents->face_mill_window );
+<a name="anchor-33"></a>     seq_ents->face_mill_wind_found = PRO_B_TRUE;
+   }
+   else if ( !seq_ents->pocket_mill_wind_found &amp;&amp; 
+             !strcmp( name,&quot;ROUGH_MILL_WINDOW&quot; ) )
+   {
+<a name="anchor-34"></a>     err = ProSelectionAlloc( NULL, feature, &amp;selection );
+     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProSelectionAlloc()&quot;, err );
+
+     ProSelectionCopy( selection, &amp;seq_ents->pocket_mill_window );
+     seq_ents->pocket_mill_wind_found = PRO_B_TRUE;
+<a name="anchor-35"></a>   }
+   else if ( !seq_ents->traj_curve_found &amp;&amp; 
+             !strcmp( name,&quot;TRAJ_CURVE&quot; ) )
+   {
+     err = ProFeatureGeomitemVisit( feature, PRO_CURVE, UserGeomItemGet,
+<a name="anchor-36"></a>                                    NULL, (ProAppData)&amp;geom_item );
+     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProFeatureGeomitemVisit()&quot;,
+                   err );
+
+     err = ProSelectionAlloc( NULL, (ProModelitem*)&amp;geom_item, 
+<a name="anchor-37"></a>                              &amp;selection );
+     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProSelectionAlloc()&quot;, err );
+
+     ProSelectionCopy( selection, &amp;seq_ents->traj_curve );
+     seq_ents->traj_curve_found = PRO_B_TRUE;
+<a name="anchor-38"></a>   }
+ }
+ else if ( !seq_ents->retract_found &amp;&amp; feat_type == PRO_FEAT_DATUM )
+ {
+   err = ProModelitemNameGet( feature, w_name );
+<a name="anchor-39"></a>   ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProModelitemNameGet()&quot;, err );
+
+   ProWstringToString( name, w_name );
+
+   if ( !strcmp( name,&quot;RETRACT_PLANE&quot; ) )
+<a name="anchor-40"></a>   {
+     err = ProFeatureGeomitemVisit( feature, PRO_SURFACE, UserGeomItemGet,
+                                    NULL, (ProAppData)&amp;geom_item );
+     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProFeatureGeomitemVisit()&quot;,
+                   err );
+<a name="anchor-41"></a>
+     err = ProSelectionAlloc( NULL, (ProModelitem*)&amp;geom_item, 
+                              &amp;selection );
+     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProSelectionAlloc()&quot;, err );
+
+<a name="anchor-42"></a>     ProSelectionCopy( selection, &amp;seq_ents->retract_plane );
+     seq_ents->retract_found = PRO_B_TRUE;
+   }
+ }
+ else if ( !seq_ents->csys_found &amp;&amp; feat_type == PRO_FEAT_CSYS )
+<a name="anchor-43"></a> {
+   err =  ProModelitemNameGet( feature, w_name );
+   ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProModelitemNameGet()&quot;, err );
+
+   ProWstringToString( name, w_name );
+<a name="anchor-44"></a>
+   if ( !strcmp( name,&quot;MACH_CSYS&quot; ) )
+   {
+     err = ProFeatureGeomitemVisit( feature, PRO_CSYS, UserGeomItemGet, 
+                                    NULL, &amp;geom_item );
+<a name="anchor-45"></a>     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProFeatureGeomitemVisit()&quot;,
+                  err );
+
+     err = ProSelectionAlloc( NULL, (ProModelitem*)&amp;geom_item, &amp;selection );
+     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProSelectionAlloc()&quot;, err );
+<a name="anchor-46"></a>
+     ProSelectionCopy( selection, &amp;seq_ents->csys );
+
+     err = ProSelectionHighlight( seq_ents->csys, PRO_COLOR_WARNING );
+     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;,&quot;ProSelectionHighlight()&quot;, err );
+<a name="anchor-47"></a>     seq_ents->csys_found = PRO_B_TRUE;
+   }
+ }
+
+ if ( seq_ents->oper_found       &amp;&amp; 
+<a name="anchor-48"></a>      seq_ents->retract_found    &amp;&amp; 
+      seq_ents->face_mill_wind_found  &amp;&amp; 
+      seq_ents->pocket_mill_wind_found  &amp;&amp; 
+      seq_ents->prof_mill_surf_found  &amp;&amp; 
+      seq_ents->traj_curve_found &amp;&amp; 
+<a name="anchor-49"></a>      seq_ents->csys_found )
+ {
+   return PRO_TK_STOP_VISIT;
+ }
+
+<a name="anchor-50"></a> return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION : UserCollectAxesToDrill
+<a name="anchor-51"></a>PURPOSE  : Finds all axes in part
+\*====================================================================*/
+ProError UserCollectAxesToDrill( 
+/*--------------------------------------------------------------------*/
+ProAssembly	assembly,
+<a name="anchor-52"></a>ProSelection	**p_sel_arr
+
+)
+/*--------------------------------------------------------------------*/
+{
+<a name="anchor-53"></a> ProError	err = PRO_TK_NO_ERROR;
+ ProAsmcomp	*asmcomps = NULL;
+ ProAsmcomppath	comp_path;
+ ProIdTable	memb_id_tab;
+ ProAxis	*axes = NULL;
+<a name="anchor-54"></a> ProMdlfileType	mdltype;
+ ProSelection	selection;
+ ProMdl		model;
+ ProFamilyMdlName	w_name;
+ char	name[PRO_FAMILY_MDLNAME_SIZE];
+<a name="anchor-55"></a> ProGeomitem	item;
+ int		ii, num_comp = 0;
+ int		jj, num_axes = 0;
+ ProBool	found = PRO_B_FALSE;
+
+<a name="anchor-56"></a> err = ProUtilCollectAsmcomp( assembly, &amp;asmcomps );
+ ERROR_CHECK( &quot;UserCollectAxesToDrill&quot;, &quot;ProUtilCollectAsmcomp()&quot;, err );
+
+ ProArraySizeGet( (ProArray)asmcomps, &amp;num_comp );
+
+<a name="anchor-57"></a> for ( ii = 0; ii &lt; num_comp; ii++ )
+ {
+   err = ProAsmcompMdlMdlnameGet( &amp;asmcomps[ii], &amp;mdltype, w_name );
+   ERROR_CHECK( &quot;UserCollectAxesToDrill&quot;, &quot;ProAsmcompMdlMdlnameGet()&quot;, err );
+
+<a name="anchor-58"></a>   ProWstringToString( name, w_name );
+
+   if ( !strcmp( name,&quot;COVER-PLATE&quot; ) )
+   {
+     err = ProAsmcompMdlGet( &amp;asmcomps[ii], &amp;model );
+<a name="anchor-59"></a>     ERROR_CHECK( &quot;UserCollectAxesToDrill&quot;, &quot;ProAsmcompMdlGet()&quot;, err );
+    
+     memb_id_tab[0] = asmcomps[ii].id;
+     memb_id_tab[1] = -1;
+
+<a name="anchor-60"></a>     err = ProAsmcomppathInit( assembly, memb_id_tab, 1, &amp;comp_path );
+     ERROR_CHECK( &quot;UserCollectAxesToDrill&quot;, &quot;ProAsmcomppathInit()&quot;, err );
+
+     found = PRO_B_TRUE;
+     break;
+<a name="anchor-61"></a>   }
+ }
+
+ if ( !found )
+   return ( PRO_TK_E_NOT_FOUND );
+<a name="anchor-62"></a>
+ err = ProUtilCollectSolidAxis( (ProSolid)model, &amp;axes );
+ ERROR_CHECK( &quot;UserCollectAxesToDrill&quot;, &quot;ProUtilCollectSolidAxis()&quot;, err );
+
+ err = ProArraySizeGet( axes, &amp;num_axes );
+<a name="anchor-63"></a> ERROR_CHECK( &quot;UserCollectAxesToDrill&quot;, &quot;ProArraySizeGet()&quot;, err );
+
+ err = ProArrayAlloc( 0, sizeof(ProSelection), 1, (ProArray*)p_sel_arr );
+ ERROR_CHECK( &quot;UserCollectAxesToDrill&quot;, &quot;ProArrayAlloc()&quot;, err );
+
+<a name="anchor-64"></a> for ( jj = 0; jj &lt; num_axes; jj++ )
+ {
+   err = ProAxisToGeomitem( (ProSolid)model, axes[jj], &amp;item );
+   ERROR_CHECK( &quot;UserCollectAxesToDrill&quot;, &quot;ProAxisToGeomitem()&quot;, err );
+
+<a name="anchor-65"></a>   err = ProModelitemNameGet( (ProModelitem*)&amp;item, w_name );
+   ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProModelitemNameGet()&quot;, err );
+
+   ProWstringToString( name, w_name );
+
+<a name="anchor-66"></a>   if ( !strcmp( name,&quot;A_1&quot;  )  ||
+        !strcmp( name,&quot;A_9&quot;  )  ||
+        !strcmp( name,&quot;A_10&quot; )  ||
+        !strcmp( name,&quot;A_11&quot; ) )
+   {
+<a name="anchor-67"></a>     err = ProSelectionAlloc( &amp;comp_path, (ProModelitem*)&amp;item, &amp;selection );
+     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProSelectionAlloc()&quot;, err );
+
+     err = ProArrayObjectAdd( (ProArray *)p_sel_arr, PRO_VALUE_UNUSED, 1, 
+                              &amp;selection );
+<a name="anchor-68"></a>     ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProArrayObjectAdd()&quot;, err );
+   }
+ }
+
+ ProArrayFree( (ProArray*)&amp;asmcomps );
+<a name="anchor-69"></a> ProArrayFree( (ProArray*)&amp;axes );
+
+ return ( err );
+}
+
+<a name="anchor-70"></a>/*====================================================================*\
+FUNCTION : UserOperWorkcellGet
+PURPOSE  : Finds workcell of operation
+\*====================================================================*/
+ProError UserOperWorkcellGet( 
+<a name="anchor-71"></a>/*--------------------------------------------------------------------*/
+ProSelection	operation,
+ProSelection	*p_workcell
+
+)
+<a name="anchor-72"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		elem_tree;
+ ProElement		element;
+<a name="anchor-73"></a> ProFeature		oper_feat;
+ ProReference		wcell_ref;
+ ProElempath		path;
+ ProElempathItem	wcell_ref_path_item[] = 
+ {
+<a name="anchor-74"></a>   { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_MFG_WCELL_REF }
+ };
+
+ err = ProSelectionModelitemGet( operation, &amp;oper_feat );
+ ERROR_CHECK( &quot;UserOperWorkcellGet&quot;, &quot;ProSelectionModelitemGet&quot;, err );
+<a name="anchor-75"></a>
+ err = ProFeatureElemtreeExtract( &amp;oper_feat, NULL, 
+                                  PRO_FEAT_EXTRACT_NO_OPTS, 
+                                  &amp;elem_tree );
+ ERROR_CHECK( &quot;UserOperWorkcellGet&quot;, &quot;ProSelectionModelitemGet&quot;, err );
+<a name="anchor-76"></a>
+ ProElempathAlloc( &amp;path );
+ ProElempathDataSet( path, wcell_ref_path_item, 1 );
+
+ err = ProElemtreeElementGet( elem_tree, path, &amp;element );
+<a name="anchor-77"></a> ERROR_CHECK( &quot;UserOperWorkcellGet&quot;, &quot;ProElemtreeElementGet&quot;, err );
+
+ ProElempathFree( &amp;path );
+   
+ err = ProElementReferenceGet( element, NULL, &amp;wcell_ref );
+<a name="anchor-78"></a> ERROR_CHECK( &quot;UserOperWorkcellGet&quot;, &quot;ProElementReferenceGet&quot;, err );
+
+ err = ProReferenceToSelection( wcell_ref, p_workcell );
+ ERROR_CHECK( &quot;UserOperWorkcellGet&quot;, &quot;ProReferenceToSelection&quot;, err );
+
+<a name="anchor-79"></a> err = ProElementFree( &amp;elem_tree );
+ ERROR_CHECK( &quot;UserOperWorkcellGet&quot;, &quot;ProElementFree&quot;, err );
+
+ return ( err );
+}
+<a name="anchor-80"></a>
+/*====================================================================*\
+Function : UserMfgModelFeatureCreate
+Purpose  : Create a feature in mfg model from elem tree
+\*====================================================================*/
+<a name="anchor-81"></a>ProError UserMfgModelFeatureCreate (
+/*--------------------------------------------------------------------*/
+ProMfg		mfg_model,
+ProElement	elem_tree,
+ProFeature	*p_feature
+<a name="anchor-82"></a>
+)
+/*--------------------------------------------------------------------*/
+{
+ ProError		  err = PRO_TK_NO_ERROR;
+<a name="anchor-83"></a> ProErrorlist		  errors;
+ ProSolid		  mfg_solid;
+ ProModelitem		  modelitem;
+ ProSelection		  selection;
+ ProFeatureCreateOptions  fd_opts[] = { PRO_FEAT_CR_DEFINE_MISS_ELEMS };
+<a name="anchor-84"></a>
+ err = ProMfgSolidGet( mfg_model, &amp;mfg_solid );
+ ERROR_CHECK( &quot;UserMfgModelFeatureCreate&quot;, &quot;ProMfgSolidGet()&quot;, err );
+
+ err = ProMdlToModelitem( mfg_solid, &amp;modelitem );
+<a name="anchor-85"></a> ERROR_CHECK( &quot;UserMfgModelFeatureCreate&quot;, &quot;ProMdlToModelitem()&quot;, err );
+
+ err = ProSelectionAlloc( NULL, &amp;modelitem, &amp;selection );
+ ERROR_CHECK( &quot;UserMfgModelFeatureCreate&quot;, &quot;ProSelectionAlloc()&quot;, err );
+
+<a name="anchor-86"></a> err = ProFeatureCreate( selection, elem_tree, fd_opts, 1,
+                         p_feature, &amp;errors );
+
+ if ( err != PRO_TK_NO_ERROR )
+   ProTKFprintf( stderr, &quot;Error in element %d\n&quot;, 
+<a name="anchor-87"></a>                 errors.error_list[0].err_item_id );
+
+ return ( (int)err );
+}
+
+<a name="anchor-88"></a>/*====================================================================*\
+FUNCTION : UserMachSurfByWindowSet
+PURPOSE  : Set machining surfaces by mill window compound element 
+\*====================================================================*/
+ProError UserMachSurfByWindowSet( 
+<a name="anchor-89"></a>/*--------------------------------------------------------------------*/
+ProSelection	mill_window,
+ProElement	mach_surf_elem
+
+)
+<a name="anchor-90"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+<a name="anchor-91"></a> ProValue		value;
+ ProSelection		selection;
+ ProReference		reference;
+ int			ii = 0, table_size = 0;
+ static ElemTable	elem_table[] = 
+<a name="anchor-92"></a> {
+   { PRO_E_MACH_SURF_OPT,     PRO_VALUE_TYPE_INT       },
+   { PRO_E_MFG_MILL_WIND_SRF, PRO_VALUE_TYPE_SELECTION }
+ };
+
+<a name="anchor-93"></a> table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+<a name="anchor-94"></a>   ERROR_CHECK( &quot;UserMachSurfByWindowSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( elem_table[ii].elem_type )
+   {
+     case PRO_E_MACH_SURF_OPT:
+<a name="anchor-95"></a>		err = ProElementIntegerSet ( element, PRO_MACH_SURF_OPT_MILL_WIND );
+        ERROR_CHECK( &quot;UserMachSurfByWindowSet&quot;,&quot; ProElementIntegerSet&quot;,err );
+        break;
+
+     case PRO_E_MFG_MILL_WIND_SRF:
+<a name="anchor-96"></a>        selection = mill_window;
+		err = ProSelectionToReference(selection , &amp;reference );
+		ERROR_CHECK( &quot;UserMachSurfByWindowSet()&quot;, &quot;ProSelectionToReference&quot;, 
+                  err );
+
+<a name="anchor-97"></a>		err = ProElementReferenceSet( element, reference );
+		ERROR_CHECK( &quot;UserMachSurfByWindowSet()&quot;, &quot;ProElementReferenceSet&quot;, err );
+        break;
+
+     default:
+<a name="anchor-98"></a>        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserMachSurfByWindowSet&quot;,&quot;UserMachSurfByWindowSet()&quot;, 
+                     err );
+        break;
+<a name="anchor-99"></a>   }
+
+   err = ProElemtreeElementAdd( mach_surf_elem, NULL, element );
+   ERROR_CHECK( &quot;UserMachSurfByWindowSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+<a name="anchor-100"></a>
+ return ( err );
+}
+
+/*====================================================================*\
+<a name="anchor-101"></a>FUNCTION : UserCurveCollectionSet
+PURPOSE  : Set curve collection by curve
+\*====================================================================*/
+ProError UserCurveCollectionSet( 
+/*--------------------------------------------------------------------*/
+<a name="anchor-102"></a>ProSelection	curve_feat,
+ProElement	coll_elem
+
+)
+/*--------------------------------------------------------------------*/
+<a name="anchor-103"></a>{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProReference		reference;
+ ProCollection		collection;
+<a name="anchor-104"></a> ProCrvcollinstr	instr;
+
+ err = ProCrvcollectionAlloc( &amp;collection );
+ ERROR_CHECK( &quot;UserCurveCollectionSet&quot;,&quot;ProCrvcollectionAlloc&quot;, err );
+
+<a name="anchor-105"></a> err = ProCrvcollinstrAlloc( PRO_CURVCOLL_CURVE_INSTR, &amp;instr );
+ ERROR_CHECK( &quot;UserCurveCollectionSet&quot;,&quot;ProSrfcollinstrAlloc&quot;, err );
+
+ err = ProCrvcollinstrAttributeSet( instr, PRO_CURVCOLL_NO_ATTR );
+ ERROR_CHECK( &quot;UserCurveCollectionSet&quot;, &quot;ProCrvcollinstrAttributeSet&quot;, err );
+<a name="anchor-106"></a>
+ err = ProSelectionToReference( curve_feat, &amp;reference );
+ ERROR_CHECK( &quot;UserCurveCollectionSet&quot;,&quot;ProSelectionToReference&quot;, err );
+
+ err = ProCrvcollinstrReferenceAdd( instr, reference );
+<a name="anchor-107"></a> ERROR_CHECK( &quot;UserCurveCollectionSet&quot;, &quot;ProCrvcollinstrReferenceAdd&quot;, err );
+
+ err = ProCrvcollectionInstructionAdd( collection, instr );
+ ERROR_CHECK( &quot;UserCurveCollectionSet&quot;, &quot;ProCrvcollectionInstructionAdd&quot;, 
+              err );
+<a name="anchor-108"></a>
+ err = ProElementCollectionSet( coll_elem, collection );
+ ERROR_CHECK( &quot;UserCurveCollectionSet&quot;, &quot;ProElementCollectionSet&quot;, err );
+
+ return ( err );
+<a name="anchor-109"></a>}
+
+/*====================================================================*\
+FUNCTION : UserSurfCollectionByMillSurfSet
+PURPOSE  : Set surfaces collection by mill surface
+<a name="anchor-110"></a>\*====================================================================*/
+ProError UserSurfCollectionByMillSurfSet( 
+/*--------------------------------------------------------------------*/
+ProSelection	mill_surface,
+ProElement	coll_elem
+<a name="anchor-111"></a>
+)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+<a name="anchor-112"></a> ProElement		element;
+ ProValueData		value_data;
+ ProValue		value;
+ ProReference		reference;
+ ProCollection		collection;
+<a name="anchor-113"></a> ProSrfcollinstr	instr;
+ ProSrfcollref		isntr_ref;
+
+ err = ProSrfcollectionAlloc( &amp;collection );
+ ERROR_CHECK( &quot;UserSurfCollectionByMillSurfSet&quot;,&quot;ProSrfcollectionAlloc&quot;, 
+<a name="anchor-114"></a>              err );
+
+ err = ProSrfcollinstrAlloc( PRO_SURFCOLL_QUILT_SRFS, PRO_B_TRUE, &amp;instr );
+ ERROR_CHECK( &quot;UserSurfCollectionByMillSurfSet&quot;,&quot;ProSrfcollinstrAlloc&quot;, 
+              err );
+<a name="anchor-115"></a>
+ err = ProSrfcollinstrIncludeSet( instr, 1 );
+ ERROR_CHECK( &quot;UserSurfCollectionByMillSurfSet&quot;,&quot;ProSrfcollinstrIncludeSet&quot;, 
+              err );
+
+<a name="anchor-116"></a> err = ProSelectionToReference( mill_surface, &amp;reference );
+ ERROR_CHECK( &quot;UserSurfCollectionByMillSurfSet&quot;,&quot;ProSelectionToReference&quot;, 
+              err );
+
+ err = ProSrfcollrefAlloc( PRO_SURFCOLL_REF_GENERIC, reference, &amp;isntr_ref );
+<a name="anchor-117"></a> ERROR_CHECK( &quot;UserSurfCollectionByMillSurfSet&quot;,&quot;ProSrfcollrefAlloc&quot;, err );
+
+ err = ProSrfcollinstrReferenceAdd( instr, isntr_ref );
+ ERROR_CHECK( &quot;UserSurfCollectionByMillSurfSet&quot;,&quot;ProSrfcollinstrReferenceAdd&quot;,
+              err );
+<a name="anchor-118"></a>
+ err = ProSrfcollectionInstructionAdd( collection, instr );
+ ERROR_CHECK( &quot;UserSurfCollectionByMillSurfSet&quot;,
+              &quot;ProSrfcollectionInstructionAdd&quot;, err );
+
+<a name="anchor-119"></a> err = ProElementCollectionSet( coll_elem, collection );
+ ERROR_CHECK( &quot;UserSurfCollectionByMillSurfSet&quot;, &quot;ProElementCollectionSet&quot;, 
+              err );
+
+ return ( err );
+<a name="anchor-120"></a>}
+
+/*====================================================================*\
+FUNCTION : UserMfgOffsetSet
+PURPOSE  : Set mfg offset element
+<a name="anchor-121"></a>\*====================================================================*/
+ProError UserMfgOffsetSet( 
+/*--------------------------------------------------------------------*/
+ProBool			apply_offset,
+ProMaterialRmvSide	material_side,
+<a name="anchor-122"></a>ProBool			flip_crv_dir,
+ProElement		offset_elem
+
+)
+/*--------------------------------------------------------------------*/
+<a name="anchor-123"></a>{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+ ProValue		value;
+<a name="anchor-124"></a> int			ii = 0, table_size = 0;
+ static ElemTable	elem_table[] = 
+ {
+   { PRO_E_MFG_OFFSET_CUT,  PRO_VALUE_TYPE_INT },
+   { PRO_E_MFG_MAT_TO_RMV,  PRO_VALUE_TYPE_INT },
+<a name="anchor-125"></a>   { PRO_E_MFG_DRV_SRF_DIR, PRO_VALUE_TYPE_INT }
+ };
+
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+<a name="anchor-126"></a> for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserMfgOffsetSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+<a name="anchor-127"></a>   switch ( elem_table[ii].elem_type )
+   {
+     case PRO_E_MFG_OFFSET_CUT:
+		err = ProElementIntegerSet ( element, (int)apply_offset );
+        ERROR_CHECK( &quot;UserMfgOffsetSet&quot;,&quot;ProElementIntegerSet()&quot;, err );
+<a name="anchor-128"></a>        break;
+
+     case PRO_E_MFG_MAT_TO_RMV:
+		err = ProElementIntegerSet ( element, (int)material_side );
+        ERROR_CHECK( &quot;UserMfgOffsetSet&quot;,&quot;ProElementIntegerSet()&quot;, err );
+<a name="anchor-129"></a>          break;
+
+     case PRO_E_MFG_DRV_SRF_DIR:
+		err = ProElementIntegerSet ( element, (int)flip_crv_dir );
+        ERROR_CHECK( &quot;UserMfgOffsetSet&quot;,&quot;ProElementIntegerSet()&quot;, err );
+<a name="anchor-130"></a>        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+<a name="anchor-131"></a>        break;
+   }
+
+   err = ProElemtreeElementAdd( offset_elem, NULL, element );
+   ERROR_CHECK( &quot;UserMfgOffsetSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+<a name="anchor-132"></a> }
+
+ return ( err );
+}
+
+<a name="anchor-133"></a>/*====================================================================*\
+FUNCTION : UserTrajCurveSet
+PURPOSE  : Set trajectory curve collection compound element
+\*====================================================================*/
+ProError UserTrajCurveSet( 
+<a name="anchor-134"></a>/*--------------------------------------------------------------------*/
+ProSelection	curve_feat,
+ProElement	traj_curve_elem
+
+)
+<a name="anchor-135"></a>/*--------------------------------------------------------------------*/
+{
+ ProError	err = PRO_TK_NO_ERROR;
+ ProElement	element;
+
+<a name="anchor-136"></a> err = ProElementAlloc( PRO_E_STD_CURVE_COLLECTION_APPL, &amp;element );
+ ERROR_CHECK( &quot;UserTrajCurveByCurveFeatSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+ err = UserCurveCollectionSet( curve_feat, element );
+ ERROR_CHECK( &quot;UserTrajCurveByCurveFeatSet&quot;, &quot;UserCurveCollectionSet()&quot;, 
+<a name="anchor-137"></a>              err );
+
+ err = ProElemtreeElementAdd( traj_curve_elem, NULL, element );
+ ERROR_CHECK( &quot;UserTrajCurveByCurveFeatSet&quot;, &quot;ProElemtreeElementAdd&quot;, err );
+
+<a name="anchor-138"></a> return ( err );
+}
+
+/*====================================================================*\
+FUNCTION : UserMachSurfCollectionByMillSurfSet
+<a name="anchor-139"></a>PURPOSE  : Set surfaces collection compound element
+\*====================================================================*/
+ProError UserMachSurfCollectionByMillSurfSet( 
+/*--------------------------------------------------------------------*/
+ProSelection	mill_surface,
+<a name="anchor-140"></a>ProElement	mach_surf_elem
+
+)
+/*--------------------------------------------------------------------*/
+{
+<a name="anchor-141"></a> ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+ ProValue		value;
+ int			ii = 0, table_size = 0;
+<a name="anchor-142"></a> static ElemTable	elem_table[] = 
+ {
+   { PRO_E_MACH_SURF_REF_TYPE,       PRO_VALUE_TYPE_INT       },
+   { PRO_E_STD_SURF_COLLECTION_APPL, SURF_COLLECTION }
+ };
+<a name="anchor-143"></a>
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+<a name="anchor-144"></a>   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserMachSurfCollectionByMillSurfSet&quot;,&quot;ProElementAlloc()&quot;, 
+                err );
+
+   switch ( elem_table[ii].elem_type )
+<a name="anchor-145"></a>   {
+     case PRO_E_MACH_SURF_REF_TYPE:
+		err = ProElementIntegerSet ( element, PRO_SURF_REF_TYPE_MILL_MVOLSRF );
+        ERROR_CHECK( &quot;UserMachSurfCollectionByMillSurfSet&quot;,
+                     &quot;ProElementIntegerSet()&quot;, err );
+<a name="anchor-146"></a>        break;
+
+     case PRO_E_STD_SURF_COLLECTION_APPL:
+        err = UserSurfCollectionByMillSurfSet( mill_surface, element );
+        ERROR_CHECK( &quot;UserMachSurfCollectionByMillSurfSet&quot;,
+<a name="anchor-147"></a>                     &quot;UserSurfCollectionByMillSurfSet()&quot;, err );
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-148"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserMachSurfCollectionByMillSurfSet&quot;,
+                     &quot;UserMachSurfCollectionByMillSurfSet()&quot;, err );
+        break;
+   }
+<a name="anchor-149"></a>
+   err = ProElemtreeElementAdd( mach_surf_elem, NULL, element );
+   ERROR_CHECK( &quot;UserMachSurfCollectionByMillSurfSet&quot;,
+                &quot;ProElemtreeElementAdd&quot;, err );
+ }
+<a name="anchor-150"></a>
+ return ( err );
+}
+
+/*====================================================================*\
+<a name="anchor-151"></a>FUNCTION : UserMachSurfByMillSurfSet
+PURPOSE  : Set machining surfaces by mill surface
+\*====================================================================*/
+ProError UserMachSurfByMillSurfSet( 
+/*--------------------------------------------------------------------*/
+<a name="anchor-152"></a>ProSelection	mill_surf,
+ProElement	mach_surf_elem
+
+)
+/*--------------------------------------------------------------------*/
+<a name="anchor-153"></a>{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+ ProValue		value;
+<a name="anchor-154"></a> int			ii = 0, table_size = 0;
+ static ElemTable	elem_table[] = 
+ {
+   { PRO_E_MACH_SURF_OPT,  PRO_VALUE_TYPE_INT },
+   { PRO_E_MACH_SURF_COMP, COMPOUND           }
+<a name="anchor-155"></a> };
+
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+ for ( ii = 0; ii &lt; table_size; ii++ )
+<a name="anchor-156"></a> {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserMachSurfByWindowSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( elem_table[ii].elem_type )
+<a name="anchor-157"></a>   {
+     case PRO_E_MACH_SURF_OPT:
+		err = ProElementIntegerSet ( element, PRO_MACH_SURF_OPT_SURFACES );
+        ERROR_CHECK( &quot;UserMachSurfByWindowSet&quot;,&quot;ProElementIntegerSet()&quot;, err );
+        break;
+<a name="anchor-158"></a>
+     case PRO_E_MACH_SURF_COMP:
+        err = UserMachSurfCollectionByMillSurfSet( mill_surf, element );
+        ERROR_CHECK( &quot;UserMachSurfByWindowSet()&quot;, &quot;UserMachSurfCompSet&quot;, err );
+        break;
+<a name="anchor-159"></a>
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserMachSurfByWindowSet&quot;,&quot;UserMachSurfByWindowSet()&quot;, 
+<a name="anchor-160"></a>                     err );
+        break;
+   }
+
+   err = ProElemtreeElementAdd( mach_surf_elem, NULL, element );
+<a name="anchor-161"></a>   ERROR_CHECK( &quot;UserMachSurfByWindowSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+ return ( err );
+}
+<a name="anchor-162"></a>
+/*====================================================================*\
+FUNCTION : UserMillWindowCompoundSet
+PURPOSE  : Set machining surfaces by mill window compound element 
+\*====================================================================*/
+<a name="anchor-163"></a>ProError UserMillWindowCompoundSet( 
+/*--------------------------------------------------------------------*/
+ProSelection	mill_win,
+ProElement	mill_win_elem
+
+<a name="anchor-164"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+<a name="anchor-165"></a> ProValueData		value_data;
+ ProValue		value;
+ ProSelection		selection;
+ ProReference		reference;
+ int			ii = 0, table_size = 0;
+<a name="anchor-166"></a> static ElemTable	elem_table[] = 
+ {
+   { PRO_E_MFG_MILL_WIND, PRO_VALUE_TYPE_SELECTION }
+ };
+
+<a name="anchor-167"></a> table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+<a name="anchor-168"></a>   ERROR_CHECK( &quot;UserMillWindowCompoundSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( elem_table[ii].elem_type )
+   {
+     case PRO_E_MFG_MILL_WIND:
+<a name="anchor-169"></a>        selection = mill_win;
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-170"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserMillWindowCompoundSet&quot;,&quot;UserMillWindowCompoundSet()&quot;, 
+                     err );
+        break;
+   }
+<a name="anchor-171"></a>
+   if ( elem_table[ii].val_type == PRO_VALUE_TYPE_SELECTION )
+   {
+     err = ProSelectionToReference( selection, &amp;reference );
+     ERROR_CHECK( &quot;UserMillWindowCompoundSet()&quot;, &quot;ProSelectionToReference&quot;, 
+<a name="anchor-172"></a>                  err );
+
+     err = ProElementReferenceSet( element, reference );
+     ERROR_CHECK( &quot;UserMillWindowCompoundSet()&quot;, &quot;ProElementReferenceSet&quot;,
+                  err );
+<a name="anchor-173"></a>   }
+
+   err = ProElemtreeElementAdd( mill_win_elem, NULL, element );
+   ERROR_CHECK( &quot;UserMillWindowCompoundSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+<a name="anchor-174"></a>
+ return ( err );
+}
+
+/*====================================================================*\
+<a name="anchor-175"></a>Function : UserFacingCreate
+Purpose  : Create a facing sequence feature using element tree
+\*====================================================================*/
+ProError UserFacingCreate (
+/*--------------------------------------------------------------------*/
+<a name="anchor-176"></a>ProMfg		   mfg_model,
+ProName		   feat_name,
+ProSelection	   operation,
+ProSelection	   retract_plane,
+ProSelection	   seq_csys,
+<a name="anchor-177"></a>ProSelection	   mill_window,
+ProMfgToolHeadType head_num,
+int		   pocket_num,
+wchar_t		   *tool_name 
+
+<a name="anchor-178"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element = NULL;       /* Individual element */
+<a name="anchor-179"></a> ProElement		seq_elem_tree = NULL; /* Entire tree        */
+ ProFeature		seq_feature;
+ int            	ii = 0, size = 0;
+ int			n_dbl_params = 0;
+ int			n_str_params = 0;
+<a name="anchor-180"></a> static ElemTable	seq_elem_table[] =  
+ {
+   { PRO_E_MACH_SURFS,  COMPOUND }
+ };
+ static MfgPrmDblValue	dbl_params[] =
+<a name="anchor-181"></a> {
+   { &quot;CUT_FEED&quot;,            200.0    },   /* required for facing    */
+   { &quot;STEP_DEPTH&quot;,          10.0     },   /* required for facing    */
+   { &quot;STEP_OVER&quot;,           50.0     },   /* required for facing    */
+   { &quot;CLEAR_DIST&quot;,          1.0      },   /* required for facing    */
+<a name="anchor-182"></a>   { &quot;SPINDLE_SPEED&quot;,       15000.0  },   /* required for facing    */
+   { &quot;RETRACT_FEED&quot;,        500.0    }    /* example (not required) */
+ };
+
+ static MfgPrmStrValue	str_params[] =  /* examples (not required) */
+<a name="anchor-183"></a> {
+   { &quot;SCAN_TYPE&quot;,           L&quot;TYPE_1&quot; },  /* Predefined SCAN_TYPE value */
+   { &quot;NCL_FILE&quot;,            L&quot;Facing&quot; }   /* Cl file name               */
+ };
+
+<a name="anchor-184"></a> n_dbl_params = sizeof( dbl_params ) / sizeof( MfgPrmDblValue );
+ n_str_params = sizeof( str_params ) / sizeof( MfgPrmStrValue );
+		
+ size = sizeof( seq_elem_table ) / sizeof( ElemTable );
+   
+<a name="anchor-185"></a> /*********************************************/
+ /*  Allocate element tree                    */
+ /*********************************************/
+ err = ProElementAlloc( PRO_E_FEATURE_TREE, &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserFacingCreate&quot;, &quot;ProElementAlloc()&quot;, err );
+<a name="anchor-186"></a>    
+ /************************************************/
+ /* Init elem tree with common sequence elements */
+ /************************************************/
+ err = UserNcSeqTreeCommonElementsAdd( mfg_model, 
+<a name="anchor-187"></a>                                       PRO_FEAT_MILL, 
+                                       PRO_NCSEQ_FACE_MILL, 
+                                       feat_name, 
+                                       operation, 
+                                       retract_plane, 
+<a name="anchor-188"></a>                                       seq_csys, 
+                                       head_num, 
+                                       pocket_num, 
+                                       tool_name, 
+                                       dbl_params,
+<a name="anchor-189"></a>                                       n_dbl_params,
+                                       str_params,
+                                       n_str_params,
+                                       seq_elem_tree );
+
+<a name="anchor-190"></a> ERROR_CHECK( &quot;UserFacingCreate()&quot;, &quot;UserNcSeqTreeCommonElementsAdd&quot;, err );
+
+ /*********************************************/
+ /* Add elements specific for facing sequence */
+ /*********************************************/
+<a name="anchor-191"></a> for ( ii = 0 ; ii &lt; size; ii++ )
+ {
+   err = ProElementAlloc( seq_elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserFacingCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+
+<a name="anchor-192"></a>   switch ( seq_elem_table[ii].elem_type )
+   {
+     case PRO_E_MACH_SURFS:
+        err = UserMachSurfByWindowSet( mill_window, element );
+        ERROR_CHECK( &quot;UserFacingCreate()&quot;, &quot;UserMachSurfByWindowSet&quot;, err );
+<a name="anchor-193"></a>        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+<a name="anchor-194"></a>        ERROR_CHECK( &quot;UserFacingCreate&quot;, &quot;UserFacingCreate()&quot;, err );
+        break;
+   }
+	
+   err = ProElemtreeElementAdd( seq_elem_tree, NULL, element );
+<a name="anchor-195"></a>   ERROR_CHECK( &quot;UserFacingCreate&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+ }
+ 
+ /*********************************************/
+ /* Display element tree                      */
+<a name="anchor-196"></a> /*********************************************/
+ ProUtilElementtreePrint( seq_elem_tree, PRO_TEST_INFO_WINDOW, NULL );
+
+ /*********************************************/
+ /* Create feature                            */
+<a name="anchor-197"></a> /*********************************************/
+ err = UserMfgModelFeatureCreate( mfg_model, seq_elem_tree, &amp;seq_feature );
+ ERROR_CHECK( &quot;UserFacingCreate&quot;, &quot;UserMfgModelFeatureCreate()&quot;, err );
+
+ err = ProElementFree( &amp;seq_elem_tree );
+<a name="anchor-198"></a> ERROR_CHECK( &quot;UserFacingCreate&quot;, &quot;ProElementFree()&quot;, err );
+
+ return ( (int)err );
+}
+
+<a name="anchor-199"></a>/*====================================================================*\
+Function : UserTrajectoryCreate
+Purpose  : Create a trajectory milling feature using element tree
+\*====================================================================*/
+ProError UserTrajectoryCreate (
+<a name="anchor-200"></a>/*--------------------------------------------------------------------*/
+ProMfg		   mfg_model,
+ProName		   feat_name,
+ProSelection	   operation,
+ProSelection	   retract_plane,
+<a name="anchor-201"></a>ProSelection	   seq_csys,
+ProSelection	   curve,
+ProMfgToolHeadType head_num,
+int		   pocket_num,
+wchar_t		   *tool_name 
+<a name="anchor-202"></a>
+)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+<a name="anchor-203"></a> ProElement		element = NULL;       /* Individual element */
+ ProElement		seq_elem_tree = NULL; /* Entire tree        */
+ ProFeature		seq_feature;
+ int            	ii = 0, size = 0;
+ int			n_dbl_params = 0;
+<a name="anchor-204"></a> static ElemTable	seq_elem_table[] =  
+ {
+   { PRO_E_TOOL_MTN_ARR, ARRAY },
+ };
+ static MfgPrmDblValue	dbl_params[] =
+<a name="anchor-205"></a> {
+   { &quot;CUT_FEED&quot;,            200.0    },  /* required for trajectory */
+   { &quot;CLEAR_DIST&quot;,          1.0      },  /* required for trajectory */
+   { &quot;SPINDLE_SPEED&quot;,       15000.0  }   /* required for trajectory */
+ };
+<a name="anchor-206"></a>
+ n_dbl_params = sizeof( dbl_params ) / sizeof( MfgPrmDblValue );
+		
+ size = sizeof( seq_elem_table ) / sizeof( ElemTable );
+   
+<a name="anchor-207"></a> /*********************************************/
+ /*  Allocate element tree                    */
+ /*********************************************/
+ err = ProElementAlloc( PRO_E_FEATURE_TREE, &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserTrajectoryCreate&quot;, &quot;ProElementAlloc()&quot;, err );
+<a name="anchor-208"></a>    
+ /************************************************/
+ /* Init elem tree with common sequence elements */
+ /************************************************/
+ err = UserNcSeqTreeCommonElementsAdd( mfg_model, 
+<a name="anchor-209"></a>                                       PRO_FEAT_MILL,
+                                       PRO_NCSEQ_TRAJ_MILL_STEP, 
+                                       feat_name, 
+                                       operation, 
+                                       retract_plane, 
+<a name="anchor-210"></a>                                       seq_csys, 
+                                       head_num, 
+                                       pocket_num, 
+                                       tool_name, 
+                                       dbl_params,
+<a name="anchor-211"></a>                                       n_dbl_params,
+                                       NULL,
+                                       0,
+                                       seq_elem_tree );
+
+<a name="anchor-212"></a> ERROR_CHECK( &quot;UserTrajectoryCreate()&quot;, &quot;UserNcSeqTreeCommonElementsAdd&quot;, 
+              err );
+
+ /*************************************************/
+ /* Add elements specific for trajectory sequence */
+<a name="anchor-213"></a> /*************************************************/
+ for ( ii = 0 ; ii &lt; size; ii++ )
+ {
+   err = ProElementAlloc( seq_elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserTrajectoryCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+<a name="anchor-214"></a>
+   switch ( seq_elem_table[ii].elem_type )
+   {
+     case PRO_E_TOOL_MTN_ARR:
+        err = UserTrajToolMtnArrSet( curve, element );
+<a name="anchor-215"></a>        ERROR_CHECK( &quot;UserTrajectoryCreate&quot;,&quot;UserTrajToolMtnArrSet()&quot;, err );
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-216"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserTrajectoryCreate&quot;,&quot;UserTrajectoryCreate()&quot;, err );
+        break;
+   }
+
+<a name="anchor-217"></a>   err = ProElemtreeElementAdd( seq_elem_tree, NULL, element );
+   ERROR_CHECK( &quot;UserTrajectoryCreate&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+ }
+ 
+ /*********************************************/
+<a name="anchor-218"></a> /* Display element tree                      */
+ /*********************************************/
+ ProUtilElementtreePrint( seq_elem_tree, PRO_TEST_INFO_WINDOW, NULL );
+
+ /*********************************************/
+<a name="anchor-219"></a> /* Create feature                            */
+ /*********************************************/
+ err = UserMfgModelFeatureCreate( mfg_model, seq_elem_tree, &amp;seq_feature );
+ ERROR_CHECK( &quot;UserTrajectoryCreate&quot;, &quot;UserMfgModelFeatureCreate()&quot;, err );
+
+<a name="anchor-220"></a> err = ProElementFree( &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserTrajectoryCreate&quot;, &quot;ProElementFree()&quot;, err );
+
+ return ( (int)err );
+}
+<a name="anchor-221"></a>
+/*====================================================================*\
+Function : UserCurveTrajCreate
+Purpose  : Create a roughing milling feature using element tree
+\*====================================================================*/
+<a name="anchor-222"></a>ProError UserCurveTrajCreate (
+/*--------------------------------------------------------------------*/
+ProMfg		   mfg_model,
+ProName		   feat_name,
+ProSelection	   operation,
+<a name="anchor-223"></a>ProSelection	   retract_plane,
+ProSelection	   seq_csys,
+ProSelection	   curve_feat,
+ProMfgToolHeadType head_num,
+int		   pocket_num,
+<a name="anchor-224"></a>wchar_t		   *tool_name
+
+)
+/*--------------------------------------------------------------------*/
+{
+<a name="anchor-225"></a> ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element = NULL;       /* Individual element */
+ ProElement		seq_elem_tree = NULL; /* Entire tree        */
+ ProFeature		seq_feature;
+ int            	ii = 0, size = 0;
+<a name="anchor-226"></a> int			n_dbl_params = 0;
+ int			n_str_params = 0;
+ static ElemTable	seq_elem_table[] =  
+ {
+   { PRO_E_MFG_TRAJ_CRV, COMPOUND },
+<a name="anchor-227"></a>   { PRO_E_MFG_OFFSET,   COMPOUND }
+
+ };
+ static MfgPrmDblValue	dbl_params[] =
+ {
+<a name="anchor-228"></a>   { &quot;CUT_FEED&quot;,            200.0   },   /* required for 2-axis trajectory */
+   { &quot;CLEAR_DIST&quot;,          1.0     },   /* required for 2-axis trajectory */
+   { &quot;SPINDLE_SPEED&quot;,       15000.0 },   /* required for 2-axis trajectory */
+   { &quot;LEAD_IN_RADIUS&quot;,      60.0    },   
+   { &quot;LEAD_OUT_RADIUS&quot;,     60.0    },   
+<a name="anchor-229"></a> };
+ static MfgPrmStrValue	str_params[] =
+ {
+   { &quot;LEAD_IN&quot;,      L&quot;YES&quot; },
+   { &quot;LEAD_OUT&quot;,     L&quot;YES&quot; }
+<a name="anchor-230"></a> };
+
+ n_dbl_params = sizeof( dbl_params ) / sizeof( MfgPrmDblValue );
+ n_str_params = sizeof( str_params ) / sizeof( MfgPrmStrValue );
+		
+<a name="anchor-231"></a> size = sizeof( seq_elem_table ) / sizeof( ElemTable );
+   
+ /*********************************************/
+ /*  Allocate element tree                    */
+ /*********************************************/
+<a name="anchor-232"></a> err = ProElementAlloc( PRO_E_FEATURE_TREE, &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserCurveTrajCreate&quot;, &quot;ProElementAlloc()&quot;, err );
+    
+ /************************************************/
+ /* Init elem tree with common sequence elements */
+<a name="anchor-233"></a> /************************************************/
+ err = UserNcSeqTreeCommonElementsAdd( mfg_model, 
+                                       PRO_FEAT_MILL,
+                                       PRO_NCSEQ_FF_TRAJ_MILL, 
+                                       feat_name, 
+<a name="anchor-234"></a>                                       operation, 
+                                       retract_plane, 
+                                       seq_csys, 
+                                       head_num, 
+                                       pocket_num, 
+<a name="anchor-235"></a>                                       tool_name, 
+                                       dbl_params,
+                                       n_dbl_params,
+                                       str_params,
+                                       n_str_params,
+<a name="anchor-236"></a>                                       seq_elem_tree );
+
+ ERROR_CHECK( &quot;UserCurveTrajCreate()&quot;, &quot;UserNcSeqTreeCommonElementsAdd&quot;, err );
+
+ /*************************************************/
+<a name="anchor-237"></a> /* Add elements specific for curve trajectory    */
+ /*************************************************/
+ for ( ii = 0 ; ii &lt; size; ii++ )
+ {
+   err = ProElementAlloc( seq_elem_table[ii].elem_type, &amp;element );
+<a name="anchor-238"></a>   ERROR_CHECK( &quot;UserCurveTrajCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( seq_elem_table[ii].elem_type )
+   {
+     case PRO_E_MFG_TRAJ_CRV:
+<a name="anchor-239"></a>        err = UserTrajCurveSet( curve_feat, element );
+        ERROR_CHECK( &quot;UserCurveTrajCreate()&quot;, &quot;UserTrajCurveSet&quot;, err );
+        break;
+
+     case PRO_E_MFG_OFFSET:
+<a name="anchor-240"></a>        err = UserMfgOffsetSet( PRO_B_TRUE, PRO_MAT_RMV_LEFT, PRO_B_TRUE,
+                                element );
+        ERROR_CHECK( &quot;UserCurveTrajCreate&quot;, &quot;UserMfgOffsetSet()&quot;, err );
+        break;
+
+<a name="anchor-241"></a>     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserCurveTrajCreate&quot;,&quot;UserCurveTrajCreate()&quot;, err );
+        break;
+<a name="anchor-242"></a>   }
+
+   err = ProElemtreeElementAdd( seq_elem_tree, NULL, element );
+   ERROR_CHECK( &quot;UserCurveTrajCreate&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+ }
+<a name="anchor-243"></a> 
+ /*********************************************/
+ /* Display element tree                      */
+ /*********************************************/
+ ProUtilElementtreePrint( seq_elem_tree, PRO_TEST_INFO_WINDOW, NULL );
+<a name="anchor-244"></a>
+ /*********************************************/
+ /* Create feature                            */
+ /*********************************************/
+ err = UserMfgModelFeatureCreate( mfg_model, seq_elem_tree, &amp;seq_feature );
+<a name="anchor-245"></a> ERROR_CHECK( &quot;UserCurveTrajCreate&quot;, &quot;UserMfgModelFeatureCreate()&quot;, err );
+
+ err = ProElementFree( &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserCurveTrajCreate&quot;, &quot;ProElementFree()&quot;, err );
+
+<a name="anchor-246"></a> return ( (int)err );
+}
+
+/*====================================================================*\
+Function : UserFinishingCreate
+<a name="anchor-247"></a>Purpose  : Create a finishing milling feature using element tree
+\*====================================================================*/
+ProError UserFinishingCreate (
+/*--------------------------------------------------------------------*/
+ProMfg		   mfg_model,
+<a name="anchor-248"></a>ProName		   feat_name,
+ProSelection	   operation,
+ProSelection	   retract_plane,
+ProSelection	   seq_csys,
+ProSelection	   mill_window,
+<a name="anchor-249"></a>ProMfgToolHeadType head_num,
+int		   pocket_num,
+wchar_t		   *tool_name
+
+)
+<a name="anchor-250"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element = NULL;       /* Individual element */
+ ProElement		seq_elem_tree = NULL; /* Entire tree        */
+<a name="anchor-251"></a> ProFeature		seq_feature;
+ int            	ii = 0, size = 0;
+ int			n_dbl_params = 0;
+ static ElemTable	seq_elem_table[] =  
+ {
+<a name="anchor-252"></a>   { PRO_E_MFG_CMP_MILL_WIND, COMPOUND },
+ };
+ static MfgPrmDblValue	dbl_params[] =
+ {
+   { &quot;CUT_FEED&quot;,            200.0   },   /* required for finishing */
+<a name="anchor-253"></a>   { &quot;STEP_OVER&quot;,           5.0     },   /* required for finishing */
+   { &quot;CLEAR_DIST&quot;,          1.0     },   /* required for finishing */
+   { &quot;SPINDLE_SPEED&quot;,       15000.0 }    /* required for finishing */
+ };
+
+<a name="anchor-254"></a> n_dbl_params = sizeof( dbl_params ) / sizeof( MfgPrmDblValue );
+		
+ size = sizeof( seq_elem_table ) / sizeof( ElemTable );
+   
+ /*********************************************/
+<a name="anchor-255"></a> /*  Allocate element tree                    */
+ /*********************************************/
+ err = ProElementAlloc( PRO_E_FEATURE_TREE, &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserFinishingCreate&quot;, &quot;ProElementAlloc()&quot;, err );
+    
+<a name="anchor-256"></a> /************************************************/
+ /* Init elem tree with common sequence elements */
+ /************************************************/
+ err = UserNcSeqTreeCommonElementsAdd( mfg_model, 
+                                       PRO_FEAT_MILL,
+<a name="anchor-257"></a>                                       PRO_NCSEQ_CVNC_FINISH_MILL, 
+                                       feat_name, 
+                                       operation, 
+                                       retract_plane, 
+                                       seq_csys, 
+<a name="anchor-258"></a>                                       head_num, 
+                                       pocket_num, 
+                                       tool_name, 
+                                       dbl_params,
+                                       n_dbl_params,
+<a name="anchor-259"></a>                                       NULL,
+                                       0,
+                                       seq_elem_tree );
+
+ ERROR_CHECK( &quot;UserFinishingCreate()&quot;, &quot;UserNcSeqTreeCommonElementsAdd&quot;, err );
+<a name="anchor-260"></a>
+ /*************************************************/
+ /* Add elements specific for finishing sequence  */
+ /*************************************************/
+ for ( ii = 0 ; ii &lt; size; ii++ )
+<a name="anchor-261"></a> {
+   err = ProElementAlloc( seq_elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserFinishingCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( seq_elem_table[ii].elem_type )
+<a name="anchor-262"></a>   {
+     case PRO_E_MFG_CMP_MILL_WIND:
+        err = UserMillWindowCompoundSet( mill_window, element );
+        ERROR_CHECK( &quot;UserFinishingCreate&quot;,&quot;UserMillWindowCompoundSet()&quot;, err );
+        break;
+<a name="anchor-263"></a>
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserFinishingCreate&quot;,&quot;UserFinishingCreate()&quot;, err );
+<a name="anchor-264"></a>        break;
+   }
+
+   err = ProElemtreeElementAdd( seq_elem_tree, NULL, element );
+   ERROR_CHECK( &quot;UserFinishingCreate&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+<a name="anchor-265"></a> }
+ 
+ /*********************************************/
+ /* Display element tree                      */
+ /*********************************************/
+<a name="anchor-266"></a> ProUtilElementtreePrint( seq_elem_tree, PRO_TEST_INFO_WINDOW, NULL );
+
+ /*********************************************/
+ /* Create feature                            */
+ /*********************************************/
+<a name="anchor-267"></a> err = UserMfgModelFeatureCreate( mfg_model, seq_elem_tree, &amp;seq_feature );
+ ERROR_CHECK( &quot;UserFinishingCreate&quot;, &quot;UserMfgModelFeatureCreate()&quot;, err );
+
+ err = ProElementFree( &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserFinishingCreate&quot;, &quot;ProElementFree()&quot;, err );
+<a name="anchor-268"></a>
+ return ( (int)err );
+}
+
+/*====================================================================*\
+<a name="anchor-269"></a>Function : UserRoughingCreate
+Purpose  : Create a roughing milling feature using element tree
+\*====================================================================*/
+ProError UserRoughingCreate (
+/*--------------------------------------------------------------------*/
+<a name="anchor-270"></a>ProMfg		   mfg_model,
+ProName		   feat_name,
+ProSelection	   operation,
+ProSelection	   retract_plane,
+ProSelection	   seq_csys,
+<a name="anchor-271"></a>ProSelection	   mill_window,
+ProMfgToolHeadType head_num,
+int		   pocket_num,
+wchar_t		   *tool_name,
+ProFeature	   *p_seq_feature
+<a name="anchor-272"></a>
+)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+<a name="anchor-273"></a> ProElement		element = NULL;       /* Individual element */
+ ProElement		seq_elem_tree = NULL; /* Entire tree        */
+ ProFeature		seq_feature;
+ int            	ii = 0, size = 0;
+ int			n_dbl_params = 0;
+<a name="anchor-274"></a> static ElemTable	seq_elem_table[] =  
+ {
+   { PRO_E_MFG_CMP_MILL_WIND, COMPOUND },
+ };
+ static MfgPrmDblValue	dbl_params[] =
+<a name="anchor-275"></a> {
+   { &quot;CUT_FEED&quot;,            200.0   },   /* required for roughing */
+   { &quot;STEP_OVER&quot;,           25.0    },   /* required for roughing */
+   { &quot;MAX_STEP_DEPTH&quot;,      5.0     },   /* required for roughing */
+   { &quot;CLEAR_DIST&quot;,          1.0     },   /* required for roughing */
+<a name="anchor-276"></a>   { &quot;SPINDLE_SPEED&quot;,       15000.0 }    /* required for roughing */
+ };
+
+ n_dbl_params = sizeof( dbl_params ) / sizeof( MfgPrmDblValue );
+		
+<a name="anchor-277"></a> size = sizeof( seq_elem_table ) / sizeof( ElemTable );
+   
+ /*********************************************/
+ /*  Allocate element tree                    */
+ /*********************************************/
+<a name="anchor-278"></a> err = ProElementAlloc( PRO_E_FEATURE_TREE, &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserRoughingCreate&quot;, &quot;ProElementAlloc()&quot;, err );
+    
+ /************************************************/
+ /* Init elem tree with common sequence elements */
+<a name="anchor-279"></a> /************************************************/
+ err = UserNcSeqTreeCommonElementsAdd( mfg_model, 
+                                       PRO_FEAT_MILL,
+                                       PRO_NCSEQ_ROUGHVOL_MILL, 
+                                       feat_name, 
+<a name="anchor-280"></a>                                       operation, 
+                                       retract_plane, 
+                                       seq_csys, 
+                                       head_num, 
+                                       pocket_num, 
+<a name="anchor-281"></a>                                       tool_name, 
+                                       dbl_params,
+                                       n_dbl_params,
+                                       NULL,
+                                       0,
+<a name="anchor-282"></a>                                       seq_elem_tree );
+
+ ERROR_CHECK( &quot;UserRoughingCreate()&quot;, &quot;UserNcSeqTreeCommonElementsAdd&quot;, err );
+
+ /*************************************************/
+<a name="anchor-283"></a> /* Add elements specific for roughing sequence   */
+ /*************************************************/
+ for ( ii = 0 ; ii &lt; size; ii++ )
+ {
+   err = ProElementAlloc( seq_elem_table[ii].elem_type, &amp;element );
+<a name="anchor-284"></a>   ERROR_CHECK( &quot;UserRoughingCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( seq_elem_table[ii].elem_type )
+   {
+     case PRO_E_MFG_CMP_MILL_WIND:
+<a name="anchor-285"></a>        err = UserMillWindowCompoundSet( mill_window, element );
+        ERROR_CHECK( &quot;UserRoughingCreate&quot;,&quot;UserMillWindowCompoundSet()&quot;, err );
+        break;
+
+     default:
+<a name="anchor-286"></a>        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserRoughingCreate&quot;,&quot;UserRoughingCreate()&quot;, err );
+        break;
+   }
+<a name="anchor-287"></a>
+   err = ProElemtreeElementAdd( seq_elem_tree, NULL, element );
+   ERROR_CHECK( &quot;UserRoughingCreate&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+ }
+ 
+<a name="anchor-288"></a> /*********************************************/
+ /* Display element tree                      */
+ /*********************************************/
+ ProUtilElementtreePrint( seq_elem_tree, PRO_TEST_INFO_WINDOW, NULL );
+
+<a name="anchor-289"></a> /*********************************************/
+ /* Create feature                            */
+ /*********************************************/
+ err = UserMfgModelFeatureCreate( mfg_model, seq_elem_tree, &amp;seq_feature );
+ ERROR_CHECK( &quot;UserRoughingCreate&quot;, &quot;UserMfgModelFeatureCreate()&quot;, err );
+<a name="anchor-290"></a>
+ if ( p_seq_feature != NULL )
+   *p_seq_feature = seq_feature;
+
+ err = ProElementFree( &amp;seq_elem_tree );
+<a name="anchor-291"></a> ERROR_CHECK( &quot;UserRoughingCreate&quot;, &quot;ProElementFree()&quot;, err );
+
+ return ( (int)err );
+}
+
+<a name="anchor-292"></a>/*====================================================================*\
+Function : UserReRoughingCreate
+Purpose  : Create a re-roughing milling feature using element tree
+\*====================================================================*/
+ProError UserReRoughingCreate (
+<a name="anchor-293"></a>/*--------------------------------------------------------------------*/
+ProMfg		   mfg_model,
+ProName		   feat_name,
+ProSelection	   operation,
+ProSelection	   retract_plane,
+<a name="anchor-294"></a>ProSelection	   seq_csys,
+ProSelection	   seq_sel,
+ProMfgToolHeadType head_num,
+int		   pocket_num,
+wchar_t		   *tool_name 
+<a name="anchor-295"></a>
+)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+<a name="anchor-296"></a> ProElement		element = NULL;       /* Individual element */
+ ProElement		seq_elem_tree = NULL; /* Entire tree        */
+ ProFeature		seq_feature;
+ ProSelection		selection;
+ ProReference		reference;
+<a name="anchor-297"></a> int            	ii = 0, size = 0;
+ int			n_dbl_params = 0;
+ static ElemTable	seq_elem_table[] =  
+ {
+   { PRO_E_MFG_PREV_SEQ,  PRO_VALUE_TYPE_SELECTION }
+<a name="anchor-298"></a> };
+ static MfgPrmDblValue	dbl_params[] =
+ {
+   { &quot;CUT_FEED&quot;,            150.0   },  /* required for re-roughing */
+   { &quot;STEP_OVER&quot;,           9.0     },  /* required for re-roughing */
+<a name="anchor-299"></a>   { &quot;MAX_STEP_DEPTH&quot;,      5.0     },  /* required for re-roughing */
+   { &quot;CLEAR_DIST&quot;,          1.0     },  /* required for re-roughing */
+   { &quot;SPINDLE_SPEED&quot;,       15000.0 }   /* required for re-roughing */
+ };
+
+<a name="anchor-300"></a> n_dbl_params = sizeof( dbl_params ) / sizeof( MfgPrmDblValue );
+		
+ size = sizeof( seq_elem_table ) / sizeof( ElemTable );
+   
+ /*********************************************/
+<a name="anchor-301"></a> /*  Allocate element tree                    */
+ /*********************************************/
+ err = ProElementAlloc( PRO_E_FEATURE_TREE, &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserRoughingCreate&quot;, &quot;ProElementAlloc()&quot;, err );
+    
+<a name="anchor-302"></a> /************************************************/
+ /* Init elem tree with common sequence elements */
+ /************************************************/
+ err = UserNcSeqTreeCommonElementsAdd( mfg_model, 
+                                       PRO_FEAT_MILL,
+<a name="anchor-303"></a>                                       PRO_NCSEQ_REROUGH_MILL, 
+                                       feat_name, 
+                                       operation, 
+                                       retract_plane, 
+                                       seq_csys, 
+<a name="anchor-304"></a>                                       head_num, 
+                                       pocket_num, 
+                                       tool_name, 
+                                       dbl_params,
+                                       n_dbl_params,
+<a name="anchor-305"></a>                                       NULL,
+                                       0,
+                                       seq_elem_tree );
+
+ ERROR_CHECK( &quot;UserReRoughingCreate()&quot;, &quot;UserNcSeqTreeCommonElementsAdd&quot;, 
+<a name="anchor-306"></a>              err );
+
+ /**************************************************/
+ /* Add elements specific for re-roughing sequence */
+ /**************************************************/
+<a name="anchor-307"></a> for ( ii = 0 ; ii &lt; size; ii++ )
+ {
+   err = ProElementAlloc( seq_elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserReRoughingCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+
+<a name="anchor-308"></a>   switch ( seq_elem_table[ii].elem_type )
+   {
+     case PRO_E_MFG_PREV_SEQ:
+        selection = seq_sel;
+        break;
+<a name="anchor-309"></a>
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserReRoughingCreate&quot;,&quot;UserReRoughingCreate()&quot;, err );
+<a name="anchor-310"></a>        break;
+   }
+
+   if ( seq_elem_table[ii].val_type == PRO_VALUE_TYPE_SELECTION )
+   {
+<a name="anchor-311"></a>     err = ProSelectionToReference( selection, &amp;reference );
+     ERROR_CHECK( &quot;UserReRoughingCreate()&quot;, &quot;ProSelectionToReference&quot;, err );
+
+     err = ProElementReferenceSet( element, reference );
+     ERROR_CHECK( &quot;UserReRoughingCreate()&quot;, &quot;ProElementReferenceSet&quot;, err );
+<a name="anchor-312"></a>   }
+
+   err = ProElemtreeElementAdd( seq_elem_tree, NULL, element );
+   ERROR_CHECK( &quot;UserReRoughingCreate&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+ }
+<a name="anchor-313"></a> 
+ /*********************************************/
+ /* Display element tree                      */
+ /*********************************************/
+ ProUtilElementtreePrint( seq_elem_tree, PRO_TEST_INFO_WINDOW, NULL );
+<a name="anchor-314"></a>
+ /*********************************************/
+ /* Create feature                            */
+ /*********************************************/
+ err = UserMfgModelFeatureCreate( mfg_model, seq_elem_tree, &amp;seq_feature );
+<a name="anchor-315"></a> ERROR_CHECK( &quot;UserReRoughingCreate&quot;, &quot;UserMfgModelFeatureCreate()&quot;, err );
+
+ err = ProElementFree( &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserReRoughingCreate&quot;, &quot;ProElementFree()&quot;, err );
+
+<a name="anchor-316"></a> return ( (int)err );
+}
+
+/*====================================================================*\
+Function : UserProfilingCreate
+<a name="anchor-317"></a>Purpose  : Create a profile milling feature using element tree
+\*====================================================================*/
+ProError UserProfilingCreate (
+/*--------------------------------------------------------------------*/
+ProMfg		   mfg_model,
+<a name="anchor-318"></a>ProName		   feat_name,
+ProSelection	   operation,
+ProSelection	   retract_plane,
+ProSelection	   seq_csys,
+ProSelection	   mill_surf,
+<a name="anchor-319"></a>ProMfgToolHeadType head_num,
+int		   pocket_num,
+wchar_t		   *tool_name,
+ProFeature	   *p_seq_feature
+
+<a name="anchor-320"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element = NULL;       /* Individual element */
+<a name="anchor-321"></a> ProElement		seq_elem_tree = NULL; /* Entire tree        */
+ ProFeature		seq_feature;
+ int            	ii = 0, size = 0;
+ int			n_dbl_params = 0;
+ static ElemTable	seq_elem_table[] =  
+<a name="anchor-322"></a> {
+   { PRO_E_MACH_SURFS, COMPOUND },
+ };
+ static MfgPrmDblValue	dbl_params[] =
+ {
+<a name="anchor-323"></a>   { &quot;CUT_FEED&quot;,            200.0   },   /* required for profile milling */
+   { &quot;STEP_DEPTH&quot;,          25.0    },   /* required for profile milling */
+   { &quot;CLEAR_DIST&quot;,          1.0     },   /* required for profile milling */
+   { &quot;SPINDLE_SPEED&quot;,       15000.0 }    /* required for profile milling */
+ };
+<a name="anchor-324"></a>
+ n_dbl_params = sizeof( dbl_params ) / sizeof( MfgPrmDblValue );
+		
+ size = sizeof( seq_elem_table ) / sizeof( ElemTable );
+   
+<a name="anchor-325"></a> /*********************************************/
+ /*  Allocate element tree                    */
+ /*********************************************/
+ err = ProElementAlloc( PRO_E_FEATURE_TREE, &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserProfilingCreate&quot;, &quot;ProElementAlloc()&quot;, err );
+<a name="anchor-326"></a>    
+ /************************************************/
+ /* Init elem tree with common sequence elements */
+ /************************************************/
+ err = UserNcSeqTreeCommonElementsAdd( mfg_model, 
+<a name="anchor-327"></a>                                       PRO_FEAT_MILL,
+                                       PRO_NCSEQ_PROF_SURF_MILL, 
+                                       feat_name, 
+                                       operation, 
+                                       retract_plane, 
+<a name="anchor-328"></a>                                       seq_csys, 
+                                       head_num, 
+                                       pocket_num, 
+                                       tool_name, 
+                                       dbl_params,
+<a name="anchor-329"></a>                                       n_dbl_params,
+                                       NULL,
+                                       0,
+                                       seq_elem_tree );
+
+<a name="anchor-330"></a> ERROR_CHECK( &quot;UserProfilingCreate()&quot;, &quot;UserNcSeqTreeCommonElementsAdd&quot;, err );
+
+ /*************************************************/
+ /* Add elements specific for profiling sequence  */
+ /*************************************************/
+<a name="anchor-331"></a> for ( ii = 0 ; ii &lt; size; ii++ )
+ {
+   err = ProElementAlloc( seq_elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserProfilingCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+
+<a name="anchor-332"></a>   switch ( seq_elem_table[ii].elem_type )
+   {
+     case PRO_E_MACH_SURFS:
+        err = UserMachSurfByMillSurfSet( mill_surf, element );
+        ERROR_CHECK( &quot;UserProfilingCreate()&quot;, 
+<a name="anchor-333"></a>                     &quot;UserMachSurfByMillSurfSet&quot;, err );
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-334"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserProfilingCreate&quot;,&quot;UserProfilingCreate()&quot;, err );
+        break;
+   }
+
+<a name="anchor-335"></a>   err = ProElemtreeElementAdd( seq_elem_tree, NULL, element );
+   ERROR_CHECK( &quot;UserProfilingCreate&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+ }
+ 
+ /*********************************************/
+<a name="anchor-336"></a> /* Display element tree                      */
+ /*********************************************/
+ ProUtilElementtreePrint( seq_elem_tree, PRO_TEST_INFO_WINDOW, NULL );
+
+ /*********************************************/
+<a name="anchor-337"></a> /* Create feature                            */
+ /*********************************************/
+ err = UserMfgModelFeatureCreate( mfg_model, seq_elem_tree, &amp;seq_feature );
+ ERROR_CHECK( &quot;UserProfilingCreate&quot;, &quot;UserMfgModelFeatureCreate()&quot;, err );
+
+<a name="anchor-338"></a> if ( p_seq_feature != NULL )
+   *p_seq_feature = seq_feature;
+
+ err = ProElementFree( &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserProfilingCreate&quot;, &quot;ProElementFree()&quot;, err );
+<a name="anchor-339"></a>
+ return ( (int)err );
+}
+
+/*====================================================================*\
+<a name="anchor-340"></a>Function : UserCSinkgCreate
+Purpose  : Create a countersink holemaking feature using element tree
+\*====================================================================*/
+ProError UserCSinkgCreate (
+/*--------------------------------------------------------------------*/
+<a name="anchor-341"></a>ProMfg		   mfg_model,
+ProName		   feat_name,
+ProSelection	   operation,
+ProSelection	   retract_plane,
+ProSelection	   seq_csys,
+<a name="anchor-342"></a>double             csink_diam,
+ProMfgToolHeadType head_num,
+int		   pocket_num,
+wchar_t		   *tool_name 
+
+<a name="anchor-343"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element = NULL;       /* Individual element */
+<a name="anchor-344"></a> ProElement		seq_elem_tree = NULL; /* Entire tree        */
+ ProValueData           value_data;
+ ProValue               value;
+ ProFeature		seq_feature;
+ int            	ii = 0, size = 0;
+<a name="anchor-345"></a> int			n_dbl_params = 0;
+ static ElemTable	seq_elem_table[] =  
+ {
+   { PRO_E_HOLEMAKING_TYPE,            PRO_VALUE_TYPE_INT },
+   { PRO_E_MFG_HOLEMAKING_CYCLE_TYPE,  PRO_VALUE_TYPE_INT },
+<a name="anchor-346"></a>   { PRO_E_HOLESETS,                   ARRAY              }
+ };
+ static MfgPrmDblValue	dbl_params[] =
+ {
+   { &quot;CUT_FEED&quot;,            200.0    },  /* required for drilling */
+<a name="anchor-347"></a>   { &quot;CLEAR_DIST&quot;,          1.0      },  /* required for drilling */
+   { &quot;SPINDLE_SPEED&quot;,       15000.0  }   /* required for drilling */
+ };
+
+ n_dbl_params = sizeof( dbl_params ) / sizeof( MfgPrmDblValue );
+<a name="anchor-348"></a>		
+ size = sizeof( seq_elem_table ) / sizeof( ElemTable );
+   
+ /*********************************************/
+ /*  Allocate element tree                    */
+<a name="anchor-349"></a> /*********************************************/
+ err = ProElementAlloc( PRO_E_FEATURE_TREE, &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserCSinkgCreate&quot;, &quot;ProElementAlloc()&quot;, err );
+    
+ /************************************************/
+<a name="anchor-350"></a> /* Init elem tree with common sequence elements */
+ /************************************************/
+ err = UserNcSeqTreeCommonElementsAdd( mfg_model, 
+                                       PRO_FEAT_DRILL,
+                                       PRO_NCSEQ_HOLEMAKING, 
+<a name="anchor-351"></a>                                       feat_name, 
+                                       operation, 
+                                       retract_plane, 
+                                       seq_csys, 
+                                       head_num, 
+<a name="anchor-352"></a>                                       pocket_num, 
+                                       tool_name, 
+                                       dbl_params,
+                                       n_dbl_params,
+                                       NULL,
+<a name="anchor-353"></a>                                       0,
+                                       seq_elem_tree );
+
+ ERROR_CHECK( &quot;UserCSinkgCreate()&quot;, &quot;UserCSinkgCreate&quot;, err );
+
+<a name="anchor-354"></a> /*********************************************/
+ /* Add elements specific for countersinking  */
+ /*********************************************/
+ for ( ii = 0 ; ii &lt; size; ii++ )
+ {
+<a name="anchor-355"></a>   err = ProElementAlloc( seq_elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserCSinkgCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( seq_elem_table[ii].elem_type )
+   {
+<a name="anchor-356"></a>     case PRO_E_HOLEMAKING_TYPE:
+		err = ProElementIntegerSet ( element, PRO_HOLE_MK_CSINK );
+        ERROR_CHECK( &quot;UserCSinkgCreate()&quot;, &quot;ProElementIntegerSet&quot;, err );
+        break;
+
+<a name="anchor-357"></a>     case PRO_E_MFG_HOLEMAKING_CYCLE_TYPE:
+		err = ProElementIntegerSet ( element, PRO_HM_CYCLE_TYPE_STANDARD );
+        ERROR_CHECK( &quot;UserCSinkgCreate()&quot;, &quot;ProElementIntegerSet&quot;, err );
+        break;
+
+<a name="anchor-358"></a>     case PRO_E_HOLESETS:
+        err = UserCsinkHolesetArrSet( csink_diam, element );
+        ERROR_CHECK( &quot;UserCSinkgCreate()&quot;, &quot;UserCsinkHolesetArrSet&quot;, err );
+        break;
+
+<a name="anchor-359"></a>     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserCSinkgCreate()&quot;, &quot;UserCSinkgCreate&quot;, err );
+        break;
+<a name="anchor-360"></a>   }
+	
+   err = ProElemtreeElementAdd( seq_elem_tree, NULL, element );
+   ERROR_CHECK( &quot;UserCSinkgCreate&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+ }
+<a name="anchor-361"></a> 
+ /*********************************************/
+ /* Display element tree                      */
+ /*********************************************/
+ ProUtilElementtreePrint( seq_elem_tree, PRO_TEST_INFO_WINDOW, NULL );
+<a name="anchor-362"></a>
+ /*********************************************/
+ /* Create feature                            */
+ /*********************************************/
+ err = UserMfgModelFeatureCreate( mfg_model, seq_elem_tree, &amp;seq_feature );
+<a name="anchor-363"></a> ERROR_CHECK( &quot;UserCSinkgCreate&quot;, &quot;UserMfgModelFeatureCreate()&quot;, err );
+
+ err = ProElementFree( &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserCSinkgCreate&quot;, &quot;ProElementFree()&quot;, err );
+
+<a name="anchor-364"></a> return ( (int)err );
+}
+
+/*====================================================================*\
+Function : UserDrillingCreate
+<a name="anchor-365"></a>Purpose  : Create a holemaking feature using element tree
+\*====================================================================*/
+ProError UserDrillingCreate (
+/*--------------------------------------------------------------------*/
+ProMfg		   mfg_model,
+<a name="anchor-366"></a>ProName		   feat_name,
+ProSelection	   operation,
+ProSelection	   retract_plane,
+ProSelection	   seq_csys,
+ProSelection	   *axes,
+<a name="anchor-367"></a>ProMfgToolHeadType head_num,
+int		   pocket_num,
+wchar_t		   *tool_name 
+
+)
+<a name="anchor-368"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element = NULL;       /* Individual element */
+ ProElement		seq_elem_tree = NULL; /* Entire tree        */
+<a name="anchor-369"></a> ProValueData           value_data;
+ ProValue               value;
+ ProFeature		seq_feature;
+ int            	ii = 0, size = 0;
+ int			n_dbl_params = 0;
+<a name="anchor-370"></a> static ElemTable	seq_elem_table[] =  
+ {
+   { PRO_E_HOLEMAKING_TYPE,            PRO_VALUE_TYPE_INT },
+   { PRO_E_MFG_HOLEMAKING_CYCLE_TYPE,  PRO_VALUE_TYPE_INT },
+   { PRO_E_HOLESETS,                   ARRAY              }
+<a name="anchor-371"></a> };
+ static MfgPrmDblValue	dbl_params[] =
+ {
+   { &quot;CUT_FEED&quot;,            200.0    },  /* required for drilling */
+   { &quot;CLEAR_DIST&quot;,          1.0      },  /* required for drilling */
+<a name="anchor-372"></a>   { &quot;SPINDLE_SPEED&quot;,       15000.0  }   /* required for drilling */
+ };
+
+ n_dbl_params = sizeof( dbl_params ) / sizeof( MfgPrmDblValue );
+		
+<a name="anchor-373"></a> size = sizeof( seq_elem_table ) / sizeof( ElemTable );
+   
+ /*********************************************/
+ /*  Allocate element tree                    */
+ /*********************************************/
+<a name="anchor-374"></a> err = ProElementAlloc( PRO_E_FEATURE_TREE, &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserDrillingCreate&quot;, &quot;ProElementAlloc()&quot;, err );
+    
+ /************************************************/
+ /* Init elem tree with common sequence elements */
+<a name="anchor-375"></a> /************************************************/
+ err = UserNcSeqTreeCommonElementsAdd( mfg_model, 
+                                       PRO_FEAT_DRILL,
+                                       PRO_NCSEQ_HOLEMAKING, 
+                                       feat_name, 
+<a name="anchor-376"></a>                                       operation, 
+                                       retract_plane, 
+                                       seq_csys, 
+                                       head_num, 
+                                       pocket_num, 
+<a name="anchor-377"></a>                                       tool_name, 
+                                       dbl_params,
+                                       n_dbl_params,
+                                       NULL,
+                                       0,
+<a name="anchor-378"></a>                                       seq_elem_tree );
+
+ ERROR_CHECK( &quot;UserDrillingCreate()&quot;, &quot;UserNcSeqTreeCommonElementsAdd&quot;, err );
+
+ /*********************************************/
+<a name="anchor-379"></a> /* Add elements specific for drilling        */
+ /*********************************************/
+ for ( ii = 0 ; ii &lt; size; ii++ )
+ {
+   err = ProElementAlloc( seq_elem_table[ii].elem_type, &amp;element );
+<a name="anchor-380"></a>   ERROR_CHECK( &quot;UserDrillingCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( seq_elem_table[ii].elem_type )
+   {
+     case PRO_E_HOLEMAKING_TYPE:
+<a name="anchor-381"></a>		err = ProElementIntegerSet ( element, PRO_HOLE_MK_DRILL );
+        ERROR_CHECK( &quot;UserDrillingCreate&quot;, &quot;ProElementIntegerSet&quot;, err );
+        break;
+
+     case PRO_E_MFG_HOLEMAKING_CYCLE_TYPE:
+<a name="anchor-382"></a>		err = ProElementIntegerSet ( element, PRO_HM_CYCLE_TYPE_STANDARD );
+        ERROR_CHECK( &quot;UserDrillingCreate&quot;, &quot;ProElementIntegerSet&quot;, err );
+        break;
+
+     case PRO_E_HOLESETS:
+<a name="anchor-383"></a>        err = UserDrillHolesetArrSet( axes, element );
+        ERROR_CHECK( &quot;UserDrillingCreate()&quot;, &quot;UserDrillHolesetArrSet&quot;, 
+                     err );
+        break;
+
+<a name="anchor-384"></a>     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserDrillingCreate()&quot;, &quot;UserDrillingCreate&quot;, err );
+        break;
+<a name="anchor-385"></a>   }
+
+   err = ProElemtreeElementAdd( seq_elem_tree, NULL, element );
+   ERROR_CHECK( &quot;UserDrillingCreate&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+ }
+<a name="anchor-386"></a> 
+ /*********************************************/
+ /* Display element tree                      */
+ /*********************************************/
+ ProUtilElementtreePrint( seq_elem_tree, PRO_TEST_INFO_WINDOW, NULL );
+<a name="anchor-387"></a>
+ /*********************************************/
+ /* Create feature                            */
+ /*********************************************/
+ err = UserMfgModelFeatureCreate( mfg_model, seq_elem_tree, &amp;seq_feature );
+<a name="anchor-388"></a> ERROR_CHECK( &quot;UserDrillingCreate&quot;, &quot;UserMfgModelFeatureCreate()&quot;, err );
+
+ err = ProElementFree( &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserDrillingCreate&quot;, &quot;ProElementFree()&quot;, err );
+
+<a name="anchor-389"></a> return ( (int)err );
+}
+
+/*====================================================================*\
+Function : UserManualCycleCreate
+<a name="anchor-390"></a>Purpose  : Create a manual cycle feature using element tree
+\*====================================================================*/
+ProError UserManualCycleCreate (
+/*--------------------------------------------------------------------*/
+ProMfg		   mfg_model,
+<a name="anchor-391"></a>ProName		   feat_name,
+ProSelection	   operation,
+ProSelection	   retract_plane,
+ProSelection	   seq_csys,
+ProMfgToolHeadType head_num,
+<a name="anchor-392"></a>int		   pocket_num,
+wchar_t		   *tool_name 
+
+)
+/*--------------------------------------------------------------------*/
+<a name="anchor-393"></a>{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element = NULL;       /* Individual element */
+ ProElement		seq_elem_tree = NULL; /* Entire tree        */
+ ProFeature		seq_feature;
+<a name="anchor-394"></a> int            	ii = 0, size = 0;
+ int			n_dbl_params = 0;
+ static ElemTable	seq_elem_table[] =  
+ {
+   { PRO_E_TOOL_MTN_ARR, ARRAY },
+<a name="anchor-395"></a> };
+ static MfgPrmDblValue	dbl_params[] =
+ {
+   { &quot;CUT_FEED&quot;,            200.0    },  /* required for manual cycle */
+   { &quot;SPINDLE_SPEED&quot;,       15000.0  }   /* required for manual cycle */
+<a name="anchor-396"></a> };
+
+ n_dbl_params = sizeof( dbl_params ) / sizeof( MfgPrmDblValue );
+		
+ size = sizeof( seq_elem_table ) / sizeof( ElemTable );
+<a name="anchor-397"></a>   
+ /*********************************************/
+ /*  Allocate element tree                    */
+ /*********************************************/
+ err = ProElementAlloc( PRO_E_FEATURE_TREE, &amp;seq_elem_tree );
+<a name="anchor-398"></a> ERROR_CHECK( &quot;UserManualCycleCreate&quot;, &quot;ProElementAlloc()&quot;, err );
+    
+ /************************************************/
+ /* Init elem tree with common sequence elements */
+ /************************************************/
+<a name="anchor-399"></a> err = UserNcSeqTreeCommonElementsAdd( mfg_model, 
+                                       PRO_FEAT_MILL,
+                                       PRO_NCSEQ_MANUAL_CYCLE_MILL, 
+                                       feat_name, 
+                                       operation, 
+<a name="anchor-400"></a>                                       retract_plane, 
+                                       seq_csys, 
+                                       head_num, 
+                                       pocket_num, 
+                                       tool_name, 
+<a name="anchor-401"></a>                                       dbl_params,
+                                       n_dbl_params,
+                                       NULL,
+                                       0,
+                                       seq_elem_tree );
+<a name="anchor-402"></a>
+ ERROR_CHECK( &quot;UserManualCycleCreate()&quot;, &quot;UserNcSeqTreeCommonElementsAdd&quot;, 
+              err );
+
+ /***************************************************/
+<a name="anchor-403"></a> /* Add elements specific for manual cycle sequence */
+ /***************************************************/
+ for ( ii = 0 ; ii &lt; size; ii++ )
+ {
+   err = ProElementAlloc( seq_elem_table[ii].elem_type, &amp;element );
+<a name="anchor-404"></a>   ERROR_CHECK( &quot;UserManualCycleCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( seq_elem_table[ii].elem_type )
+   {
+     case PRO_E_TOOL_MTN_ARR:
+<a name="anchor-405"></a>        err = UserManualCycleMtnArrSet( element );
+        ERROR_CHECK( &quot;UserManualCycleCreate&quot;,
+                     &quot;UserManualCycleMtnArrSet()&quot;, err );
+        break;
+
+<a name="anchor-406"></a>     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserManualCycleCreate&quot;,&quot;UserManualCycleCreate()&quot;, err );
+        break;
+<a name="anchor-407"></a>   }
+
+   err = ProElemtreeElementAdd( seq_elem_tree, NULL, element );
+   ERROR_CHECK( &quot;UserManualCycleCreate&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+ }
+<a name="anchor-408"></a> 
+ /*********************************************/
+ /* Display element tree                      */
+ /*********************************************/
+ ProUtilElementtreePrint( seq_elem_tree, PRO_TEST_INFO_WINDOW, NULL );
+<a name="anchor-409"></a>
+ /*********************************************/
+ /* Create feature                            */
+ /*********************************************/
+ err = UserMfgModelFeatureCreate( mfg_model, seq_elem_tree, &amp;seq_feature );
+<a name="anchor-410"></a> ERROR_CHECK( &quot;UserManualCycleCreate&quot;, &quot;UserMfgModelFeatureCreate()&quot;, err );
+
+ err = ProElementFree( &amp;seq_elem_tree );
+ ERROR_CHECK( &quot;UserManualCycleCreate&quot;, &quot;ProElementFree()&quot;, err );
+
+<a name="anchor-411"></a> return ( (int)err );
+}
+
+/*====================================================================*\
+FUNCTION : UserNcsequenceCreate
+<a name="anchor-412"></a>PURPOSE  : Top level nc-sequence creation function
+\*====================================================================*/
+int UserNcsequenceCreate ()
+{
+ ProMdl		    mfg_model;
+<a name="anchor-413"></a> ProError	    err = PRO_TK_NO_ERROR;
+ ProAssembly	    assembly;
+ ProSelection	    workcell;
+ int		    num_sels;
+ NcseqEnts	    entities;
+<a name="anchor-414"></a> ProLine	    tool_name;
+ ProMfgToolHeadType head_num = PRO_MFG_TOOL_HEAD_1;
+ ProSelection	    *axes;
+ ProSelection	    curve;
+ ProSelection	    seq_sel;
+<a name="anchor-415"></a> ProFeature         rough_seq;
+ int		    pocket_num = 1;
+ int		    n_params;
+ static MfgPrmDblValue  end_mill_60x40_params[] =
+ {
+<a name="anchor-416"></a>   { &quot;CUTTER_DIAM&quot;,         60.0 },
+   { &quot;LENGTH&quot;,              40.0 }
+ };
+ static MfgPrmDblValue  drill_8mm_params[] =
+ {
+<a name="anchor-417"></a>   { &quot;CUTTER_DIAM&quot;,         8.0   },
+   { &quot;LENGTH&quot;,              75.0   },
+   { &quot;POINT_ANGLE&quot;,         118.0  }
+ };
+ static MfgPrmDblValue  end_mill_60x180_params[] =
+<a name="anchor-418"></a> {
+   { &quot;CUTTER_DIAM&quot;,         60.0  },
+   { &quot;LENGTH&quot;,              180.0 }
+ };
+ static MfgPrmDblValue  end_mill_18x100_params[] =
+<a name="anchor-419"></a> {
+   { &quot;CUTTER_DIAM&quot;,         18.0  },
+   { &quot;LENGTH&quot;,              100.0 }
+ };
+ static MfgPrmDblValue  end_mill_20x40_params[] =
+<a name="anchor-420"></a> {
+   { &quot;CUTTER_DIAM&quot;,         20.0 },
+   { &quot;LENGTH&quot;,              40.0 }
+ };
+
+<a name="anchor-421"></a> static MfgPrmDblValue  csink_15mm_params[] =
+ {
+   { &quot;CUTTER_DIAM&quot;,         15.0  },
+   { &quot;POINT_ANGLE&quot;,         90.0 },
+   { &quot;LENGTH&quot;,              50.0  },
+<a name="anchor-422"></a> };
+
+
+ err = ProMdlCurrentGet( &amp;mfg_model );
+ ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;ProMdlCurrentGet&quot;, err );
+<a name="anchor-423"></a>
+ err = ProMfgAssemGet( (ProMfg)mfg_model, &amp;assembly );
+ ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;ProMfgAssemGet&quot;, err );
+
+ /*--------------------------------------------------------------------*\
+<a name="anchor-424"></a>    Search required references
+ \*--------------------------------------------------------------------*/
+ entities.oper_found = PRO_B_FALSE;
+ entities.csys_found = PRO_B_FALSE;
+ entities.retract_found = PRO_B_FALSE;
+<a name="anchor-425"></a> entities.face_mill_wind_found = PRO_B_FALSE;
+ entities.pocket_mill_wind_found = PRO_B_FALSE;
+ entities.prof_mill_surf_found = PRO_B_FALSE;
+ entities.traj_curve_found = PRO_B_FALSE;
+ entities.model = (ProMfg)mfg_model;
+<a name="anchor-426"></a>
+ err = ProSolidFeatVisit( assembly, UserNcseqEntitiesCollect, NULL,
+                          (ProAppData) &amp;entities );
+
+ /*--------------------------------------------------------------------*\
+<a name="anchor-427"></a>    Create features
+ \*--------------------------------------------------------------------*/
+ if ( entities.oper_found           &amp;&amp; 
+      entities.retract_found        &amp;&amp;
+      entities.csys_found           &amp;&amp;
+<a name="anchor-428"></a>      entities.traj_curve           &amp;&amp;
+      entities.face_mill_wind_found &amp;&amp;
+      entities.prof_mill_surf_found &amp;&amp;
+      entities.pocket_mill_wind_found )
+ {
+<a name="anchor-429"></a>   err = UserOperWorkcellGet( entities.operation, &amp;workcell );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserOperWorkcellGet&quot;, err );
+
+   /*------------------------------------------------------------------*\
+      Facing sequence
+<a name="anchor-430"></a>   \*------------------------------------------------------------------*/
+   ProStringToWstring( tool_name, &quot;FLAT_MILL_60MM&quot; );
+   n_params = sizeof( end_mill_60x40_params )/sizeof( MfgPrmDblValue );
+
+   err = UserWorkcellToolAdd( mfg_model, workcell, head_num,  
+<a name="anchor-431"></a>                              PRO_TOOL_END_MILL, tool_name, 
+                              end_mill_60x40_params, n_params, 
+                              PRO_UNITLENGTH_MM, PRO_B_TRUE, &amp;pocket_num );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserWorkcellToolAdd&quot;, err );
+
+<a name="anchor-432"></a>   err = UserFacingCreate( (ProMfg)mfg_model,
+                           L&quot;FACING_W_D60_CUTTER&quot;, 
+                           entities.operation, 
+                           entities.retract_plane,
+                           entities.csys, 
+<a name="anchor-433"></a>                           entities.face_mill_window, 
+                           head_num,
+                           pocket_num,
+                           tool_name );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserFacingCreate&quot;, err );
+<a name="anchor-434"></a>
+   /*------------------------------------------------------------------*\
+      Countersink sequence
+   \*------------------------------------------------------------------*/
+   ProStringToWstring( tool_name, &quot;CSINK_15MM&quot; );
+<a name="anchor-435"></a>   n_params = sizeof( csink_15mm_params )/sizeof( MfgPrmDblValue );
+
+   err = UserWorkcellToolAdd( mfg_model, workcell, head_num,  
+                              PRO_TOOL_CSINK, tool_name, 
+                              csink_15mm_params, n_params, PRO_UNITLENGTH_MM, 
+<a name="anchor-436"></a>                              PRO_B_TRUE, &amp;pocket_num );
+
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserWorkcellToolAdd&quot;, err );
+
+   err = UserCSinkgCreate( (ProMfg)mfg_model,
+<a name="anchor-437"></a>                           L&quot;COUNTERSINK_D9&quot;, 
+                           entities.operation, 
+                           entities.retract_plane,
+                           entities.csys, 
+                           9.,
+<a name="anchor-438"></a>                           head_num,
+                           pocket_num,
+                           tool_name );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserCSinkgCreate&quot;, err );
+
+<a name="anchor-439"></a>   /*------------------------------------------------------------------*\
+      Drilling sequence
+   \*------------------------------------------------------------------*/
+   ProStringToWstring( tool_name, &quot;DRILL_8MM&quot; );
+   n_params = sizeof( drill_8mm_params )/sizeof( MfgPrmDblValue );
+<a name="anchor-440"></a>
+   err = UserWorkcellToolAdd( mfg_model, workcell, head_num,  
+                              PRO_TOOL_DRILL, tool_name, 
+                              drill_8mm_params, n_params, PRO_UNITLENGTH_MM, 
+                              PRO_B_TRUE, &amp;pocket_num );
+<a name="anchor-441"></a>
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserWorkcellToolAdd&quot;, err );
+
+   err = UserCollectAxesToDrill( assembly, &amp;axes );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserCollectAxesToDrill&quot;, err );
+<a name="anchor-442"></a>
+   err = UserDrillingCreate( (ProMfg)mfg_model,
+                             L&quot;DRILLING_W_D8_DRILL&quot;, 
+                             entities.operation, 
+                             entities.retract_plane,
+<a name="anchor-443"></a>                             entities.csys, 
+                             axes,
+                             head_num,
+                             pocket_num,
+                             tool_name );
+<a name="anchor-444"></a>   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserDrillingCreate&quot;, err );
+
+   /*------------------------------------------------------------------*\
+      Trajectory sequence (tool motion based trajectory)
+   \*------------------------------------------------------------------*/
+<a name="anchor-445"></a>   ProStringToWstring( tool_name, &quot;END_MILL_65MM&quot; );
+   n_params = sizeof( end_mill_60x180_params )/sizeof( MfgPrmDblValue );
+
+   err = UserWorkcellToolAdd( mfg_model, workcell, head_num,  
+                              PRO_TOOL_END_MILL, tool_name, 
+<a name="anchor-446"></a>                              end_mill_60x180_params, n_params,
+                              PRO_UNITLENGTH_MM, PRO_B_TRUE, &amp;pocket_num );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserWorkcellToolAdd&quot;, err );
+
+   err = UserTrajectoryCreate( (ProMfg)mfg_model,
+<a name="anchor-447"></a>                                L&quot;TRAJECTORY_W_D60_MILL&quot;, 
+                                entities.operation, 
+                                entities.retract_plane,
+                                entities.csys, 
+                                entities.traj_curve, 
+<a name="anchor-448"></a>                                head_num,
+                                pocket_num,
+                                tool_name );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserTrajectoryCreate&quot;, err );
+
+<a name="anchor-449"></a>   /*------------------------------------------------------------------*\
+      2-axis trajectory sequence (curve trajectory)
+   \*------------------------------------------------------------------*/
+   err = UserCurveTrajCreate( (ProMfg)mfg_model,
+                              L&quot;CURVE_TRAJECTORY_W_D60_MILL&quot;, 
+<a name="anchor-450"></a>                              entities.operation, 
+                              entities.retract_plane,
+                              entities.csys, 
+                              entities.traj_curve, 
+                              head_num,
+<a name="anchor-451"></a>                              pocket_num,
+                              tool_name );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserTrajectoryCreate&quot;, err );
+
+   /*------------------------------------------------------------------*\
+<a name="anchor-452"></a>      Roughing sequence
+   \*------------------------------------------------------------------*/
+   err = UserRoughingCreate( (ProMfg)mfg_model,
+                             L&quot;ROUGHING_W_D60_MILL&quot;, 
+                             entities.operation, 
+<a name="anchor-453"></a>                             entities.retract_plane,
+                             entities.csys, 
+                             entities.pocket_mill_window, 
+                             head_num,
+                             pocket_num,
+<a name="anchor-454"></a>                             tool_name,
+                             &amp;rough_seq );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserRoughingCreate&quot;, err );
+
+   /*------------------------------------------------------------------*\
+<a name="anchor-455"></a>      Re-Roughing sequence
+   \*------------------------------------------------------------------*/
+   err = ProSelectionAlloc( NULL, &amp;rough_seq, &amp;seq_sel );
+   ERROR_CHECK( &quot;UserNcseqEntitiesCollect&quot;, &quot;ProSelectionAlloc()&quot;, err );
+
+<a name="anchor-456"></a>   ProStringToWstring( tool_name, &quot;END_MILL_20MM&quot; );
+   n_params = sizeof( end_mill_20x40_params )/sizeof( MfgPrmDblValue );
+
+   err = UserWorkcellToolAdd( mfg_model, workcell, head_num,  
+                              PRO_TOOL_END_MILL, tool_name, 
+<a name="anchor-457"></a>                              end_mill_20x40_params, n_params, 
+                              PRO_UNITLENGTH_MM, PRO_B_TRUE, &amp;pocket_num );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserWorkcellToolAdd&quot;, err );
+   err = UserReRoughingCreate( (ProMfg)mfg_model,
+                               L&quot;RE-ROUGHING_W_D20_MILL&quot;, 
+<a name="anchor-458"></a>                               entities.operation, 
+                               entities.retract_plane,
+                               entities.csys, 
+                               seq_sel,
+                               head_num,
+<a name="anchor-459"></a>                               pocket_num,
+                               tool_name );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserReRoughingCreate&quot;, err );
+
+   /*------------------------------------------------------------------*\
+<a name="anchor-460"></a>      Finishing sequence
+   \*------------------------------------------------------------------*/
+   err = UserFinishingCreate( (ProMfg)mfg_model,
+                              L&quot;FINISHING_W_D20_MILL&quot;, 
+                              entities.operation, 
+<a name="anchor-461"></a>                              entities.retract_plane,
+                              entities.csys, 
+                              entities.pocket_mill_window, 
+                              head_num,
+                              pocket_num,
+<a name="anchor-462"></a>                              tool_name );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserFinishingCreate&quot;, err );
+
+   /*------------------------------------------------------------------*\
+      Profile milling sequence
+<a name="anchor-463"></a>   \*------------------------------------------------------------------*/
+   ProStringToWstring( tool_name, &quot;END_MILL_18MM&quot; );
+   n_params = sizeof( end_mill_18x100_params )/sizeof( MfgPrmDblValue );
+
+   err = UserWorkcellToolAdd( mfg_model, workcell, head_num,  
+<a name="anchor-464"></a>                              PRO_TOOL_END_MILL, tool_name, 
+                              end_mill_18x100_params, n_params,
+                              PRO_UNITLENGTH_MM, PRO_B_TRUE, &amp;pocket_num );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserWorkcellToolAdd&quot;, err );
+
+<a name="anchor-465"></a>   err = UserProfilingCreate( (ProMfg)mfg_model,
+                              L&quot;PROFILING_W_D18_MILL&quot;, 
+                              entities.operation, 
+                              entities.retract_plane,
+                              entities.csys, 
+<a name="anchor-466"></a>                              entities.prof_mill_surf, 
+                              head_num,
+                              pocket_num,
+                              tool_name,
+                              &amp;rough_seq );
+<a name="anchor-467"></a>   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserProfilingCreate&quot;, err );
+
+   /*------------------------------------------------------------------*\
+      Manual cycle sequence
+   \*------------------------------------------------------------------*/
+<a name="anchor-468"></a>   err = UserManualCycleCreate( (ProMfg)mfg_model,
+                                L&quot;MANUAL_CYCLE_W_NO_TOOL&quot;, 
+                                entities.operation, 
+                                entities.retract_plane,
+                                entities.csys, 
+<a name="anchor-469"></a>                                head_num,
+                                -1,
+                                NULL );
+   ERROR_CHECK( &quot;UserNcsequenceCreate&quot;, &quot;UserManualCycleCreate&quot;, err );
+
+<a name="anchor-470"></a> }
+ else
+ {
+   if ( !entities.retract_found )
+     ProTKFprintf( stderr, &quot;A suitable retract plane was not found\n&quot; );
+<a name="anchor-471"></a>
+   if ( !entities.oper_found )
+     ProTKFprintf( stderr, &quot;A suitable operation was not found\n&quot; );
+
+   if ( !entities.csys_found )
+<a name="anchor-472"></a>     ProTKFprintf( stderr, &quot;A suitable csys was not found\n&quot; );
+
+   if ( !entities.face_mill_wind_found )
+     ProTKFprintf( stderr, &quot;A suitable mill window was not found\n&quot; );
+
+<a name="anchor-473"></a>   if ( !entities.pocket_mill_wind_found )
+     ProTKFprintf( stderr, &quot;A suitable mill window was not found\n&quot; );
+
+   if ( !entities.prof_mill_surf_found )
+     ProTKFprintf( stderr, &quot;A suitable mill surface was not found\n&quot; );
+<a name="anchor-474"></a> }
+    
+ return ((int)err);
+}
+
+</pre>
+</body>
+</html>

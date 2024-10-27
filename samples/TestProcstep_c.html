@@ -1,0 +1,759 @@
+<html>
+<head>
+<title>TestProcstep.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProArray.h>
+#include &lt;ProFeature.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMenu.h>
+#include &lt;ProProcstep.h>
+<a name="anchor-3"></a>#include &lt;ProUtil.h>
+#include &lt;ProSolid.h>
+
+/*--------------------------------------------------------------------*\
+C System includes
+<a name="anchor-4"></a>\*--------------------------------------------------------------------*/
+#include &lt;stdlib.h>
+#include &lt;string.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-5"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilFiles.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilMessage.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;UtilTree.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &quot;UtilString.h&quot;
+<a name="anchor-7"></a>#include &lt;ProTKRunTime.h>
+#include &lt;ProMessage.h>
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;ProExpldstate.h>
+<a name="anchor-8"></a>/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-9"></a>Application data types
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+<a name="anchor-10"></a>\*--------------------------------------------------------------------*/
+
+/*====================================================================*\
+  Function : ProUtilProcstepDataGet
+  Purpose  : Get value data 
+<a name="anchor-11"></a>\*====================================================================*/
+
+ProError ProUtilProcstepDataGet (
+    ProProcstep *procstep,      /* Pointer on  ProProcstep type element */
+    int element_id,             /* id_elem                              */
+<a name="anchor-12"></a>    ProValueData **valuedata)   /* ProArray                             */
+{
+    ProValue *p_values;
+    ProElement elem_tree, p_element;
+    ProElempathItem elempathitem;
+<a name="anchor-13"></a>    int path_size = 1, multi_size, i;
+    ProError err;
+    ProValueData pval_data;
+    
+/*-------------------------------------------------------------------------*\
+<a name="anchor-14"></a>    Get  tree element
+\*-------------------------------------------------------------------------*/
+
+    elempathitem.type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+    elempathitem.path_item.elem_id = element_id;
+<a name="anchor-15"></a>    
+    err = ProFeatureElemtreeExtract ((ProFeature*)procstep, NULL, PRO_FEAT_EXTRACT_NO_OPTS, &amp;elem_tree);
+    TEST_CALL_REPORT(&quot;ProFeatureElemtreeExtract()&quot;,
+		     &quot;ProUtilProcstepDataGet&quot;, err, err != PRO_TK_NO_ERROR); 
+
+<a name="anchor-16"></a>    err = ProUtilElemtreeElementGet (elem_tree, &amp;elempathitem,
+				     path_size, &amp;p_element);
+   
+    if (err != PRO_TK_NO_ERROR)
+	return (err);
+<a name="anchor-17"></a>
+/*-------------------------------------------------------------------------*\
+    Get  element values
+\*-------------------------------------------------------------------------*/
+
+<a name="anchor-18"></a>    err = ProArrayAlloc (0, sizeof(ProValue),
+			 1, (ProArray*)&amp;p_values);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,
+		     &quot;ProUtilProcstepDataGet&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-19"></a>    err = ProElementValuesGet (p_element, &amp;p_values);
+    TEST_CALL_REPORT(&quot;ProElementValuesGet()&quot;,
+		     &quot;ProUtilProcstepDataGet&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProArraySizeGet ((ProArray)p_values, &amp;multi_size);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+<a name="anchor-20"></a>		     &quot;ProUtilProcstepDataGet&quot;, err, err != PRO_TK_NO_ERROR);
+
+    for (i=0; i&lt;multi_size; i++)
+    {
+	err = ProValueDataGet (p_values[i], &amp;pval_data);
+<a name="anchor-21"></a>	TEST_CALL_REPORT(&quot;ProValueDataGet()&quot;,
+			 &quot;ProUtilProcstepDataGet&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProArrayObjectAdd ((ProArray*)valuedata,
+				 0, 1, (void*)&amp;pval_data);
+<a name="anchor-22"></a>	TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;,
+			 &quot;ProUtilProcstepDataGet&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    
+    err = ProArrayFree ((ProArray*)&amp;p_values);
+<a name="anchor-23"></a>    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+		     &quot;ProUtilProcstepDataGet&quot;, err, err != PRO_TK_NO_ERROR);
+
+     
+    return (err);
+<a name="anchor-24"></a>}
+ 
+/*====================================================================*\
+  Function : ProUtilProcstepTypeGet
+  Purpose  : Get process step type 
+<a name="anchor-25"></a>\*====================================================================*/
+
+ProError ProUtilProcstepTypeGet (int n_type,
+				 ProProcstep *procstep,
+				 char (*step_type)[2][13])
+<a name="anchor-26"></a>{
+    ProError err= PRO_TK_NO_ERROR, status;
+    ProValueData *valuedata;
+    int n_array;
+    
+<a name="anchor-27"></a>    switch (n_type)
+    {
+	case PRO_PROCSTEP_ASSEMBLE :
+	    ProUtilstrcpy((*step_type)[0], &quot;Assemble&quot;);
+	    ProUtilstrcpy((*step_type)[1], &quot;ASSEMBLED&quot;);
+<a name="anchor-28"></a>	    break;
+	case PRO_PROCSTEP_DISASSEMBLE :
+	    ProUtilstrcpy((*step_type)[0], &quot;Disassemble&quot;);
+	    ProUtilstrcpy((*step_type)[1], &quot;DISASSEMBLED&quot;);
+	    break;
+<a name="anchor-29"></a>	case PRO_PROCSTEP_REASSEMBLE :
+	    ProUtilstrcpy((*step_type)[0], &quot;Reassemble&quot;);
+	    ProUtilstrcpy((*step_type)[1], &quot;REASSEMBLED&quot;);
+	    break;
+	case PRO_PROCSTEP_REPOSITION :
+<a name="anchor-30"></a>	    ProUtilstrcpy((*step_type)[0], &quot;Reposition&quot;);
+	    ProUtilstrcpy((*step_type)[1], &quot;REPOSITIONED&quot;);
+	    break;
+	case PRO_PROCSTEP_SURFACE :
+	    ProUtilstrcpy((*step_type)[0], &quot;Surface&quot;);
+<a name="anchor-31"></a>	    ProUtilstrcpy((*step_type)[1], &quot;Surface&quot;);
+	    break;
+	case PRO_PROCSTEP_VOLUME :
+	    ProUtilstrcpy((*step_type)[0], &quot;Volume&quot;);
+	    ProUtilstrcpy((*step_type)[1], &quot;Volume&quot;);
+<a name="anchor-32"></a>	    break;
+	case PRO_PROCSTEP_MFG_MODEL : 
+	    ProUtilstrcpy((*step_type)[0], &quot;Mfg_model&quot;);
+	    ProUtilstrcpy((*step_type)[1], &quot;Mfg_model&quot;);
+	    break;
+<a name="anchor-33"></a>	case PRO_PROCSTEP_GENERAL :
+	    ProUtilstrcpy((*step_type)[0], &quot;General&quot;);
+
+	    err = ProArrayAlloc (0, sizeof(ProValueData),
+				 1, (ProArray*)&amp;valuedata);
+<a name="anchor-34"></a>	    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, 
+			     &quot;ProUtilProcstepTypeGet&quot;,
+			     err, err != PRO_TK_NO_ERROR);
+	    
+	    err = ProUtilProcstepDataGet (procstep,
+<a name="anchor-35"></a>					  PRO_E_GEN_STEP_TYPE,
+					  &amp;valuedata);
+	    status = ProArraySizeGet ((ProArray)valuedata, &amp;n_array);
+	    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+			     &quot;ProUtilProcstepTypeGet&quot;, status,
+<a name="anchor-36"></a>			     status != PRO_TK_NO_ERROR);
+
+	    if (err == PRO_TK_NO_ERROR &amp;&amp; n_array != 0)
+		ProWstringToString ((*step_type)[1], valuedata[0].v.w);
+
+<a name="anchor-37"></a>	    err = ProArrayFree ((ProArray*)&amp;valuedata);
+	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, 
+			     &quot;ProUtilProcstepTypeGet&quot;,
+			     err, err != PRO_TK_NO_ERROR);
+	    
+<a name="anchor-38"></a>	    break;
+	default:
+	    ProUtilstrcpy((*step_type)[0], &quot;unknow&quot;);
+	}
+    return err;
+<a name="anchor-39"></a>}
+
+/*====================================================================*\
+  Function : ProTestSetStep
+  Purpose  : Select and set active process step 
+<a name="anchor-40"></a>\*====================================================================*/
+ProError ProTestSetStep (
+    ProAppData model,
+    int var2)
+{
+<a name="anchor-41"></a>    ProSolid solid = *((ProSolid*)model);
+    ProError err;
+    ProCharLine str;
+    wchar_t **w_strings, **p_sel;
+    ProName w_title;
+<a name="anchor-42"></a>    ProProcstep *p_steps, procstep, active;
+    int n_steps, i, sel, n_sel, id;
+
+/*-------------------------------------------------------------------------*\
+    Find all process steps in the model
+<a name="anchor-43"></a>\*-------------------------------------------------------------------------*/
+
+    err = ProUtilCollectProcstep(solid, &amp;p_steps);
+    if (err != PRO_TK_NO_ERROR)
+	return (PRO_TK_NO_ERROR);
+<a name="anchor-44"></a>
+    err = ProArraySizeGet((ProArray)p_steps, &amp;n_steps);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, 
+			    &quot;ProTestProcstep&quot;, err, err != PRO_TK_NO_ERROR);
+    if (n_steps &lt;= 0)
+<a name="anchor-45"></a>	return (PRO_TK_NO_ERROR);
+
+/*-------------------------------------------------------------------------*\
+   Create a menu for select active step 
+\*-------------------------------------------------------------------------*/
+<a name="anchor-46"></a>    w_strings = (wchar_t**)calloc(n_steps+1, sizeof(wchar_t*));
+    for (i=0; i&lt;n_steps; i++)
+    {
+	w_strings[i] = (wchar_t*)calloc(1, sizeof(ProName));
+	ProTKSprintf(str, &quot;Step %d&quot;, i+1);
+<a name="anchor-47"></a>	ProStringToWstring(w_strings[i], str);
+    } 
+    w_strings[n_steps] = (wchar_t*)calloc(1, sizeof(ProName));
+
+
+<a name="anchor-48"></a>    ProStringToWstring(w_title, (char *)&quot;Steps&quot;); 
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select a step&quot;);
+
+    err = ProMenuStringsSelect(w_title, w_strings, 1, NULL, &amp;p_sel, &amp;n_sel);
+    TEST_CALL_REPORT(&quot;ProMenuStringsSelect()&quot;, 
+<a name="anchor-49"></a>			    &quot;ProtestSetStep&quot;, err, err != PRO_TK_NO_ERROR);
+
+    if (err == PRO_TK_NO_ERROR)
+    {
+	for (i=0; i&lt;=n_steps; i++)
+<a name="anchor-50"></a>	    if (ProUtilWstrCmp(w_strings[i], p_sel[0])==0)
+		break;
+	sel = i;
+    }
+    
+<a name="anchor-51"></a>/*-------------------------------------------------------------------------*\
+   Free allocated memory 
+\*-------------------------------------------------------------------------*/
+    for (i=0; i&lt;n_steps+1; i++)
+	free(w_strings[i]);
+<a name="anchor-52"></a>    free(w_strings);
+
+    if (err != PRO_TK_NO_ERROR || sel>n_steps)
+	return (PRO_TK_NO_ERROR);
+   
+<a name="anchor-53"></a>/*-------------------------------------------------------------------------*\
+   Init procstep 
+\*-------------------------------------------------------------------------*/
+    if (sel&lt;n_steps)
+    {
+<a name="anchor-54"></a>	err = ProProcstepInit(solid, sel+1, PRO_VALUE_UNUSED, &amp;procstep);
+	TEST_CALL_REPORT(&quot;ProProcstepInit()&quot;, 
+			    &quot;ProtestSetStep&quot;, err, err != PRO_TK_NO_ERROR);
+	ProTKSprintf(str, &quot;Selected step has Id = %d&quot;, procstep.id);
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, str);
+<a name="anchor-55"></a>    }
+    else
+    {
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter proc step Id [QUIT]:&quot;);
+	err = ProMessageIntegerRead(NULL, &amp;id);
+<a name="anchor-56"></a>	TEST_CALL_REPORT(&quot;ProMessageIntegerRead()&quot;, 
+			    &quot;ProtestSetStep&quot;, err, err != PRO_TK_NO_ERROR);
+	if (err != PRO_TK_NO_ERROR)
+	    return (PRO_TK_NO_ERROR);
+
+<a name="anchor-57"></a>	err = ProProcstepInit(solid, PRO_VALUE_UNUSED, id, &amp;procstep);
+	TEST_CALL_REPORT(&quot;ProProcstepInit()&quot;, 
+			    &quot;ProtestSetStep&quot;, err, err != PRO_TK_NO_ERROR);
+
+    }
+<a name="anchor-58"></a>
+/*-------------------------------------------------------------------------*\
+   Compare with current active step 
+\*-------------------------------------------------------------------------*/
+    err = ProProcstepActiveGet(solid, &amp;active);
+<a name="anchor-59"></a>    TEST_CALL_REPORT(&quot;ProProcstepActiveGet()&quot;, 
+			    &quot;ProtestSetStep&quot;, err, err != PRO_TK_NO_ERROR);
+    if (active.id == procstep.id &amp;&amp; err == PRO_TK_NO_ERROR)
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Selected step already active&quot;);
+    else 
+<a name="anchor-60"></a>    {
+/*-------------------------------------------------------------------------*\
+  Set new set 
+\*-------------------------------------------------------------------------*/
+	err = ProProcstepActiveSet(solid, &amp;procstep);
+<a name="anchor-61"></a>	TEST_CALL_REPORT(&quot;ProProcstepActiveSet()&quot;, 
+			    &quot;ProtestSetStep&quot;, err, err != PRO_TK_NO_ERROR);
+	if (err == PRO_TK_NO_ERROR)
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Active step set successfully&quot;);
+			    
+<a name="anchor-62"></a>	err = ProSolidRegenerate(solid, (int)PRO_REGEN_ALLOW_CONFIRM);
+
+    	TEST_CALL_REPORT(&quot;ProSolidRegenerate()&quot;, 
+			    &quot;ProtestSetStep&quot;, err, err != PRO_TK_NO_ERROR);
+#ifndef PT_PRODUCTS_BUILD
+<a name="anchor-63"></a>	err = ProSolidDisplay(solid);
+    	TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, 
+			    &quot;ProtestSetStep&quot;, err, err != PRO_TK_NO_ERROR);
+#endif
+    }
+<a name="anchor-64"></a>    
+/*-------------------------------------------------------------------------*\
+   Activate or Unactivate Next#step and Previous#step buttons
+\*-------------------------------------------------------------------------*/
+    err = ProUtilMenubuttonActivate ((char *)&quot;-Step Regen&quot;, (char *)&quot;Previous step&quot;,
+<a name="anchor-65"></a>			       p_steps[0].id != procstep.id);
+    err = ProUtilMenubuttonActivate ((char *)&quot;-Step Regen&quot;, (char *)&quot;Next step&quot;, 
+			       p_steps[n_steps-1].id != procstep.id);
+    err = ProUtilMenubuttonActivate ((char *)&quot;-Step Regen&quot;, (char *)&quot;Info&quot;, 1);
+    
+<a name="anchor-66"></a>    err = ProArrayFree((ProArray*)&amp;p_steps);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, 
+		     &quot;ProtestSetStep&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-67"></a>}
+
+/*====================================================================*\
+  Function : ProTestStep
+  Purpose  : Set next process step to be active 
+<a name="anchor-68"></a>\*====================================================================*/
+ProError ProTestStep (
+    ProAppData model,
+    int flag)
+{
+<a name="anchor-69"></a>    ProProcstep active, *p_steps;
+    ProError err;
+    ProSolid solid = *((ProSolid*)model);
+    int n_steps, des = 1, i;
+    
+<a name="anchor-70"></a>    if (!flag)
+	des = -1;
+/*-------------------------------------------------------------------------*\
+    Find all process steps in the model
+\*-------------------------------------------------------------------------*/
+<a name="anchor-71"></a>    
+    err = ProUtilCollectProcstep(solid, &amp;p_steps);
+    if (err != PRO_TK_NO_ERROR)
+	return (PRO_TK_NO_ERROR);
+
+<a name="anchor-72"></a>    err = ProArraySizeGet((ProArray)p_steps, &amp;n_steps);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+		     &quot;ProTestStep&quot;, err, err != PRO_TK_NO_ERROR);
+         
+    err = ProProcstepActiveGet (solid, &amp;active);
+<a name="anchor-73"></a>    TEST_CALL_REPORT(&quot;ProProcstepActiveGet()&quot;,
+		     &quot;ProTestStep&quot;, err, err != PRO_TK_NO_ERROR);
+		     
+    if (err != PRO_TK_NO_ERROR)
+    {
+<a name="anchor-74"></a>	active = p_steps[0];
+	des = 0;
+    }
+    err = ProProcstepNumberGet(solid, &amp;active, &amp;i);
+    TEST_CALL_REPORT(&quot;ProProcstepNumberGet()&quot;,
+<a name="anchor-75"></a>		     &quot;ProTestStep&quot;, err, err != PRO_TK_NO_ERROR);
+    i+=des - 1;
+    err = ProProcstepActiveSet(solid, &amp;p_steps[i]);
+    TEST_CALL_REPORT(&quot;ProProcstepActiveSet()&quot;,
+		     &quot;ProTestStep&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-76"></a>    
+    err = ProSolidRegenerate(solid, (int)PRO_REGEN_ALLOW_CONFIRM);
+
+    TEST_CALL_REPORT(&quot;ProSolidRegenerate()&quot;, 
+		     &quot;ProTestStep&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-77"></a>#ifndef PT_PRODUCTS_BUILD
+    err = ProSolidDisplay(solid);
+    TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, 
+		     &quot;ProTestStep&quot;, err, err != PRO_TK_NO_ERROR);
+#endif
+<a name="anchor-78"></a>    
+/*-------------------------------------------------------------------------*\
+   Activate or Unactivate Next#step and Previous#step buttons
+\*-------------------------------------------------------------------------*/
+    ProUtilMenubuttonActivate ((char *)&quot;-Step Regen&quot;, (char *)&quot;Previous step&quot;, i>0);
+<a name="anchor-79"></a>    ProUtilMenubuttonActivate ((char *)&quot;-Step Regen&quot;, (char *)&quot;Next step&quot;, i+1&lt;n_steps);
+    ProUtilMenubuttonActivate ((char *)&quot;-Step Regen&quot;, (char *)&quot;Info&quot;, 1);
+    
+    err = ProArrayFree((ProArray*)&amp;p_steps);
+    
+<a name="anchor-80"></a>    return(PRO_TK_NO_ERROR);    
+}
+
+/*====================================================================*\
+  Function : ProTestInfo
+<a name="anchor-81"></a>  Purpose  : Get info for current process step 
+\*====================================================================*/
+ProError ProTestInfo (ProAppData model, int var2)
+{
+    char messagefile[] = &quot;teststeps.inf&quot;, sname[PRO_MDLNAME_SIZE],
+<a name="anchor-82"></a>	stype[2][13], msg_str[PRO_LINE_SIZE], strout[PRO_PATH_SIZE],
+	*sign_eq = (char *)&quot;======================================================&quot;,
+	*sign_ln = (char *)&quot;------------------------------------------------------&quot;,
+	s_description[1000];
+    FILE *pfile;
+<a name="anchor-83"></a>    ProProcstep procstep;
+    ProError err, status;
+    ProSolid solid = (*(ProSolid*)model);
+    ProValueData *valuedata;
+    ProModelitem model_item;
+<a name="anchor-84"></a>    wchar_t msgfile[PRO_NAME_SIZE], mdl_wname[PRO_MDLNAME_SIZE];
+    int n_step, str_len, i, size_array, n_gen, element_id;
+    ProExpldstate expld_state;
+    ProSimprep simp_rep;
+        
+<a name="anchor-85"></a>    pfile = (FILE *)PTApplsUnicodeFopen (messagefile, &quot;w&quot;);
+    err = ProArrayAlloc (0, sizeof(ProValueData),
+			 1, (ProArray*)&amp;valuedata);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, 
+		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-86"></a>    
+/*-------------------------------------------------------------------------*\
+    Get model name 
+\*-------------------------------------------------------------------------*/
+    err = ProMdlMdlnameGet ((ProMdl)solid, mdl_wname);
+<a name="anchor-87"></a>    ProWstringToString (sname, mdl_wname);
+    ProTKSprintf(strout, &quot;PROCESS NAME = %s\n&quot;, sname);
+    strncat(strout, sign_eq, strlen(strout)-1);
+    ProTKFprintf(pfile,&quot;\n%s\n\n&quot;, strout);
+    
+<a name="anchor-88"></a>/*-------------------------------------------------------------------------*\
+    Get active process it step type and step number
+\*-------------------------------------------------------------------------*/
+    
+    err = ProProcstepActiveGet (solid, &amp;procstep); 
+<a name="anchor-89"></a>    TEST_CALL_REPORT(&quot;ProProcstepActiveGet()&quot;, 
+		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProProcstepNumberGet (solid, &amp;procstep, &amp;n_step);
+    TEST_CALL_REPORT(&quot;ProProcstepNumberGet()&quot;, 
+<a name="anchor-90"></a>		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+  
+    err = ProUtilProcstepDataGet (&amp;procstep, PRO_E_PROCESS_STEP_TYPE,
+				  &amp;valuedata);
+
+<a name="anchor-91"></a>    status = ProArraySizeGet ((ProArray)valuedata, &amp;size_array);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+		     &quot;ProTestInfo&quot;, status, status != PRO_TK_NO_ERROR);
+
+    if (err == PRO_TK_NO_ERROR &amp;&amp; size_array != 0)
+<a name="anchor-92"></a>	err = ProUtilProcstepTypeGet (valuedata[0].v.i, &amp;procstep, &amp;stype);
+   
+    n_gen = valuedata[0].v.i == PRO_PROCSTEP_GENERAL ? 1:0;
+    
+    ProTKSprintf(strout, &quot;STEP %d: %s&quot;, n_step, stype[n_gen]);
+<a name="anchor-93"></a>    str_len = strlen(strout);
+    ProUtilstrncpy(msg_str, sign_ln, str_len);
+    msg_str[str_len]='\0';
+    ProTKFprintf(pfile,&quot; %s\n %s\n %s&quot;, msg_str, strout, msg_str);
+
+<a name="anchor-94"></a>    err = ProArraySizeSet ((ProArray*)&amp;valuedata, 0);
+    TEST_CALL_REPORT(&quot;ProArraySizeSet()&quot;, 
+		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+		     
+/*-------------------------------------------------------------------------*\
+<a name="anchor-95"></a>    Get components
+\*-------------------------------------------------------------------------*/
+
+    if (n_gen)
+    {	
+<a name="anchor-96"></a>	element_id = PRO_E_GEN_STEP_REFS;
+	ProTKFprintf(pfile, &quot;\n\n ITEM REFERENCED\n&quot;);
+    }
+    else
+    {
+<a name="anchor-97"></a>	ProTKFprintf(pfile, &quot;\n\n COMPONENTS %s\n&quot;, stype[1]);
+	element_id = PRO_E_COMPONENTS;
+    }
+    
+    err = ProUtilProcstepDataGet (&amp;procstep, element_id, &amp;valuedata); 
+<a name="anchor-98"></a>
+    status = ProArraySizeGet ((ProArray)valuedata, &amp;size_array);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+		     &quot;ProTestInfo&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-99"></a>    if (err == PRO_TK_NO_ERROR &amp;&amp; size_array != 0)
+    {
+	for (i=size_array-1; i>=0; i--)
+	{
+	    err = ProSelectionModelitemGet (valuedata[i].v.r, &amp;model_item);
+<a name="anchor-100"></a>	    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+	    	&quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR &amp;&amp;
+		err != PRO_TK_BAD_INPUTS);
+
+	    ProUtilstrcpy(sname, &quot;*&quot;);	    
+<a name="anchor-101"></a>	    if (err == PRO_TK_NO_ERROR)
+	    {	    
+		err = ProMdlMdlnameGet (model_item.owner, mdl_wname);
+		TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, 
+			     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-102"></a>		ProWstringToString (sname, mdl_wname);
+	    }	    
+	    ProTKFprintf (pfile, &quot;    %s\n&quot;, sname);
+	}
+    }
+<a name="anchor-103"></a>    else
+	ProTKFprintf(pfile, &quot;    None\n&quot;); 
+
+    err = ProArraySizeSet((ProArray*)&amp;valuedata, 0);
+    TEST_CALL_REPORT(&quot;ProArraySizeSet()&quot;, 
+<a name="anchor-104"></a>		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+		    	    
+/*-------------------------------------------------------------------------*\
+    Get Abreviated Description
+\*-------------------------------------------------------------------------*/
+<a name="anchor-105"></a>    err = ProUtilProcstepDataGet (&amp;procstep, PRO_E_DESCRIPTION, &amp;valuedata);
+
+    status = ProArraySizeGet ((ProArray)valuedata, &amp;size_array);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+		     &quot;ProTestInfo&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-106"></a> 
+    if (err == PRO_TK_NO_ERROR &amp;&amp; size_array != 0)
+    {
+	ProWstringToString (s_description, valuedata[size_array-1].v.w);
+	if (size_array > 1)
+<a name="anchor-107"></a>	    ProUtilstrcat (s_description, &quot;...&quot;);
+    }
+    else
+	ProUtilstrcpy (s_description, &quot;No description&quot;);
+
+<a name="anchor-108"></a>    ProTKFprintf (pfile, &quot;\n ABREVIATED DESCRIPTION\n    %s\n&quot;, s_description);
+
+    err = ProArraySizeSet ((ProArray*)&amp;valuedata, 0);
+    TEST_CALL_REPORT(&quot;ProArrayObjectRemove()&quot;, 
+		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-109"></a>	
+/*-------------------------------------------------------------------------*\
+     Get Time Estimate
+\*-------------------------------------------------------------------------*/
+
+<a name="anchor-110"></a>    err = ProUtilProcstepDataGet (&amp;procstep, PRO_E_TIME_ESTIMATE, &amp;valuedata);
+
+    status = ProArraySizeGet ((ProArray)valuedata, &amp;size_array);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+		     &quot;ProTestInfo&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-111"></a>
+    if ((err == PRO_TK_NO_ERROR) &amp;&amp; (valuedata[0].v.d > 0.0) &amp;&amp; size_array != 0)
+	ProTKFprintf (pfile, &quot;\n TIME ESTIMATE\n    %f HOURS\n&quot;, valuedata[0].v.d); 
+    else
+	ProTKFprintf (pfile, &quot;\n TIME ESTIMATE\n    No assigned\n&quot;);
+<a name="anchor-112"></a>
+    err = ProArraySizeSet ((ProArray*)&amp;valuedata, 0);
+    TEST_CALL_REPORT(&quot;ProArraySizeSet()&quot;, 
+		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+	
+<a name="anchor-113"></a>/*-------------------------------------------------------------------------*\
+    Get Cost Estimate
+\*-------------------------------------------------------------------------*/
+
+    err = ProUtilProcstepDataGet (&amp;procstep, PRO_E_COST_ESTIMATE, &amp;valuedata);
+<a name="anchor-114"></a>    
+    status = ProArraySizeGet ((ProArray)valuedata, &amp;size_array);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+		     &quot;ProTestInfo&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-115"></a>    if ((err == PRO_TK_NO_ERROR) &amp;&amp; (valuedata[0].v.d != 0.0) &amp;&amp; size_array != 0)
+	ProTKFprintf (pfile, &quot;\n COST ESTIMATE\n    %f\n&quot;, valuedata[0].v.d); 
+    else
+	ProTKFprintf (pfile, &quot;\n COST ESTIMATE\n    Not Assigned\n&quot;);
+
+<a name="anchor-116"></a>    err = ProArraySizeSet ((ProArray*)&amp;valuedata, 0);
+    TEST_CALL_REPORT(&quot;ProArraySizeSet()&quot;, 
+		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+	
+/*-------------------------------------------------------------------------*\
+<a name="anchor-117"></a>    Get Simplfd Rep
+\*-------------------------------------------------------------------------*/
+
+    err = ProUtilProcstepDataGet (&amp;procstep, PRO_E_SIMPLFD_REP,&amp;valuedata);
+
+<a name="anchor-118"></a>    status = ProArraySizeGet ((ProArray)valuedata, &amp;size_array);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+		     &quot;ProTestInfo&quot;, status, status != PRO_TK_NO_ERROR);
+
+#ifndef PT_PRODUCTS_BUILD
+<a name="anchor-119"></a>    if (err == PRO_TK_NO_ERROR &amp;&amp; size_array != 0 &amp;&amp; valuedata[0].v.i != -1)
+    {
+	err = ProSimprepInit (NULL, valuedata[0].v.i, solid, &amp;simp_rep);
+	TEST_CALL_REPORT(&quot;ProSimprepInit()&quot;, 
+			 &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-120"></a>	err = ProModelitemNameGet ((ProModelitem*)&amp;simp_rep, mdl_wname);
+	TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, 
+			 &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+	ProWstringToString (strout, mdl_wname);
+    }
+<a name="anchor-121"></a>    else
+#endif
+	ProUtilstrcpy (strout, &quot;No Assigned&quot;);
+
+    ProTKFprintf (pfile, &quot;\n SIMPLIFIED REPRESENTATION\n    %s\n&quot;, strout);
+<a name="anchor-122"></a>
+    err = ProArraySizeSet((ProArray*)&amp;valuedata, 0);
+    TEST_CALL_REPORT(&quot;ProArraySizeSet()&quot;, 
+		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+	
+<a name="anchor-123"></a>/*-------------------------------------------------------------------------*\
+    Get Explode State
+\*-------------------------------------------------------------------------*/
+
+    err = ProUtilProcstepDataGet (&amp;procstep, PRO_E_EXPLODE_STATE,&amp;valuedata);
+<a name="anchor-124"></a>
+    status = ProArraySizeGet ((ProArray)valuedata, &amp;size_array);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+		     &quot;ProTestInfo&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-125"></a>    if (err == PRO_TK_NO_ERROR &amp;&amp; size_array != 0)
+    {
+	ProExpldstateActiveGet (solid, &amp;expld_state);
+	err = ProModelitemNameGet ((ProModelitem*)&amp;expld_state, mdl_wname);
+	TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, 
+<a name="anchor-126"></a>			 &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+	ProWstringToString (strout, mdl_wname);
+    }
+    else
+	ProUtilstrcpy (strout, &quot;No Explode&quot;);
+<a name="anchor-127"></a>
+    ProTKFprintf (pfile, &quot;\n EXPLODE STATE\n    %s\n&quot;, strout);
+    
+    err = ProArraySizeSet ((ProArray*)&amp;valuedata, 0);
+    TEST_CALL_REPORT(&quot;ProArraySizeSet()&quot;, 
+<a name="anchor-128"></a>		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+	
+/*-------------------------------------------------------------------------*\
+    Get Full Description
+\*-------------------------------------------------------------------------*/
+<a name="anchor-129"></a>    err = ProUtilProcstepDataGet (&amp;procstep, PRO_E_DESCRIPTION, &amp;valuedata);
+
+    status = ProArraySizeGet ((ProArray)valuedata, &amp;size_array);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+		     &quot;ProTestInfo&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-130"></a>
+    ProUtilstrcpy (s_description, &quot;&quot;);
+    if (err == PRO_TK_NO_ERROR &amp;&amp; size_array != 0)
+	for (i=size_array-1; i>=0; i--)
+	{
+<a name="anchor-131"></a>	    ProWstringToString (strout, valuedata[i].v.w);
+	    ProUtilstrcat (s_description, (const char*)strout);
+	    ProUtilstrcat (s_description, &quot;\n&quot;);
+	}
+    else 
+<a name="anchor-132"></a>	ProUtilstrcpy (s_description, &quot;No description&quot;); 
+
+    ProTKFprintf (pfile, &quot;\n FULL DESCRIPTION\n    %s\n&quot;, s_description);
+     
+/*-------------------------------------------------------------------------*\
+<a name="anchor-133"></a>    Display Info
+\*-------------------------------------------------------------------------*/
+    fclose (pfile);
+
+    err = ProArrayFree ((ProArray*)&amp;valuedata);
+<a name="anchor-134"></a>    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, 
+		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+
+    ProStringToWstring (msgfile, messagefile);
+
+<a name="anchor-135"></a>    err = ProInfoWindowDisplay(msgfile, NULL, NULL);
+    TEST_CALL_REPORT(&quot;ProInfoWindowDisplay()&quot;, 
+		     &quot;ProTestInfo&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-136"></a>}
+
+/*====================================================================*\
+  Function : ProTestProcstep
+  Purpose  :  
+<a name="anchor-137"></a>\*====================================================================*/
+int ProTestProcstep()
+{
+    ProProcstep *p_steps, active;
+    ProSolid solid;
+<a name="anchor-138"></a>    ProError err;
+    int n_steps, menu_id, action;
+    const int prev = 0, next = 1;
+
+    err = ProMdlCurrentGet((ProMdl*)&amp;solid);
+<a name="anchor-139"></a>    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, 
+			    &quot;ProTestProcstep&quot;, err, err != PRO_TK_NO_ERROR);
+/*-------------------------------------------------------------------------*\
+    Find all process steps in the model
+\*-------------------------------------------------------------------------*/
+<a name="anchor-140"></a>
+    err = ProUtilCollectProcstep(solid, &amp;p_steps);
+    if (err != PRO_TK_NO_ERROR)
+	return (0);
+
+<a name="anchor-141"></a>    err = ProArraySizeGet((ProArray)p_steps, &amp;n_steps);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, 
+			    &quot;ProTestProcstep&quot;, err, err != PRO_TK_NO_ERROR);
+    if (n_steps &lt;= 0)
+	return (0);
+<a name="anchor-142"></a>
+/*-------------------------------------------------------------------------*\
+    Add -Step#Regen menu
+\*-------------------------------------------------------------------------*/
+
+<a name="anchor-143"></a>    ProMenuPush();
+    
+    ProMenuFileRegister ((char *)&quot;-Step Regen&quot;, (char *)&quot;playstep.mnu&quot;, &amp;menu_id);
+    ProMenubuttonActionSet ((char *)&quot;-Step Regen&quot;, (char *)&quot;Set step&quot;,
+			    (ProMenubuttonAction)ProTestSetStep, &amp;solid, 0);
+<a name="anchor-144"></a>    ProMenubuttonActionSet ((char *)&quot;-Step Regen&quot;, (char *)&quot;Previous step&quot;,
+			    (ProMenubuttonAction)ProTestStep, &amp;solid, prev);
+    ProMenubuttonActionSet ((char *)&quot;-Step Regen&quot;, (char *)&quot;Next step&quot;,
+			    (ProMenubuttonAction)ProTestStep, &amp;solid, next);
+    ProMenubuttonActionSet ((char *)&quot;-Step Regen&quot;, (char *)&quot;Info&quot;,
+<a name="anchor-145"></a>			    (ProMenubuttonAction)ProTestInfo, &amp;solid, 0);
+    ProMenubuttonActionSet ((char *)&quot;-Step Regen&quot;, (char *)&quot;Tk done -Step Regen&quot;,
+			    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    ProMenubuttonActionSet ((char *)&quot;-Step Regen&quot;, (char *)&quot;-Step Regen&quot;,
+			    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-146"></a>
+    err = ProMenuCreate (PROMENUTYPE_MAIN,(char *)&quot;-Step Regen&quot;, &amp;menu_id );
+
+
+    err = ProProcstepActiveGet (solid, &amp;active);
+<a name="anchor-147"></a>    TEST_CALL_REPORT(&quot;ProProcstepActiveGet()&quot;,
+		     &quot;ProtestSetStep&quot;, err, err != PRO_TK_NO_ERROR);
+
+    ProUtilMenubuttonActivate ((char *)&quot;-Step Regen&quot;,(char *)&quot;Previous step&quot;,
+			       p_steps[0].id != active.id &amp;&amp;
+<a name="anchor-148"></a>			       err == PRO_TK_NO_ERROR);
+    ProUtilMenubuttonActivate ((char *)&quot;-Step Regen&quot;, (char *)&quot;Next step&quot;,
+			       p_steps[n_steps-1].id != active.id);
+    ProUtilMenubuttonActivate ((char *)&quot;-Step Regen&quot;, (char *)&quot;Info&quot;, err == PRO_TK_NO_ERROR);
+
+<a name="anchor-149"></a>    ProMenuProcess ((char *)&quot;-Step Regen&quot;, &amp;action);
+    ProMenuPop();
+            
+    return (0);
+}
+<a name="anchor-150"></a>
+</pre>
+</body>
+</html>

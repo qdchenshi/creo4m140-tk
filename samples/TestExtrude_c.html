@@ -1,0 +1,2966 @@
+<html>
+<head>
+<title>TestExtrude.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes -- include this first
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProModFeat.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProGraphic.h>
+#include &lt;ProDisplist.h>
+#include &lt;ProExtrude.h>
+<a name="anchor-3"></a>#include &lt;ProFeatForm.h>
+#include &lt;ProStdSection.h>
+#include &lt;ProTKRunTime.h>
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-4"></a>\*--------------------------------------------------------------------*/
+#include &quot;UtilMath.h&quot;
+#include &quot;UtilMatrix.h&quot;
+#include &quot;UtilTree.h&quot;
+#include &quot;TestSect.h&quot;
+<a name="anchor-5"></a>#include &lt;ProSolid.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMdl.h>
+#include &lt;TestError.h>
+#include &lt;ProSolid.h>
+<a name="anchor-6"></a>#include &lt;UtilMessage.h>
+#include &lt;ProWindows.h>
+#include &lt;ProSurface.h>
+#include &lt;ProUtil.h>
+#include &lt;ProMessage.h>
+<a name="anchor-7"></a>#include &lt;UtilVisit.h>
+
+/*--------------------------------------------------------------------*\
+Application data types 
+\*--------------------------------------------------------------------*/
+<a name="anchor-8"></a>/* Section data structure */
+typedef struct tag_SketchingData
+	{
+	    ProSection	section;	/* The section to add sketched 
+						entities to */
+<a name="anchor-9"></a>	    ProMatrix	trf_matrix;	/* The matrix to transform screen
+						coords to section coords */
+	    ProMatrix	mdl_matrix;	/* The matrix to transform screen 
+						coords to model coords */
+	} SketchingData;
+<a name="anchor-10"></a>
+typedef struct tag_DepthData
+	{
+	    ProExtDepthFromType from_type;
+	    ProValueData        from_value;
+<a name="anchor-11"></a>	    ProExtDepthToType   to_type;
+	    ProValueData        to_value;
+
+	} DepthData;
+
+<a name="anchor-12"></a>typedef struct tag_DirectionArrow
+{
+    ProPoint3d		origin;
+    ProVector		dir_vector;
+    ProSecViewDirType	direction;
+<a name="anchor-13"></a>    int			disp_id;
+
+} DirectionArrow;
+
+
+<a name="anchor-14"></a>/* Message file name */
+#define msgfil			&quot;feat&quot;
+
+
+
+<a name="anchor-15"></a>/* Array direction actions */
+#define OKAY_DIRECTION		0
+#define FLIP_DIRECTION		1
+
+/* Sketching reference plane types */
+<a name="anchor-16"></a>#define SK_REF_NONE		0
+#define SK_REF_TOP		1
+#define SK_REF_BOTTOM		2
+#define SK_REF_RIGHT		3
+#define SK_REF_LEFT		4
+<a name="anchor-17"></a>#define SK_REF_DEFAULT		5
+
+/* Sektcher actions */
+#define SKETCHER_QUIT		0
+#define SKETCHER_DONE		1
+<a name="anchor-18"></a>#define SKETCHER_SKETCH		2
+
+/* Planes disposition constants */
+#define UNKNOWN_PLANES		-1
+#define PARALLEL_PLANES		0
+<a name="anchor-19"></a>#define PERPENDICULAR_PLANES	1
+
+/* Feature depth type */
+#define DEPTH_TYPE_QUIT		0
+#define DEPTH_TYPE_DONE		1
+<a name="anchor-20"></a>#define DEPTH_TYPE_BLIND	2
+#define DEPTH_TYPE_2SIDEBLIND	3
+#define DEPTH_TYPE_THRU_NEXT	4
+#define DEPTH_TYPE_THRU_ALL	5
+#define DEPTH_TYPE_THRU_UNTIL	6
+<a name="anchor-21"></a>#define DEPTH_TYPE_UPTO_PNT	7
+#define DEPTH_TYPE_UPTO_CURVE	8
+#define DEPTH_TYPE_UPTO_SURFACE	9
+#define DEPTH_TYPE_NONE		10
+
+<a name="anchor-22"></a>#define SIZEOFARR(a) (sizeof(a)/(sizeof(a[0])))
+
+/*--------------------------------------------------------------------*\
+Application global variables
+\*--------------------------------------------------------------------*/
+<a name="anchor-23"></a>static int		Disp_ID = 745;
+
+
+/*--------------------------------------------------------------------*\
+Functions declaration 
+<a name="anchor-24"></a>\*--------------------------------------------------------------------*/
+ProError ProTestFeatureExtrudeCreate();
+
+ProError ProTestFirstFeatureCreate(ProMdl model);
+
+<a name="anchor-25"></a>ProError ProTestFeatureAttrsRetrieve(ProSides *p_sides);
+
+int ProTestFeatSidesSet(
+    ProSides		*p_sides,
+    ProSides		sides );
+<a name="anchor-26"></a>
+ProError ProTestPlaneSelect(ProSurface *p_plane, ProSelection *p_plane_sel);
+
+ProError ProTestFeatureDirectionRetrieve (
+	ProSurface plane, ProSecViewDirType *p_direction);
+<a name="anchor-27"></a>
+ProError ProTestDirectionArrowCreate(
+    ProSurface			plane,		/* In: Sketching plane */
+    ProSecViewDirType		init_dir,	/* In: Init arrow direction:
+							1 - along normal vect;
+<a name="anchor-28"></a>							-1- reversed normal */
+    DirectionArrow		*p_dir_arrow );	/* Out: Created direction 
+							arrow */
+
+int ProTestDirectionArrowFlip(
+<a name="anchor-29"></a>    DirectionArrow		*p_dir_arrow,	/* In: [0] is origin point, 
+						     [1] is direction vector */
+    int				action );	/* In: OKAY_DIRECTION or
+							FLIP_DIRECTION */
+
+<a name="anchor-30"></a>ProError ProTestDirectionArrowDraw(
+    ProPoint3d		point1,
+    ProPoint3d		point2,
+    ProColor	*p_color);
+
+<a name="anchor-31"></a>ProError ProTestDirectionArrowDelete(
+    DirectionArrow       *p_dir_arrow );
+
+ProError ProTestSketchingViewSet(
+    ProSurface		sk_plane,		/* In: Sketching plane */
+<a name="anchor-32"></a>    ProSecViewDirType   direction,              /* In: Feature direction */
+    int			*p_ref_type,		/* Out: Reference type */
+    ProSelection	*p_ref_plane_sel,	/* Out: Reference plane 
+							selection structure */
+    ProMatrix		sk_view_matrix );
+<a name="anchor-33"></a>
+int ProTestRefPlaneTypeSet(
+    int			*p_ref_type,
+    int			ref_type );
+
+<a name="anchor-34"></a>ProError ProTestModelOrient(
+    ProSurface		sk_plane,		/* In: Sketching plane */
+    ProSecViewDirType	direction,		/* In: Feature direction */
+    int			ref_type,		/* In: Orientation of reference 
+							plane */
+<a name="anchor-35"></a>    ProSelection	*p_ref_plane_sel,	/* Out: Reference plane 
+							selection structure.
+							Use ProSelectionFree to 
+							free the memory */
+    ProMatrix		view_matrix );		/* Out: Matrix to to transform 
+<a name="anchor-36"></a>							model coords to section
+							coords */
+
+ProBoolean ProTestPlanesPerpendicular(
+    ProSurface		plane1,
+<a name="anchor-37"></a>    ProSurface		plane2 );
+    
+ProError ProTestSectionSketcher(
+    ProMatrix		sk_view_matrix, /* In: Matrix to convert model coords
+                                                to section coords, (NULL-
+<a name="anchor-38"></a>						for 1st feature) */
+    ProSection		*p_out_section,	/* Out: The undimesioned section */
+    ProSelection	**p_refs );	/* Out: Allocated array with selected
+                                                references. Array must be
+                                                released with 
+<a name="anchor-39"></a>						ProTestSectionRefsFree.
+						Pass NULL when creating the
+						1st feature */
+                                                
+int ProTestSpecifyRefsMenuPostaction();
+<a name="anchor-40"></a>
+ProError ProTestSketchingDataInit(
+    ProSection		section,	/* In: The section */
+    ProMatrix		sk_view_matrix,	/* In: Matrix to convert model coords
+						to section coords (NULL - for 
+<a name="anchor-41"></a>						first feature */
+    SketchingData	*p_sk_data );	/* Out: Initialized sketching data */
+    
+int ProTestSectionSketch(
+    SketchingData	*p_sk_data,
+<a name="anchor-42"></a>    int			sketcher_action );
+    
+int ProTestSectionRefsSet(
+    ProSelection	**p_ref_sel);
+    
+<a name="anchor-43"></a>ProError ProTestSectionRefsFree(
+    ProSelection	**p_ref_sel );
+    
+ProError ProTestSectionDraw();
+
+<a name="anchor-44"></a>int ProTestSectionLineEntityCreate(
+    SketchingData	*p_sk_data);
+    
+ProError ProTestSectionLineEntityAdd( 
+    SketchingData	*p_sk_data,	/* In: Sketching data */
+<a name="anchor-45"></a>    ProPoint3d		point1,		/* In: Line end 1 in screen coords */
+    ProPoint3d		point2 );	/* In: Line end 2 in screen coords */
+    
+ProError ProTestLineDraw(
+     ProPoint3d		point1,		/* In: Screen coords of line end point*/
+<a name="anchor-46"></a>     ProPoint3d		point2,		/* In: Screen coords of line end point*/
+     ProMatrix		trf_matrix );	/* In: Matrx to convert screen coords
+						into model coords (NULL)*/
+                                                
+int ProTestSectionRectangleEntityCreate(
+<a name="anchor-47"></a>    SketchingData       *p_sk_data);
+    
+ProError ProTestSectionRectangleEntityAdd(
+    SketchingData	*p_sk_data,	/* In: Sketching data */
+    ProPoint3d		point1,		/* In: Screen coords of top point*/
+<a name="anchor-48"></a>    ProPoint3d		point3 );	/* In: Screen coords of bottom point */
+    
+ProError ProTestRectangleDraw(
+     ProPoint3d         point1,         /* In: Screen coords of top point*/
+     ProPoint3d         point3,         /* In: Screen coords of bottom point */
+<a name="anchor-49"></a>     ProMatrix          trf_matrix );    /* In: Matrx to convert screen coords
+                                                into model coords (NULL)*/
+                                                
+int ProTestSectionCircleEntityCreate(
+    SketchingData	*p_sk_data);
+<a name="anchor-50"></a>    
+ProError ProTestSectionCircleEntityAdd(
+    SketchingData       *p_sk_data,     /* In: Sketching data */
+    ProPoint3d		center,		/* In: The center point */
+    ProPoint3d          circle );	/* In: Circle point */
+<a name="anchor-51"></a>    
+int ProTestSectionArcEntityCreate(
+    SketchingData	*p_sk_data);
+    
+ProError ProTestCircleDraw( 
+<a name="anchor-52"></a>    ProPoint3d		center,		/* In: Screen coords of center point */
+    ProPoint3d		circle,		/* In: Screen coords of circle point */
+    ProMatrix		trf_matrix );	/* In: Matrx to convert screen coords
+						into model coords (NULL) */
+                                                
+<a name="anchor-53"></a>ProError ProTestPointDraw(
+    ProPoint3d		point,		/* In: Point screen coords */
+    ProMatrix		trf_matrix );	/* In: Matrx to convert screen coords
+						into model coords (NULL) */
+                                                
+<a name="anchor-54"></a>wchar_t *ProTestNewSectionNameGet(
+    ProName		w_name );
+
+ProError ProTestProtrusionFeatureCreate(
+    ProSecViewDirType	view_direction,	/* In: Feature direction */
+<a name="anchor-55"></a>    ProSelection	sk_plane_sel,	/* In: The sketching plane selection */
+    int			ref_type, 	/* In: The reference plane type 
+						(TOP, ...) */ 
+    ProSelection	ref_plane_sel,	/* In: The reference plane selection */
+    ProSection		section,	/* In: The sketched section */
+<a name="anchor-56"></a>    ProSelection        *p_references,	/* In: The sketching references */
+    DepthData		*p_depth,	/* In: Initialized depth data */
+    ProFeature		*p_feature );	/* Out: Created feature */
+    
+    
+<a name="anchor-57"></a>ProError ProTestFeatureSectionInit(
+    ProFeature		*p_feature,	/* In: Incomplete feature */
+    ProSection		section,	/* In: Sketched section */
+    ProSelection	*p_references,  /* In: Sketching refs (NULL) */
+    ProBoolean          is_first);	/* In: If first feature or not */
+<a name="anchor-58"></a>    
+ProError ProTestFeatureSectionRefsAdd(
+    ProSection		section,	/* In: The section */
+    ProSelection	*p_references );	/* In: The selected refs */
+    
+<a name="anchor-59"></a>ProError ProTestSectionRegenerate(
+    ProSection		section );
+
+ProError ProTestFeatureDepthRetrieve(
+    ProSides		sides,		/* In: ONE_SIDE or
+<a name="anchor-60"></a>						BOTH_SIDES */
+    ProSecViewDirType	direction,	/* In: Feature direction */
+    ProSurface		sk_plane,	/* In: Sketching plane */
+
+    DepthData		*p_depth );	/* Out: Initialized depth data.  
+<a name="anchor-61"></a>					If ONE_SIDE, init only p_depth->to_*, 
+					setting from_type to DEPTH_TYPE_NONE */
+                                        
+ProError ProTestFeatureDepthTypeGet(
+    ProSides		sides,
+<a name="anchor-62"></a>    ProBoolean          is_second_side, /* In: TRUE for 2nd side depth 
+                                                initialization. In this case
+                                                &quot;Blind&quot; and &quot;2 Side Blind&quot;
+                                                buttons are disabled */
+    int			*p_depth_type );	/* Out: Depth type */
+<a name="anchor-63"></a>    
+int ProTestFeatureDepthTypeSet(
+    int			*p_depth_type,
+    int			depth_type );
+    
+<a name="anchor-64"></a>ProError ProTestFeatureDepthValueInit(
+    ProSides            sides,
+    ProBoolean		is_second_side,	/* In: TRUE if for 2nd side depth 
+						initialization. In this case
+						&quot;Blind&quot; and &quot;2 Side Blind&quot;
+<a name="anchor-65"></a>						buttons are disabled */
+    int			*p_depth_type,
+    ProValueData	*p_depth_value );
+    
+double ProTestDoubleValueGet( 
+<a name="anchor-66"></a>    double		def );
+
+
+/*--------------------------------------------
+Declaration of variable SKETCHER_DONE_LOCAL and
+<a name="anchor-67"></a>it is initialized to SKETCHER_QUIT to mean that
+sketch has not been done in the sketcher mode.
+--------------------------------------------*/
+
+int SKETCHER_DONE_LOCAL = SKETCHER_QUIT;
+<a name="anchor-68"></a>
+
+/*====================================================================*\
+FUNCTION : ProTestFeatureExtrudeCreate
+PURPOSE  : Retrieve all the necessary data and create extruded 
+<a name="anchor-69"></a>		protrusion feature
+\*====================================================================*/
+ProError ProTestFeatureExtrudeCreate()
+{
+    ProError		status;
+<a name="anchor-70"></a>    ProMdl		model;
+    int			n_csys;
+    ProSides		sides;
+    ProSecViewDirType	direction;
+    ProSurface		sk_plane;
+<a name="anchor-71"></a>    ProSelection	sk_plane_selection = NULL;
+    int			ref_plane_type;
+    ProSelection	ref_plane_selection = NULL;
+    ProSection		section;
+    ProSelection	*p_references = NULL;
+<a name="anchor-72"></a>    DepthData		depth_data;
+    ProMatrix		sk_view_matrix;
+    ProFeature		feature;
+
+
+<a name="anchor-73"></a>    status = ProMdlCurrentGet( &amp;model );
+    TEST_CALL_REPORT( &quot;ProMdlCurrentGet()&quot;, &quot;ProTestFeatureExtrudeCreate()&quot;, 
+	status, status != PRO_TK_NO_ERROR);
+
+    /*--------------------------------------------------------------*\
+<a name="anchor-74"></a>	Try to find the feature which is not csys. If there are no
+	such kind of feature create one of type FIRST_FEATURE.
+    \*--------------------------------------------------------------*/
+    status = ProSolidFeatVisit((ProSolid)model,
+        (ProFeatureVisitAction)ProUtilNonCsysFeatCheck,
+<a name="anchor-75"></a>        (ProFeatureFilterAction)NULL, (ProAppData)&amp;n_csys);
+    TEST_CALL_REPORT(&quot;ProSolidFeatVisit()&quot;, &quot;ProTestFeatureExtrudeCreate()&quot;, 
+	status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_FOUND &amp;&amp;
+	status != PRO_TK_E_NOT_FOUND);
+    if( status != PRO_TK_E_FOUND )
+<a name="anchor-76"></a>    {
+      return ProTestFirstFeatureCreate( model );
+    }
+
+
+<a name="anchor-77"></a>    status = ProTestFeatureAttrsRetrieve( &amp;sides );
+    if( status == PRO_TK_NO_ERROR )
+    {
+        ProUtilMsgPrint( msgfil, 
+		(char *)&quot;USER Select or create a SKETCHING PLANE.&quot; );
+<a name="anchor-78"></a>        status = ProTestPlaneSelect( &amp;sk_plane, &amp;sk_plane_selection );
+    }
+
+    if( status == PRO_TK_NO_ERROR )
+	status = ProTestFeatureDirectionRetrieve( sk_plane, &amp;direction );
+<a name="anchor-79"></a>
+    if( status == PRO_TK_NO_ERROR )
+        status = ProTestSketchingViewSet( sk_plane, direction, 
+		&amp;ref_plane_type, &amp;ref_plane_selection, sk_view_matrix );
+
+<a name="anchor-80"></a>
+    if( status == PRO_TK_NO_ERROR )
+        status = ProTestSectionSketcher( sk_view_matrix, 
+		&amp;section, &amp;p_references );
+
+<a name="anchor-81"></a>
+    if( status == PRO_TK_NO_ERROR )
+        status = ProTestFeatureDepthRetrieve( sides, direction, sk_plane, 
+		&amp;depth_data );
+
+<a name="anchor-82"></a>
+    if( status == PRO_TK_NO_ERROR )
+        ProTestProtrusionFeatureCreate( direction, 
+	    sk_plane_selection, 
+	    ref_plane_type, ref_plane_selection, 
+<a name="anchor-83"></a>	    section, p_references, 
+	    &amp;depth_data,
+	    &amp;feature );
+
+    ProWindowRepaint( PRO_VALUE_UNUSED );
+<a name="anchor-84"></a>
+
+    /* Free allocated memory */
+    if( sk_plane_selection != NULL )
+	ProSelectionFree( &amp;sk_plane_selection );
+<a name="anchor-85"></a>    if( ref_plane_selection != NULL )
+	ProSelectionFree( &amp;ref_plane_selection );
+    if( p_references != NULL )
+    	ProTestSectionRefsFree( &amp;p_references );
+
+<a name="anchor-86"></a>
+    return PRO_TK_NO_ERROR;
+}
+
+
+<a name="anchor-87"></a>
+/*====================================================================*\
+FUNCTION : ProTestFeatureAttrsRetrieve
+PURPOSE  : Retrieve direction of feature creation
+\*====================================================================*/
+<a name="anchor-88"></a>ProError ProTestFeatureAttrsRetrieve( 
+    ProSides		*p_sides )	/* Out: Direction of feature creation */
+{
+    ProError		status;
+    ProSides		sides = (ProSides)(-1);
+<a name="anchor-89"></a>    int			menu_id;
+    int			action;
+
+
+    /*------------------------------------*\
+<a name="anchor-90"></a>      Choose direction of feature creation 
+    \*------------------------------------*/
+    ProMenuFileRegister( (char *)&quot;TK SIDES&quot;, (char *)&quot;tksides.mnu&quot;, &amp;menu_id );
+    ProMenubuttonActionSet( (char *)&quot;TK SIDES&quot;, (char *)&quot;One Side&quot;,
+        (ProMenubuttonAction)ProTestFeatSidesSet, &amp;sides, PRO_SIDES_ONE_SIDE );
+<a name="anchor-91"></a>    ProMenubuttonActionSet( (char *)&quot;TK SIDES&quot;, (char *)&quot;Both Sides&quot;,
+        (ProMenubuttonAction)ProTestFeatSidesSet, &amp;sides,PRO_SIDES_BOTH_SIDES );
+    ProMenubuttonActionSet( (char *)&quot;TK SIDES&quot;, (char *)&quot;TK SIDES&quot;, 
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+ 
+<a name="anchor-92"></a>    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;TK SIDES&quot;, &amp;menu_id );
+    if( status == PRO_TK_NO_ERROR )
+    {
+        status = ProMenuProcess( (char *)&quot;TK SIDES&quot;, &amp;action );
+    }
+<a name="anchor-93"></a> 
+
+    if( sides != -1 )
+    {
+	*p_sides = sides;
+<a name="anchor-94"></a>        status = PRO_TK_NO_ERROR;
+    }
+    else
+	status = PRO_TK_GENERAL_ERROR;
+
+<a name="anchor-95"></a>
+    return status;
+}
+
+
+<a name="anchor-96"></a>
+/*====================================================================*\
+FUNCTION : ProTestFeatSidesSet
+PURPOSE  : ProMenubuttonAction for TK SIDES
+\*====================================================================*/
+<a name="anchor-97"></a>int ProTestFeatSidesSet(
+    ProSides		*p_sides,
+    ProSides		sides )
+{
+    *p_sides = sides;
+<a name="anchor-98"></a>    ProMenuDelete();
+
+
+    return 0;
+}
+<a name="anchor-99"></a>
+
+
+/*====================================================================*\
+FUNCTION : ProTestPlaneSelect
+<a name="anchor-100"></a>PURPOSE  : Select plane feature in current model
+\*====================================================================*/
+ProError ProTestPlaneSelect(
+    ProSurface		*p_plane,	/* Out: Selected plane */
+    ProSelection	*p_plane_sel )	/* Out: Selection structure (NULL).
+<a name="anchor-101"></a>						Use ProSelectionFree to 
+						free the memory */
+{
+    ProError		status;
+    ProSelection	*p_sel;
+<a name="anchor-102"></a>    int			n_sel;
+    ProModelitem	model_item;
+    ProSurface		surface;
+    ProSrftype		srf_type = PRO_SRF_NONE;
+
+<a name="anchor-103"></a>
+    do
+    {
+	n_sel = 0;
+	srf_type = PRO_SRF_NONE;
+<a name="anchor-104"></a>
+        /* Select surface */
+        status = ProSelect( (char *)&quot;surface,sldface,qltface,datum&quot;, 1, NULL, NULL, 
+        	NULL, NULL, &amp;p_sel, &amp;n_sel );
+        TEST_CALL_REPORT( &quot;ProSelect()&quot;, &quot;ProTestPlaneSelect()&quot;,
+<a name="anchor-105"></a>            status, status != PRO_TK_NO_ERROR);
+        if( status != PRO_TK_NO_ERROR || n_sel &lt; 1 )
+	    return PRO_TK_GENERAL_ERROR;
+
+        /* Check out model item */
+<a name="anchor-106"></a>        status = ProSelectionModelitemGet( p_sel[0], &amp;model_item );
+	TEST_CALL_REPORT( &quot;ProSelectionModelitemGet&quot;, &quot;ProTestPlaneSelect()&quot;,
+	    status, status != PRO_TK_NO_ERROR);
+        if( model_item.type != PRO_SURFACE &amp;&amp; 
+	    model_item.type != PRO_DATUM_PLANE )
+<a name="anchor-107"></a>        {
+	    ProUtilMsgPrint( msgfil, (char *)&quot;USER Only planes are allowed&quot; );
+            continue;
+        }
+
+<a name="anchor-108"></a>        /* Get the selected surface  */
+        status = ProSurfaceInit( model_item.owner, model_item.id, &amp;surface );
+	TEST_CALL_REPORT( &quot;ProSurfaceInit&quot;, &quot;ProTestPlaneSelect()&quot;,
+	    status, status != PRO_TK_NO_ERROR);
+        if( status != PRO_TK_NO_ERROR )
+<a name="anchor-109"></a>	    continue;
+
+	/* Check out the surface type. A plane is only acceptable */
+        status = ProSurfaceTypeGet( surface, &amp;srf_type );
+	TEST_CALL_REPORT( &quot;ProSurfaceTypeGet&quot;, &quot;ProTestPlaneSelect()&quot;,
+<a name="anchor-110"></a>	    status, status != PRO_TK_NO_ERROR);
+        if( srf_type != PRO_SRF_PLANE )
+        {
+	    ProUtilMsgPrint( msgfil, (char *)&quot;USER Only planes are allowed&quot; );
+            continue;
+<a name="anchor-111"></a>        }
+
+    } while( srf_type != PRO_SRF_PLANE );
+
+    memcpy( p_plane, &amp;surface, sizeof(ProSurface) );
+<a name="anchor-112"></a>    if( p_plane_sel )
+    {
+	status = ProSelectionCopy( *p_sel, p_plane_sel );
+	TEST_CALL_REPORT( &quot;ProSelectionCopy&quot;, &quot;ProTestPlaneSelect()&quot;,
+	    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-113"></a>    }
+
+
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-114"></a>
+
+
+/*====================================================================*\
+FUNCTION : ProTestFeatureDirectionRetrieve
+<a name="anchor-115"></a>PURPOSE  : Retrieve feature creation direction basing on sketching plane
+\*====================================================================*/
+ProError ProTestFeatureDirectionRetrieve( 
+    ProSurface		plane,		/* In: Sketching plane */
+    ProSecViewDirType	*p_direction )	/* Out: Direction */
+<a name="anchor-116"></a>{
+    ProError		status;
+    int                 menu_id;
+    int                 action = OKAY_DIRECTION;
+    DirectionArrow 	dir_arrow;
+<a name="anchor-117"></a> 
+
+    ProUtilMsgPrint( msgfil, 
+	(char *)&quot;USER Arrow shows direction of feature creation&quot; );
+
+<a name="anchor-118"></a>    /* Create and display initial direction arrow */
+    ProTestDirectionArrowCreate( plane, (ProSecViewDirType)1, &amp;dir_arrow );
+
+    /* Choose feature direction */
+    ProMenuFileRegister( (char *)&quot;TK DIRECTION&quot;, (char *)&quot;tkdirection.mnu&quot;, &amp;menu_id );
+<a name="anchor-119"></a>    ProMenubuttonActionSet( (char *)&quot;TK DIRECTION&quot;, (char *)&quot;Flip&quot;,
+        (ProMenubuttonAction)ProTestDirectionArrowFlip, 
+	&amp;dir_arrow, FLIP_DIRECTION );
+    ProMenubuttonActionSet( (char *)&quot;TK DIRECTION&quot;, (char *)&quot;Okay&quot;,
+        (ProMenubuttonAction)ProTestDirectionArrowFlip, 
+<a name="anchor-120"></a>	&amp;dir_arrow, OKAY_DIRECTION );
+ 
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;TK DIRECTION&quot;, &amp;menu_id );
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-121"></a>        status = ProMenuProcess( (char *)&quot;TK DIRECTION&quot;, &amp;action );
+    }
+
+    /* Init output value */
+    if( dir_arrow.direction > 0 )
+<a name="anchor-122"></a>	*p_direction = PRO_SEC_VIEW_DIR_SIDE_ONE;
+    else
+	*p_direction = PRO_SEC_VIEW_DIR_SIDE_TWO;
+
+    /* Delete direction arrow */
+<a name="anchor-123"></a>    ProTestDirectionArrowDelete( &amp;dir_arrow );
+
+
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-124"></a>
+
+
+/*====================================================================*\
+FUNCTION :  ProTestDirectionArrowCreate
+<a name="anchor-125"></a>PURPOSE  :  Create arrow image
+\*====================================================================*/
+ProError ProTestDirectionArrowCreate(
+    ProSurface			plane,		/* In: Sketching plane */
+    ProSecViewDirType		init_dir,	/* In: Init arrow direction:
+<a name="anchor-126"></a>							1 - along normal vect;
+							-1- reversed normal */
+    DirectionArrow		*p_dir_arrow )	/* Out: Created direction 
+							arrow */
+{
+<a name="anchor-127"></a>    ProError		status;
+    ProPoint3d		point2;
+    ProGeomitemdata	*p_geom_data;
+    ProColor	color;
+    ProMatrix		transform;
+<a name="anchor-128"></a>
+
+    /* Get the plane geom data */
+    status = ProSurfaceDataGet( plane, &amp;p_geom_data );
+    TEST_CALL_REPORT( &quot;ProSurfaceDataGet&quot;, &quot;ProTestDirectionArrowCreate()&quot;,
+<a name="anchor-129"></a>        status, status != PRO_TK_NO_ERROR );
+
+    /* Retrieve the point on the plane to place direction arrow */
+    status = ProSurfaceXyzdataEval( plane, 
+	p_geom_data->data.p_surface_data->uv_max,
+<a name="anchor-130"></a>	p_dir_arrow->origin, NULL, NULL, p_dir_arrow->dir_vector );
+    TEST_CALL_REPORT( &quot;ProSurfaceXyzdataEval&quot;, &quot;ProTestDirectionArrowCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    p_dir_arrow->direction = init_dir;
+<a name="anchor-131"></a>    p_dir_arrow->disp_id = Disp_ID++;
+
+
+    /* Get the end point of direction vector */
+    point2[0] = p_dir_arrow->origin[0] + p_dir_arrow->dir_vector[0]*0.6*init_dir;
+<a name="anchor-132"></a>    point2[1] = p_dir_arrow->origin[1] + p_dir_arrow->dir_vector[1]*0.6*init_dir;
+    point2[2] = p_dir_arrow->origin[2] + p_dir_arrow->dir_vector[2]*0.6*init_dir;
+
+    /* Draw the arrow */
+	color.method = PRO_COLOR_METHOD_TYPE;
+<a name="anchor-133"></a>	color.value.type = PRO_COLOR_HIGHLITE;	
+    status = ProWindowCurrentMatrixGet( transform );
+    TEST_CALL_REPORT( &quot;ProWindowCurrentMatrixGet&quot;, 
+	&quot;ProTestDirectionArrowCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-134"></a>    status = ProDisplist3dCreate( p_dir_arrow->disp_id, 
+	(ProDisplistCallback)ProTestDirectionArrowDraw, p_dir_arrow->origin, point2, &amp;color );
+    TEST_CALL_REPORT( &quot;ProDisplist3dCreate&quot;, &quot;ProTestDirectionArrowCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    status = ProDisplist3dDisplay( p_dir_arrow->disp_id, transform );
+<a name="anchor-135"></a>    TEST_CALL_REPORT( &quot;ProDisplist3dDisplay&quot;, &quot;ProTestDirectionArrowCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    status = ProWindowRepaint( PRO_VALUE_UNUSED );
+    TEST_CALL_REPORT( &quot;ProWindowRepaint&quot;, &quot;ProTestDirectionArrowCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-136"></a>
+
+    /* Release the memory allocated by ProSurfaceDataGet */
+    status = ProGeomitemdataFree( &amp;p_geom_data );
+    TEST_CALL_REPORT( &quot;ProGeomitemdataFree&quot;, &quot;ProTestDirectionArrowCreate()&quot;,
+<a name="anchor-137"></a>        status, status != PRO_TK_NO_ERROR );
+
+
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-138"></a>
+
+
+/*====================================================================*\
+FUNCTION :  ProTestDirectionArrowFlip
+<a name="anchor-139"></a>PURPOSE  :  Flip arrow image
+\*====================================================================*/
+int ProTestDirectionArrowFlip(
+    DirectionArrow		*p_dir_arrow,	/* In: [0] is origin point, 
+						     [1] is direction vector */
+<a name="anchor-140"></a>    int				action )	/* In: OKAY_DIRECTION or
+							FLIP_DIRECTION */
+{
+    ProError		status;
+    ProPoint3d		point2;
+<a name="anchor-141"></a>    ProColor        color;
+    ProMatrix		transform;
+
+
+    if( action == OKAY_DIRECTION )
+<a name="anchor-142"></a>    {
+	ProMenuDelete();
+	return 0;
+    }
+
+<a name="anchor-143"></a>
+    /* Inverse direction */
+    p_dir_arrow->direction = (ProSecViewDirType)-p_dir_arrow->direction;
+
+    /* Set the arrow color */
+<a name="anchor-144"></a>    if( p_dir_arrow->direction > 0 )
+	{
+		color.method = PRO_COLOR_METHOD_TYPE;
+		color.value.type = PRO_COLOR_HIGHLITE;		
+	}
+<a name="anchor-145"></a>    else
+	{
+		color.method = PRO_COLOR_METHOD_TYPE;
+		color.value.type = PRO_COLOR_LETTER;				
+	}
+<a name="anchor-146"></a>
+    /* Get the end point og direction vector */
+    point2[0]  =  p_dir_arrow->origin[0] + p_dir_arrow->dir_vector[0] *
+	p_dir_arrow->direction * 0.6;
+    point2[1]  =  p_dir_arrow->origin[1] + p_dir_arrow->dir_vector[1] *
+<a name="anchor-147"></a>	p_dir_arrow->direction * 0.6;
+    point2[2]  =  p_dir_arrow->origin[2] + p_dir_arrow->dir_vector[2] *
+	p_dir_arrow->direction * 0.6;
+
+    /* Delete previous arrow */
+<a name="anchor-148"></a>    ProDisplist3dDelete( p_dir_arrow->disp_id );
+
+    /* Draw the arrow */
+    status = ProWindowCurrentMatrixGet( transform );
+    TEST_CALL_REPORT( &quot;ProWindowCurrentMatrixGet&quot;,&quot;ProTestDirectionArrowFlip()&quot;,
+<a name="anchor-149"></a>        status, status != PRO_TK_NO_ERROR );
+    status = ProDisplist3dCreate( p_dir_arrow->disp_id, 
+	(ProDisplistCallback)ProTestDirectionArrowDraw, p_dir_arrow->origin, point2, &amp;color );
+    TEST_CALL_REPORT( &quot;ProDisplist3dCreate&quot;,&quot;ProTestDirectionArrowFlip()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-150"></a>    status = ProDisplist3dDisplay( p_dir_arrow->disp_id, transform );
+    TEST_CALL_REPORT( &quot;ProDisplist3dDisplay&quot;,&quot;ProTestDirectionArrowFlip()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    status = ProWindowRepaint( PRO_VALUE_UNUSED );
+    TEST_CALL_REPORT( &quot;ProWindowRepaint&quot;,&quot;ProTestDirectionArrowFlip()&quot;,
+<a name="anchor-151"></a>        status, status != PRO_TK_NO_ERROR );
+
+
+    return 0;
+}
+<a name="anchor-152"></a>
+
+
+/*====================================================================*\
+FUNCTION :  ProTestDirectionArrowDraw
+<a name="anchor-153"></a>PURPOSE  :  Draw the arrow. This is the display list creation callback 
+		function
+\*====================================================================*/
+ProError ProTestDirectionArrowDraw(
+    ProPoint3d		point1,
+<a name="anchor-154"></a>    ProPoint3d		point2,
+    ProColor	*p_color)
+{
+    ProError		status;
+    ProLinestyle	old_line_style;
+<a name="anchor-155"></a>    ProColor	old_color;	
+    ProPoint3d		center;
+    double		radius;
+    double		dx, dy, dz;
+    int			i;
+<a name="anchor-156"></a>
+
+    /* Set new style and color */
+    status = ProLinestyleSet( PRO_LINESTYLE_SOLID, &amp;old_line_style );
+    TEST_CALL_REPORT( &quot;ProLinestyleSet&quot;,&quot;ProTestDirectionArrowDraw()&quot;,
+<a name="anchor-157"></a>        status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_NO_CHANGE);
+    status = ProGraphicsColorModify( p_color, &amp;old_color ); 
+    TEST_CALL_REPORT( &quot;ProGraphicsColorModify&quot;,&quot;ProTestDirectionArrowDraw()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-158"></a>    ProGraphicsPenPosition( point1 );
+    ProGraphicsLineDraw( point2 );
+
+    dx = (point2[0] - point1[0]) / 6;
+    dy = (point2[1] - point1[1]) / 6;
+<a name="anchor-159"></a>    dz = (point2[2] - point1[2]) / 6;
+    center[0] = point1[0];
+    center[1] = point1[1];
+    center[2] = point1[2];
+    radius = 0.08;
+<a name="anchor-160"></a>
+    for( i=0; i&lt;8; i++ )
+    {
+	ProGraphicsCircleDraw( center, radius );
+	center[0] += dx;
+<a name="anchor-161"></a>	center[1] += dy;
+	center[2] += dz;
+	radius -= 0.01;
+    }
+
+<a name="anchor-162"></a>    /* Restore style and color */
+    status = ProLinestyleSet( old_line_style, &amp;old_line_style );
+    TEST_CALL_REPORT( &quot;ProLinestyleSet&quot;,&quot;ProTestDirectionArrowDraw()&quot;,
+        status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_NO_CHANGE);
+    status = ProGraphicsColorModify( &amp;old_color, NULL ); 
+<a name="anchor-163"></a>    TEST_CALL_REPORT( &quot;ProGraphicsColorModify&quot;,&quot;ProTestDirectionArrowDraw()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-164"></a>
+
+
+/*====================================================================*\
+FUNCTION :  ProTestDirectionArrowDelete
+<a name="anchor-165"></a>PURPOSE  :  Delete the arrow.
+\*====================================================================*/
+ProError ProTestDirectionArrowDelete(
+    DirectionArrow       *p_dir_arrow )	/* In: Dir arrow structure */
+{
+<a name="anchor-166"></a>    ProError		status;
+
+
+    status = ProDisplist3dDelete( p_dir_arrow->disp_id );
+    TEST_CALL_REPORT( &quot;ProDisplist3dDelete&quot;,&quot;ProTestDirectionArrowDelete()&quot;,
+<a name="anchor-167"></a>        status, status != PRO_TK_NO_ERROR );
+
+    status = ProWindowRepaint( PRO_VALUE_UNUSED );
+    TEST_CALL_REPORT( &quot;ProWindowRepaint&quot;,&quot;ProTestDirectionArrowDelete()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-168"></a>
+
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-169"></a>
+
+/*====================================================================*\
+FUNCTION :  ProTestSketchingViewSet
+PURPOSE  :  Select reference type and set the view for sketching
+<a name="anchor-170"></a>\*====================================================================*/
+ProError ProTestSketchingViewSet(
+    ProSurface		sk_plane,		/* In: Sketching plane */
+    ProSecViewDirType   direction,              /* In: Feature direction */
+    int			*p_ref_type,		/* Out: Reference type */
+<a name="anchor-171"></a>    ProSelection	*p_ref_plane_sel,	/* Out: Reference plane 
+							selection structure */
+    ProMatrix		sk_view_matrix )	/* Out: Matrix to to transform
+                                                        model coords to section
+                                                        coords */
+<a name="anchor-172"></a>
+{
+    ProError		status;
+    int			menu_id;
+    int			action = 0;
+<a name="anchor-173"></a>    int			ref_type = SK_REF_NONE;
+
+
+    ProUtilMsgPrint( msgfil, (char *)&quot;USER Select reference for sketching&quot; );
+
+<a name="anchor-174"></a>    /*--------------------------------------------*\
+	Choose reference plane type
+    \*--------------------------------------------*/
+    ProMenuFileRegister( (char *)&quot;TK SKET VIEW&quot;, (char *)&quot;tk_orient.mnu&quot;, &amp;menu_id );
+    ProMenubuttonActionSet( (char *)&quot;TK SKET VIEW&quot;, (char *)&quot;Top&quot;,
+<a name="anchor-175"></a>        (ProMenubuttonAction)ProTestRefPlaneTypeSet,
+        (ProAppData)&amp;ref_type, SK_REF_TOP );
+    ProMenubuttonActionSet( (char *)&quot;TK SKET VIEW&quot;, (char *)&quot;Bottom&quot;,
+        (ProMenubuttonAction)ProTestRefPlaneTypeSet,
+        (ProAppData)&amp;ref_type, SK_REF_BOTTOM );
+<a name="anchor-176"></a>    ProMenubuttonActionSet( (char *)&quot;TK SKET VIEW&quot;, (char *)&quot;Right&quot;,
+        (ProMenubuttonAction)ProTestRefPlaneTypeSet,
+        (ProAppData)&amp;ref_type, SK_REF_RIGHT );
+    ProMenubuttonActionSet( (char *)&quot;TK SKET VIEW&quot;, (char *)&quot;Left&quot;,
+        (ProMenubuttonAction)ProTestRefPlaneTypeSet,
+<a name="anchor-177"></a>        (ProAppData)&amp;ref_type, SK_REF_LEFT );
+    ProMenubuttonActionSet( (char *)&quot;TK SKET VIEW&quot;, (char *)&quot;Quit&quot;,
+        (ProMenubuttonAction)ProTestRefPlaneTypeSet,
+        (ProAppData)&amp;ref_type, SK_REF_NONE );
+    ProMenubuttonActionSet( (char *)&quot;TK SKET VIEW&quot;, (char *)&quot;TK SKET VIEW&quot;,
+<a name="anchor-178"></a>	(ProMenubuttonAction)ProTestRefPlaneTypeSet,
+	(ProAppData)&amp;ref_type, SK_REF_NONE );
+ 
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;TK SKET VIEW&quot;, &amp;menu_id );
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-179"></a>    {
+        status = ProMenuProcess( (char *)&quot;TK SKET VIEW&quot;, &amp;action );
+	if( action != 0 )
+	    return PRO_TK_GENERAL_ERROR;
+    }
+<a name="anchor-180"></a>
+
+    /*--------------------------------------------*\
+	Set the new view for sketching
+    \*--------------------------------------------*/
+<a name="anchor-181"></a>    status = ProTestModelOrient( sk_plane, direction, ref_type, 
+        p_ref_plane_sel, sk_view_matrix );
+
+    *p_ref_type = ref_type;
+
+<a name="anchor-182"></a>
+    return status;
+}
+
+
+<a name="anchor-183"></a>
+/*====================================================================*\
+FUNCTION :  ProTestRefPlaneTypeSet
+PURPOSE  :  
+\*====================================================================*/
+<a name="anchor-184"></a>int ProTestRefPlaneTypeSet(
+    int			*p_ref_type,
+    int			ref_type )
+{
+    *p_ref_type = ref_type;
+<a name="anchor-185"></a>
+    if( ref_type == SK_REF_NONE )
+        ProMenuDeleteWithStatus( -1 );
+    else
+	ProMenuDeleteWithStatus( 0 );
+<a name="anchor-186"></a> 
+ 
+    return 0;
+}
+
+<a name="anchor-187"></a>
+
+#if 0
+int print_matrix( ProMatrix m )
+{
+<a name="anchor-188"></a>    int i,j;
+
+    for( i=0; i&lt;4; i++ )
+    {
+	for( j=0; j&lt;4; j++ )
+<a name="anchor-189"></a>	    printf( &quot;%f  &quot;, m[i][j] );
+	putchar( '\n' );
+    }
+
+    putchar( '\n' );
+<a name="anchor-190"></a>
+    return 0;
+}
+
+int print_vector( ProVector m )
+<a name="anchor-191"></a>{
+    int i,j;
+ 
+    for( i=0; i&lt;3; i++ )
+        printf( &quot;%f  &quot;, m[i] );
+<a name="anchor-192"></a> 
+    putchar( '\n' );
+ 
+    return 0;
+}
+<a name="anchor-193"></a>#endif
+ 
+
+
+/*====================================================================*\
+<a name="anchor-194"></a>FUNCTION :  ProTestModelOrient
+PURPOSE  :  Select reference plane, generate sketching view matrix and
+		set the view for sketching
+\*====================================================================*/
+ProError ProTestModelOrient(
+<a name="anchor-195"></a>    ProSurface		sk_plane,		/* In: Sketching plane */
+    ProSecViewDirType	direction,		/* In: Feature direction */
+    int			ref_type,		/* In: Orientation of reference 
+							plane */
+    ProSelection	*p_ref_plane_sel,	/* Out: Reference plane 
+<a name="anchor-196"></a>							selection structure.
+							Use ProSelectionFree to 
+							free the memory */
+    ProMatrix		view_matrix )		/* Out: Matrix to to transform 
+							model coords to section
+<a name="anchor-197"></a>							coords */
+{
+    ProError		status;
+    ProSurface		ref_plane;
+    ProVector		orig_vector = { 0.0, 0.0, 0.0 };
+<a name="anchor-198"></a>    ProVector		tmp_orig;
+    ProGeomitemdata	*p_geom_data;
+    ProVector		x_vector;
+    ProVector		y_vector;
+    ProVector		z_vector;
+<a name="anchor-199"></a>    ProVector		sk_plane_normal;
+    ProVector		ref_plane_normal;
+    ProMatrix		new_matrix;
+
+
+<a name="anchor-200"></a>    /* Select the reference plane which is perpendicular 
+	to the sketching plane */
+    do
+    {
+	status = ProTestPlaneSelect( &amp;ref_plane, p_ref_plane_sel );
+<a name="anchor-201"></a>	if( status != PRO_TK_NO_ERROR )
+	    return status;
+
+    } while( ProTestPlanesPerpendicular( sk_plane, ref_plane ) != PRO_B_TRUE );
+
+<a name="anchor-202"></a>
+    /* Get the reference plane normal vector */
+    status = ProSurfaceDataGet( ref_plane, &amp;p_geom_data );
+    TEST_CALL_REPORT( &quot;ProSurfaceDataGet&quot;,&quot;ProTestModelOrient()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-203"></a>    status = ProSurfaceXyzdataEval( ref_plane,
+        p_geom_data->data.p_surface_data->uv_max,
+        tmp_orig, NULL, NULL, ref_plane_normal );
+    TEST_CALL_REPORT( &quot;ProSurfaceXyzdataEval&quot;,&quot;ProTestModelOrient()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-204"></a>    status = ProGeomitemdataFree( &amp;p_geom_data );
+    TEST_CALL_REPORT( &quot;ProGeomitemdataFree&quot;,&quot;ProTestModelOrient()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    /* Get the sketching plane normal vector */
+<a name="anchor-205"></a>    status = ProSurfaceDataGet( sk_plane, &amp;p_geom_data );
+    TEST_CALL_REPORT( &quot;ProSurfaceDataGet&quot;,&quot;ProTestModelOrient()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    status = ProSurfaceXyzdataEval( sk_plane,
+        p_geom_data->data.p_surface_data->uv_max,
+<a name="anchor-206"></a>        tmp_orig, NULL, NULL, sk_plane_normal );
+    TEST_CALL_REPORT( &quot;ProSurfaceXyzdataEval&quot;,&quot;ProTestModelOrient()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    status = ProGeomitemdataFree( &amp;p_geom_data );
+    TEST_CALL_REPORT( &quot;ProGeomitemdataFree&quot;,&quot;ProTestModelOrient()&quot;,
+<a name="anchor-207"></a>        status, status != PRO_TK_NO_ERROR );
+
+    /* Use sketching plane normal vector as Z vector of new view */
+    ProUtilVectorCopy( sk_plane_normal, z_vector );
+
+<a name="anchor-208"></a>    /* Reverse Z vector if we use &quot;flipped&quot; direction for protrusion creation */
+    if( direction == PRO_SEC_VIEW_DIR_SIDE_TWO )
+        ProUtilVectorScale( -1.0, z_vector, z_vector );
+
+    /* Generate the vectors for new view */
+<a name="anchor-209"></a>    switch( ref_type )
+    {
+	case SK_REF_TOP:
+	    ProUtilVectorCopy( ref_plane_normal, y_vector );
+	    ProUtilVectorCross( y_vector, z_vector, x_vector );
+<a name="anchor-210"></a>	    break;
+
+	case SK_REF_BOTTOM:
+	    ProUtilVectorScale( -1.0, ref_plane_normal, y_vector );
+	    ProUtilVectorCross( y_vector, z_vector, x_vector );
+<a name="anchor-211"></a>	    break;
+
+	case SK_REF_RIGHT:
+	    ProUtilVectorCopy( ref_plane_normal, x_vector );
+	    ProUtilVectorCross( z_vector, x_vector, y_vector );
+<a name="anchor-212"></a>	    break;
+
+	case SK_REF_LEFT:
+	    ProUtilVectorScale( -1.0, ref_plane_normal, x_vector );
+	    ProUtilVectorCross( z_vector, x_vector, y_vector );
+<a name="anchor-213"></a>	    break;
+    }
+
+    /* Set new view matrix */
+    status = ProMatrixInit( x_vector, y_vector, z_vector, orig_vector, 
+<a name="anchor-214"></a>	new_matrix );
+    TEST_CALL_REPORT( &quot;ProMatrixInit&quot;,&quot;ProTestModelOrient()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    ProUtilMatrixInvert( new_matrix, view_matrix );
+    status = ProViewMatrixSet( NULL, NULL, view_matrix  );
+<a name="anchor-215"></a>    TEST_CALL_REPORT( &quot;ProViewMatrixSet&quot;,&quot;ProTestModelOrient()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    ProWindowRefresh( PRO_VALUE_UNUSED );
+    status = ProWindowRepaint( PRO_VALUE_UNUSED );
+<a name="anchor-216"></a>    TEST_CALL_REPORT( &quot;ProWindowRepaint&quot;,&quot;ProTestModelOrient()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+
+    return PRO_TK_NO_ERROR;
+<a name="anchor-217"></a>}
+
+
+
+/*====================================================================*\
+<a name="anchor-218"></a>FUNCTION :  ProTestPlanesPerpendicular
+PURPOSE  :  Check out if two planes are perpendicular.
+\*====================================================================*/
+ProBoolean ProTestPlanesPerpendicular(
+    ProSurface		plane1,
+<a name="anchor-219"></a>    ProSurface		plane2 )
+{
+    ProError		status;
+    ProGeomitemdata	*p_geom_data1 = NULL;
+    ProGeomitemdata	*p_geom_data2 = NULL;
+<a name="anchor-220"></a>    double		dot;
+
+
+    /* Get the planes geom data */
+    status = ProSurfaceDataGet( plane1, &amp;p_geom_data1 );
+<a name="anchor-221"></a>    TEST_CALL_REPORT( &quot;ProSurfaceDataGet&quot;,&quot;ProTestPlanesPerpendicular()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return PRO_B_FALSE;
+
+<a name="anchor-222"></a>    status = ProSurfaceDataGet( plane2, &amp;p_geom_data2 );
+    TEST_CALL_REPORT( &quot;ProSurfaceDataGet&quot;,&quot;ProTestPlanesPerpendicular()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+        return PRO_B_FALSE;
+<a name="anchor-223"></a>
+    /* If dot product of planes normals is 0.0 the planes are perpendicular */
+    dot = ProUtilVectorDot( 
+	p_geom_data1->data.p_surface_data->srf_shape.plane.e3, 
+	p_geom_data2->data.p_surface_data->srf_shape.plane.e3 );
+<a name="anchor-224"></a>
+    /* Release the mem allocated with ProSurfaceDataGet */
+    status = ProGeomitemdataFree( &amp;p_geom_data1 );
+    TEST_CALL_REPORT( &quot;ProGeomitemdataFree&quot;,&quot;ProTestPlanesPerpendicular()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-225"></a>    status = ProGeomitemdataFree( &amp;p_geom_data2 );
+    TEST_CALL_REPORT( &quot;ProGeomitemdataFree&quot;,&quot;ProTestPlanesPerpendicular()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+
+<a name="anchor-226"></a>    if( fabs( dot ) &lt; EPSM6 )
+	return PRO_B_TRUE;
+    else
+	return PRO_B_FALSE;
+}
+<a name="anchor-227"></a>
+
+
+/*====================================================================*\
+FUNCTION :  ProTestSectionSketcher
+<a name="anchor-228"></a>PURPOSE  :  Create the section
+\*====================================================================*/
+ProError ProTestSectionSketcher(
+    ProMatrix		sk_view_matrix, /* In: Matrix to convert model coords
+                                                to section coords, (NULL-
+<a name="anchor-229"></a>						for 1st feature) */
+    ProSection		*p_out_section,	/* Out: The undimesioned section */
+    ProSelection	**p_refs )	/* Out: Allocated array with selected
+                                                references. Array must be
+                                                released with 
+<a name="anchor-230"></a>						ProTestSectionRefsFree.
+						Pass NULL when creating the
+						1st feature */
+{
+    ProError		status = PRO_TK_NO_ERROR;
+<a name="anchor-231"></a>    int			menu_id;
+    int			action = SKETCHER_QUIT;
+    static char		*p_menus[] = { (char *)&quot;TK SKETCHER&quot;, (char *)&quot;DONE QUIT&quot;, (char *)&quot;&quot; };
+    ProSection		section;
+    ProName             w_section_name;
+<a name="anchor-232"></a>    ProSelection	*p_ref_sel = NULL;
+    SketchingData	sk_data;
+
+
+    /*-------------------------------------------*\
+<a name="anchor-233"></a>	Allocate the new section and set its name
+    \*-------------------------------------------*/
+    status = ProSection2DAlloc( &amp;section );
+    TEST_CALL_REPORT( &quot;ProSection2DAlloc&quot;,&quot;ProTestSectionSketcher()&quot;,
+	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-234"></a>
+    if( status == PRO_TK_NO_ERROR )
+    {
+	status = ProSectionNameSet( section, 
+	    ProTestNewSectionNameGet( w_section_name ) );
+<a name="anchor-235"></a>    	TEST_CALL_REPORT( &quot;ProSectionNameSet&quot;,&quot;ProTestSectionSketcher()&quot;,
+            status, status != PRO_TK_NO_ERROR );
+     }
+
+    if( status != PRO_TK_NO_ERROR )
+<a name="anchor-236"></a>	return status;
+
+
+    /*-------------------------------------------*\
+	Init sketching data structure
+<a name="anchor-237"></a>    \*-------------------------------------------*/
+    ProTestSketchingDataInit( section, sk_view_matrix, &amp;sk_data );
+
+    /*-------------------------------------------*\
+	Specify references and draw the section.
+<a name="anchor-238"></a>    \*-------------------------------------------*/
+    ProMenuFileRegister( (char *)&quot;TK SKETCHER&quot;, (char *)&quot;tksketcher.mnu&quot;, &amp;menu_id );
+    ProMenubuttonActionSet( (char *)&quot;TK SKETCHER&quot;, (char *)&quot;Sketch&quot;,
+        (ProMenubuttonAction)ProTestSectionSketch,
+        (ProAppData)&amp;sk_data, SKETCHER_SKETCH );
+<a name="anchor-239"></a>
+    ProMenubuttonActionSet( (char *)&quot;TK SKETCHER&quot;, (char *)&quot;Specify Refs&quot;,
+        (ProMenubuttonAction)ProTestSectionRefsSet,
+        (ProAppData)&amp;p_ref_sel, 0 );
+    
+<a name="anchor-240"></a>    ProMenubuttonActionSet( (char *)&quot;TK SKETCHER&quot;, (char *)&quot;TK SKETCHER&quot;,
+	(ProMenubuttonAction)ProTestSectionSketch,
+	(ProAppData)&amp;sk_data, SKETCHER_QUIT );
+    ProMenuFileRegister( (char *)&quot;DONE QUIT&quot;, (char *)&quot;tkdonequit.mnu&quot;, &amp;menu_id );
+
+<a name="anchor-241"></a>    ProMenubuttonActionSet( (char *)&quot;DONE QUIT&quot;, (char *)&quot;-Done&quot;,
+        (ProMenubuttonAction)ProTestSectionSketch,
+        (ProAppData)&amp;sk_data, SKETCHER_DONE );
+
+    ProMenubuttonActionSet( (char *)&quot;DONE QUIT&quot;, (char *)&quot;-Quit&quot;,
+<a name="anchor-242"></a>        (ProMenubuttonAction)ProTestSectionSketch,
+        (ProAppData)&amp;sk_data, SKETCHER_QUIT );
+    
+    ProMenubuttonActionSet( (char *)&quot;DONE QUIT&quot;, (char *)&quot;DONE QUIT&quot;, 
+        (ProMenubuttonAction)ProTestSectionSketch,
+<a name="anchor-243"></a>        (ProAppData)&amp;sk_data, SKETCHER_QUIT );
+
+    action = SKETCHER_QUIT;
+
+    status = ProCompoundmenuCreate( p_menus,  &amp;menu_id );
+<a name="anchor-244"></a>    if( status == PRO_TK_NO_ERROR )
+    {
+        /*--------------------------------------------------*\
+            Do not specify references for the 1st feature
+        \*--------------------------------------------------*/
+<a name="anchor-245"></a>        if( p_refs == NULL )
+	{
+            ProMenubuttonDeactivate( (char *)&quot;TK SKETCHER&quot;, (char *)&quot;Specify Refs&quot; );
+	    ProMenuCommandPush( (char *)&quot;Sketch&quot; );
+	}
+<a name="anchor-246"></a>        else
+	{
+            ProMenubuttonActivate( (char *)&quot;TK SKETCHER&quot;, (char *)&quot;Specify Refs&quot; );
+	    ProMenuCommandPush( (char *)&quot;Specify Refs&quot; );
+	}
+<a name="anchor-247"></a>
+        ProMenuProcess( (char *)&quot;TK SKETCHER&quot;, &amp;action );
+    }
+/*------------------------------------------------------------------
+This if block is executed only if the user sketch entities in the 
+<a name="anchor-248"></a>Sketcher mode and pick -Done in the menu.Otherwise this fn will
+return PRO_TK_USER_ABORT.
+------------------------------------------------------------------*/
+
+    if( action == SKETCHER_DONE &amp;&amp; SKETCHER_DONE_LOCAL == SKETCHER_DONE)
+<a name="anchor-249"></a>    {
+	/* Init output data */
+	memcpy( p_out_section, &amp;(sk_data.section), sizeof(ProSection) );
+	if( p_refs != NULL )
+	    *p_refs = p_ref_sel;
+<a name="anchor-250"></a>	status = PRO_TK_NO_ERROR;
+    }
+    else
+    {
+	/* Section creation process was canceled.
+<a name="anchor-251"></a>	    Delete incomplete section. */
+
+	status = ProSectionFree( &amp;section );
+        TEST_CALL_REPORT( &quot;ProSectionFree&quot;,&quot;ProTestSectionSketcher()&quot;,
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-252"></a>
+	if( p_ref_sel != NULL )
+	    ProTestSectionRefsFree( &amp;p_ref_sel );
+
+	status = PRO_TK_USER_ABORT;
+<a name="anchor-253"></a>    }
+
+    return status;
+}
+
+<a name="anchor-254"></a>
+
+/*====================================================================*\
+FUNCTION :  ProTestSketchingDataInit
+PURPOSE  :  Initialize sketching data structure to use it 
+<a name="anchor-255"></a>		in sketching menu actions
+\*====================================================================*/
+ProError ProTestSketchingDataInit(
+    ProSection		section,	/* In: The section */
+    ProMatrix		sk_view_matrix,	/* In: Matrix to convert model coords
+<a name="anchor-256"></a>						to section coords (NULL - for 
+						first feature */
+    SketchingData	*p_sk_data )	/* Out: Initialized sketching data */
+{
+    ProMatrix		mdl_matrix;
+<a name="anchor-257"></a>    ProMatrix		identity_matrix = { {1.0, 0.0, 0.0, 0.0},
+                                        {0.0, 1.0, 0.0, 0.0},
+                                        {0.0, 0.0, 1.0, 0.0},
+                                        {0.0, 0.0, 0.0, 1.0} };
+ 
+<a name="anchor-258"></a>
+    p_sk_data->section = section;
+
+    /*------------------------------------------------------------------*\
+	Create matrix to transform screen coords to model coords
+<a name="anchor-259"></a>    \*------------------------------------------------------------------*/
+    ProViewMatrixGet( NULL, NULL, mdl_matrix );
+    ProUtilMatrixInvert( mdl_matrix, p_sk_data->mdl_matrix );
+
+    if( sk_view_matrix == NULL )
+<a name="anchor-260"></a>    {
+    /*------------------------------------------------------------------*\
+    	For the first feature use identity matrix to transform 
+	screen coords to section coords
+    \*------------------------------------------------------------------*/
+<a name="anchor-261"></a>    	ProUtilMatrixCopy( identity_matrix, p_sk_data->trf_matrix ); 
+	return PRO_TK_NO_ERROR;
+    }
+
+    /*------------------------------------------------------------------*\
+<a name="anchor-262"></a>        Create matrix to transform screen coords to section coords
+    \*------------------------------------------------------------------*/
+    ProUtilMatrixProduct( p_sk_data->mdl_matrix, sk_view_matrix, 
+	p_sk_data->trf_matrix );
+
+<a name="anchor-263"></a>
+    return PRO_TK_NO_ERROR;
+}
+
+
+<a name="anchor-264"></a>
+/*====================================================================*\
+FUNCTION :  ProTestSectionSketch
+PURPOSE  :  Select from menu to draw the entities of section
+\*====================================================================*/
+<a name="anchor-265"></a>int ProTestSectionSketch(
+    SketchingData	*p_sk_data,
+    int			sketcher_action )
+{
+    ProError		status;
+<a name="anchor-266"></a>    int			menu_id;
+    int			action;
+
+
+    /*-------------------------------------------*\
+<a name="anchor-267"></a>        Check for sketcher exiting 
+    \*-------------------------------------------*/
+    if( sketcher_action == SKETCHER_DONE || sketcher_action == SKETCHER_QUIT )
+    {
+	ProMenuDeleteWithStatus( sketcher_action );
+<a name="anchor-268"></a>	ProMenuDeleteWithStatus( sketcher_action );
+	return 0;
+    }
+
+    /*-------------------------------------------*\
+<a name="anchor-269"></a>        Choose entity type and draw it
+    \*-------------------------------------------*/
+
+    ProMenuFileRegister( (char *)&quot;TK GEOMETRY&quot;, (char *)&quot;tksketgeom.mnu&quot;, &amp;menu_id );
+    ProMenubuttonActionSet( (char *)&quot;TK GEOMETRY&quot;, (char *)&quot;Point&quot;, 
+<a name="anchor-270"></a>	(ProMenubuttonAction)NULL, 
+	(ProAppData)p_sk_data, 0 );
+
+
+
+<a name="anchor-271"></a>    ProMenubuttonActionSet( (char *)&quot;TK GEOMETRY&quot;, (char *)&quot;Line&quot;,
+        (ProMenubuttonAction)ProTestSectionLineEntityCreate,
+        (ProAppData)p_sk_data, 0 );
+
+    ProMenubuttonActionSet( (char *)&quot;TK GEOMETRY&quot;, (char *)&quot;Rectangle&quot;,
+<a name="anchor-272"></a>        (ProMenubuttonAction)ProTestSectionRectangleEntityCreate,
+        (ProAppData)p_sk_data, 0 );
+
+    ProMenubuttonActionSet( (char *)&quot;TK GEOMETRY&quot;, (char *)&quot;Circle&quot;,
+        (ProMenubuttonAction)ProTestSectionCircleEntityCreate,
+<a name="anchor-273"></a>        (ProAppData)p_sk_data, 0 );
+
+    ProMenubuttonActionSet( (char *)&quot;TK GEOMETRY&quot;, (char *)&quot;Arc&quot;,
+        (ProMenubuttonAction)ProTestSectionArcEntityCreate,
+        (ProAppData)p_sk_data, 0 );
+<a name="anchor-274"></a>
+    ProMenubuttonActionSet( (char *)&quot;TK GEOMETRY&quot;, (char *)&quot;TK GEOMETRY&quot;,
+        (ProMenubuttonAction)ProMenuDelete,
+        (ProAppData)p_sk_data, 0 );
+
+<a name="anchor-275"></a>
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;TK GEOMETRY&quot;, &amp;menu_id );
+    if( status == PRO_TK_NO_ERROR )
+    {
+	ProMenubuttonDeactivate(  (char *)&quot;TK GEOMETRY&quot;, (char *)&quot;Point&quot;);
+<a name="anchor-276"></a>	ProMenubuttonDeactivate( (char *)&quot;TK GEOMETRY&quot;, (char *)&quot;Arc&quot; );
+        status = ProMenuProcess( (char *)&quot;TK GEOMETRY&quot;, &amp;action );
+    }
+
+
+<a name="anchor-277"></a>    return 0;
+}
+
+
+
+<a name="anchor-278"></a>/*====================================================================*\
+FUNCTION :  ProTestSectionRefsSet
+PURPOSE  :  &quot;Set Refs&quot; on-button function. 
+		Select sketching references
+\*====================================================================*/
+<a name="anchor-279"></a>int ProTestSectionRefsSet(
+    ProSelection	**p_ref_sel)	/* Out: If NULL - Allocated array with 
+						selected references. Array must 
+						be released with 
+						ProTestSectionRefsFree.
+<a name="anchor-280"></a>						If !NULL - contains previously 
+						selected references. */
+{
+    ProError		status;
+    ProSelection	*p_sel;
+<a name="anchor-281"></a>    int			n_sel = 0;
+    int			i;
+
+/*-------------------------------------------------
+Note:
+<a name="anchor-282"></a>   The variable SKETCHER_DONE_LOCAL is set to  SKETCHER_QUIT 
+   and this can be changed to SKETCHER_DONE only by a fn call 
+   to create entities in the sketcher.Those calls are 
+
+   ProTestSectionRectangleEntityCreate()
+<a name="anchor-283"></a>   ProTestSectionCircleEntityCreate()
+   ProTestSectionLineEntityCreate()
+
+---------------------------------------------------*/
+
+<a name="anchor-284"></a>    SKETCHER_DONE_LOCAL = SKETCHER_QUIT;
+
+/*-------------------------------------------------
+Note:The Sketch menu is hiden untill the sketcher reference
+is not given.
+<a name="anchor-285"></a>---------------------------------------------------*/
+
+    ProMenubuttonDeactivate( (char *)&quot;TK SKETCHER&quot;, (char *)&quot;Sketch&quot; );
+	
+	
+<a name="anchor-286"></a>    ProUtilMsgPrint( msgfil, (char *)&quot;USER Select a perpendicular surface&quot; );
+
+    /* Select an edge to use as dimension/constrain reference */
+    status = ProSelect( 
+	(char *)&quot;datum,sldedge,edge,curve,point,edge_end,surface,sldface&quot;, 
+<a name="anchor-287"></a>	2, *p_ref_sel, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel );
+    TEST_CALL_REPORT( &quot;ProSelect&quot;,&quot;ProTestSectionRefsSet()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR || n_sel &lt; 1 )
+    {
+<a name="anchor-288"></a>	return -1;
+    }
+    else
+    {
+	ProMenubuttonActivate( (char *)&quot;TK SKETCHER&quot;, (char *)&quot;Sketch&quot; );
+<a name="anchor-289"></a>    }
+
+    /* Delete initial references if necessary */
+    if( *p_ref_sel != NULL )
+	ProTestSectionRefsFree( p_ref_sel );
+<a name="anchor-290"></a>
+    /* Copy selected referencies to output array */
+    status = ProArrayAlloc( n_sel, sizeof(ProSelection), 1, 
+	(ProArray*)p_ref_sel );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc&quot;,&quot;ProTestSectionRefsSet()&quot;,
+<a name="anchor-291"></a>        status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR)
+	return -1;
+
+    for( i=0; i&lt;n_sel; i++ )
+<a name="anchor-292"></a>    {
+	status = ProSelectionCopy( p_sel[i], *p_ref_sel + i );
+	TEST_CALL_REPORT( &quot;ProSelectionCopy&quot;,&quot;ProTestSectionRefsSet()&quot;,
+            status, status != PRO_TK_NO_ERROR );
+    }
+<a name="anchor-293"></a>
+    /* Call the sketcher next */
+    status = ProMenuCommandPush( (char *)&quot;Sketch&quot; );
+    TEST_CALL_REPORT( &quot;ProMenuCommandPush&quot;,&quot;ProTestSectionRefsSet()&quot;,
+	status, status != PRO_TK_NO_ERROR ); 
+<a name="anchor-294"></a>
+
+    return 0;
+}
+ 
+<a name="anchor-295"></a>
+
+/*====================================================================*\
+FUNCTION :  ProTestSectionRefsFree
+PURPOSE  :  Free array of selected section references.
+<a name="anchor-296"></a>\*====================================================================*/
+ProError ProTestSectionRefsFree(
+    ProSelection	**p_ref_sel )	/* In: ProArray of selected refs */
+{
+    ProError		status;
+<a name="anchor-297"></a>    int			n_refs = 0;
+    int			i;
+
+
+    status = ProArraySizeGet( (ProArray)(*p_ref_sel), &amp;n_refs );
+<a name="anchor-298"></a>    TEST_CALL_REPORT( &quot;ProArraySizeGet&quot;,&quot;ProTestSectionRefsFree()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR || n_refs &lt; 1 )
+	return PRO_TK_NO_ERROR;
+
+<a name="anchor-299"></a>    for( i=0; i&lt;n_refs; i++ )
+    {
+	status = ProSelectionFree( *p_ref_sel + i );
+	TEST_CALL_REPORT( &quot;ProSelectionFree&quot;,&quot;ProTestSectionRefsFree()&quot;,
+	    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-300"></a>    }
+
+    status = ProArrayFree( (ProArray*)p_ref_sel );
+    TEST_CALL_REPORT( &quot;ProArrayFree&quot;,&quot;ProTestSectionRefsFree()&quot;,
+	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-301"></a>
+
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-302"></a>
+
+/*---------------------------------------------------------------------------*\
+    Sketching entities
+ 
+<a name="anchor-303"></a>\*---------------------------------------------------------------------------*/
+ 
+/*====================================================================*\
+FUNCTION :  ProTestSectionLineEntityCreate
+PURPOSE  :  Draw the line entity and add it to the section
+<a name="anchor-304"></a>\*====================================================================*/
+int ProTestSectionLineEntityCreate(
+    SketchingData	*p_sk_data)
+{
+    ProError		status;
+<a name="anchor-305"></a>    ProMouseButton	mouse_button;
+    ProPoint3d		point1, point2;
+    ProColor        old_color;
+	ProColor        warning_color;
+
+<a name="anchor-306"></a>/*------------------------------------------------------
+Note:
+Value of the SKETCHER_DONE_LOCAL is changed from SKETCHER_QUIT to
+SKETCHER_DONE.This implies, the sketch has been done in the
+Sketcher mode.
+<a name="anchor-307"></a>------------------------------------------------------*/
+  
+    SKETCHER_DONE_LOCAL = SKETCHER_DONE;
+
+    /* Pick the first point */
+<a name="anchor-308"></a>    mouse_button = PRO_NO_BUTTON;
+    status = ProMousePickGet( PRO_ANY_BUTTON, &amp;mouse_button, point1 );
+    TEST_CALL_REPORT( &quot;ProMousePickGet&quot;,&quot;ProTestSectionLineEntityCreate()&quot;,
+	status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR || mouse_button != PRO_LEFT_BUTTON )
+<a name="anchor-309"></a>        return -1;
+
+    /* Draw the first point */
+	warning_color.method = PRO_COLOR_METHOD_TYPE;
+	warning_color.value.type = PRO_COLOR_WARNING;
+<a name="anchor-310"></a>    ProGraphicsColorModify( &amp;warning_color, &amp;old_color );
+    ProTestPointDraw( point1, p_sk_data->mdl_matrix );
+
+    while( mouse_button != PRO_MIDDLE_BUTTON )
+    {
+<a name="anchor-311"></a>	/* Pick the line end point */
+	status = ProMousePickGet( PRO_ANY_BUTTON, &amp;mouse_button, point2 );
+	TEST_CALL_REPORT( &quot;ProMousePickGet&quot;,&quot;ProTestSectionLineEntityCreate()&quot;,
+	    status, status != PRO_TK_NO_ERROR );
+ 	if( status != PRO_TK_NO_ERROR )
+<a name="anchor-312"></a>	    break;
+
+	if( mouse_button == PRO_LEFT_BUTTON )
+	{
+	    /* Draw the line and line end point */
+<a name="anchor-313"></a>	    ProTestLineDraw( point1, point2, p_sk_data->mdl_matrix );
+
+	    /* Add drawn line as entity */
+	    ProTestSectionLineEntityAdd( p_sk_data, point1, point2 );
+
+<a name="anchor-314"></a>	    point1[0] = point2[0];
+	    point1[1] = point2[1];
+	    point1[2] = point2[2];
+	}
+    }
+<a name="anchor-315"></a>
+
+    ProGraphicsColorModify( &amp;old_color, NULL );
+
+
+<a name="anchor-316"></a>    return 0;
+}
+
+
+
+<a name="anchor-317"></a>/*====================================================================*\
+FUNCTION :  ProTestSectionRectangleEntityCreate
+PURPOSE  :  Draw the rectangle entity and add it to the section
+\*====================================================================*/
+int ProTestSectionRectangleEntityCreate(
+<a name="anchor-318"></a>    SketchingData       *p_sk_data)
+{
+    ProError            status;
+    ProMouseButton      mouse_button;
+    ProPoint3d          point1, point2;
+<a name="anchor-319"></a>    ProColor        	old_color;
+	ProColor 	        warning_color;
+    
+/*------------------------------------------------------
+Note:
+<a name="anchor-320"></a>Value of the SKETCHER_DONE_LOCAL is changed from SKETCHER_QUIT to
+SKETCHER_DONE.This implies, the sketch has been done in the
+Sketcher mode.
+------------------------------------------------------*/
+    SKETCHER_DONE_LOCAL = SKETCHER_DONE;
+<a name="anchor-321"></a>
+
+    /* Pick the first point */
+    mouse_button = PRO_NO_BUTTON;
+    status = ProMousePickGet( PRO_ANY_BUTTON, &amp;mouse_button, point1 );
+<a name="anchor-322"></a>    TEST_CALL_REPORT( &quot;ProMousePickGet&quot;,&quot;ProTestSectionRectangleEntityCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR || mouse_button != PRO_LEFT_BUTTON )
+        return -1;
+ 
+<a name="anchor-323"></a>    /* Draw the first point */
+	warning_color.method = PRO_COLOR_METHOD_TYPE;
+	warning_color.value.type = PRO_COLOR_WARNING;
+    ProGraphicsColorModify( &amp;warning_color, &amp;old_color );
+    ProTestPointDraw( point1, p_sk_data->mdl_matrix );
+<a name="anchor-324"></a>
+
+    /* Pick the circle point */
+    while( mouse_button != PRO_MIDDLE_BUTTON )
+    {
+<a name="anchor-325"></a>        /* Pick the line end point */
+        status = ProMousePickGet( PRO_ANY_BUTTON, &amp;mouse_button, point2 );
+	TEST_CALL_REPORT( &quot;ProMousePickGet&quot;,
+		&quot;ProTestSectionRectangleEntityCreate()&quot;, 
+		status, status != PRO_TK_NO_ERROR );
+<a name="anchor-326"></a>        if( status != PRO_TK_NO_ERROR )
+            break;
+        if( mouse_button == PRO_LEFT_BUTTON )
+        {
+            /* Draw the rectangle */
+<a name="anchor-327"></a>            ProTestRectangleDraw( point1, point2, p_sk_data->mdl_matrix );
+ 
+            /* Add drawn rectangle as entity */
+            ProTestSectionRectangleEntityAdd( p_sk_data, point1, point2 );
+ 
+<a name="anchor-328"></a>            break;
+        }
+    }
+ 
+    ProGraphicsColorModify( &amp;old_color, NULL );
+<a name="anchor-329"></a>
+
+    return 0;
+}
+
+<a name="anchor-330"></a>
+
+/*====================================================================*\
+FUNCTION :  ProTestSectionCircleEntityCreate
+PURPOSE  :  Draw the circle entity and add it to the section
+<a name="anchor-331"></a>\*====================================================================*/
+int ProTestSectionCircleEntityCreate(
+    SketchingData	*p_sk_data)
+{
+    ProError            status;
+<a name="anchor-332"></a>    ProMouseButton      mouse_button;
+    ProPoint3d          point1, point2;
+    ProColor            old_color;
+	ProColor            warning_color;
+
+<a name="anchor-333"></a>/*------------------------------------------------------
+Note:
+Value of the SKETCHER_DONE_LOCAL is changed from SKETCHER_QUIT to
+SKETCHER_DONE.This implies, the sketch has been done in the
+Sketcher mode.
+<a name="anchor-334"></a>------------------------------------------------------*/
+    SKETCHER_DONE_LOCAL = SKETCHER_DONE;
+
+    /* Pick the center point */
+    mouse_button = PRO_NO_BUTTON;
+<a name="anchor-335"></a>    status = ProMousePickGet( PRO_ANY_BUTTON, &amp;mouse_button, point1 );
+    TEST_CALL_REPORT( &quot;ProMousePickGet&quot;,&quot;ProTestSectionCircleEntityCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR || mouse_button != PRO_LEFT_BUTTON )
+        return -1;
+<a name="anchor-336"></a> 
+    /* Draw the center point */
+	warning_color.method = PRO_COLOR_METHOD_TYPE;
+	warning_color.value.type = PRO_COLOR_WARNING;
+    ProGraphicsColorModify( &amp;warning_color, &amp;old_color );
+<a name="anchor-337"></a>    ProTestPointDraw( point1, p_sk_data->mdl_matrix );
+
+    /* Pick the circle point */
+    while( mouse_button != PRO_MIDDLE_BUTTON )
+    {
+<a name="anchor-338"></a>        /* Pick the line end point */
+        status = ProMousePickGet( PRO_ANY_BUTTON, &amp;mouse_button, point2 );
+	TEST_CALL_REPORT( &quot;ProMousePickGet&quot;,
+		&quot;ProTestSectionCircleEntityCreate()&quot;,
+		status, status != PRO_TK_NO_ERROR );
+<a name="anchor-339"></a>	if( status != PRO_TK_NO_ERROR )
+	    break;
+        if( mouse_button == PRO_LEFT_BUTTON )
+        {
+            /* Draw the circle */
+<a name="anchor-340"></a>	    ProTestCircleDraw( point1, point2, p_sk_data->mdl_matrix );
+ 
+            /* Add drawn circle as entity */
+            ProTestSectionCircleEntityAdd( p_sk_data, point1, point2 );
+
+<a name="anchor-341"></a>	    break;
+        }
+    }
+ 
+    ProGraphicsColorModify( &amp;old_color, NULL );
+<a name="anchor-342"></a> 
+ 
+    return 0;
+}
+
+<a name="anchor-343"></a>
+
+int ProTestSectionArcEntityCreate(
+    SketchingData	*p_sk_data)
+{
+<a name="anchor-344"></a>#if 0
+    ProError		status;
+    ProMouseButton	mouse_button;
+    ProPoint3d		point1;
+    ProPoint3d		point2;
+<a name="anchor-345"></a>    ProPoint3d		point3;
+    ProColor	old_color;
+	ProColor	warning_color;
+
+
+<a name="anchor-346"></a>    /* Pick the first end point */
+    mouse_button = PRO_NO_BUTTON;
+    status = ProMousePickGet( PRO_ANY_BUTTON, &amp;mouse_button, point1 );
+    if( status != PRO_TK_NO_ERROR || mouse_button != PRO_LEFT_BUTTON )
+        return -1;
+<a name="anchor-347"></a> 
+    /* Draw the first arc end point */
+	warning_color.method = PRO_COLOR_METHOD_TYPE;
+	warning_color.value.type = PRO_COLOR_WARNING;
+    ProGraphicsColorModify( &amp;warning_color, &amp;old_color );
+<a name="anchor-348"></a>    ProTestPointDraw( point1, p_sk_data->mdl_matrix );
+
+    /* Get the second arc end point */
+    while( mouse_button != PRO_MIDDLE_BUTTON )
+    {
+<a name="anchor-349"></a>        /* Pick the second arc end point */
+        status = ProMousePickGet( PRO_ANY_BUTTON, &amp;mouse_button, point2 );
+        if( status != PRO_TK_NO_ERROR )
+            break;
+        if( mouse_button == PRO_LEFT_BUTTON )
+<a name="anchor-350"></a>        {
+            /* Draw the second end point */
+            ProTestPointDraw( point2, p_sk_data->mdl_matrix );
+            break;
+        }
+<a name="anchor-351"></a>    }
+
+    /* Get the center point */
+    while( mouse_button != PRO_MIDDLE_BUTTON )
+    {
+<a name="anchor-352"></a>	/* Pick the center point */
+	status = ProMousePickGet( PRO_ANY_BUTTON, &amp;mouse_button, center );
+	if( status != PRO_TK_NO_ERROR )
+	    break;
+	if( mouse_button == PRO_LEFT_BUTTON )
+<a name="anchor-353"></a>	{
+	    /* Draw the center point */
+	    ProTestPointDraw( center, p_sk_data->mdl_matrix );
+	    break;
+	}
+<a name="anchor-354"></a>    }
+
+    ProGraphicsColorModify( &amp;old_color, NULL );
+ 
+ 
+<a name="anchor-355"></a>#endif
+    return 0;
+}
+
+
+<a name="anchor-356"></a>
+/*---------------------------------------------------------------------------*\
+    Adding entities
+
+\*---------------------------------------------------------------------------*/
+<a name="anchor-357"></a>
+/*====================================================================*\
+FUNCTION :  ProTestSectionLineEntityAdd
+PURPOSE  :  Add the specified line to the section
+\*====================================================================*/
+<a name="anchor-358"></a>ProError ProTestSectionLineEntityAdd( 
+    SketchingData	*p_sk_data,	/* In: Sketching data */
+    ProPoint3d		point1,		/* In: Line end 1 in screen coords */
+    ProPoint3d		point2 )	/* In: Line end 2 in screen coords */
+{
+<a name="anchor-359"></a>    ProError		status;
+    Pro2dLinedef	line_def;
+    int			entity_id;
+    ProPoint3d		sec_point1, sec_point2;
+
+<a name="anchor-360"></a>
+    /* Transform from screen coords to section coords */
+    status = ProPntTrfEval( point1, p_sk_data->trf_matrix, sec_point1 );
+    TEST_CALL_REPORT( &quot;ProPntTrfEval&quot;,&quot;ProTestSectionLineEntityAdd()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-361"></a>    status = ProPntTrfEval( point2, p_sk_data->trf_matrix, sec_point2 );
+    TEST_CALL_REPORT( &quot;ProPntTrfEval&quot;,&quot;ProTestSectionLineEntityAdd()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    /* Init the entity structure */
+<a name="anchor-362"></a>    line_def.type = PRO_2D_LINE;
+    line_def.end1[0] = sec_point1[0];
+    line_def.end1[1] = sec_point1[1];
+    line_def.end2[0] = sec_point2[0];
+    line_def.end2[1] = sec_point2[1];
+<a name="anchor-363"></a>
+    /* Add the entity */
+    status = ProSectionEntityAdd( p_sk_data->section, (Pro2dEntdef*)&amp;line_def, 
+	&amp;entity_id );
+    TEST_CALL_REPORT( &quot;ProSectionEntityAdd&quot;,&quot;ProTestSectionLineEntityAdd()&quot;,
+<a name="anchor-364"></a>        status, status != PRO_TK_NO_ERROR );
+
+
+    return status;
+}
+<a name="anchor-365"></a>
+
+/*====================================================================*\
+FUNCTION :  ProTestSectionRectangleEntityAdd
+PURPOSE  :  Add the specified rectangle to the section
+<a name="anchor-366"></a>\*====================================================================*/
+ProError ProTestSectionRectangleEntityAdd(
+    SketchingData	*p_sk_data,	/* In: Sketching data */
+    ProPoint3d		point1,		/* In: Screen coords of top point*/
+    ProPoint3d		point3 )	/* In: Screen coords of bottom point */
+<a name="anchor-367"></a>{
+    ProError            status;
+    Pro2dLinedef        line_def;
+    int                 entity_id;
+    ProPoint3d		point2, point4;
+<a name="anchor-368"></a>    ProPoint3d          sec_points[ 5 ];
+    int			i;
+ 
+ 
+    point2[0] = point3[0];
+<a name="anchor-369"></a>    point2[1] = point1[1];
+    point2[2] = 0.0;
+    point4[0] = point1[0];
+    point4[1] = point3[1];
+    point4[2] = 0.0;
+<a name="anchor-370"></a> 
+    /* Transform from screen coords to section coords */
+    ProPntTrfEval( point1, p_sk_data->trf_matrix, sec_points[0] );
+    ProPntTrfEval( point2, p_sk_data->trf_matrix, sec_points[1] );
+    ProPntTrfEval( point3, p_sk_data->trf_matrix, sec_points[2] );
+<a name="anchor-371"></a>    ProPntTrfEval( point4, p_sk_data->trf_matrix, sec_points[3] );
+    status = ProPntTrfEval( point1, p_sk_data->trf_matrix, sec_points[4] ); 
+    TEST_CALL_REPORT( &quot;ProPntTrfEval&quot;,&quot;ProTestSectionRectangleEntityAdd()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+ 
+<a name="anchor-372"></a>    for( i=1; i&lt;5; i++ )
+    {
+    	line_def.type = PRO_2D_LINE;
+    	line_def.end1[0] = sec_points[i-1][0];
+    	line_def.end1[1] = sec_points[i-1][1];
+<a name="anchor-373"></a>    	line_def.end2[0] = sec_points[i][0];
+    	line_def.end2[1] = sec_points[i][1];
+
+    	/* Add the entity */
+    	status = ProSectionEntityAdd( p_sk_data->section, 
+<a name="anchor-374"></a>		(Pro2dEntdef*)&amp;line_def, &amp;entity_id );
+	TEST_CALL_REPORT( &quot;ProSectionEntityAdd&quot;,
+		&quot;ProTestSectionRectangleEntityAdd()&quot;,
+		status, status != PRO_TK_NO_ERROR );
+    }
+<a name="anchor-375"></a>
+ 
+    return status;
+}
+ 
+<a name="anchor-376"></a> 
+
+/*====================================================================*\
+FUNCTION :  ProTestSectionCircleEntityAdd
+PURPOSE  :  Add the specified circle to the section
+<a name="anchor-377"></a>\*====================================================================*/
+ProError ProTestSectionCircleEntityAdd(
+    SketchingData       *p_sk_data,     /* In: Sketching data */
+    ProPoint3d		center,		/* In: The center point */
+    ProPoint3d          circle )	/* In: Circle point */
+<a name="anchor-378"></a>{
+    ProError		status;
+    Pro2dCircledef	circle_def;
+    int			entity_id;
+    ProPoint3d		sec_center;
+<a name="anchor-379"></a>    ProPoint3d		sec_circle_point;
+
+
+    /* Transform from screen coords to section coords */
+    status = ProPntTrfEval( center, p_sk_data->trf_matrix, sec_center );
+<a name="anchor-380"></a>    TEST_CALL_REPORT( &quot;ProPntTrfEval&quot;,&quot;ProTestSectionCircleEntityAdd()&quot;, 
+        status, status != PRO_TK_NO_ERROR );
+    status = ProPntTrfEval( circle, p_sk_data->trf_matrix, sec_circle_point );
+    TEST_CALL_REPORT( &quot;ProPntTrfEval&quot;,&quot;ProTestSectionCircleEntityAdd()&quot;, 
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-381"></a> 
+    /* Init the entity structure */
+    circle_def.type = PRO_2D_CIRCLE;
+    circle_def.center[0] = sec_center[0];
+    circle_def.center[1] = sec_center[1];
+<a name="anchor-382"></a>    circle_def.radius = ProUtilPointsDist( sec_center, sec_circle_point );
+
+    /* Add the entity */
+    status = ProSectionEntityAdd( p_sk_data->section, 
+	(Pro2dEntdef*)&amp;circle_def, &amp;entity_id );
+<a name="anchor-383"></a>    TEST_CALL_REPORT( &quot;ProSectionEntityAdd&quot;,&quot;ProTestSectionCircleEntityAdd()&quot;, 
+        status, status != PRO_TK_NO_ERROR );
+
+
+    return status;
+<a name="anchor-384"></a>}
+
+
+
+/*---------------------------------------------------------------------------*\
+<a name="anchor-385"></a>    Displaying graphics
+ 
+\*---------------------------------------------------------------------------*/
+ 
+/*====================================================================*\
+<a name="anchor-386"></a>FUNCTION :  ProTestPointDraw
+PURPOSE  :  Draw the point
+\*====================================================================*/
+ProError ProTestPointDraw(
+    ProPoint3d		point,		/* In: Point screen coords */
+<a name="anchor-387"></a>    ProMatrix		trf_matrix )	/* In: Matrx to convert screen coords
+						into model coords (NULL) */
+{
+    ProColor	old_color;
+	ProColor	letter_color;
+<a name="anchor-388"></a>    ProPoint3d          mdl_point;
+
+
+    /* Convert screen coords into model coords if necessary */
+    if( trf_matrix != NULL )
+<a name="anchor-389"></a>        ProUtilPointTrans( trf_matrix, point, mdl_point );
+    else
+        ProUtilVectorCopy( point, mdl_point );
+
+    /* Draw the point */
+<a name="anchor-390"></a>	letter_color.method = PRO_COLOR_METHOD_TYPE;
+	letter_color.value.type = PRO_COLOR_LETTER;
+    ProGraphicsColorModify(&amp;letter_color , &amp;old_color );
+    ProGraphicsCircleDraw( mdl_point, 0.02 );
+    ProGraphicsColorModify( &amp;old_color, NULL );
+<a name="anchor-391"></a>
+
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-392"></a>
+
+/*====================================================================*\
+FUNCTION :  ProTestLineDraw
+PURPOSE  :  Draw the line
+<a name="anchor-393"></a>\*====================================================================*/
+ProError ProTestLineDraw(
+     ProPoint3d		point1,		/* In: Screen coords of line end point*/
+     ProPoint3d		point2,		/* In: Screen coords of line end point*/
+     ProMatrix		trf_matrix )	/* In: Matrx to convert screen coords
+<a name="anchor-394"></a>						into model coords (NULL)*/
+{
+    ProPoint3d		mdl_point1, mdl_point2;
+
+
+<a name="anchor-395"></a>    /* Convert screen coords into model coords if necessary */
+    if( trf_matrix != NULL )
+    {
+	ProUtilPointTrans( trf_matrix, point1, mdl_point1 );
+	ProUtilPointTrans( trf_matrix, point2, mdl_point2 );
+<a name="anchor-396"></a>    }
+    else
+    {
+	ProUtilVectorCopy( point1, mdl_point1 );
+	ProUtilVectorCopy( point2, mdl_point2 );
+<a name="anchor-397"></a>    }
+
+    /* Draw the line and line end points */
+    ProGraphicsPenPosition( mdl_point1 );
+    ProGraphicsLineDraw( mdl_point2 );
+<a name="anchor-398"></a>    ProTestPointDraw( mdl_point1, NULL );
+    ProTestPointDraw( mdl_point2, NULL );
+
+
+    return PRO_TK_NO_ERROR;
+<a name="anchor-399"></a>}
+
+
+
+/*====================================================================*\
+<a name="anchor-400"></a>FUNCTION :  ProTestRectangleDraw
+PURPOSE  :  Draw the rectangle
+\*====================================================================*/
+ProError ProTestRectangleDraw(
+     ProPoint3d         point1,         /* In: Screen coords of top point*/
+<a name="anchor-401"></a>     ProPoint3d         point3,         /* In: Screen coords of bottom point */
+     ProMatrix          trf_matrix )    /* In: Matrx to convert screen coords
+                                                into model coords (NULL)*/
+{
+    ProPoint3d		point2 = {0,0,0};
+<a name="anchor-402"></a>    ProPoint3d		point4 = {0,0,0};
+    ProPoint3d          mdl_point1, mdl_point2, mdl_point3, mdl_point4;
+ 
+ 
+    point2[0] = point3[0];
+<a name="anchor-403"></a>    point2[1] = point1[1];
+    point2[2] = 0.0;
+    point4[0] = point1[0];
+    point4[1] = point3[1];
+    point4[2] = 0.0;
+<a name="anchor-404"></a>
+    /* Convert screen coords into model coords if necessary */
+    if( trf_matrix != NULL )
+    {
+        ProUtilPointTrans( trf_matrix, point1, mdl_point1 );
+<a name="anchor-405"></a>        ProUtilPointTrans( trf_matrix, point2, mdl_point2 );
+        ProUtilPointTrans( trf_matrix, point3, mdl_point3 );
+        ProUtilPointTrans( trf_matrix, point4, mdl_point4 );
+    }
+    else
+<a name="anchor-406"></a>    {
+        ProUtilVectorCopy( point1, mdl_point1 );
+        ProUtilVectorCopy( point2, mdl_point2 );
+	ProUtilVectorCopy( point3, mdl_point3 );
+	ProUtilVectorCopy( point4, mdl_point4 );
+<a name="anchor-407"></a>    }
+ 
+    /* Draw the rectangle and its end points */
+    ProGraphicsPenPosition( mdl_point1 );
+    ProGraphicsLineDraw( mdl_point2 );
+<a name="anchor-408"></a>    ProGraphicsLineDraw( mdl_point3 );
+    ProGraphicsLineDraw( mdl_point4 );
+    ProGraphicsLineDraw( mdl_point1 );
+    ProTestPointDraw( mdl_point1, NULL );
+    ProTestPointDraw( mdl_point2, NULL );
+<a name="anchor-409"></a>    ProTestPointDraw( mdl_point3, NULL );
+    ProTestPointDraw( mdl_point4, NULL );
+ 
+ 
+    return PRO_TK_NO_ERROR;
+<a name="anchor-410"></a>}
+
+
+
+/*====================================================================*\
+<a name="anchor-411"></a>FUNCTION :  ProTestCircleDraw
+PURPOSE  :  Draw the circle
+\*====================================================================*/
+ProError ProTestCircleDraw( 
+    ProPoint3d		center,		/* In: Screen coords of center point */
+<a name="anchor-412"></a>    ProPoint3d		circle,		/* In: Screen coords of circle point */
+    ProMatrix		trf_matrix )	/* In: Matrx to convert screen coords
+						into model coords (NULL) */
+{
+    ProPoint3d		mdl_center;
+<a name="anchor-413"></a>    ProPoint3d		mdl_circle;
+    double		radius;
+
+
+    /* Convert screen coords into model coords if necessary */
+<a name="anchor-414"></a>    if( trf_matrix != NULL )
+    {
+	ProUtilPointTrans( trf_matrix, center, mdl_center );
+	ProUtilPointTrans( trf_matrix, circle, mdl_circle );
+    }
+<a name="anchor-415"></a>    else
+    {
+	ProUtilVectorCopy( center, mdl_center );
+	ProUtilVectorCopy( circle, mdl_circle );
+    }
+<a name="anchor-416"></a>
+    radius = ProUtilPointsDist( mdl_center, mdl_circle );
+
+    ProGraphicsCircleDraw( mdl_center, radius );
+
+<a name="anchor-417"></a>
+    return PRO_TK_NO_ERROR;
+}
+
+
+<a name="anchor-418"></a>
+/*====================================================================*\
+FUNCTION :  ProTestNewSectionNameGet
+PURPOSE  :  Generate the name of the next new section 
+\*====================================================================*/
+<a name="anchor-419"></a>wchar_t *ProTestNewSectionNameGet(
+    ProName		w_name )	/* Out: Name of the new section.
+						User must allocate w_name */
+{
+    static int		counter = 0;
+<a name="anchor-420"></a>    ProCharName		name;
+
+
+    ProTKSprintf( name, (char *)&quot;TKSECTION%04d&quot;, counter++ );
+    ProStringToWstring( w_name, name );
+<a name="anchor-421"></a>
+
+    return w_name;
+}
+
+<a name="anchor-422"></a>
+
+/*====================================================================*\
+FUNCTION :  ProTestProtrusionFeatureCreate
+PURPOSE  :  Initialize element tree and create extruded protrusion feature
+<a name="anchor-423"></a>\*====================================================================*/
+ProError ProTestProtrusionFeatureCreate(
+    ProSecViewDirType	view_direction,	/* In: Feature direction */
+    ProSelection	sk_plane_sel,	/* In: The sketching plane selection */
+    int			ref_type, 	/* In: The reference plane type 
+<a name="anchor-424"></a>						(TOP, ...) */ 
+    ProSelection	ref_plane_sel,	/* In: The reference plane selection */
+    ProSection		section,	/* In: The sketched section */
+    ProSelection        *p_references,	/* In: The sketching references */
+    DepthData		*p_depth,	/* In: Initialized depth data */
+<a name="anchor-425"></a>    ProFeature		*p_feature )	/* Out: Created feature */
+{
+    ProMdl		model;
+    ProModelitem	model_item;
+    ProSelection	model_sel;
+<a name="anchor-426"></a>    ProError		status;
+    ProElement		elem_tree;
+    ProFeatureCreateOptions *options = 0;
+    ProErrorlist	err_list;
+
+<a name="anchor-427"></a>
+    static ElemTreeData tree[]={
+        {0, PRO_E_FEATURE_TREE, {PRO_VALUE_TYPE_INT, PRO_VALUE_UNUSED}},
+        {1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_PROTRUSION}},
+	{1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+<a name="anchor-428"></a>	{1, PRO_E_EXT_SURF_CUT_SOLID_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_TYPE_SOLID}},
+	{1, PRO_E_REMOVE_MATERIAL, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_ADD}},
+
+	    /* Section */
+            {1, PRO_E_STD_SECTION,  {PRO_VALUE_TYPE_INT, PRO_VALUE_UNUSED}},
+<a name="anchor-429"></a>                    {2, PRO_E_STD_SEC_SETUP_PLANE, {PRO_VALUE_TYPE_INT, PRO_VALUE_UNUSED}},
+                        {3, PRO_E_STD_SEC_PLANE, 
+			    {PRO_VALUE_TYPE_SELECTION}},
+                        {3, PRO_E_STD_SEC_PLANE_VIEW_DIR, 
+			    {PRO_VALUE_TYPE_INT}},
+<a name="anchor-430"></a>                        {3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, 
+			    {PRO_VALUE_TYPE_INT}},
+                        {3, PRO_E_STD_SEC_PLANE_ORIENT_REF, 
+			    {PRO_VALUE_TYPE_SELECTION}},
+
+<a name="anchor-431"></a>	    /* Extrusion depth */
+            {1, PRO_E_STD_EXT_DEPTH, {PRO_VALUE_TYPE_INT, PRO_VALUE_UNUSED}},
+                {2, PRO_E_EXT_DEPTH_FROM, {PRO_VALUE_TYPE_INT, PRO_VALUE_UNUSED}},
+                    {3, PRO_E_EXT_DEPTH_FROM_TYPE, 
+			{PRO_VALUE_TYPE_INT}},
+<a name="anchor-432"></a>                    {3, PRO_E_EXT_DEPTH_FROM_VALUE, 
+			{PRO_VALUE_TYPE_DOUBLE}},
+		    {3, PRO_E_EXT_DEPTH_FROM_REF,
+			{PRO_VALUE_TYPE_SELECTION}},
+                {2, PRO_E_EXT_DEPTH_TO, {PRO_VALUE_TYPE_INT, PRO_VALUE_UNUSED}},
+<a name="anchor-433"></a>                    {3, PRO_E_EXT_DEPTH_TO_TYPE, 
+			{PRO_VALUE_TYPE_INT,PRO_EXT_DEPTH_TO_NONE} },
+		    {3, PRO_E_EXT_DEPTH_TO_VALUE, 
+                        {PRO_VALUE_TYPE_DOUBLE}},
+		    {3, PRO_E_EXT_DEPTH_TO_REF,
+<a name="anchor-434"></a>                        {PRO_VALUE_TYPE_SELECTION}}
+    };
+
+
+    /*-------------------------------------------------*\
+<a name="anchor-435"></a>	Complete section elements initialization
+    \*-------------------------------------------------*/
+    tree[7].data.v.r = sk_plane_sel;
+    tree[8].data.v.i = view_direction;
+    tree[10].data.v.r = ref_plane_sel;
+<a name="anchor-436"></a>
+    /*-------------------------------------------------*\
+	Init orientation direction value
+    \*-------------------------------------------------*/
+    switch( ref_type )
+<a name="anchor-437"></a>    {
+        case SK_REF_TOP:
+            tree[9].data.v.i = PRO_SEC_ORIENT_DIR_UP;
+            break;
+ 
+<a name="anchor-438"></a>        case SK_REF_BOTTOM:
+            tree[9].data.v.i = PRO_SEC_ORIENT_DIR_DOWN;
+            break;
+ 
+        case SK_REF_RIGHT:
+<a name="anchor-439"></a>            tree[9].data.v.i = PRO_SEC_ORIENT_DIR_RIGHT;
+            break;
+ 
+        case SK_REF_LEFT:
+            tree[9].data.v.i = PRO_SEC_ORIENT_DIR_LEFT;
+<a name="anchor-440"></a>            break;
+
+	default:
+	    return PRO_TK_NO_ERROR;
+    }
+<a name="anchor-441"></a>
+    /*-------------------------------------------------*\
+        Set PRO_E_EXT_DEPTH_FROM elements
+    \*-------------------------------------------------*/
+    switch( p_depth->from_type )
+<a name="anchor-442"></a>    {
+        case DEPTH_TYPE_BLIND:  /* symmetric blind */
+	case DEPTH_TYPE_2SIDEBLIND:
+	    tree[13].data.v.i = PRO_EXT_DEPTH_FROM_BLIND;
+	    tree[14].data.v.d = p_depth->from_value.v.d;
+<a name="anchor-443"></a>	    break;
+
+	case DEPTH_TYPE_THRU_NEXT:
+	    tree[13].data.v.i = PRO_EXT_DEPTH_FROM_NEXT;
+	    break;
+<a name="anchor-444"></a>
+	case DEPTH_TYPE_THRU_ALL:
+	    tree[13].data.v.i = PRO_EXT_DEPTH_FROM_ALL;
+	    break;
+
+<a name="anchor-445"></a>	case DEPTH_TYPE_THRU_UNTIL:
+	    tree[13].data.v.i = PRO_EXT_DEPTH_FROM_UNTIL;
+	    ProSelectionCopy( p_depth->from_value.v.r, &amp;(tree[15].data.v.r) );
+	    break;
+
+<a name="anchor-446"></a>	case DEPTH_TYPE_UPTO_PNT:
+	case DEPTH_TYPE_UPTO_CURVE:
+	case DEPTH_TYPE_UPTO_SURFACE:
+	    tree[13].data.v.i = PRO_EXT_DEPTH_FROM_REF;
+	    ProSelectionCopy( p_depth->from_value.v.r, &amp;(tree[15].data.v.r) );
+<a name="anchor-447"></a>	    break;
+      
+	default:
+	    tree[13].data.v.i = PRO_EXT_DEPTH_FROM_NONE;
+    }
+<a name="anchor-448"></a>
+    /*-------------------------------------------------*\
+        Set PRO_E_EXT_DEPTH_TO elements
+    \*-------------------------------------------------*/
+    switch( p_depth->to_type )
+<a name="anchor-449"></a>    {
+        case DEPTH_TYPE_BLIND:
+	  if (p_depth->from_type == DEPTH_TYPE_BLIND)
+	    {
+	      tree[17].data.v.i = PRO_EXT_DEPTH_SYMMETRIC;
+<a name="anchor-450"></a>	    }
+	  else
+	    {
+	      tree[17].data.v.i = PRO_EXT_DEPTH_TO_BLIND;
+	      tree[18].data.v.d = p_depth->to_value.v.d;
+<a name="anchor-451"></a>	    }
+	  break;
+
+
+        case DEPTH_TYPE_2SIDEBLIND:
+<a name="anchor-452"></a>            tree[17].data.v.i = PRO_EXT_DEPTH_TO_BLIND;
+            tree[18].data.v.d = p_depth->to_value.v.d;
+            break;
+ 
+        case DEPTH_TYPE_THRU_NEXT:
+<a name="anchor-453"></a>            tree[17].data.v.i = PRO_EXT_DEPTH_TO_NEXT;
+            break;
+ 
+        case DEPTH_TYPE_THRU_ALL:
+            tree[17].data.v.i = PRO_EXT_DEPTH_TO_ALL;
+<a name="anchor-454"></a>            break;
+ 
+        case DEPTH_TYPE_THRU_UNTIL:
+            tree[17].data.v.i = PRO_EXT_DEPTH_TO_UNTIL;
+            ProSelectionCopy( p_depth->to_value.v.r, &amp;(tree[19].data.v.r) );
+<a name="anchor-455"></a>            break;
+ 
+        case DEPTH_TYPE_UPTO_PNT:
+        case DEPTH_TYPE_UPTO_CURVE:
+        case DEPTH_TYPE_UPTO_SURFACE:
+<a name="anchor-456"></a>            tree[17].data.v.i = PRO_EXT_DEPTH_TO_REF;
+            ProSelectionCopy( p_depth->to_value.v.r, &amp;(tree[19].data.v.r) );
+            break;
+ 
+        default:
+<a name="anchor-457"></a>            tree[17].data.v.i = PRO_EXT_DEPTH_TO_NONE;
+    }
+
+
+    /*-------------------------------------------------*\
+<a name="anchor-458"></a>	Create element tree 
+    \*-------------------------------------------------*/
+    status = ProUtilElemtreeCreate( tree, SIZEOFARR(tree), NULL, &amp;elem_tree );
+    if( status != PRO_TK_NO_ERROR )
+	return status;
+<a name="anchor-459"></a>
+    /*-------------------------------------------------*\
+	Create selection structure for current model
+    \*-------------------------------------------------*/
+    status = ProMdlCurrentGet( &amp;model );
+<a name="anchor-460"></a>    TEST_CALL_REPORT( &quot;ProMdlCurrentGet&quot;,&quot;ProTestProtrusionFeatureCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    status = ProMdlToModelitem( model, &amp;model_item );
+    TEST_CALL_REPORT( &quot;ProMdlToModelitem&quot;,&quot;ProTestProtrusionFeatureCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-461"></a>    status = ProSelectionAlloc( NULL, &amp;model_item, &amp;model_sel );
+    TEST_CALL_REPORT( &quot;ProSelectionAlloc&quot;,&quot;ProTestProtrusionFeatureCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    /*-------------------------------------------------*\
+<a name="anchor-462"></a>	Create the incomplete feature
+    \*-------------------------------------------------*/
+    status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+        1, (ProArray*)&amp;options);
+
+<a name="anchor-463"></a>    options[0]= PRO_FEAT_CR_INCOMPLETE_FEAT;
+
+    status = ProFeatureWithoptionsCreate( model_sel, elem_tree,
+        options, PRO_REGEN_NO_FLAGS, p_feature, &amp;err_list );
+    TEST_CALL_REPORT( &quot;ProFeatureWithoptionsCreate&quot;,&quot;ProTestProtrusionFeatureCreate()&quot;,
+<a name="anchor-464"></a>        status, status != PRO_TK_NO_ERROR );
+
+    status = ProArrayFree((ProArray*)&amp;options);
+
+    /*-------------------------------------------------*\
+<a name="anchor-465"></a>	Release element tree
+    \*-------------------------------------------------*/
+    status = ProElementFree( &amp;elem_tree );
+    TEST_CALL_REPORT( &quot;ProElementFree&quot;,&quot;ProTestProtrusionFeatureCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-466"></a>
+    /*-------------------------------------------------*\
+	Complete the feature adding the sketched section
+    \*-------------------------------------------------*/
+    status = ProTestFeatureSectionInit( p_feature, section, p_references, PRO_B_FALSE );
+<a name="anchor-467"></a>
+
+    return status;
+}
+
+<a name="anchor-468"></a>
+
+/*
+    Complete PRO_E_SKETCHER element with section and references.
+*/
+<a name="anchor-469"></a>ProError ProTestFeatureSectionInit(
+    ProFeature		*p_feature,	/* In: Incomplete feature */
+    ProSection		section,	/* In: Sketched section */
+    ProSelection	*p_references,  /* In: Sketching refs (NULL) */
+    ProBoolean          is_first)	/* In: If first feature or not */
+<a name="anchor-470"></a>{
+    ProError		status;
+    /*
+    ProFeatureCreateOptions	redefine_options[] = { PRO_FEAT_CR_NO_OPTS };
+    */
+<a name="anchor-471"></a>    ProFeatureCreateOptions *redefine_options = 0;
+    ProElement		elem_tree;
+    ProElement		sketcher_elem;
+    ProValue		sketcher_elem_value, new_value;
+    ProValueData	value_data;
+<a name="anchor-472"></a>    ProMatrix		location_matrix;
+    ProMatrix		inv_matrix;
+    ProVector		tran_vector = {0,0,0};
+    ProErrorlist        err_list;
+
+<a name="anchor-473"></a>    int win_id;
+
+    static ProElempathItem	sketcher_elempath[] = {
+	{ PRO_ELEM_PATH_ITEM_TYPE_ID, {PRO_E_STD_SECTION} },
+	{ PRO_ELEM_PATH_ITEM_TYPE_ID, {PRO_E_SKETCHER} } };
+<a name="anchor-474"></a>    static ProElempathItem	sketcher_elempath_first[] = {
+	{ PRO_ELEM_PATH_ITEM_TYPE_ID, {PRO_E_SKETCHER} } };
+    
+
+
+<a name="anchor-475"></a>    /* Get the element tree of newly created feature to init PRO_E_SKETCHER */
+    status = ProFeatureElemtreeExtract( p_feature, NULL, PRO_FEAT_EXTRACT_NO_OPTS, &amp;elem_tree );
+    TEST_CALL_REPORT( &quot;ProFeatureElemtreeExtract&quot;,&quot;ProTestFeatureSectionInit()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+<a name="anchor-476"></a>	return status;
+ 
+    if (is_first)
+      {
+
+<a name="anchor-477"></a>	/* Find PRO_E_SKETCHER element in element tree */
+	ProUtilElemtreeElementGet( elem_tree, sketcher_elempath_first, 1,
+				   &amp;sketcher_elem );
+	
+	status = ProElementSpecialvalueGet( sketcher_elem, NULL, (ProAppData*)&amp;section );
+<a name="anchor-478"></a>	TEST_CALL_REPORT( &quot;ProElementSpecialvalueGet&quot;,&quot;ProTestFeatureSectionInit()&quot;,
+			  status, status != PRO_TK_NO_ERROR );
+	
+	/* Following call will Autodim &amp; Regenerate the section */ 
+	ProTestSectionRegenerate (section);
+<a name="anchor-479"></a>
+	status = ProElementSpecialvalueSet( sketcher_elem, (ProAppData)section );
+	TEST_CALL_REPORT( &quot;ProElementSpecialvalueSet&quot;,&quot;ProTestFeatureSectionInit()&quot;,
+			  status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-480"></a>     }
+
+    else
+      {
+	ProSection cur_sec;
+<a name="anchor-481"></a>	/* Find PRO_E_SKETCHER element in element tree */
+	ProUtilElemtreeElementGet( elem_tree, sketcher_elempath, 2,
+				   &amp;sketcher_elem );
+	status = ProElementSpecialvalueGet( sketcher_elem, NULL, (ProAppData*)&amp;cur_sec );
+	TEST_CALL_REPORT( &quot;ProElementSpecialvalueGet&quot;,&quot;ProTestFeatureSectionInit()&quot;,
+<a name="anchor-482"></a>			  status, status != PRO_TK_NO_ERROR );
+ 
+	/* Calc translation vector */ 
+	status = ProSectionLocationGet( cur_sec, location_matrix );
+	TEST_CALL_REPORT( &quot;ProSectionLocationGet&quot;,&quot;ProTestFeatureSectionInit()&quot;,
+<a name="anchor-483"></a>			  status, status != PRO_TK_NO_ERROR );
+	ProUtilMatrixInvert( location_matrix, inv_matrix );
+	ProUtilVectorCopy( inv_matrix[3], tran_vector );
+     
+	/* Copy sketched section into elem tree usin translation vector */
+<a name="anchor-484"></a>	status = ProUtilSectionInfoCopy( section, cur_sec, tran_vector );
+ 
+	/* Add sketching referencies, dimension and regenerate the section */
+	if( p_references != NULL )
+	  status = ProTestFeatureSectionRefsAdd(cur_sec, p_references );
+<a name="anchor-485"></a>
+
+	status = ProTestSectionRegenerate( cur_sec );
+
+      }
+<a name="anchor-486"></a>
+    /* Redefine the feature with complete elem tree */
+    status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+        1, (ProArray*)&amp;redefine_options);
+
+<a name="anchor-487"></a>    redefine_options[0]= PRO_FEAT_CR_DEFINE_MISS_ELEMS;
+
+    status = ProFeatureWithoptionsRedefine( NULL, p_feature, elem_tree,
+        redefine_options, PRO_REGEN_NO_FLAGS, &amp;err_list );
+    TEST_CALL_REPORT( &quot;ProFeatureWithoptionsRedefine&quot;,&quot;ProTestFeatureSectionInit()&quot;,
+<a name="anchor-488"></a>        status, status != PRO_TK_NO_ERROR );
+
+    status = ProArrayFree((ProArray*)&amp;redefine_options);
+
+    /* Fit the nodel within the viewing window */
+<a name="anchor-489"></a>    status = ProWindowCurrentGet(&amp;win_id);
+    TEST_CALL_REPORT( &quot;ProWindowCurrentGet&quot;,&quot;ProTestFeatureSectionInit()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    status = ProWindowRefit(win_id);
+<a name="anchor-490"></a>    TEST_CALL_REPORT( &quot;ProWindowRefit&quot;,&quot;ProTestFeatureSectionInit()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    /* Release element tree */
+    ProFeatureElemtreeFree( p_feature,elem_tree );
+<a name="anchor-491"></a>
+    return status;
+}
+    
+
+<a name="anchor-492"></a>
+/*
+    Add references to the feature section.
+*/
+ProError ProTestFeatureSectionRefsAdd(
+<a name="anchor-493"></a>    ProSection		section,	/* In: The section */
+    ProSelection	*p_references )	/* In: The selected refs */
+{
+    ProError		status;
+    int			n_refs = 0;
+<a name="anchor-494"></a>    int			entity_id;
+    int			i;
+
+
+    /* Get the number of references */
+<a name="anchor-495"></a>    status = ProArraySizeGet( (ProArray)p_references, &amp;n_refs );
+    TEST_CALL_REPORT( &quot;ProArraySizeGet&quot;,&quot;ProTestFeatureSectionRefsAdd()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    /* Add references to the section */
+<a name="anchor-496"></a>    for( i=0; i&lt;n_refs; i++ )
+    {
+	status = ProSectionEntityFromProjection( section, p_references[i], 
+		&amp;entity_id );
+	TEST_CALL_REPORT( &quot;ProSectionEntityFromProjection&quot;,
+<a name="anchor-497"></a>	    &quot;ProTestFeatureSectionRefsAdd()&quot;, 
+	    status, status != PRO_TK_NO_ERROR );
+	if( status != PRO_TK_NO_ERROR )
+	    return status;
+    }
+<a name="anchor-498"></a>
+
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-499"></a>
+
+/*
+    Autodim and regenerate the section.
+*/
+<a name="anchor-500"></a>ProError ProTestSectionRegenerate(
+    ProSection		section )
+{
+    ProError            status;
+    ProWSecerror        sec_errors;
+<a name="anchor-501"></a>
+
+    status = ProSectionEpsilonSet( section, 0.1 );
+    TEST_CALL_REPORT( &quot;ProSectionEpsilonSet&quot;,&quot;ProTestSectionRegenerate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-502"></a> 
+    /* Allocate the error list */
+    status = ProSecerrorAlloc( &amp;sec_errors );
+    TEST_CALL_REPORT( &quot;ProSecerrorAlloc&quot;,&quot;ProTestSectionRegenerate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-503"></a> 
+    /* Add all the missing dimensions */
+    status = ProSectionAutodim( section, &amp;sec_errors );
+    TEST_CALL_REPORT( &quot;ProSectionAutodim&quot;,&quot;ProTestSectionRegenerate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-504"></a>    if( status == PRO_TK_NO_ERROR )
+    {
+        /* Regenerate the section */
+        status = ProSectionRegenerate( section, &amp;sec_errors );
+        TEST_CALL_REPORT( &quot;ProSectionRegenerate&quot;,
+<a name="anchor-505"></a>            &quot;ProTestSectionRegenerate()&quot;,
+            status, status != PRO_TK_NO_ERROR );
+    }
+ 
+    /* Release the error list */
+<a name="anchor-506"></a>    ProSecerrorFree( &amp;sec_errors );
+ 
+ 
+    return status;
+}
+<a name="anchor-507"></a>
+
+
+/*
+    Initialize depth values for both feature sides
+<a name="anchor-508"></a>*/
+ProError ProTestFeatureDepthRetrieve(
+    ProSides		sides,		/* In: ONE_SIDE or
+						BOTH_SIDES */
+    ProSecViewDirType	direction,	/* In: Feature direction */
+<a name="anchor-509"></a>    ProSurface		sk_plane,	/* In: Sketching plane */
+
+    DepthData		*p_depth )	/* Out: Initialized depth data.  
+					If ONE_SIDE, init only p_depth->to_*, 
+					setting from_type to DEPTH_TYPE_NONE */
+<a name="anchor-510"></a>{
+    ProError			status;
+    DirectionArrow		dir_arrow;
+
+
+<a name="anchor-511"></a>    /*-----------------------------------------*\
+	Init values for ONE_SIDE
+    \*-----------------------------------------*/
+    if( sides == PRO_SIDES_ONE_SIDE )
+    {
+<a name="anchor-512"></a>        status = ProTestFeatureDepthValueInit( sides, PRO_B_FALSE,
+            (int *)&amp;(p_depth->to_type), &amp;(p_depth->to_value) );
+
+	p_depth->from_type = (ProExtDepthFromType)DEPTH_TYPE_NONE;
+    }
+<a name="anchor-513"></a>
+
+    /*-----------------------------------------*\
+	Init values for BOTH_SIDES 
+    \*-----------------------------------------*/
+<a name="anchor-514"></a>    if( sides == PRO_SIDES_BOTH_SIDES )
+    {
+	/* Create and display the direction arrow */
+	ProTestDirectionArrowCreate( sk_plane, direction, &amp;dir_arrow );
+
+<a name="anchor-515"></a>	/* Init TO type &amp; value */
+	status = ProTestFeatureDepthValueInit( sides, PRO_B_FALSE,
+                (int *)&amp;(p_depth->to_type), &amp;(p_depth->to_value) );
+	
+	if( status != PRO_TK_NO_ERROR )
+<a name="anchor-516"></a>	  {
+	    ProTestDirectionArrowDelete( &amp;dir_arrow );
+	    return status;
+	  }
+	
+<a name="anchor-517"></a>        if( p_depth->to_type == DEPTH_TYPE_BLIND )
+	  {
+	    p_depth->from_type = (ProExtDepthFromType)DEPTH_TYPE_BLIND;  /* Symmetric */
+	    p_depth->from_value.type = PRO_VALUE_TYPE_DOUBLE;
+	    p_depth->from_value.v.d = p_depth->to_value.v.d;
+<a name="anchor-518"></a>	  }
+        else if( p_depth->to_type == DEPTH_TYPE_2SIDEBLIND )
+	  {
+            p_depth->from_type = (ProExtDepthFromType)DEPTH_TYPE_2SIDEBLIND;
+            p_depth->from_value.type = PRO_VALUE_TYPE_DOUBLE;
+<a name="anchor-519"></a>            p_depth->from_value.v.d = ProTestDoubleValueGet( 3.0 );
+	  }
+        else
+	  {
+	    /* Flip direction arrow */
+<a name="anchor-520"></a>            ProTestDirectionArrowFlip( &amp;dir_arrow, -1 );
+	    
+            status = ProTestFeatureDepthValueInit(sides, PRO_B_TRUE,
+						   (int *)&amp;(p_depth->from_type), &amp;(p_depth->from_value) );
+	  }
+<a name="anchor-521"></a>
+	ProTestDirectionArrowDelete( &amp;dir_arrow );
+    }
+
+
+<a name="anchor-522"></a>    return status;
+}
+
+
+
+<a name="anchor-523"></a>/*
+    Use menu to select depth type. 
+    p_depth_value will contain:
+	double value  - for DEPTH_TYPE_BLIND, DEPTH_TYPE_2SIDEBLIND
+	selection     - for DEPTH_TYPE_THRU_UNTIL, DEPTH_TYPE_UPTO_PNT,
+<a name="anchor-524"></a>			DEPTH_TYPE_UPTO_CURVE, DEPTH_TYPE_UPTO_SURFACE
+	nothing       - for DEPTH_TYPE_THRU_NEXT, DEPTH_TYPE_THRU_ALL
+*/
+ProError ProTestFeatureDepthValueInit(
+    ProSides            sides,
+<a name="anchor-525"></a>    ProBoolean		is_second_side,	/* In: TRUE if for 2nd side depth 
+						initialization. In this case
+						&quot;Blind&quot; and &quot;2 Side Blind&quot;
+						buttons are disabled */
+    int			*p_depth_type,
+<a name="anchor-526"></a>    ProValueData	*p_depth_value )
+{
+    ProError		status;
+    int			depth_type;
+    char		*p_option = NULL;
+<a name="anchor-527"></a>    ProSelection	*p_sel;
+    int			n_sel = 0;
+
+
+    ProUtilMsgPrint( msgfil, (char *)&quot;USER Specify feature depth&quot; );
+<a name="anchor-528"></a>    /* Display the menu to select depth type */
+    status = ProTestFeatureDepthTypeGet( sides, is_second_side, &amp;depth_type );
+    if( status != PRO_TK_NO_ERROR )
+        return status;
+
+<a name="anchor-529"></a>/*----------------------------------------------------
+Note:
+The default case is added to avoid the unexpected behaviour ,if the user 
+enter DONE without giving the value of the DEPTH.
+----------------------------------------------------*/
+<a name="anchor-530"></a> 
+    switch( depth_type )
+    {
+        case DEPTH_TYPE_BLIND:
+            p_depth_value->type = PRO_VALUE_TYPE_DOUBLE;
+<a name="anchor-531"></a>            p_depth_value->v.d = ProTestDoubleValueGet( 3.0 );
+            break;
+ 
+        case DEPTH_TYPE_2SIDEBLIND:
+            p_depth_value->type = PRO_VALUE_TYPE_DOUBLE;
+<a name="anchor-532"></a>            p_depth_value->v.d = ProTestDoubleValueGet( 3.0 );
+            break;
+	
+	case DEPTH_TYPE_THRU_NEXT:
+	    break;
+<a name="anchor-533"></a>
+	case DEPTH_TYPE_THRU_ALL:
+	    break;
+
+        case DEPTH_TYPE_THRU_UNTIL:
+<a name="anchor-534"></a>            ProUtilMsgPrint( msgfil,
+                (char *)&quot;USER Select a surface to extrude until&quot; );
+	    p_option = (char *)&quot;surface,sldface,qltface,datum&quot;;
+	    break;
+
+<a name="anchor-535"></a>	case DEPTH_TYPE_UPTO_PNT:
+	    ProUtilMsgPrint( msgfil,
+		(char *)&quot;USER Select a datum point or a vertex to extrude up to&quot; );
+	    p_option = (char *)&quot;point,edge_end,curve_end&quot;;
+	    break;
+<a name="anchor-536"></a>
+	case DEPTH_TYPE_UPTO_CURVE:
+	    ProUtilMsgPrint( msgfil,
+		(char *)&quot;USER Select an axis to extrude up to&quot; );
+	    p_option = (char *)&quot;axis,edge,curve,sldedge,qltedge&quot;;
+<a name="anchor-537"></a>	    break;
+
+	case DEPTH_TYPE_UPTO_SURFACE:
+	    ProUtilMsgPrint( msgfil,
+		(char *)&quot;USER Select a surface to extrude up to&quot; );
+<a name="anchor-538"></a>	    p_option = (char *)&quot;surface,sldface,qltface,datum&quot;;
+	    break;
+
+         default:
+	    return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-539"></a>    }
+
+
+    if( p_option != NULL )
+    {
+<a name="anchor-540"></a>        n_sel = 0;
+        status = ProSelect( p_option, 1, NULL, NULL, NULL, NULL, 
+	    &amp;p_sel, &amp;n_sel );
+    	TEST_CALL_REPORT( &quot;ProSelect&quot;,&quot;ProTestFeatureDepthValueInit()&quot;,
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-541"></a>        if( status != PRO_TK_NO_ERROR || n_sel &lt; 1 )
+	    return PRO_TK_GENERAL_ERROR;
+
+        p_depth_value->type = PRO_VALUE_TYPE_SELECTION;
+        status = ProSelectionCopy( *p_sel, &amp;(p_depth_value->v.r) );
+<a name="anchor-542"></a>	TEST_CALL_REPORT( &quot;ProSelectionCopy&quot;,&quot;ProTestFeatureDepthValueInit()&quot;,
+	    status, status != PRO_TK_NO_ERROR );
+    }
+
+    *p_depth_type = depth_type;
+<a name="anchor-543"></a>
+
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-544"></a>
+
+/*
+    Display the menu to select depth type
+*/
+<a name="anchor-545"></a>ProError ProTestFeatureDepthTypeGet(
+    ProSides		sides,
+    ProBoolean          is_second_side, /* In: TRUE for 2nd side depth 
+                                                initialization. In this case
+                                                &quot;Blind&quot; and &quot;2 Side Blind&quot;
+<a name="anchor-546"></a>                                                buttons are disabled */
+    int			*p_depth_type )	/* Out: Depth type */
+{
+    ProError            status;
+    int                 menu_id;
+<a name="anchor-547"></a>    int                 action;
+    static char         *p_enus[] = { (char *)&quot;TK SPEC TO&quot;, (char *)&quot;DONE QUIT&quot;, (char *)&quot;&quot; };
+    int			depth_type;
+
+    /*-------------------------------------------*\
+<a name="anchor-548"></a>        Choose depth type 
+    \*-------------------------------------------*/
+    ProMenuFileRegister( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;tkdepth.mnu&quot;, &amp;menu_id );
+    ProMenubuttonActionSet( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;Blind&quot;,
+        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+<a name="anchor-549"></a>        (ProAppData)&amp;depth_type, DEPTH_TYPE_BLIND );
+    ProMenubuttonActionSet( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;2 Side Blind&quot;,
+        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+        (ProAppData)&amp;depth_type, DEPTH_TYPE_2SIDEBLIND );
+    ProMenubuttonActionSet( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;Thru Next&quot;,
+<a name="anchor-550"></a>        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+        (ProAppData)&amp;depth_type, DEPTH_TYPE_THRU_NEXT );
+    ProMenubuttonActionSet( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;Thru All&quot;,
+        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+        (ProAppData)&amp;depth_type, DEPTH_TYPE_THRU_ALL );
+<a name="anchor-551"></a>    ProMenubuttonActionSet( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;Thru Until&quot;,
+        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+        (ProAppData)&amp;depth_type, DEPTH_TYPE_THRU_UNTIL );
+    ProMenubuttonActionSet( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;UpTo Pnt/Vtx&quot;,
+        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+<a name="anchor-552"></a>        (ProAppData)&amp;depth_type, DEPTH_TYPE_UPTO_PNT );
+    ProMenubuttonActionSet( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;UpTo Curve&quot;,
+        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+        (ProAppData)&amp;depth_type, DEPTH_TYPE_UPTO_CURVE );
+    ProMenubuttonActionSet( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;UpTo Surface&quot;,
+<a name="anchor-553"></a>        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+        (ProAppData)&amp;depth_type, DEPTH_TYPE_UPTO_SURFACE );
+    ProMenubuttonActionSet( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;TK SPEC TO&quot;,
+        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+        (ProAppData)&amp;depth_type, DEPTH_TYPE_QUIT );
+<a name="anchor-554"></a> 
+    ProMenuFileRegister( (char *)&quot;DONE QUIT&quot;, (char *)&quot;tkdonequit.mnu&quot;, &amp;menu_id );
+    ProMenubuttonActionSet( (char *)&quot;DONE QUIT&quot;, (char *)&quot;-Done&quot;,
+        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+        (ProAppData)&amp;depth_type, DEPTH_TYPE_DONE );
+<a name="anchor-555"></a>    ProMenubuttonActionSet( (char *)&quot;DONE QUIT&quot;, (char *)&quot;-Quit&quot;,
+        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+        (ProAppData)&amp;depth_type, DEPTH_TYPE_QUIT );
+    ProMenubuttonActionSet( (char *)&quot;DONE QUIT&quot;, (char *)&quot;DONE QUIT&quot;,
+        (ProMenubuttonAction)ProTestFeatureDepthTypeSet,
+<a name="anchor-556"></a>        (ProAppData)&amp;depth_type, DEPTH_TYPE_QUIT );
+ 
+
+    action = DEPTH_TYPE_QUIT;
+    status = ProCompoundmenuCreate( p_enus,  &amp;menu_id );
+<a name="anchor-557"></a>
+    if( status == PRO_TK_NO_ERROR )
+    {
+	if(sides == PRO_SIDES_ONE_SIDE || is_second_side == PRO_B_TRUE )
+	{
+<a name="anchor-558"></a>	    ProMenubuttonDeactivate( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;2 Side Blind&quot; );
+	}
+	else
+	{
+	    ProMenubuttonActivate( (char *)&quot;TK SPEC TO&quot;, (char *)&quot;2 Side Blind&quot; );
+<a name="anchor-559"></a>	}
+        ProMenuProcess( (char *)&quot;TK SPEC TO&quot;, &amp;action );
+    }
+
+    if( action == DEPTH_TYPE_DONE )
+<a name="anchor-560"></a>    {
+	status = PRO_TK_NO_ERROR;
+	*p_depth_type = depth_type;
+    }
+    else
+<a name="anchor-561"></a>    {
+	status = PRO_TK_USER_ABORT;
+    }
+
+
+<a name="anchor-562"></a>    return status;
+}
+
+
+
+<a name="anchor-563"></a>int ProTestFeatureDepthTypeSet(
+    int			*p_depth_type,
+    int			depth_type )
+{
+    /*-------------------------------------------*\
+<a name="anchor-564"></a>        Check for exiting
+    \*-------------------------------------------*/
+    if( depth_type == DEPTH_TYPE_DONE || depth_type == DEPTH_TYPE_QUIT )
+    {
+        ProMenuDeleteWithStatus( depth_type );
+<a name="anchor-565"></a>        ProMenuDeleteWithStatus( depth_type );
+	return 0;
+    }
+
+    *p_depth_type = depth_type;
+<a name="anchor-566"></a>
+
+    return 0;
+}
+
+<a name="anchor-567"></a>
+
+/*
+    Get the double 
+*/
+<a name="anchor-568"></a>double ProTestDoubleValueGet( 
+    double		def )	/* In: Default value */
+{
+    ProError		status;
+    double		double_value;
+<a name="anchor-569"></a>
+    do
+    {
+        ProUtilMsgPrint( msgfil, (char *)&quot;USER Enter depth %0f&quot;, &amp;def );
+        status = ProMessageDoubleRead( NULL, &amp;double_value );
+<a name="anchor-570"></a>        TEST_CALL_REPORT( &quot;ProMessageDoubleRead&quot;,&quot;ProTestDoubleValueGet()&quot;,
+            status, status != PRO_TK_NO_ERROR );
+
+    } while( status == PRO_TK_MSG_USER_QUIT );
+ 
+<a name="anchor-571"></a>    if( status != PRO_TK_NO_ERROR )
+        double_value = def;
+
+
+    return double_value;
+<a name="anchor-572"></a>}
+
+
+
+/*
+<a name="anchor-573"></a>    Create the first feature 
+*/
+ProError ProTestFirstFeatureCreate(
+    ProMdl		model )		/* The model */
+{
+<a name="anchor-574"></a>    ProError		status;
+    ProElement		elem_tree;
+    ProSection		section;
+    ProSelection	model_sel;
+    ProModelitem	model_item;
+<a name="anchor-575"></a>    ProFeature		feature;
+    ProErrorlist        err_list;
+ 
+    ProFeatureCreateOptions *options = 0;
+    static ElemTreeData tree[]={
+<a name="anchor-576"></a>        {0, PRO_E_FEATURE_TREE, {PRO_VALUE_TYPE_INT, PRO_VALUE_UNUSED}},
+	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_FIRST_FEAT}},
+	{1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+
+	/* Extrusion depth */
+<a name="anchor-577"></a>	{1, PRO_E_STD_EXT_DEPTH, {PRO_VALUE_TYPE_INT, PRO_VALUE_UNUSED}},
+	{2, PRO_E_EXT_DEPTH_FROM, {PRO_VALUE_TYPE_INT, PRO_VALUE_UNUSED}},
+	{3, PRO_E_EXT_DEPTH_FROM_VALUE,
+	 {PRO_VALUE_TYPE_DOUBLE}}
+    };
+<a name="anchor-578"></a>
+
+    /*-------------------------------------------------*\
+    	Sketch the section 
+    \*-------------------------------------------------*/
+<a name="anchor-579"></a>    status = ProTestSectionSketcher( NULL, &amp;section, NULL );
+    if( status != PRO_TK_NO_ERROR )
+	return status;
+
+    /*-------------------------------------------------*\
+<a name="anchor-580"></a>    	Set feature depth
+    \*-------------------------------------------------*/
+    tree[5].data.v.d = ProTestDoubleValueGet( 3.0 );
+
+    /*-------------------------------------------------*\
+<a name="anchor-581"></a>        Create element tree
+    \*-------------------------------------------------*/
+    status = ProUtilElemtreeCreate( tree, SIZEOFARR(tree), NULL, &amp;elem_tree );
+    if( status != PRO_TK_NO_ERROR )
+        return status;
+<a name="anchor-582"></a> 
+    /*-------------------------------------------------*\
+        Create selection structure for current model
+    \*-------------------------------------------------*/
+    status = ProMdlToModelitem( model, &amp;model_item );
+<a name="anchor-583"></a>    TEST_CALL_REPORT( &quot;ProMdlToModelitem&quot;,&quot;ProTestFirstFeatureCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    status = ProSelectionAlloc( NULL, &amp;model_item, &amp;model_sel );
+    TEST_CALL_REPORT( &quot;ProSelectionAlloc&quot;,&quot;ProTestFirstFeatureCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-584"></a> 
+    /*-------------------------------------------------*\
+        Create the incomplete feature
+    \*-------------------------------------------------*/
+    /*
+<a name="anchor-585"></a>  status = ProFeatureCreate( model_sel, elem_tree, options,
+        0, &amp;feature, &amp;err_list );
+  */
+    status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+        1, (ProArray*)&amp;options);
+<a name="anchor-586"></a>
+    options[0]= PRO_FEAT_CR_INCOMPLETE_FEAT;
+
+  status = ProFeatureWithoptionsCreate( model_sel, elem_tree,
+        options, PRO_REGEN_NO_FLAGS, &amp;feature, &amp;err_list );
+<a name="anchor-587"></a>  
+    TEST_CALL_REPORT( &quot;ProFeatureWithoptionsCreate&quot;,&quot;ProTestFirstFeatureCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+
+    status = ProArrayFree((ProArray*)&amp;options);
+<a name="anchor-588"></a> 
+    /*-------------------------------------------------*\
+        Release element tree
+    \*-------------------------------------------------*/
+    status = ProElementFree( &amp;elem_tree );
+<a name="anchor-589"></a>    TEST_CALL_REPORT( &quot;ProElementFree&quot;,&quot;ProTestFirstFeatureCreate()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+ 
+    /*-------------------------------------------------*\
+        Complete the feature adding the sketched section
+<a name="anchor-590"></a>    \*-------------------------------------------------*/
+    
+    status = ProTestFeatureSectionInit( &amp;feature, section, NULL, PRO_B_TRUE );
+    
+    return status;
+<a name="anchor-591"></a>    
+}
+
+</pre>
+</body>
+</html>

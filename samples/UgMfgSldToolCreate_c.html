@@ -1,0 +1,98 @@
+<html>
+<head>
+<title>UgMfgSldToolCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMfg.h>
+#include &lt;ProMdl.h>
+#include &lt;ProTool.h>
+#include &lt;ProToolinput.h>
+<a name="anchor-2"></a>#include &lt;ProToolElem.h>
+#include &lt;ProParamval.h>
+
+#include &lt;TestError.h>
+
+<a name="anchor-3"></a>/*===========================================================*\
+  Function : UserSolidToolCreate
+  Purpose  : Creates a tool from a tool part.
+\*===========================================================*/
+ProErr UserSolidToolCreate (
+<a name="anchor-4"></a>    ProMfg         mfg_model,
+    ProToolType    tool_type,
+    wchar_t       *tool_id,
+    wchar_t       *part_name,
+    ProTool       *tool)
+<a name="anchor-5"></a>{
+    ProToolElem     tool_elem;
+    ProToolinputPtr tool_input;
+    ProMdl          tool_part;
+    ProMdlfileType  mdl_type = PRO_MDLFILE_PART;
+<a name="anchor-6"></a>    ProErr          status;
+    ProErrorlist    errors;
+
+    status = ProMdlnameRetrieve (part_name, mdl_type, &amp;tool_part);
+    ERROR_CHECK(&quot;UserSolidToolCreate&quot;, &quot;ProMdlnameRetrieve&quot;, status);
+<a name="anchor-7"></a>    if (status != PRO_TK_NO_ERROR)
+        return status;
+
+    status = ProToolinputAlloc (&amp;tool_input);
+    ERROR_CHECK(&quot;UserSolidToolCreate&quot;, &quot;ProToolinputAlloc&quot;, status);
+<a name="anchor-8"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+/*--------------------------------------------------------------------*\
+	Set the tool type.
+\*--------------------------------------------------------------------*/
+<a name="anchor-9"></a>	status = ProToolinputTypeSet (tool_input, tool_type);
+	ERROR_CHECK(&quot;UserSolidToolCreate&quot;, &quot;ProToolinputTypeSet&quot;,status);
+	if (status == PRO_TK_NO_ERROR)
+	    return status;
+
+<a name="anchor-10"></a>/*--------------------------------------------------------------------*\
+        Allocate the space for the tool model and to the tool_input.
+\*--------------------------------------------------------------------*/
+	status = ProElementAlloc(PRO_E_TOOL_MODEL, &amp;tool_elem);
+	ERROR_CHECK(&quot;UserSolidToolCreate&quot;, &quot;ProElementAlloc&quot;,status);
+<a name="anchor-11"></a>
+	if (status == PRO_TK_NO_ERROR)
+        {
+	    status = ProToolElemModelSet (tool_elem, &amp;tool_part);
+	    ERROR_CHECK(&quot;UserSolidToolCreate&quot;, &quot;ProToolElemModelSet&quot;,status);
+<a name="anchor-12"></a>	}
+
+	if (status == PRO_TK_NO_ERROR)
+        {
+	    status = ProToolinputElemAdd (tool_input, tool_elem);
+<a name="anchor-13"></a>	    ERROR_CHECK(&quot;UserSolidToolCreate&quot;, &quot;ProToolinputElemAdd&quot;,status);
+        }
+
+/*--------------------------------------------------------------------*\
+        Create the tool.
+<a name="anchor-14"></a>\*--------------------------------------------------------------------*/
+        if (status == PRO_TK_NO_ERROR)
+        {
+            status = ProToolInit (tool_id, mfg_model, tool);
+	    ERROR_CHECK(&quot;UserSolidToolCreate&quot;, &quot;ProToolInit&quot;,status);
+<a name="anchor-15"></a>            if (status == PRO_TK_NO_ERROR)
+	    {
+		status = ProToolCreate (tool, tool_input, &amp;errors);
+		ERROR_CHECK(&quot;UserSolidToolCreate&quot;,&quot;ProToolCreate&quot;,status);
+	    }
+<a name="anchor-16"></a>    	}
+/*--------------------------------------------------------------------*\
+        Free the input structure
+\*--------------------------------------------------------------------*/
+        status = ProToolinputFree (&amp;tool_input);
+<a name="anchor-17"></a>	ERROR_CHECK(&quot;UserSolidToolCreate&quot;,&quot;ProToolinputFree&quot;,status);
+         
+    }
+    return status;
+}
+</pre>
+</body>
+</html>

@@ -1,0 +1,1160 @@
+<html>
+<head>
+<title>TestDtmPln.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProDtmPln.h>
+#include &lt;ProDtmCsys.h>
+#include &lt;ProElemId.h>
+#include &lt;ProFeatType.h>
+<a name="anchor-2"></a>#include &lt;ProMenu.h>
+#include &lt;ProMessage.h>
+#include &lt;ProMdl.h>
+#include &lt;ProUtil.h>
+
+<a name="anchor-3"></a>
+#include &lt;TestError.h>
+#include &lt;UtilCollect.h>
+#include &lt;UtilMath.h>
+#include &lt;UtilMenu.h>
+<a name="anchor-4"></a>#include &lt;UtilMessage.h>
+#include &lt;UtilTree.h>
+#include &quot;UtilString.h&quot;
+
+
+<a name="anchor-5"></a>#define msgfil &quot;feat&quot;
+#define SIZEOFARR(a) (sizeof(a)/(sizeof(a[0])))
+
+
+#define MAX_CONSTR_TYPES 7
+<a name="anchor-6"></a>#define MAX_REF_TYPE 5
+
+typedef enum dtm_constr_type
+{
+    DCTR_THROUGH = 0,
+<a name="anchor-7"></a>    DCTR_NORMAL,
+    DCTR_PARALLEL,
+    DCTR_OFFSET,
+    DCTR_ANGLE,
+    DCTR_TANGENT,
+<a name="anchor-8"></a>    DCTR_BLEND_SECTION,
+    DCTR_DEFAULT
+} DtmConstrType;
+
+typedef enum dtm_constr_ref
+<a name="anchor-9"></a>{
+    USER_LINE =  0,
+    USER_POINT,
+    USER_PLANE,
+    USER_CYL,
+<a name="anchor-10"></a>    USER_CSYS
+} DtmConsrRef;
+
+typedef struct test_ref_type {
+    char *button_name;
+<a name="anchor-11"></a>    char *select_option;
+    int freedom[MAX_CONSTR_TYPES];
+
+    int state_en;
+    int state_hi;
+<a name="anchor-12"></a>} RefType;
+
+typedef struct test_constr_type {
+    char *button_name;
+
+<a name="anchor-13"></a>    int state_en;
+} ContrType;
+
+typedef struct dtmpln_constr {
+    int cur_constr;
+<a name="anchor-14"></a>
+    int constr_enabled;
+    int ref_highlighted;
+    int ref_enabled;
+
+<a name="anchor-15"></a>    ProBoolean	ref_pressed;
+
+
+    Pro3dPnt	points[3];
+    int		n_points;
+<a name="anchor-16"></a>    ProBoolean	through;
+
+    int n_constr;
+    ProDtmplnConstrType type[3];
+    ProSelection ref[3];
+<a name="anchor-17"></a>    double  offset[3];
+    int	    index[3];
+    int	    freedom;
+
+    ProMdl  model;
+<a name="anchor-18"></a>} DtmPlnConstr;
+
+static ContrType constr_type[MAX_CONSTR_TYPES] = {
+    {(char *)&quot;Through&quot;},
+    {(char *)&quot;Normal&quot;},
+<a name="anchor-19"></a>    {(char *)&quot;Parallel&quot;},
+    {(char *)&quot;Offset&quot;},
+    {(char *)&quot;Angle&quot;},
+    {(char *)&quot;Tangent&quot;},
+    {(char *)&quot;BlendSection&quot;}
+<a name="anchor-20"></a>};
+
+static RefType ref_type[MAX_REF_TYPE] = {
+    {(char *)&quot;AxisEdgeCurv&quot;, (char *)&quot;axis,edge,curve&quot;, { 2, 1, -1, -1, -1, -1, -1}}, 
+    {(char *)&quot;Point/Vertex&quot;, (char *)&quot;point,edge_end,curve_end&quot;, { 1, -1, -1, -1, -1, -1, -1}},
+<a name="anchor-21"></a>    {(char *)&quot;Plane&quot;, (char *)&quot;surface,datum&quot;, { 3, 1, 1, 3, 1, -1, -1}},
+    {(char *)&quot;Cylinder&quot;, (char *)&quot;surface&quot;, { 2, -1, -1, -1, -1, 1, -1}},
+    {(char *)&quot;Coord Sys&quot;, (char *)&quot;csys&quot;, {-1, -1, -1, 3, -1, -1, -1}}
+};
+
+<a name="anchor-22"></a>static DtmPlnConstr constraint;
+
+
+/*=============================================================*\
+  FUNCTION: ProUtilDefMenuAction
+<a name="anchor-23"></a>  PURPOSE:  Menu button function
+\*=============================================================*/
+static int ProUtilDefMenuAction(
+    ProAppData data,
+    int action)
+<a name="anchor-24"></a>{
+    ProError err;
+
+    err = ProMenuDeleteWithStatus(action);
+    TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;,
+<a name="anchor-25"></a>		    &quot;ProUtilDefMenuaAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    return (0);
+}
+
+/*=============================================================*\
+<a name="anchor-26"></a>  FUNCTION: ProTestDtmplnDefCreate
+  PURPOSE:  Create default datum plane
+\*=============================================================*/
+ProError ProTestDtmplnDefCreate(
+    ProMdl model, 
+<a name="anchor-27"></a>    int n_csys)
+{
+    ProError err;
+    int action, n_sel, i;
+    ProElement tree, constr_elem;
+<a name="anchor-28"></a>    ProSelection *p_sel_arr, csys_sel = NULL, featsel;
+    ProModelitem modelitem;
+    ProGeomitem *p_geomitems;
+    ProFeature feat;
+    ProErrorlist   errs;
+<a name="anchor-29"></a>    ProFeatureCreateOptions *opts = 0;
+    char *c= (char *)&quot;x&quot;;
+    double offset[3];
+    static ElemTreeData def_csys[]= {
+    	{0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+<a name="anchor-30"></a>	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, {PRO_FEAT_CSYS}}},
+	{1, PRO_E_CSYS_METHOD, {PRO_VALUE_TYPE_INT, {PRO_CSYS_DEFAULT}}}
+    };
+    static ElemTreeData dtmpln[] = {
+	{0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+<a name="anchor-31"></a>	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, {PRO_FEAT_DATUM}}},
+	{1, PRO_E_DTMPLN_CONSTRAINTS, {(ProValueDataType)-1}},
+	{2, PRO_E_DTMPLN_CONSTRAINT, {(ProValueDataType)-1}}
+    };
+    static ElemTreeData def_dtmpln[] = {
+<a name="anchor-32"></a>	{1, PRO_E_DTMPLN_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, {PRO_DTMPLN_DEF_X}}}
+    };
+    static ElemTreeData offs_dtmpln[] = {
+	{1, PRO_E_DTMPLN_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, {PRO_DTMPLN_OFFS}}},
+	{1, PRO_E_DTMPLN_CONSTR_REF, {PRO_VALUE_TYPE_SELECTION}}, 
+<a name="anchor-33"></a>	{1, PRO_E_DTMPLN_OFF_CSYS, {PRO_VALUE_TYPE_INT}},
+	{1, PRO_E_DTMPLN_OFF_CSYS_OFFSET, {PRO_VALUE_TYPE_DOUBLE}}
+    };
+    static ProElempathItem constr_path[] = {
+	{PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_DTMPLN_CONSTRAINTS},
+<a name="anchor-34"></a>	{PRO_ELEM_PATH_ITEM_TYPE_INDEX, 0}
+    };
+    static int offs_type[3] = {PRO_DTMPLN_OFF_CSYS_X, PRO_DTMPLN_OFF_CSYS_Y, 
+	PRO_DTMPLN_OFF_CSYS_Z
+    };
+<a name="anchor-35"></a>    static int def_constr_type[3] = {PRO_DTMPLN_DEF_X, PRO_DTMPLN_DEF_Y,
+	PRO_DTMPLN_DEF_Z
+    };
+
+    err = ProMenuFileRegister((char *)&quot;tkmenudtm opt&quot;,(char *)&quot;tkmdtmopt.mnu&quot;, NULL);
+<a name="anchor-36"></a>    err = ProMenubuttonActionSet((char *)&quot;tkmenudtm opt&quot;, (char *)&quot;Default&quot;,
+	(ProMenubuttonAction)ProUtilDefMenuAction, NULL, DCTR_DEFAULT);
+    err = ProMenubuttonActionSet((char *)&quot;tkmenudtm opt&quot;, (char *)&quot;Offset&quot;,
+	(ProMenubuttonAction)ProUtilDefMenuAction, NULL, DCTR_OFFSET);
+    err = ProMenubuttonActionSet((char *)&quot;tkmenudtm opt&quot;, (char *)&quot;tkmenudtm opt&quot;,
+<a name="anchor-37"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+
+    err = ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;tkmenudtm opt&quot;, NULL);
+    err = ProMenuProcess((char *)&quot;&quot;, &amp;action);
+
+<a name="anchor-38"></a>    if (err != PRO_TK_NO_ERROR)
+	return (err);
+
+    if (action != DCTR_DEFAULT)
+    {
+<a name="anchor-39"></a>	if (n_csys > 0)
+	{
+/*------------------------------------------------------------------*\
+	Csys alredy exists, select one
+\*------------------------------------------------------------------*/
+<a name="anchor-40"></a>	    ProUtilMsgPrint(msgfil, (char *)&quot;TEST Select a coordinate system.&quot;);
+	    err = ProSelect((char *)&quot;csys&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel_arr, 
+		&amp;n_sel);
+	    TEST_CALL_REPORT(&quot;ProSelect()&quot;,
+		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-41"></a>	    if (err != PRO_TK_NO_ERROR)
+		return (err);
+
+	    err = ProSelectionCopy(p_sel_arr[0], &amp;csys_sel);
+	    TEST_CALL_REPORT(&quot;ProSelectionCopy()&quot;,
+<a name="anchor-42"></a>		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+	}
+	
+	for (i=0, c[0]='x'; i&lt;3; i++, c[0]++)
+	{
+<a name="anchor-43"></a>/*------------------------------------------------------------------*\
+	Read offset values
+\*------------------------------------------------------------------*/
+	    offset[i] = 0;
+	    ProUtilMsgPrint(msgfil, 
+<a name="anchor-44"></a>		(char *)&quot;TEST Enter offset value in the %0s-direction [%1f]:&quot;,
+		 c, offset+i);
+
+	    err = ProMessageDoubleRead(NULL, offset+i);
+	    TEST_CALL_REPORT(&quot;ProMessageDoubleRead()&quot;,
+<a name="anchor-45"></a>		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+	     
+	     if (err == PRO_TK_MSG_USER_QUIT)
+		break;
+	}
+<a name="anchor-46"></a>	if (i&lt;3)
+	    return (PRO_TK_NO_ERROR);
+
+	if (n_csys == 0)
+	{
+<a name="anchor-47"></a>/*------------------------------------------------------------------*\
+	Create default datum csys first if no one already created
+\*------------------------------------------------------------------*/
+	    err = ProUtilElemtreeCreate(def_csys, SIZEOFARR(def_csys), NULL, 
+		&amp;tree);
+<a name="anchor-48"></a>    
+	    err = ProMdlToModelitem(model, &amp;modelitem);
+	    TEST_CALL_REPORT(&quot;ProMdlToModelitem()&quot;,
+		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+	    err = ProSelectionAlloc(NULL, &amp;modelitem, &amp;featsel);
+<a name="anchor-49"></a>	    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;,
+		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+	    err = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+	    	    1, (ProArray*)&amp;opts);
+
+<a name="anchor-50"></a>	    opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+	    err = ProFeatureWithoptionsCreate(featsel, tree,
+	    	    opts, PRO_REGEN_NO_FLAGS, &amp;feat, &amp;errs);	    
+	    TEST_CALL_REPORT(&quot;ProFeatureWithoptionsCreate()&quot;,
+<a name="anchor-51"></a>		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    err = ProArrayFree((ProArray*)&amp;opts);
+	    err = ProSelectionFree(&amp;featsel);
+	    TEST_CALL_REPORT(&quot;ProSelectionFree()&quot;,
+<a name="anchor-52"></a>		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+	    err = ProUtilCollectFeatureGeomitems(&amp;feat, PRO_CSYS, &amp;p_geomitems);
+	    if (err != PRO_TK_NO_ERROR)
+		return(err);
+	    err = ProSelectionAlloc(NULL, p_geomitems, &amp;csys_sel);
+<a name="anchor-53"></a>	    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;,
+		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+	    err = ProArrayFree((ProArray*)&amp;p_geomitems);
+	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-54"></a>	    err = ProElementFree(&amp;tree);
+	    TEST_CALL_REPORT(&quot;ProElementFree()&quot;,
+		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    	}
+    }
+<a name="anchor-55"></a>
+/*------------------------------------------------------------------*\
+	Alloc selection to the model
+\*------------------------------------------------------------------*/
+    err = ProMdlToModelitem(model, &amp;modelitem);
+<a name="anchor-56"></a>    TEST_CALL_REPORT(&quot;ProMdlToModelitem()&quot;,
+		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProSelectionAlloc(NULL, &amp;modelitem, &amp;featsel);
+    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;,
+		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-57"></a>
+    for (i=0; i&lt;3; i++)
+    {
+/*------------------------------------------------------------------*\
+	Create main part of feat tree
+<a name="anchor-58"></a>\*------------------------------------------------------------------*/
+	err = ProUtilElemtreeCreate(dtmpln, SIZEOFARR(dtmpln), NULL, &amp;tree);
+
+	err = ProUtilElemtreeElementGet(tree, constr_path, 
+	    SIZEOFARR(constr_path), &amp;constr_elem);
+<a name="anchor-59"></a>
+/*------------------------------------------------------------------*\
+	Create specific part of feat tree
+\*------------------------------------------------------------------*/
+	if (action == DCTR_DEFAULT)
+<a name="anchor-60"></a>	{
+	    def_dtmpln[0].data.v.i = def_constr_type[i];
+	    err = ProUtilElemtreeCreate(def_dtmpln, SIZEOFARR(def_dtmpln), 
+		constr_elem, &amp;constr_elem);
+	}
+<a name="anchor-61"></a>	else
+	{
+	    offs_dtmpln[1].data.v.r = csys_sel;
+	    offs_dtmpln[2].data.v.i = offs_type[i];
+	    offs_dtmpln[3].data.v.d = offset[i];
+<a name="anchor-62"></a>	    err = ProUtilElemtreeCreate(offs_dtmpln, SIZEOFARR(offs_dtmpln), 
+		constr_elem, &amp;constr_elem);
+	}
+
+/*------------------------------------------------------------------*\
+<a name="anchor-63"></a>	Create datum plane
+\*------------------------------------------------------------------*/
+	err = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+		1, (ProArray*)&amp;opts);
+
+<a name="anchor-64"></a>	opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+	err = ProFeatureWithoptionsCreate(featsel, tree,
+		opts, PRO_REGEN_NO_FLAGS, &amp;feat, &amp;errs);	
+	TEST_CALL_REPORT(&quot;ProFeatureWithoptionsCreate()&quot;,
+<a name="anchor-65"></a>		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProArrayFree((ProArray*)&amp;opts);
+
+	err = ProElementFree(&amp;tree);
+<a name="anchor-66"></a>	TEST_CALL_REPORT(&quot;ProElementFree()&quot;,
+		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    
+    err = ProSelectionFree(&amp;featsel);
+<a name="anchor-67"></a>    TEST_CALL_REPORT(&quot;ProSelectionFree()&quot;,
+		    &quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (csys_sel != NULL)
+    {
+	err = ProSelectionFree(&amp;csys_sel);
+<a name="anchor-68"></a>	TEST_CALL_REPORT(&quot;ProSelectionFree()&quot;,
+			&quot;ProTestDtmplnDefCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+
+    ProUtilMsgPrint(msgfil, (char *)&quot;TEST %0s has been created successfully.&quot;, 
+<a name="anchor-69"></a>	&quot;DATUM PLANE&quot;);
+    return(PRO_TK_NO_ERROR);
+}
+
+/*=============================================================*\
+<a name="anchor-70"></a>  FUNCTION: ProUtilCheckFeatures
+  PURPOSE:  Visit func. Check if another than csys feature is created
+\*=============================================================*/
+ProError ProUtilNonCsysFeatCheck(
+    ProFeature *feature,
+<a name="anchor-71"></a>    ProError	status,
+    ProAppData  num_csys)	
+{
+    ProError err;
+    ProFeattype type;
+<a name="anchor-72"></a>
+    err = ProFeatureTypeGet(feature, &amp;type);
+    TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;,
+		    &quot;ProUtilNonCsysFeatCheck()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (type == PRO_FEAT_CSYS)
+<a name="anchor-73"></a>    {
+	((int*)num_csys)[0]++;
+	return (PRO_TK_NO_ERROR);
+    }
+    else
+<a name="anchor-74"></a>    {
+	return (PRO_TK_E_FOUND);
+    }
+}
+
+<a name="anchor-75"></a>
+/*=============================================================*\
+  FUNCTION: ProTestDtmplnMenuSet
+  PURPOSE:  Allow/Disable menu buttons
+\*=============================================================*/
+<a name="anchor-76"></a>ProError ProTestDtmplnMenuSet(
+    DtmPlnConstr *constr)
+{
+    int i;
+
+<a name="anchor-77"></a>    for (i=0; i&lt;MAX_CONSTR_TYPES; i++)
+    {
+	if (constr_type[i].state_en != (constr->constr_enabled &amp; (1 &lt;&lt; i)))
+	{
+	    constr_type[i].state_en = constr->constr_enabled &amp; (1 &lt;&lt; i);
+<a name="anchor-78"></a>	    ProUtilMenubuttonActivate((char *)&quot;tkdtm plane&quot;, constr_type[i].button_name,
+		constr_type[i].state_en);
+	}
+    }
+
+<a name="anchor-79"></a>    for (i=0; i&lt;SIZEOFARR(ref_type); i++)
+    {
+	if ((ref_type[i].state_en != (constr->ref_enabled &amp; (1 &lt;&lt; i))) ||
+	    (ref_type[i].state_hi != (constr->ref_highlighted &amp; (1 &lt;&lt; i))))
+	{
+<a name="anchor-80"></a>	    ref_type[i].state_en = constr->ref_enabled &amp; (1 &lt;&lt; i);
+	    ref_type[i].state_hi = constr->ref_highlighted &amp; (1 &lt;&lt; i);
+	    ProUtilMenubuttonActivate((char *)&quot;tkdtmplnc&quot;, ref_type[i].button_name, 1);
+	    ProUtilMenubuttonHighlight((char *)&quot;tkdtmplnc&quot;, ref_type[i].button_name,
+		ref_type[i].state_hi);
+<a name="anchor-81"></a>	    ProUtilMenubuttonActivate((char *)&quot;tkdtmplnc&quot;, ref_type[i].button_name,
+		ref_type[i].state_en);
+	}
+    }
+    
+<a name="anchor-82"></a>    return (PRO_TK_NO_ERROR);
+}
+
+
+
+<a name="anchor-83"></a>/*=============================================================*\
+  FUNCTION: ProUtilMenucompDelete
+  PURPOSE:  ProMenuDelete function for the compound menu
+\*=============================================================*/
+static ProError ProUtilMenucompDelete()
+<a name="anchor-84"></a>{
+    ProError err;
+
+    err = ProMenuDelete();
+    err = ProMenuDelete();
+<a name="anchor-85"></a>    err = ProMenuDelete();
+    TEST_CALL_REPORT(&quot;ProMenuDelete()&quot;,
+			    &quot;ProTestDtmpln()&quot;, err, err != PRO_TK_NO_ERROR);
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-86"></a>
+/*=============================================================*\
+  FUNCTION: ProTestDtmplnDone
+  PURPOSE:  Done creation
+\*=============================================================*/
+<a name="anchor-87"></a>int ProTestDtmplnDone(
+    DtmPlnConstr *constr)
+{
+    ProElement tree, constr_elem, constrs_elem;
+    ProFeature feat;
+<a name="anchor-88"></a>    ProError err;
+    ProErrorlist    errs;
+    ProModelitem    modelitem;
+    ProSelection    featsel;
+    ProFeatureCreateOptions *opts = 0;
+<a name="anchor-89"></a>    int i;
+
+    static ElemTreeData dtmpln[] = {
+	{0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, {PRO_FEAT_DATUM}}},
+<a name="anchor-90"></a>	{1, PRO_E_DTMPLN_CONSTRAINTS, {(ProValueDataType)-1}}
+    };
+    static ElemTreeData constr_dtmpln[] = {
+	{0, PRO_E_DTMPLN_CONSTRAINT, {(ProValueDataType)-1}},
+	{1, PRO_E_DTMPLN_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, {PRO_DTMPLN_OFFS}}},
+<a name="anchor-91"></a>	{1, PRO_E_DTMPLN_CONSTR_REF, {PRO_VALUE_TYPE_SELECTION}}
+    };
+    static ElemTreeData offcsys_dtmpln[] = {
+	{1, PRO_E_DTMPLN_OFF_CSYS, {PRO_VALUE_TYPE_INT}},
+	{1, PRO_E_DTMPLN_OFF_CSYS_OFFSET, {PRO_VALUE_TYPE_DOUBLE}}
+<a name="anchor-92"></a>    };
+    static ElemTreeData offs_dtmpln[] = {
+	{1, PRO_E_DTMPLN_CONSTR_REF_OFFSET, {PRO_VALUE_TYPE_DOUBLE}}
+    };
+    static ElemTreeData angle_dtmpln[] = {
+<a name="anchor-93"></a>	{1, PRO_E_DTMPLN_CONSTR_REF_ANGLE, {PRO_VALUE_TYPE_DOUBLE}}
+    };
+    static ElemTreeData blend_dtmpln[] = {
+	{1, PRO_E_DTMPLN_SEC_IND, {PRO_VALUE_TYPE_INT}}
+    };
+<a name="anchor-94"></a>    static ProElempathItem constr_path[] = {
+	{PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_DTMPLN_CONSTRAINTS}
+    };
+        
+
+<a name="anchor-95"></a>    err = ProUtilElemtreeCreate(dtmpln, SIZEOFARR(dtmpln), NULL, &amp;tree);
+
+    err = ProUtilElemtreeElementGet(tree, constr_path, 
+	SIZEOFARR(constr_path), &amp;constrs_elem);
+
+<a name="anchor-96"></a>    for (i=0; i&lt;constr->n_constr; i++)
+    {
+	constr_dtmpln[1].data.v.i = constr->type[i];
+	constr_dtmpln[2].data.v.r = constr->ref[i];
+	err = ProUtilElemtreeCreate(constr_dtmpln, SIZEOFARR(constr_dtmpln), 
+<a name="anchor-97"></a>	    NULL, &amp;constr_elem);
+	
+	switch(constr->type[i])
+	{
+	case DCTR_OFFSET:
+<a name="anchor-98"></a>	    if (constr->index[i] == -1)
+	    {
+		/* Offset plane */
+		offs_dtmpln[0].data.v.d = constr->offset[i];
+		err = ProUtilElemtreeCreate(offs_dtmpln, SIZEOFARR(offs_dtmpln), 
+<a name="anchor-99"></a>		    constr_elem, &amp;constr_elem);
+	    }
+	    else
+	    {
+		/* Offset csys */
+<a name="anchor-100"></a>		offcsys_dtmpln[0].data.v.i = constr->index[i];
+		offcsys_dtmpln[1].data.v.d = constr->offset[i];
+		err = ProUtilElemtreeCreate(offcsys_dtmpln,
+		    SIZEOFARR(offcsys_dtmpln), constr_elem, &amp;constr_elem);
+	    }
+<a name="anchor-101"></a>	    break;
+	case DCTR_ANGLE:
+	    offs_dtmpln[0].data.v.d = constr->offset[i];
+	    err = ProUtilElemtreeCreate(angle_dtmpln, SIZEOFARR(angle_dtmpln), 
+		constr_elem, &amp;constr_elem);
+<a name="anchor-102"></a>	    break;
+	case DCTR_BLEND_SECTION:
+	    offs_dtmpln[0].data.v.i = constr->index[i];
+	    err = ProUtilElemtreeCreate(blend_dtmpln, SIZEOFARR(blend_dtmpln), 
+		constr_elem, &amp;constr_elem);
+<a name="anchor-103"></a>	    break;
+    	}
+
+
+   /* For testing purposes used ProElementArraySet/Get, the better way use 
+<a name="anchor-104"></a>	ProElemtreeElementAdd */
+#if 0
+	err = ProArrayAlloc(0, sizeof(ProElement), 1, (ProArray*)&amp;p_elems);
+	TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,
+			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-105"></a>
+	err = ProElementArrayGet(constrs_elem, NULL, &amp;p_elems);
+	TEST_CALL_REPORT(&quot;ProElementArrayGet()&quot;,
+			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-106"></a>	if (err != PRO_TK_NO_ERROR)
+	{
+	    /* Added since bug in func ProElementArrayGet in the pipe mode */
+
+	    err = ProArrayAlloc(0, sizeof(ProElement), 1, (ProArray*)&amp;p_elems);
+<a name="anchor-107"></a>	    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,
+			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+	}
+	
+	err = ProArrayObjectAdd((ProArray*)&amp;p_elems, PRO_VALUE_UNUSED,
+<a name="anchor-108"></a>	    1, &amp;constr_elem);
+	TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;,
+			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+	err = ProElementArraySet(constrs_elem, NULL, p_elems);
+<a name="anchor-109"></a>	TEST_CALL_REPORT(&quot;ProElementArraySet()&quot;,
+			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+	err = ProArrayFree((ProArray*)&amp;p_elems);
+	TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+<a name="anchor-110"></a>			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+#else
+	err = ProElemtreeElementAdd(constrs_elem, NULL, constr_elem);
+	TEST_CALL_REPORT(&quot;ProElemtreeElementAdd()&quot;,
+			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-111"></a>
+#endif
+    }
+
+/*------------------------------------------------------------------*\
+<a name="anchor-112"></a>	Alloc selection to the model
+\*------------------------------------------------------------------*/
+    err = ProMdlToModelitem(constr->model, &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProMdlToModelitem()&quot;,
+			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-113"></a>    err = ProSelectionAlloc(NULL, &amp;modelitem, &amp;featsel);
+    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;,
+			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+
+/*------------------------------------------------------------------*\
+<a name="anchor-114"></a>	Create datum plane
+\*------------------------------------------------------------------*/
+    err = ProUtilElementtreePrint(tree, PRO_TEST_INFO_WINDOW, NULL);
+
+    err = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+<a name="anchor-115"></a>        1, (ProArray*)&amp;opts);
+
+    opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+    err = ProFeatureWithoptionsCreate(featsel, tree,
+<a name="anchor-116"></a>        opts, PRO_REGEN_NO_FLAGS, &amp;feat, &amp;errs);    
+    TEST_CALL_REPORT(&quot;ProFeatureWithoptionsCreate()&quot;,
+			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProArrayFree((ProArray*)&amp;opts);
+<a name="anchor-117"></a>
+    if (err != PRO_TK_NO_ERROR)
+    {
+	ProUtilFeatErrsPrint(&amp;errs);
+    }
+<a name="anchor-118"></a>    else
+    {
+	ProUtilMsgPrint(msgfil, (char *)&quot;TEST %0s has been created successfully.&quot;, 
+	    (char *)&quot;DATUM PLANE&quot;);
+	err = ProTreetoolRefresh(constr->model);
+<a name="anchor-119"></a>	TEST_CALL_REPORT(&quot;ProTreetoolRefresh()&quot;,
+			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    err = ProElementFree(&amp;tree);
+    TEST_CALL_REPORT(&quot;ProElementFree()&quot;,
+<a name="anchor-120"></a>			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProSelectionFree(&amp;featsel);
+    TEST_CALL_REPORT(&quot;ProSelectionFree()&quot;,
+			    &quot;ProTestDtmplnDone()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-121"></a>    ProUtilMenucompDelete(); 
+    return (0);
+}
+
+/*=============================================================*\
+<a name="anchor-122"></a>  FUNCTION: ProTestDtmplnRestart
+  PURPOSE:  Restart datum plane creation
+\*=============================================================*/
+int ProTestDtmplnRestart(
+    DtmPlnConstr *constr)
+<a name="anchor-123"></a>{
+    int i;
+    ProMdl model;
+
+    ProUtilMsgPrint(msgfil, 
+<a name="anchor-124"></a>	(char *)&quot;TEST Datum plane was restarted. Select options again.&quot;);
+
+    if (constr->cur_constr != -1)
+	ProUtilMenubuttonHighlight((char *)&quot;tkdtm plane&quot;, 
+	    constr_type[constr->cur_constr].button_name, 0);
+<a name="anchor-125"></a>
+    ProUtilMenubuttonHighlight((char *)&quot;tkdtmplnd&quot;, (char *)&quot;Restart&quot;, 0);
+
+    model = constr->model;
+    memset(constr, '\0', sizeof(DtmPlnConstr));
+<a name="anchor-126"></a>    constr->cur_constr = -1;
+    constr->constr_enabled = -1;
+    constr->model = model;
+
+    for (i=0; i&lt;SIZEOFARR(constr_type); i++)
+<a name="anchor-127"></a>	constr_type[i].state_en = -1;
+    for (i=0; i&lt;SIZEOFARR(ref_type); i++)
+    {
+	ref_type[i].state_en = -1;
+	ref_type[i].state_hi = -1;
+<a name="anchor-128"></a>    }
+
+    ProTestDtmplnMenuSet(constr);
+    return (0);
+}
+<a name="anchor-129"></a>
+/*=============================================================*\
+  FUNCTION: ProUtilMenucompRestart
+  PURPOSE:  Restart datum plane creation
+\*=============================================================*/
+<a name="anchor-130"></a>int ProTestDtmplnQuit(
+    DtmPlnConstr *constr)
+{
+    ProUtilMsgPrint(msgfil, (char *)&quot;TEST Datum plane was not created.&quot;);
+    ProUtilMenucompDelete(); 
+<a name="anchor-131"></a>    return (0);
+}
+
+/*=============================================================*\
+  FUNCTION: ProUtilOffsetPlaneThruPoint
+<a name="anchor-132"></a>  PURPOSE:  Calculate offset to datum plane by pick point on the
+	    model
+\*=============================================================*/
+int ProUtilOffsetPlaneThruPoint(
+    ProGeomitemdata **p_data,
+<a name="anchor-133"></a>    double *offset)
+{
+    ProError err;
+    ProPoint3d point;
+    ProSelection *p_sel_arr;
+<a name="anchor-134"></a>    ProGeomitemdata *data =*p_data;
+    int n_sel;
+
+    err = ProSelect((char *)&quot;surface,datum&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel_arr,
+	&amp;n_sel);
+<a name="anchor-135"></a>    TEST_CALL_REPORT(&quot;ProSelect()&quot;,
+		&quot;ProUtilOffsetPlaneThruPoint()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR || n_sel != 1)
+	return(-1);
+    err = ProSelectionPoint3dGet(p_sel_arr[0], point);
+<a name="anchor-136"></a>    TEST_CALL_REPORT(&quot;ProSelectionPoint3dGet()&quot;,
+		&quot;ProUtilOffsetPlaneThruPoint()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    *offset = ProUtilPointPlaneDist(point, 
+	data->data.p_surface_data->srf_shape.plane.origin, 
+<a name="anchor-137"></a>	data->data.p_surface_data->srf_shape.plane.e3); 
+
+    err = ProMenuDeleteWithStatus(0);
+    TEST_CALL_REPORT(&quot;ProMenuDeleteWithStatus()&quot;,
+		&quot;ProUtilOffsetPlaneThruPoint()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-138"></a>    return (0);
+}
+
+/*=============================================================*\
+  FUNCTION: ProUtilOffsetPlaneThruPoint
+<a name="anchor-139"></a>  PURPOSE:  Calculate offset to datum plane by pick point on the
+	    model
+\*=============================================================*/
+int ProUtilOffsetPlaneEnterValue(
+    ProGeomitemdata **p_data,
+<a name="anchor-140"></a>    double *p_offset)
+{
+    ProGeomitemdata *data =*p_data;
+    ProError err;
+    double offset;
+<a name="anchor-141"></a>
+    *p_offset = 0.0;
+    ProUtilMsgPrint(msgfil, 
+	(char *)&quot;TEST Enter offset in the indicated direction, &lt;ESC> to quit[%0f]:&quot;,
+	&amp;offset);
+<a name="anchor-142"></a>
+    err = ProMessageDoubleRead(NULL, &amp;offset);
+    TEST_CALL_REPORT(&quot;ProMessageDoubleRead()&quot;,
+	    &quot;ProUtilOffsetPlaneEnterValue()&quot;, err, err != PRO_TK_NO_ERROR);
+     
+<a name="anchor-143"></a>     if (err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_GENERAL_ERROR)
+	return (-1);
+
+    *p_offset = offset;
+
+<a name="anchor-144"></a>    err = ProMenuDeleteWithStatus(0);
+    TEST_CALL_REPORT(&quot;ProMenuDeleteWithStatus()&quot;,
+	    &quot;ProUtilOffsetPlaneEnterValue()&quot;, err, err != PRO_TK_NO_ERROR);
+    return(0);
+}
+<a name="anchor-145"></a>
+/*=============================================================*\
+  FUNCTION: ProUtilDtmplnSelPostFilter
+  PURPOSE:  Post filter for selection
+\*=============================================================*/
+<a name="anchor-146"></a>ProError ProUtilDtmplnSelPostFilter(
+    ProSelection sel,
+    DtmPlnConstr *constr)
+{
+    ProError err;
+<a name="anchor-147"></a>    ProBoolean ok = PRO_B_TRUE;
+    ProModelitem modelitem;
+    ProGeomitemdata *p_data;
+    int num_sec;
+
+<a name="anchor-148"></a>/*    TEST_CALL_REPORT(&quot;ProSelectionPostFilter()&quot;,
+					&quot;ProUtilDtmplnSelPostFilter()&quot;, 0, 0);*/
+    
+    err = ProSelectionModelitemGet(sel, &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+<a name="anchor-149"></a>		  &quot;ProUtilDtmplnSelPostFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    if (modelitem.type == PRO_EDGE || modelitem.type == PRO_SURFACE)
+    {
+	err = ProGeomitemdataGet((ProGeomitem*)&amp;modelitem, &amp;p_data);
+<a name="anchor-150"></a>	TEST_CALL_REPORT(&quot;ProGeomitemdataGet()&quot;,
+		  &quot;ProUtilDtmplnSelPostFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	if (modelitem.type == PRO_EDGE &amp;&amp; 
+	    p_data->data.p_curve_data->line.type != PRO_ENT_LINE &amp;&amp;
+<a name="anchor-151"></a>	    p_data->data.p_curve_data->line.type != PRO_ENT_ARC &amp;&amp;
+	    p_data->data.p_curve_data->line.type != PRO_ENT_ELLIPSE)
+	    ok = PRO_B_FALSE;
+
+	if (modelitem.type == PRO_SURFACE)
+<a name="anchor-152"></a>	{
+	    if (constr->cur_constr == DCTR_TANGENT &amp;&amp;
+		p_data->data.p_surface_data->type != PRO_SRF_CYL &amp;&amp;
+		p_data->data.p_surface_data->type != PRO_SRF_CONE)
+		ok = PRO_B_FALSE;
+<a name="anchor-153"></a>	    if ((constr->cur_constr == DCTR_PARALLEL ||
+		 constr->cur_constr == DCTR_NORMAL ||
+		 constr->cur_constr == DCTR_OFFSET ||
+		 constr->cur_constr == DCTR_ANGLE) &amp;&amp;
+		p_data->data.p_surface_data->type != PRO_SRF_PLANE)
+<a name="anchor-154"></a>		ok = PRO_B_FALSE;
+	    if (constr->cur_constr == DCTR_THROUGH &amp;&amp;
+		p_data->data.p_surface_data->type != PRO_SRF_PLANE &amp;&amp;
+		p_data->data.p_surface_data->type != PRO_SRF_CYL &amp;&amp;
+		p_data->data.p_surface_data->type != PRO_SRF_CONE)
+<a name="anchor-155"></a>		ok = PRO_B_FALSE;
+	}
+
+	err = ProGeomitemdataFree(&amp;p_data);
+	TEST_CALL_REPORT(&quot;ProGeomitemdataFree()&quot;,
+<a name="anchor-156"></a>		  &quot;ProUtilDtmplnSelPostFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+
+    if (modelitem.type == PRO_FEATURE)
+    {
+<a name="anchor-157"></a>	err = ProFeatureNumSectionsGet((ProFeature*)&amp;modelitem, &amp;num_sec);
+	TEST_CALL_REPORT(&quot;ProFeatureNumSectionsGet()&quot;,
+		  &quot;ProUtilDtmplnSelPostFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	if (err != PRO_TK_NO_ERROR || num_sec&lt;1)
+<a name="anchor-158"></a>	    ok = PRO_B_FALSE;
+    }
+
+    return (ok ? PRO_TK_NO_ERROR : PRO_TK_GENERAL_ERROR);
+} 
+<a name="anchor-159"></a>
+/*=============================================================*\
+  FUNCTION: ProUtilDtmplnSelPostSelact
+  PURPOSE:  Post action function for selection
+\*=============================================================*/
+<a name="anchor-160"></a>ProError ProUtilDtmplnSelPostSelact(
+    Pro3dPnt pnt,
+    ProSelection sel,
+    DtmPlnConstr *constr)
+{
+<a name="anchor-161"></a>    ProError err;
+    ProModelitem modelitem;
+    double offset;
+    int action;
+    char *c= (char *)&quot;x&quot;;
+<a name="anchor-162"></a>
+/*    TEST_CALL_REPORT(&quot;ProSelectionPostSelact()&quot;,
+					&quot;ProUtilDtmplnSelPostSelact()&quot;, 0, 0);*/
+
+    if (constr->cur_constr == DCTR_OFFSET )
+<a name="anchor-163"></a>    {
+	err = ProSelectionModelitemGet(sel, &amp;modelitem);
+	TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+		&quot;ProUtilDtmplnSelPostSelact()&quot;, err, err != PRO_TK_NO_ERROR);
+	if (modelitem.type == PRO_CSYS)
+<a name="anchor-164"></a>	{
+	    err = ProMenuFileRegister((char *)&quot;tkoff csys&quot;, (char *)&quot;tkoffcsys.mnu&quot;, NULL);
+	    err = ProMenubuttonActionSet((char *)&quot;tkoff csys&quot;, (char *)&quot;X Axis&quot;,
+		(ProMenubuttonAction)ProUtilMenubuttonDeleteWithStatus, NULL, PRO_DTMPLN_OFF_CSYS_X);
+	    err = ProMenubuttonActionSet((char *)&quot;tkoff csys&quot;, (char *)&quot;Y Axis&quot;,
+<a name="anchor-165"></a>		(ProMenubuttonAction)ProUtilMenubuttonDeleteWithStatus, NULL, PRO_DTMPLN_OFF_CSYS_Y);
+	    err = ProMenubuttonActionSet((char *)&quot;tkoff csys&quot;, (char *)&quot;Z Axis&quot;,
+		(ProMenubuttonAction)ProUtilMenubuttonDeleteWithStatus, NULL, PRO_DTMPLN_OFF_CSYS_Z);
+	    err = ProMenubuttonActionSet((char *)&quot;tkoff csys&quot;, (char *)&quot;tkoff csys&quot;,
+		(ProMenubuttonAction)ProMenubuttonDelete, NULL, 0);
+<a name="anchor-166"></a>
+	    err = ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;tkoff csys&quot;, NULL);
+	    err = ProMenuProcess((char *)&quot;tkoff csys&quot;, &amp;action);
+
+	    if (err == PRO_TK_NO_ERROR)
+<a name="anchor-167"></a>	    {
+    		constr->index[constr->n_constr] = action;
+    		offset = 0.0;
+		
+		c[0] = action - PRO_DTMPLN_OFF_CSYS_X + 'x';
+<a name="anchor-168"></a>		ProUtilMsgPrint(msgfil, 
+		    (char *)&quot;TEST Enter offset value in the %0s-direction [%1f]:&quot;,
+		     c, &amp;offset);
+		err = ProMessageDoubleRead(NULL, &amp;offset);
+		TEST_CALL_REPORT(&quot;ProMessageDoubleRead()&quot;,
+<a name="anchor-169"></a>		    &quot;ProUtilDtmplnSelPostSelact()&quot;, err, err !=PRO_TK_NO_ERROR);
+		constr->offset[constr->n_constr] = offset;
+	    }
+	}
+    }
+<a name="anchor-170"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*=============================================================*\
+  FUNCTION: ProTestDtmplnConstrAdd
+<a name="anchor-171"></a>  PURPOSE:  Add new constraint
+\*=============================================================*/
+int ProTestDtmplnConstrAdd(
+    DtmPlnConstr *constr,	/* In: Setup struct */
+    int index)			/* In : Const index in the table */
+<a name="anchor-172"></a>{
+    ProCharLine line;
+    int i, n_sel, action, reftype;
+    ProSelection *p_sel_arr;
+    ProModelitem modelitem;
+<a name="anchor-173"></a>    ProGeomitemdata *p_data;
+    ProSelFunctions func;
+    ProError err;
+    double offset = 0.0;
+
+<a name="anchor-174"></a>    if (constr->ref_pressed)
+	constr->ref_pressed = PRO_B_FALSE;
+    else
+    {
+	constr->cur_constr = index;
+<a name="anchor-175"></a>
+	for (i=0, constr->ref_enabled = 0; i&lt;SIZEOFARR(ref_type); i++)
+	    if (ref_type[i].freedom[index] > 0)
+		constr->ref_enabled |= (1 &lt;&lt; i);
+	constr->ref_highlighted = constr->ref_enabled;
+<a name="anchor-176"></a>    }
+    ProTestDtmplnMenuSet(constr);
+
+    if (constr->cur_constr == DCTR_BLEND_SECTION)
+    {
+<a name="anchor-177"></a>    	ProUtilstrcpy(line, &quot;feature&quot;);
+	ProUtilMsgPrint(msgfil, (char *)&quot;TEST Not implemented.&quot;);
+	return (0);
+    }
+    else
+<a name="anchor-178"></a>	for (i=0, line[0] = '\0'; i&lt;SIZEOFARR(ref_type); i++)
+	{
+	    if (constr->ref_highlighted &amp; (1 &lt;&lt; i))
+	    {
+		if (line[0] != '\0')
+<a name="anchor-179"></a>		    ProUtilstrcat(line, &quot;,&quot;);
+		ProUtilstrcat(line, (const char*)ref_type[i].select_option);
+	    }
+	}
+
+<a name="anchor-180"></a>    memset(&amp;func, '\0', sizeof(func));
+    func.post_filter = (ProSelectionPostFilter)ProUtilDtmplnSelPostFilter;
+    func.post_selact = (ProSelectionPostSelact)ProUtilDtmplnSelPostSelact;
+    func.app_data = (ProAppData)constr;
+    /*  do
+<a name="anchor-181"></a>    {*/
+	err = ProSelect(line, 1, NULL, &amp;func, NULL, NULL, &amp;p_sel_arr, &amp;n_sel);
+	TEST_CALL_REPORT(&quot;ProSelect()&quot;,
+    	    &quot;ProTestDtmplnConstrAdd()&quot;, err, err != PRO_TK_NO_ERROR &amp;&amp;
+	    err != PRO_TK_PICK_ABOVE);
+<a name="anchor-182"></a>
+	/* } while(err != PRO_TK_PICK_ABOVE &amp;&amp; !(err ==PRO_TK_NO_ERROR &amp;&amp; n_sel == 1));
+	 */
+    if (err != PRO_TK_NO_ERROR)
+	return (0);
+<a name="anchor-183"></a>
+    err = ProSelectionModelitemGet(p_sel_arr[0], &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+		    &quot;ProTestDtmplnConstrAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-184"></a>    constr->ref_enabled = 0;
+    constr->ref_highlighted = 0;
+    ProUtilMenubuttonHighlight((char *)&quot;tkdtm plane&quot;, constr_type[index].button_name, 
+	0);
+    ProTestDtmplnMenuSet(constr);
+<a name="anchor-185"></a>
+    err = ProGeomitemdataGet((ProGeomitem*)&amp;modelitem, &amp;p_data);
+    TEST_CALL_REPORT(&quot;ProGeomitemdataGet()&quot;,
+		    &quot;ProTestDtmplnConstrAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-186"></a>    err = ProSelectionCopy(p_sel_arr[0], &amp;constr->ref[constr->n_constr]);
+    TEST_CALL_REPORT(&quot;ProSelectionCopy()&quot;,
+		    &quot;ProTestDtmplnConstrAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+
+/*------------------------------------------------------------*\
+<a name="anchor-187"></a>    Add constarint
+\*------------------------------------------------------------*/
+    if (index == DCTR_OFFSET)
+    {
+	if (modelitem.type == PRO_SURFACE)
+<a name="anchor-188"></a>	{
+	    err = ProMenuFileRegister((char *)&quot;tkoffset&quot;, (char *)&quot;tkoffset.mnu&quot;, NULL);
+	    err = ProMenubuttonGenactionSet((char *)&quot;tkoffset&quot;, (char *)&quot;Thru point&quot;,
+		(ProMenubuttonGenaction)ProUtilOffsetPlaneThruPoint, &amp;p_data,
+		&amp;offset, NULL, NULL, NULL, NULL);
+<a name="anchor-189"></a>	    err = ProMenubuttonGenactionSet((char *)&quot;tkoffset&quot;, (char *)&quot;Enter Value&quot;,
+		(ProMenubuttonGenaction)ProUtilOffsetPlaneEnterValue, &amp;p_data,
+		&amp;offset, NULL, NULL, NULL, NULL);
+	    err = ProMenubuttonActionSet((char *)&quot;tkoffset&quot;, (char *)&quot;tkoffset&quot;,
+		(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-190"></a>
+	    err = ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;tkoffset&quot;, NULL);
+	    err = ProMenuCommandPush((char *)&quot;Thru point&quot;);
+	    TEST_CALL_REPORT(&quot;ProMenuCommandPush()&quot;,
+		    (char *)&quot;ProTestDtmplnConstrAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-191"></a>	    
+	    err = ProMenuProcess((char *)&quot;tkoffset&quot;, &amp;action);
+	    if (err != PRO_TK_NO_ERROR)
+		return (0);
+
+<a name="anchor-192"></a>	    constr->offset[constr->n_constr] = offset;
+	    constr->index[constr->n_constr] = -1;
+	}
+    }
+    if (index == DCTR_ANGLE)
+<a name="anchor-193"></a>    {
+	ProUtilMsgPrint(msgfil, (char *)&quot;TEST Angle in indicated direction, [%0f]:&quot;,
+	    &amp;offset);
+	err = ProMessageDoubleRead(NULL, &amp;offset);
+	TEST_CALL_REPORT(&quot;ProMessageDoubleRead()&quot;,
+<a name="anchor-194"></a>		    &quot;ProTestDtmplnConstrAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+	constr->offset[constr->n_constr] = offset;
+    }
+
+    /* Here constraint should be checked */
+<a name="anchor-195"></a>    switch (modelitem.type)
+    {
+	case PRO_AXIS:
+	case PRO_EDGE:
+	case PRO_CURVE:
+<a name="anchor-196"></a>	    if (p_data->data.p_curve_data->line.type == PRO_ENT_LINE)
+		reftype = USER_LINE;
+	    else
+		reftype = USER_PLANE;
+	    break;
+<a name="anchor-197"></a>	case PRO_POINT:
+	case PRO_EDGE_START:
+	case PRO_EDGE_END:
+	case PRO_CRV_START:
+	case PRO_CRV_END:
+<a name="anchor-198"></a>	    reftype = USER_POINT;
+	    break;
+	case PRO_SURFACE:
+	    if (p_data->data.p_surface_data->type == PRO_SRF_PLANE)
+		reftype = USER_PLANE;
+<a name="anchor-199"></a>	    else
+		reftype = USER_CYL;
+	    break;
+	case PRO_CSYS:
+		reftype = USER_CSYS;
+<a name="anchor-200"></a>	    break;
+	case PRO_FEATURE:
+	    reftype = USER_PLANE;
+	    index = DCTR_THROUGH;
+	    /* Here we must find the feature section */
+<a name="anchor-201"></a>    	    break;
+     }
+
+    err = ProGeomitemdataFree(&amp;p_data);
+    TEST_CALL_REPORT(&quot;ProGeomitemdataFree()&quot;,
+<a name="anchor-202"></a>		    &quot;ProTestDtmplnConstrAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    constr->type[constr->n_constr] = (ProDtmplnConstrType)constr->cur_constr;
+
+    constr->n_constr++;
+<a name="anchor-203"></a>    constr->freedom += ref_type[reftype].freedom[index];
+    if (index == DCTR_THROUGH || index == DCTR_OFFSET)
+	constr->through = PRO_B_TRUE;
+
+    /* Allow offset and Blend be only first constraint */
+<a name="anchor-204"></a>    constr->constr_enabled = constr->constr_enabled &amp; 
+	(~((1 &lt;&lt; DCTR_OFFSET)|(1 &lt;&lt; DCTR_BLEND_SECTION)));
+    if (constr->cur_constr == DCTR_PARALLEL)
+	constr->constr_enabled = 
+	    constr->constr_enabled &amp; (~(1 &lt;&lt; DCTR_PARALLEL));
+<a name="anchor-205"></a>
+    if ((constr->freedom >= 3) &amp;&amp; constr->through)
+    {
+	ProUtilMsgPrint(msgfil, (char *)&quot;TEST Datum Plane is fully constrained.&quot;);
+	constr->constr_enabled = 0;
+<a name="anchor-206"></a>    }	 
+
+    ProTestDtmplnMenuSet(constr);
+
+    return (0);
+<a name="anchor-207"></a>}
+
+/*=============================================================*\
+  FUNCTION: ProTestDtmplnConstrRef
+  PURPOSE:  Enable/Disable constraint ref
+<a name="anchor-208"></a>\*=============================================================*/
+int ProTestDtmplnConstrRef(
+    DtmPlnConstr *constr,
+    int index)
+{
+<a name="anchor-209"></a>    ProError err;
+
+    constr->ref_pressed = PRO_B_TRUE;
+    constr->ref_highlighted ^= (1 &lt;&lt; index);
+
+<a name="anchor-210"></a>    err = ProMenuCommandPush(constr_type[constr->cur_constr].button_name);
+    TEST_CALL_REPORT(&quot;ProMenuCommandPush()&quot;,
+		    &quot;ProTestDtmplnConstrRef()&quot;, err, err != PRO_TK_NO_ERROR);
+    return (0);
+}
+<a name="anchor-211"></a>
+/*=============================================================*\
+  FUNCTION: ProTestDtmplnCreate
+  PURPOSE:  Create datum plane feature
+\*=============================================================*/
+<a name="anchor-212"></a>int ProTestDtmplnCreate(
+    ProMdl model)
+{
+    ProError err;
+    int action, i, n_menus;
+<a name="anchor-213"></a>    char *compound[] = {(char *)&quot;tkdtm plane&quot;, (char *)&quot;tkdtmplnc&quot;, (char *)&quot;tkdtmplnd&quot;, (char *)&quot;&quot;};
+
+    memset(&amp;constraint, '\0', sizeof(constraint));
+    constraint.cur_constr = -1;
+    constraint.constr_enabled = -1;
+<a name="anchor-214"></a>    constraint.model = model;
+
+    err = ProMenuFileRegister((char *)&quot;tkdtm plane&quot;, (char *)&quot;tkdtmpln.mnu&quot;, NULL);
+    for (i=0; i&lt;SIZEOFARR(constr_type); i++)
+    {
+<a name="anchor-215"></a>	err = ProMenubuttonActionSet((char *)&quot;tkdtm plane&quot;, constr_type[i].button_name,
+	    (ProMenubuttonAction)ProTestDtmplnConstrAdd, &amp;constraint, i);
+	constr_type[i].state_en = -1;
+    }
+    err = ProMenubuttonActionSet((char *)&quot;tkdtm plane&quot;, (char *)&quot;tkdtm plane&quot;,
+<a name="anchor-216"></a>	(ProMenubuttonAction)ProTestDtmplnQuit, NULL, 0);
+
+    err = ProMenuFileRegister((char *)&quot;tkdtmplnc&quot;, (char *)&quot;tkdtmplnc.mnu&quot;, NULL);
+    for (i=0; i&lt;SIZEOFARR(ref_type); i++)
+    {
+<a name="anchor-217"></a>	err = ProMenubuttonActionSet((char *)&quot;tkdtmplnc&quot;, ref_type[i].button_name, 
+	    (ProMenubuttonAction)ProTestDtmplnConstrRef, &amp;constraint, i);
+
+	ref_type[i].state_en = -1;
+	ref_type[i].state_hi = -1;
+<a name="anchor-218"></a>    }
+
+    err = ProMenuFileRegister((char *)&quot;tkdtmplnd&quot;,(char *)&quot;tkdtmplnd.mnu&quot;, NULL);
+    err = ProMenubuttonActionSet((char *)&quot;tkdtmplnd&quot;, (char *)&quot;Done&quot;, 
+	(ProMenubuttonAction)ProTestDtmplnDone, &amp;constraint, 0);
+<a name="anchor-219"></a>    err = ProMenubuttonActionSet((char *)&quot;tkdtmplnd&quot;, (char *)&quot;Restart&quot;,
+	(ProMenubuttonAction)ProTestDtmplnRestart, &amp;constraint, 0);
+    err = ProMenubuttonActionSet((char *)&quot;tkdtmplnd&quot;, (char *)&quot;Quit&quot;,
+	(ProMenubuttonAction)ProTestDtmplnQuit, &amp;constraint, 0);
+
+<a name="anchor-220"></a>    err = ProMenuPush();
+    TEST_CALL_REPORT(&quot;ProMenuPush()&quot;,
+			    &quot;ProTestDtmpln()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProMenuDatamodeSet((char *)&quot;tkdtmplnc&quot;, PRO_B_TRUE);
+<a name="anchor-221"></a>    TEST_CALL_REPORT(&quot;ProMenuDatamodeSet()&quot;,
+			    &quot;ProTestDtmpln()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProCompoundmenuCreate(compound, &amp;n_menus);
+    TEST_CALL_REPORT(&quot;ProCompoundmenuCreate()&quot;,
+<a name="anchor-222"></a>			    &quot;ProTestDtmpln()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    ProTestDtmplnMenuSet(&amp;constraint);
+    err = ProMenuProcess((char *)&quot;tkdtm plane&quot;, &amp;action);
+    err = ProMenuPop();
+<a name="anchor-223"></a>    TEST_CALL_REPORT(&quot;ProMenuPop()&quot;,
+			    &quot;ProTestDtmpln()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-224"></a>
+/*=============================================================*\
+  FUNCTION: ProTestDtmpln
+  PURPOSE:  Create datum plane feature main funct
+\*=============================================================*/
+<a name="anchor-225"></a>ProError ProTestDtmpln()
+{
+    ProMdl   model;
+    ProError err;
+    int	     n_csys = 0;
+<a name="anchor-226"></a>
+    err = ProMdlCurrentGet(&amp;model);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;,
+			    &quot;ProTestDtmpln()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-227"></a>    err = ProSolidFeatVisit((ProSolid)model, 
+	(ProFeatureVisitAction)ProUtilNonCsysFeatCheck, 
+	(ProFeatureFilterAction)NULL, (ProAppData)&amp;n_csys);
+    TEST_CALL_REPORT(&quot;ProSolidFeatVisit()&quot;,
+	&quot;ProTestDtmpln()&quot;, err, err != PRO_TK_NO_ERROR &amp;&amp; 
+<a name="anchor-228"></a>	err != PRO_TK_E_FOUND);
+
+    if (err == PRO_TK_E_FOUND)
+    {
+	ProTestDtmplnCreate(model);
+<a name="anchor-229"></a>    }
+    else
+    {
+	ProTestDtmplnDefCreate(model, n_csys);
+    }
+<a name="anchor-230"></a>    return (PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

@@ -1,0 +1,463 @@
+<html>
+<head>
+<title>UtilMenu.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#ifndef lint 
+    static char UtilMenu_c [] = &quot;@(#)UtilMenu.c	1.2 11/26/96&quot;;
+#endif 
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-2"></a>Pro/Toolkit includes -- include this first
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProArray.h>
+#include &lt;ProMenu.h>
+<a name="anchor-3"></a>#include &lt;ProUtil.h>
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+#include &lt;TestError.h>
+<a name="anchor-4"></a>#include &lt;UtilMenu.h>
+#include &quot;UtilString.h&quot;
+
+/*====================================================================*\
+FUNCTION : ProUtilAssign
+<a name="anchor-5"></a>PURPOSE  : assigns option to a member (being dereferenced &amp; casted to int)
+	   Can be used in promenu_on_button. The menu will diappear after 
+	   the chosen menu button is pushed.
+\*====================================================================*/
+int ProUtilAssign(ProAppData p_member, int option)
+<a name="anchor-6"></a>{
+    ProError status;
+
+    *((int *)p_member) = option;
+    status = ProMenuDelete();
+<a name="anchor-7"></a>    TEST_CALL_REPORT(&quot;ProMenuDelete&quot;,&quot;ProUtilAssign&quot;, status,
+    				status != PRO_TK_NO_ERROR);
+
+    return (0);
+}
+<a name="anchor-8"></a>
+/*====================================================================*\
+FUNCTION : ProUtilMenuKill
+PURPOSE  : Deletes the number of menus given.
+\*====================================================================*/
+<a name="anchor-9"></a>int ProUtilMenuKill(ProAppData p_member, int n_menus)
+{
+    ProError status;
+    int      i;
+
+<a name="anchor-10"></a>    for (i = 0; i &lt; n_menus; i++)
+    {
+    status = ProMenuDelete();
+    TEST_CALL_REPORT(&quot;ProMenuDelete&quot;,&quot;ProUtilMenuKill&quot;, status,
+    				status != PRO_TK_NO_ERROR);
+<a name="anchor-11"></a>    }
+
+    return (0);
+}
+
+<a name="anchor-12"></a>
+/*=============================================================*\
+  FUNCTION: ProUtilMenubuttonActivate
+  PURPOSE:  Activate/Deactivate button
+\*=============================================================*/
+<a name="anchor-13"></a>ProError ProUtilMenubuttonActivate(
+    char    *menu,	    /* In : the menu name */
+    char    *menubutton,    /* In : the menubutton name */
+    int	    enable)	    /* In : 0 - dis, 1 - en */
+{
+<a name="anchor-14"></a>    ProError err;
+
+    if (enable)
+    {
+	err = ProMenubuttonActivate(menu, menubutton);
+<a name="anchor-15"></a>	TEST_CALL_REPORT(&quot;ProMenubuttonActivate()&quot;,
+		 &quot;ProUtilMenubuttonActivate()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    else
+    {
+<a name="anchor-16"></a>	err = ProMenubuttonDeactivate(menu, menubutton);
+	TEST_CALL_REPORT(&quot;ProMenubuttonDeactivate()&quot;,
+		 &quot;ProUtilMenubuttonActivate()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    return (err);
+<a name="anchor-17"></a>} 
+
+/*=============================================================*\
+  FUNCTION: ProUtilMenubuttonHighlight
+  PURPOSE:  Highlight / Unhighlight button
+<a name="anchor-18"></a>\*=============================================================*/
+ProError ProUtilMenubuttonHighlight(
+    char    *menu,	    /* In : the menu name */
+    char    *menubutton,    /* In : the menubutton name */
+    int	    enable)	    /* In : 0 - dis, 1 - en */
+<a name="anchor-19"></a>{
+    ProError err;
+
+    if (enable)
+    {
+<a name="anchor-20"></a>	err = ProMenubuttonHighlight(menu, menubutton);
+	TEST_CALL_REPORT(&quot;ProMenubuttonHighlight()&quot;,
+		 &quot;ProUtilMenubuttonActivate()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    else
+<a name="anchor-21"></a>    {
+	err = ProMenubuttonUnhighlight(menu, menubutton);
+	TEST_CALL_REPORT(&quot;ProMenubuttonUnhighlight()&quot;,
+		 &quot;ProUtilMenubuttonActivate()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-22"></a>    return (err);
+} 
+
+/*=============================================================*\
+  FUNCTION: ProUtilMenubuttonDeleteWithStatus
+<a name="anchor-23"></a>  PURPOSE:  Call DeleteWithStatus func
+\*=============================================================*/
+int ProUtilMenubuttonDeleteWithStatus(
+    ProAppData appdata,
+    int status)
+<a name="anchor-24"></a>{
+    ProError err;
+
+    err = ProMenuDeleteWithStatus(status);
+    TEST_CALL_REPORT(&quot;ProMenuDeleteWithStatus()&quot;,
+<a name="anchor-25"></a>	&quot;ProUtilMenubuttonDeleteWithStatus()&quot;, err, err != PRO_TK_NO_ERROR);
+    return (0);
+}
+
+/*============================================================================*\
+<a name="anchor-26"></a> Function:	ProUtilMenuIntValueSelect
+ Purpose:       Create menu/Select int value/Close menu
+ Return:	PRO_TK_NO_ERROR if value selected, or PRO_TK_GENERAL_ERROR 
+\*============================================================================*/
+ProError ProUtilMenuIntValueSelect(
+<a name="anchor-27"></a>    ProUtilMenuButtons *buttons_array, /* In : The menu button array */
+    int *output_value)
+{
+    ProError err;
+    int i, n_buttons, menu_id;
+<a name="anchor-28"></a>    wchar_t **w_menu_buttons;
+    
+    for (n_buttons = 0; buttons_array[n_buttons].button[0]!='\0'; n_buttons++);
+
+    if (n_buttons &lt;= 1)
+<a name="anchor-29"></a>	return PRO_TK_NO_ERROR;
+	
+    ProUtilMenuStringsAlloc(&amp;w_menu_buttons);
+    for (i=1; i&lt;n_buttons; i++)
+	ProUtilMenuStringsStrAdd(&amp;w_menu_buttons, buttons_array[i].button);
+<a name="anchor-30"></a>    ProMenuFromStringsRegister ( buttons_array[0].button, NULL, w_menu_buttons,
+	NULL, NULL, &amp;menu_id);
+    ProUtilMenuStringsFree(&amp;w_menu_buttons);
+    for (i=0; i&lt;n_buttons; i++)
+    {
+<a name="anchor-31"></a>	if (buttons_array[i].special_flag &amp; 
+	    (TEST_CALL_PRO_MENU_DELETE | TEST_CALL_PRO_MENU_HOLD))
+	    ProMenubuttonActionSet(buttons_array[0].button, 
+		buttons_array[i].button, (ProMenubuttonAction)
+		(buttons_array[i].special_flag &amp; TEST_CALL_PRO_MENU_DELETE ?
+<a name="anchor-32"></a>		ProMenuDelete : ProMenuHold), NULL, 0);
+	else
+	    ProMenubuttonActionSet(buttons_array[0].button, 
+		buttons_array[i].button, (ProMenubuttonAction)
+		ProUtilMenubuttonDeleteWithStatus, NULL, 
+<a name="anchor-33"></a>		buttons_array[i].value);
+    }
+    for (i=1; i&lt;n_buttons; i++)
+    {
+	if (buttons_array[i].special_flag &amp; TEST_CALL_PRO_MENUBUTTON_DELETE)
+<a name="anchor-34"></a>	    ProMenubuttonDelete(buttons_array[0].button, 
+		buttons_array[i].button, &amp;menu_id); 
+    }
+    err = ProMenuCreate( PROMENUTYPE_MAIN, buttons_array[0].button, &amp;menu_id );
+    for (i=1; i&lt;n_buttons; i++)
+<a name="anchor-35"></a>    {
+	if (buttons_array[i].special_flag &amp;
+	    (TEST_CALL_PRO_MENU_ACTIVATE | TEST_CALL_PRO_MENU_DEACTIVATE))
+	    ProUtilMenubuttonActivate(buttons_array[0].button, 
+		buttons_array[i].button, 
+<a name="anchor-36"></a>		buttons_array[i].special_flag &amp; TEST_CALL_PRO_MENU_ACTIVATE);
+	if (buttons_array[i].special_flag &amp;
+	    (TEST_CALL_PRO_MENU_HIGHLIGHT | TEST_CALL_PRO_MENU_UNHIGHLIGHT))
+	    ProUtilMenubuttonActivate(buttons_array[0].button, 
+		buttons_array[i].button, 
+<a name="anchor-37"></a>		buttons_array[i].special_flag &amp; TEST_CALL_PRO_MENU_HIGHLIGHT);
+    }
+    err = ProMenuProcess(buttons_array[0].button, output_value);
+    return (err);
+}
+<a name="anchor-38"></a>
+/*============================================================================*\
+ Function:	ProUtilMenuStringsAlloc
+ Purpose:       Alloc memory for array of wchar_t* used in ProMenu functions
+\*============================================================================*/
+<a name="anchor-39"></a>ProError ProUtilMenuStringsAlloc(
+    wchar_t ***w_ptr)
+{
+    ProError err;
+    static wchar_t  w_epmty[] = {'\0'};
+<a name="anchor-40"></a>    wchar_t *w_p = w_epmty;
+
+    err = ProArrayAlloc(0, sizeof(wchar_t*), 1, (ProArray*)w_ptr);
+    if (err == PRO_TK_NO_ERROR)
+	err = ProArrayObjectAdd((ProArray*)w_ptr, 0, 1, &amp;w_p);
+<a name="anchor-41"></a>    return (err);
+}
+
+/*============================================================================*\
+ Function:	ProUtilMenuStringsStrAdd
+<a name="anchor-42"></a> Purpose:       Alloc memory and add string to MenuStrings array
+\*============================================================================*/
+ProError ProUtilMenuStringsStrAdd(
+    wchar_t ***w_ptr,
+    char *str)
+<a name="anchor-43"></a>{
+    ProError err;
+    wchar_t *w_p;
+    int len, n_str;
+
+<a name="anchor-44"></a>    len = strlen(str);
+    w_p = (wchar_t*)calloc(len + 1, sizeof(wchar_t));
+    if (w_p == NULL)
+	return (PRO_TK_GENERAL_ERROR);
+    ProStringToWstring(w_p, str); 
+<a name="anchor-45"></a>
+    err = ProArraySizeGet((ProArray)*w_ptr, &amp;n_str);
+    err = ProArrayObjectAdd((ProArray*)w_ptr, n_str-1, 1, &amp;w_p);
+    return (err);
+}
+<a name="anchor-46"></a>
+/*============================================================================*\
+ Function:	ProUtilMenuStringsWstrAdd
+ Purpose:       Alloc memory and add string to MenuStrings array
+\*============================================================================*/
+<a name="anchor-47"></a>ProError ProUtilMenuStringsWstrAdd(
+    wchar_t ***w_ptr,
+    wchar_t *w_str)
+{
+    ProError err;
+<a name="anchor-48"></a>    wchar_t *w_p;
+    int len, n_str;
+
+    len = ProUtilWstrLen(w_str);
+    w_p = (wchar_t*)calloc(len + 1, sizeof(wchar_t));
+<a name="anchor-49"></a>    if (w_p == NULL)
+	return (PRO_TK_GENERAL_ERROR);
+    ProUtilWstrcpy(w_p, w_str); 
+
+    err = ProArraySizeGet((ProArray)*w_ptr, &amp;n_str);
+<a name="anchor-50"></a>    err = ProArrayObjectAdd((ProArray*)w_ptr, n_str-1, 1, &amp;w_p);
+    return (err);
+}
+
+/*============================================================================*\
+<a name="anchor-51"></a> Function:	ProUtilMenuStringsIntValueSelect
+ Purpose:       Select a string from menu and return it's number
+\*============================================================================*/
+ProError ProUtilMenuStringsIntValueSelect(
+    char    *menu_name,
+<a name="anchor-52"></a>    wchar_t **w_ptr,
+    int	    *output_value)
+{
+    ProUtilMenuButtons *buttons_array;
+    int i, n_buttons;
+<a name="anchor-53"></a>    ProError err;
+
+    for(n_buttons=1; w_ptr[n_buttons-1][0] != '\0'; n_buttons++);
+
+    buttons_array = (ProUtilMenuButtons *)calloc(n_buttons+1, 
+<a name="anchor-54"></a>	sizeof(ProUtilMenuButtons));
+    
+    ProUtilstrcpy(buttons_array[0].button, (const char *) menu_name);
+    buttons_array[0].special_flag = TEST_CALL_PRO_MENU_DELETE;
+
+<a name="anchor-55"></a>    for(i=1; i&lt;=n_buttons; i++)
+    {
+	ProWstringToString(buttons_array[i].button, w_ptr[i-1]);
+	buttons_array[i].value = i - 1;
+    }
+<a name="anchor-56"></a>    err = ProUtilMenuIntValueSelect(buttons_array, output_value);
+    free(buttons_array);
+    return (err);
+}
+
+<a name="anchor-57"></a>/*============================================================================*\
+ Function:	ProUtilMenuStringsFree
+ Purpose:       Free memory allocated by ..Alloc, ..StrAdd, ..WstrAdd
+\*============================================================================*/
+ProError ProUtilMenuStringsFree(
+<a name="anchor-58"></a>    wchar_t ***w_ptr)
+{
+    ProError err;
+    int i, n_str;
+    wchar_t **w_p = *w_ptr;
+<a name="anchor-59"></a>
+    err = ProArraySizeGet((ProArray)w_p, &amp;n_str);
+    for (i=n_str-2; i>0; i--)
+	free(w_p[i]);
+    err = ProArrayFree((ProArray*)w_ptr);
+<a name="anchor-60"></a>    return (err);
+}
+
+typedef struct menu_toggle_info
+{
+<a name="anchor-61"></a>    char *menu_name;
+    wchar_t **w_menu_buttons;
+    int *button_status;
+    int n_buttons;
+} MenuToggleInfo;
+<a name="anchor-62"></a>
+#define SELECT_ALL  0
+#define UNSEL_ALL   1
+#define DONE_SEL    2
+#define QUIT_SEL    3
+<a name="anchor-63"></a>
+/*============================================================================*\
+ Function:	ProUtilMenuToggleOne
+ Purpose:       Used from ProUtilMenuStringManySelect
+\*============================================================================*/
+<a name="anchor-64"></a>int ProUtilMenuToggleOne(
+    MenuToggleInfo *p_toggle_info,
+    int n_str)
+{
+    p_toggle_info->button_status[n_str] = !p_toggle_info->button_status[n_str];
+<a name="anchor-65"></a>    return (0);
+}
+
+/*============================================================================*\
+ Function:	ProUtilMenuToggleDone
+<a name="anchor-66"></a> Purpose:       Used from ProUtilMenuStringManySelect
+\*============================================================================*/
+int ProUtilMenuToggleDone(
+    MenuToggleInfo *p_toggle_info,
+    int action)
+<a name="anchor-67"></a>{
+    int i, sel;
+    ProError err;
+    ProCharName name;
+
+<a name="anchor-68"></a>    switch (action)
+    {
+    case SELECT_ALL:
+    case UNSEL_ALL:
+	sel = (action == SELECT_ALL);
+<a name="anchor-69"></a>	for (i=0; i&lt;p_toggle_info->n_buttons; i++)
+	    if (p_toggle_info->button_status[i] != sel)
+	    {
+		ProWstringToString(name, p_toggle_info->w_menu_buttons[i]);
+		err = ProUtilMenubuttonHighlight(p_toggle_info->menu_name,
+<a name="anchor-70"></a>		    name,  sel);
+		p_toggle_info->button_status[i] = sel;
+	    }
+	break;
+    case DONE_SEL:
+<a name="anchor-71"></a>    case QUIT_SEL:
+	err = ProMenuDeleteWithStatus(action);
+	err = ProMenuDeleteWithStatus(action);
+	break;
+    }
+<a name="anchor-72"></a>    return (0);
+}
+
+
+/*============================================================================*\
+<a name="anchor-73"></a> Function:	ProUtilMenuStringManySelect
+ Purpose:       Select many string from menu with submenu Select All/Unsell All
+\*============================================================================*/
+ProError ProUtilMenuStringManySelect(
+    char    *menu_name,		   /* In : Menu name */
+<a name="anchor-74"></a>    wchar_t **w_menu_buttons,	   /* In : Menu buttons */
+    int	    **output_array,	   /* Out: ProArray of numbers of selected 
+					   strings, use ProArrayFree to free
+					   memory */
+    int *p_n_sel)		   /* Out: Number of selected components */
+<a name="anchor-75"></a>{
+    int i, n_but, n_sel, menu_id, action;
+    ProError err, ret_status = PRO_TK_USER_ABORT;
+    int *toggle_array;
+    MenuToggleInfo toggle_info;
+<a name="anchor-76"></a>    ProCharName name;
+    wchar_t **w_menus;
+
+    for(n_but=0; w_menu_buttons[n_but][0] != '\0'; n_but++);
+    err = ProArrayAlloc(n_but, sizeof(int), 1, (ProArray*)&amp;toggle_array);
+<a name="anchor-77"></a>    
+    toggle_info.w_menu_buttons = w_menu_buttons;
+    toggle_info.button_status = toggle_array;
+    toggle_info.n_buttons = n_but;
+    toggle_info.menu_name = menu_name;
+<a name="anchor-78"></a>
+    err = ProMenuFromStringsRegister ( menu_name, NULL, 
+	w_menu_buttons, NULL, NULL, &amp;menu_id);
+    for (i=0; i&lt;n_but; i++)
+    {
+<a name="anchor-79"></a>	toggle_array[i] = 0;
+	ProWstringToString(name, w_menu_buttons[i]);
+	err = ProMenubuttonActionSet(menu_name, name,
+	    (ProMenubuttonAction)ProUtilMenuToggleOne, &amp;toggle_info, i);
+    }   
+<a name="anchor-80"></a>    err = ProMenubuttonActionSet(menu_name, menu_name,
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenuModeSet(menu_name, PROMENUMODE_DATA);
+    err = ProMenuDatamodeSet(menu_name, PRO_B_TRUE );
+    err = ProMenuCreate(PROMENUTYPE_MAIN, menu_name, &amp;menu_id);
+<a name="anchor-81"></a>
+    err = ProUtilMenuStringsAlloc(&amp;w_menus);
+    err = ProUtilMenuStringsStrAdd(&amp;w_menus, (char *)&quot;Select All&quot;);
+    err = ProUtilMenuStringsStrAdd(&amp;w_menus, (char *)&quot;Unsel All&quot;);
+    err = ProUtilMenuStringsStrAdd(&amp;w_menus, (char *)&quot;Done Sel&quot;);
+<a name="anchor-82"></a>    err = ProUtilMenuStringsStrAdd(&amp;w_menus, (char *)&quot;Quit Sel&quot;);
+    
+    ProMenuFromStringsRegister ( (char *)&quot;TkMenuUtilSelect&quot;, NULL, w_menus,
+	NULL, NULL, &amp;menu_id);
+    err = ProMenubuttonActionSet((char *)&quot;TkMenuUtilSelect&quot;, (char *)&quot;Select All&quot;,
+<a name="anchor-83"></a>	(ProMenubuttonAction)ProUtilMenuToggleDone, &amp;toggle_info, SELECT_ALL);
+    err = ProMenubuttonActionSet((char *)&quot;TkMenuUtilSelect&quot;, (char *)&quot;Unsel All&quot;, 
+	(ProMenubuttonAction)ProUtilMenuToggleDone, &amp;toggle_info, UNSEL_ALL);
+    err = ProMenubuttonActionSet((char *)&quot;TkMenuUtilSelect&quot;, (char *)&quot;Done Sel&quot;, 
+	(ProMenubuttonAction)ProUtilMenuToggleDone, &amp;toggle_info, DONE_SEL);
+<a name="anchor-84"></a>    err = ProMenubuttonActionSet((char *)&quot;TkMenuUtilSelect&quot;, (char *)&quot;Quit Sel&quot;,
+	(ProMenubuttonAction)ProUtilMenuToggleDone, &amp;toggle_info, QUIT_SEL);
+    err = ProMenubuttonActionSet((char *)&quot;TkMenuUtilSelect&quot;, (char *)&quot;TkMenuUtilSelect&quot;, 
+	(ProMenubuttonAction)ProUtilMenuToggleDone, &amp;toggle_info, QUIT_SEL);
+
+<a name="anchor-85"></a>    err = ProMenuCreate(PROMENUTYPE_SUB, (char *)&quot;TkMenuUtilSelect&quot;, &amp;menu_id);
+    err = ProMenuProcess((char *)&quot;TkMenuUtilSelect&quot;, &amp;action);
+    if(err == PRO_TK_NO_ERROR &amp;&amp; action == DONE_SEL)
+    {
+        err = ProArrayAlloc(0, sizeof(int), 1, (ProArray*)output_array);
+<a name="anchor-86"></a>	n_sel = 0;
+	for (i=0; i&lt;n_but; i++)
+	    if (toggle_array[i])
+	    {
+		ProArrayObjectAdd((ProArray*)output_array, PRO_VALUE_UNUSED,
+<a name="anchor-87"></a>		    1, &amp;i);
+		n_sel++;
+	    }
+	if (n_sel>0)
+	{
+<a name="anchor-88"></a>	    *p_n_sel = n_sel;
+	    ret_status = PRO_TK_NO_ERROR;
+	}
+	else
+	    err = ProArrayFree((ProArray*)output_array);
+<a name="anchor-89"></a>    }
+    err = ProArrayFree((ProArray*)&amp;toggle_array);
+    return (ret_status);
+}
+
+<a name="anchor-90"></a>#undef SELECT_ALL
+#undef UNSEL_ALL
+#undef DONE_SEL
+#undef QUIT_SEL
+
+</pre>
+</body>
+</html>

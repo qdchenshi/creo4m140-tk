@@ -1,0 +1,1489 @@
+<html>
+<head>
+<title>TestDbms.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*-----------------------------------------------------------------------
+             This code runs for test:  ptr_dbms
+-------------------------------------------------------------------------*/
+
+<a name="anchor-2"></a>/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProObjects.h>
+<a name="anchor-3"></a>#include &lt;ProMdl.h>
+#include &lt;ProSolid.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMfg.h>
+#include &lt;ProUtil.h>
+<a name="anchor-4"></a>#include &lt;ProSurface.h>
+#include &lt;ProMessage.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-5"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilTypes.h&quot;
+#include &quot;UtilFiles.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilNames.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;UtilMenu.h&quot;
+<a name="anchor-7"></a>#include &quot;PTApplsUnicodeUtils.h&quot; 
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-8"></a>#define ERASE_OBJECT	    0
+#define ERASE_NOT_DISPLAYED 1
+
+#define DELETE_OLD 0
+#define DELETE_ALL 1
+<a name="anchor-9"></a>
+#define SAVE	0
+#define SAVE_AS 1
+#define BACKUP  2
+#define RENAME  3
+<a name="anchor-10"></a>
+typedef struct MdlData_
+{
+ ProMdl mdl;
+ ProMdlName name;
+<a name="anchor-11"></a> ProMdlType type;
+} MdlData;
+ 
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-12"></a>Application data types
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+<a name="anchor-13"></a>\*--------------------------------------------------------------------*/
+
+/*====================================================================*\
+  Function : ProUtilLogFileWrite
+  Purpose  : Create info string for a model
+<a name="anchor-14"></a>\*====================================================================*/
+static void ProUtilLogFileWrite(char *str)
+{
+    FILE *fp;
+
+<a name="anchor-15"></a>    fp = PTApplsUnicodeFopen(&quot;dbms.log&quot;, &quot;a&quot;);
+    fputs(str, fp);
+    fputc('\n', fp);
+    fclose(fp);
+}
+<a name="anchor-16"></a>
+/*====================================================================*\
+  Function : ProUtilMdlStr
+  Purpose  : Create info string for a model
+\*====================================================================*/
+<a name="anchor-17"></a>char* ProUtilMdlStr(ProMdl mdl, char *str)
+{
+    ProError err;
+    ProType model_type;
+    char tname[PRO_NAME_SIZE], mname[PRO_MDLNAME_SIZE], mfgtypename[PRO_NAME_SIZE];
+<a name="anchor-18"></a>    ProMdlName w_name = L&quot;&quot;;
+    ProMfgType mfg_type;
+    int model_id;
+
+    err = ProMdlTypeGet(mdl, (ProMdlType*)&amp;model_type);
+<a name="anchor-19"></a>    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProUtilMdlStr()&quot;, 
+			    err, err != PRO_TK_NO_ERROR);
+
+    err = ProMdlIdGet(mdl, &amp;model_id);
+    TEST_CALL_REPORT(&quot;ProMdlIdGet()&quot;, &quot;ProUtilMdlStr()&quot;, 
+<a name="anchor-20"></a>			    err, err != PRO_TK_NO_ERROR);
+
+    err = ProMdlMdlnameGet(mdl, w_name);
+    TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProUtilMdlStr()&quot;, 
+			    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>
+    ProUtilstrcpy(tname, (const char *)ProUtilGetMdlTypeStr((ProMdlType)model_type));
+    ProWstringToString(mname, w_name);
+
+    if (model_type == PRO_MFG)
+<a name="anchor-22"></a>    {
+	err = ProMfgTypeGet((ProMfg)mdl, &amp;mfg_type);
+	TEST_CALL_REPORT(&quot;ProMfgTypeGet()&quot;, &quot;ProUtilMdlStr()&quot;, 
+			    err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-23"></a>	ProUtilMfgtypeStr(mfg_type, mfgtypename);
+	ProTKSprintf(str, &quot;%s (%s) %s  id = %d&quot;, tname, mfgtypename, mname, model_id);
+
+    }
+    else
+<a name="anchor-24"></a>	ProTKSprintf(str, &quot;%s %s  id = %d&quot;, tname, mname, model_id);
+
+    return (str);
+}
+
+<a name="anchor-25"></a>/*====================================================================*\
+  Function : ProUtilMdlDisplay
+  Purpose  : Display model in new window
+\*====================================================================*/
+ProError ProUtilMdlDisplay(ProMdl mdl)
+<a name="anchor-26"></a>{
+    ProError err = PRO_TK_NO_ERROR;
+#ifndef PT_PRODUCTS_BUILD
+    ProMdlName w_name = L&quot;&quot;;
+    ProCharLine line, str;
+<a name="anchor-27"></a>    ProType type;
+    int w_id;
+
+    err = ProMdlWindowGet(mdl, &amp;w_id);
+    TEST_CALL_REPORT(&quot;ProMdlWindowGet()&quot;, &quot;ProUtilMdlDisplay()&quot;,
+<a name="anchor-28"></a>					    err, (err != PRO_TK_NO_ERROR)&amp;&amp;
+						(err!=PRO_TK_E_NOT_FOUND));
+    if( err == PRO_TK_NO_ERROR )
+    {
+	ProTKSprintf(line, &quot;Model %s already displayed.&quot;, ProUtilMdlStr(mdl, str));
+<a name="anchor-29"></a>	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+	ProUtilLogFileWrite(line);
+	return (err);	
+    }    
+    
+<a name="anchor-30"></a>    err = ProMdlTypeGet(mdl, (ProMdlType*)&amp;type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProUtilMdlDisplay()&quot;,
+					    err, err != PRO_TK_NO_ERROR);
+
+    err = ProMdlMdlnameGet(mdl, w_name);
+<a name="anchor-31"></a>    TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProUtilMdlDisplay()&quot;,
+					    err, err != PRO_TK_NO_ERROR);
+    err = ProObjectwindowMdlnameCreate(w_name, type, &amp;w_id);
+    TEST_CALL_REPORT(&quot;ProObjectwindowMdlnameCreate()&quot;, &quot;ProUtilMdlDisplay()&quot;,
+					    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-32"></a>
+    err = ProMdlDisplay(mdl);
+    TEST_CALL_REPORT(&quot;ProMdlDisplay()&quot;, &quot;ProUtilMdlDisplay()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-33"></a>    err = ProWindowActivate(w_id);
+    TEST_CALL_REPORT(&quot;ProWindowActivate()&quot;, &quot;ProUtilMdlDisplay()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+
+    if( err == PRO_TK_NO_ERROR )
+<a name="anchor-34"></a>    {
+	ProTKSprintf(line, &quot;Displayed %s&quot;, ProUtilMdlStr(mdl, str));
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+	ProUtilLogFileWrite(line);
+    }
+<a name="anchor-35"></a>
+#endif
+    return (err);
+}
+
+<a name="anchor-36"></a>/*====================================================================*\
+  Function : ProUtilMdlInput()
+  Purpose  : Ask user to input model name and type
+\*====================================================================*/
+ProError ProUtilMdlInput(
+<a name="anchor-37"></a>    char *user_prompt, 
+    ProBoolean allow_def, 
+    ProName model_name,
+    ProMdlType *p_mdl_type)
+{
+<a name="anchor-38"></a>    char line[PRO_PATH_SIZE], str[PRO_PATH_SIZE], tname[PRO_TYPE_SIZE];
+    ProMdlName w_name = L&quot;&quot;;
+    ProPath buff;
+    ProMdlType type;
+    ProMdl mdl;
+<a name="anchor-39"></a>    ProError err;
+    int stop = 1;
+    char * dot_occur;
+
+    if (allow_def == PRO_B_TRUE)
+<a name="anchor-40"></a>    {
+	err = ProMdlCurrentGet(&amp;mdl);
+	TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProUtilMdlInput()&quot;, 
+					    err, (err != PRO_TK_NO_ERROR)&amp;&amp;
+					    (err != PRO_TK_BAD_CONTEXT));
+<a name="anchor-41"></a>	if (err == PRO_TK_NO_ERROR)
+	{
+	    err = ProMdlMdlnameGet(mdl, w_name);
+	    TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProUtilMdlInput()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-42"></a>	    err = ProMdlTypeGet(mdl, &amp;type);
+	    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProUtilMdlInput()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+	    
+	    ProUtilstrcpy(tname, (const char *)ProUtilGetMdlTypeStr(type));
+<a name="anchor-43"></a>	    ProWstringToString(line, w_name);
+	    ProUtilstrcat(line, (const char *)&quot;.&quot;);
+	    ProUtilstrcat(line, (const char *)tname);
+	    ProTKSprintf(str, user_prompt, line);
+	}
+<a name="anchor-44"></a>	else
+	{
+	    allow_def = PRO_B_FALSE;
+	    ProTKSprintf(str, user_prompt, &quot;&quot;);
+	}
+<a name="anchor-45"></a>    }
+    else
+	ProUtilstrcpy(str, (const char*)user_prompt);
+    
+    do
+<a name="anchor-46"></a>    {
+
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, str);
+	err = ProMessageStringRead(PRO_FILE_NAME_SIZE, buff); 
+	TEST_CALL_REPORT(&quot;ProMessageStringRead()&quot;, &quot;ProUtilMdlInput()&quot;, 
+<a name="anchor-47"></a>		err, (err != PRO_TK_NO_ERROR)&amp;&amp;(err!=PRO_TK_GENERAL_ERROR));
+	if (err != PRO_TK_NO_ERROR)
+	{
+	    if (err != PRO_TK_MSG_USER_QUIT &amp;&amp; allow_def == PRO_B_TRUE)
+	    {
+<a name="anchor-48"></a>		ProWstringToString(line, w_name);
+		break;
+	    }
+	    else
+		return(PRO_TK_BAD_INPUTS);
+<a name="anchor-49"></a>	}
+
+	ProWstringToString(str, buff);
+
+        if((dot_occur = strchr(str, '.')) == NULL)
+<a name="anchor-50"></a>       {
+        ProUtilstrcpy(tname, (const char *)ProUtilGetMdlTypeStr(type));
+        ProUtilstrcat( str,(const char *)&quot;.&quot;);
+        ProUtilstrcat( str,(const char *)tname);
+       }	
+<a name="anchor-51"></a>
+	if( ProUtilConfirmNameType(str, line, (ProType*)&amp;type) 
+	    == PRO_TK_BAD_INPUTS)
+	    continue;
+	else
+<a name="anchor-52"></a>		stop = 0;
+
+    } while (stop);
+
+    ProStringToWstring(model_name, line);
+<a name="anchor-53"></a>    *p_mdl_type = type;
+    return (PRO_TK_NO_ERROR);
+}
+
+
+<a name="anchor-54"></a>/*====================================================================*\
+  Function : ProTestNewAction
+  Purpose  : Menubutton action. Return with err
+\*====================================================================*/
+static int ProTestNewAction(ProAppData data, int action)
+<a name="anchor-55"></a>{
+    ProError err;
+
+    err = ProMenuDeleteWithStatus(action);
+    TEST_CALL_REPORT(&quot;ProMenuDeleteWithStatus()&quot;,
+<a name="anchor-56"></a>		&quot;ProTestNewAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    return (0);
+}
+
+
+<a name="anchor-57"></a>/*====================================================================*\
+  Function : ProTestUnsupported
+  Purpose  : Write Message 'type unsupported'
+\*====================================================================*/
+static int ProTestUnsupported(ProAppData data, ProType type)
+<a name="anchor-58"></a>{
+    char ctype[PRO_NAME_SIZE];
+    ProCharLine line;
+
+    ProUtilObjtypeStr(type, ctype);
+<a name="anchor-59"></a>    ProTKSprintf(line, &quot;Model creation isn't supported yet for type %s.&quot;, ctype);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+
+    return (0);
+}
+<a name="anchor-60"></a>
+
+/*====================================================================*\
+  Function : ProTestNewMfg
+  Purpose  : Show menu new tknewmfg
+<a name="anchor-61"></a>\*====================================================================*/
+ProError ProTestNewMfg(ProName name, ProMdlfileType orig_type, ProMdl *p_mdl)
+{
+    ProError err;
+    int action;
+<a name="anchor-62"></a>	ProMdlName buff = L&quot;&quot;;
+    ProMdl orig_model = NULL;
+    ProMfg mfg;
+    ProMfgType mfgtype;
+
+<a name="anchor-63"></a>    err = ProMenuFileRegister((char*)&quot;TkNewMfg&quot;, (char*)&quot;tknewmfg.mnu&quot;, NULL);
+    err = ProMenubuttonActionSet((char*)&quot;TkNewMfg&quot;, (char*)&quot;-Assembly&quot;,
+	(ProMenubuttonAction)ProTestNewAction, NULL, (int)PRO_MFGTYPE_MACH_ASSEM);
+    err = ProMenubuttonActionSet((char*)&quot;TkNewMfg&quot;, (char*)&quot;-Sheetmetal&quot;,
+	(ProMenubuttonAction)ProTestNewAction, NULL, (int)PRO_MFGTYPE_SHEET_METAL);
+<a name="anchor-64"></a>    err = ProMenubuttonActionSet((char*)&quot;TkNewMfg&quot;, (char*)&quot;-Cast&quot;,
+	(ProMenubuttonAction)ProTestNewAction, NULL, (int)PRO_MFGTYPE_CAST);
+    err = ProMenubuttonActionSet((char*)&quot;TkNewMfg&quot;, (char*)&quot;-Mold&quot;,
+	(ProMenubuttonAction)ProTestNewAction, NULL, (int)PRO_MFGTYPE_MOLD);
+    err = ProMenubuttonActionSet((char*)&quot;TkNewMfg&quot;, (char*)&quot;-CMM&quot;,
+<a name="anchor-65"></a>	(ProMenubuttonAction)ProTestNewAction, NULL, (int)PRO_MFGTYPE_CMM);
+    err = ProMenubuttonActionSet((char*)&quot;TkNewMfg&quot;, (char*)&quot;Done/Return&quot;,
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkNewMfg&quot;, (char*)&quot;TkNewMfg&quot;,
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-66"></a>
+    err = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkNewMfg&quot;, NULL);
+    err = ProMenuProcess((char*)&quot;TkNewMfg&quot;, &amp;action);
+
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-67"></a>	return (err);
+
+    mfgtype = (ProMfgType)action;
+
+    if (mfgtype == PRO_MFGTYPE_SHEET_METAL)
+<a name="anchor-68"></a>    {
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter design part name: &quot;);
+
+	if( ProUtilStringGet(buff, NULL, PRO_FILE_NAME_SIZE) == 0)
+	    return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-69"></a>    }
+
+    err = ProMdlnameInit(buff, orig_type, &amp;orig_model);
+    err = ProMfgMdlCreate(name, mfgtype, orig_model, &amp;mfg);
+    TEST_CALL_REPORT(&quot;ProMfgMdlCreate()&quot;, &quot;ProTestNewMfg()&quot;, 
+<a name="anchor-70"></a>				    err, err != PRO_TK_NO_ERROR);
+
+    if (err == PRO_TK_NO_ERROR)
+	*p_mdl = (ProMdl)mfg;
+
+<a name="anchor-71"></a>    return (PRO_TK_NO_ERROR);
+}
+
+
+/*====================================================================*\
+<a name="anchor-72"></a>  Function : ProTestNewModel
+  Purpose  : Show menu new tknew
+\*====================================================================*/
+int ProTestNewModel()
+{
+<a name="anchor-73"></a>    ProError err;
+    int action;
+    ProMdlName buff = L&quot;&quot;;
+    ProCharLine line, str;
+    ProMdl  model;
+<a name="anchor-74"></a>    
+    err = ProMenuFileRegister((char*)&quot;TkNew&quot;, (char*)&quot;tknew.mnu&quot;, NULL);
+    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;-Sketch&quot;,
+	(ProMenubuttonAction)ProTestUnsupported, NULL, (int)PRO_2DSECTION);
+    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;-Part&quot;,
+<a name="anchor-75"></a>	(ProMenubuttonAction)ProTestNewAction, NULL, (int)PRO_PART);
+    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;-Assembly&quot;,
+	(ProMenubuttonAction)ProTestNewAction, NULL, (int)PRO_ASSEMBLY);
+    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;-Manufacturing&quot;,
+	(ProMenubuttonAction)ProTestNewAction, NULL, (int)PRO_MFG);
+<a name="anchor-76"></a>    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;-Drawing&quot;,
+	(ProMenubuttonAction)ProTestUnsupported, NULL, (int)PRO_DRAWING);
+    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;-Format&quot;,
+	(ProMenubuttonAction)ProTestUnsupported, NULL, (int)PRO_DWGFORM);
+    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;-Report&quot;,
+<a name="anchor-77"></a>	(ProMenubuttonAction)ProTestUnsupported, NULL, (int)PRO_REPORT);
+    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;-Diagram&quot;,
+	(ProMenubuttonAction)ProTestUnsupported, NULL, (int)PRO_DIAGRAM);
+    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;-Layout&quot;,
+	(ProMenubuttonAction)ProTestUnsupported, NULL, (int)PRO_LAYOUT);
+<a name="anchor-78"></a>    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;-Markup&quot;,
+	(ProMenubuttonAction)ProTestUnsupported, NULL, (int)PRO_MARKUP);
+    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;TkNew&quot;,
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkNew&quot;, (char*)&quot;Done/Return&quot;,
+<a name="anchor-79"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+
+    err = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkNew&quot;, NULL);
+    err = ProMenuProcess((char*)&quot;TkNew&quot;, &amp;action);
+
+<a name="anchor-80"></a>    if (err != PRO_TK_NO_ERROR)
+	return (0);
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter new model name: &quot;);
+
+<a name="anchor-81"></a>    if( ProUtilStringGet(buff, NULL, PRO_FILE_MDLNAME_SIZE) == 0)
+	return(-1);
+
+    if ((ProType)action == PRO_PART || (ProType)action == PRO_ASSEMBLY)
+    {
+<a name="anchor-82"></a>	err = ProSolidMdlnameCreate(buff, (ProMdlfileType)action, (ProSolid *)&amp;model);
+	TEST_CALL_REPORT(&quot;ProSolidMdlnameCreate()&quot;, &quot;ProTestDbmsAction()&quot;, err,
+					    err != PRO_TK_NO_ERROR);
+    } else if ((ProType)action == PRO_MFG)
+    {
+<a name="anchor-83"></a>	err = ProTestNewMfg(buff, (ProMdlfileType)action, &amp;model);
+    }
+
+    if( err == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-84"></a>	ProTKSprintf(line, &quot;%s has been created&quot;, ProUtilMdlStr(model, str));
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+	ProUtilLogFileWrite(line);
+	err = ProUtilMdlDisplay(model);
+    }
+<a name="anchor-85"></a>
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-86"></a>  Function : ProTestModelOpen
+  Purpose  : Open model window
+\*====================================================================*/
+int ProTestModelOpen()
+{
+<a name="anchor-87"></a>    ProError err;
+    int version;
+    ProCharLine line, str;
+    ProLine buff;
+    ProPath sel_path, def_path;
+<a name="anchor-88"></a>	ProMdlName w_name = L&quot;&quot;;
+	ProMdlExtension w_type;
+    ProMdl  model;
+    ProType type;
+
+<a name="anchor-89"></a>    ProStringToWstring(buff, (char*)&quot;*.prt,*.asm,*.mfg,*.lay,*.sec,&quot;
+			     &quot;*.drw,*.rep,*.frm,*.rep,*.mrk,*.dgm&quot;);
+    ProStringToWstring(def_path, (char*)&quot;.&quot;);
+
+    /* Open file */
+<a name="anchor-90"></a>    err = ProFileMdlnameOpen(NULL, buff, NULL, NULL, NULL, NULL,
+		      sel_path);
+    TEST_CALL_REPORT(&quot;ProFileMdlnameOpen()&quot;, &quot;ProTestModelOpen()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-91"></a>    ProWstringToString(line, sel_path);
+
+    if (err == PRO_TK_NO_ERROR)
+    {
+	err = ProFileMdlnameParse (sel_path, def_path, w_name, w_type, &amp;version);
+<a name="anchor-92"></a>	TEST_CALL_REPORT(&quot;ProFileMdlnameParse1 ()&quot;, &quot;ProTestModelOpen()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+
+	err = ProPathMdlnameCreate(NULL, w_name, w_type, PRO_VALUE_UNUSED, def_path);
+	TEST_CALL_REPORT(&quot;ProPathMdlnameCreate()&quot;, &quot;ProTestModelOpen()&quot;, 
+<a name="anchor-93"></a>					    err, err != PRO_TK_NO_ERROR);
+
+	ProWstringToString(str, def_path);
+	if( ProUtilConfirmNameType(str, line, &amp;type) != PRO_TK_BAD_INPUTS)
+	{
+<a name="anchor-94"></a>	    err = ProMdlnameRetrieve(w_name, (ProMdlfileType)type, &amp;model);
+	    TEST_CALL_REPORT(&quot;ProMdlnameRetrieve()&quot;, &quot;ProTestModelOpen()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+
+	    if( err == PRO_TK_NO_ERROR )
+<a name="anchor-95"></a>	    {
+		ProTKSprintf(line, &quot;%s has been retrieved&quot;, 
+		    ProUtilMdlStr(model, str));
+		ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+		ProUtilLogFileWrite( line);
+<a name="anchor-96"></a>		err = ProUtilMdlDisplay(model);
+	    }
+	}
+    }
+
+<a name="anchor-97"></a>    return(0);
+}
+
+/*====================================================================*\
+  Function : ProUtilModelToMdl
+<a name="anchor-98"></a>  Purpose  : Convert ProModels to ProMdls
+\*====================================================================*/
+ProError ProUtilModelToMdl(
+    ProMdlnameShortdata **model_list, 
+    ProMdl **mdl_list, 
+<a name="anchor-99"></a>    ProMdlfileType *filetypes,
+    int *n_mdl)
+{
+    ProError err;
+    int i, ign=0;
+<a name="anchor-100"></a>    ProMdlfileType type;
+    ProMdl mdl;
+    char ctype[PRO_NAME_SIZE];
+
+    err = ProArrayAlloc(0, sizeof(ProMdl), 1, (ProArray*)mdl_list);
+<a name="anchor-101"></a>    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProUtilModelToMdl()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+
+    for (i=0; i&lt;n_mdl[0]; i++)
+    {
+<a name="anchor-102"></a>	err = ProMdlnameInit(model_list[0][i].name, filetypes[i], &amp;mdl);
+	TEST_CALL_REPORT(&quot;ProMdlnameInit()&quot;, 
+		    &quot;ProUtilModelToMdl()&quot;, err, err != PRO_TK_NO_ERROR);
+	if (err != PRO_TK_NO_ERROR)
+	{
+<a name="anchor-103"></a>	    ign++;
+	    continue;
+	}
+
+	err = ProArrayObjectAdd((ProArray*)mdl_list, PRO_VALUE_UNUSED, 1, &amp;mdl);
+<a name="anchor-104"></a>	TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProUtilModelToMdl()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+    }
+
+    err = ProArrayFree((ProArray*)model_list);
+<a name="anchor-105"></a>    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProUtilModelToMdl()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+    n_mdl[0] -= ign;
+    return( n_mdl[0]>0 ? PRO_TK_NO_ERROR : PRO_TK_E_NOT_FOUND);
+}
+<a name="anchor-106"></a>
+
+/*====================================================================*\
+  Function : ProUtilMdlDataArrayOut()
+  Purpose  : Add Mdl Data Array out 
+<a name="anchor-107"></a>              Collect model info &amp; init MdlData struct
+\*====================================================================*/
+ProError ProUtilMdlDataArrayOut(ProMdl *in, MdlData **out)
+{ 
+     MdlData *out_ar=NULL;
+<a name="anchor-108"></a>    ProError err;
+    int n_mdls=0,ii;
+ 
+   if ( out == NULL ) 
+      return PRO_TK_GENERAL_ERROR;
+<a name="anchor-109"></a>
+   err  = ProArraySizeGet ( (ProArray*)in, &amp;n_mdls);
+   TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProUtilMdlDataArrayOut()&quot;,
+                     err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-110"></a>   err = ProArrayAlloc (0, sizeof(MdlData), 1, (ProArray *)&amp;out_ar);
+   TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProUtilMdlDataArrayOut()&quot;,
+                     err, err != PRO_TK_NO_ERROR);
+   
+   for (ii=0; ii&lt;n_mdls;ii++)
+<a name="anchor-111"></a>   { 
+       MdlData tmp_data;
+
+       tmp_data.mdl = in[ii];
+       
+<a name="anchor-112"></a>       err = ProMdlMdlnameGet(in[ii],tmp_data.name);
+       TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProUtilMdlDataArrayOut()&quot;,
+                     err, err != PRO_TK_NO_ERROR);
+
+       err =  ProMdlTypeGet(in[ii], &amp;tmp_data.type);
+<a name="anchor-113"></a>       TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProUtilMdlDataArrayOut()&quot;,
+                     err, err != PRO_TK_NO_ERROR);
+
+       err = ProArrayObjectAdd((ProArray*)&amp;out_ar, PRO_VALUE_UNUSED,
+            1, &amp;tmp_data);
+<a name="anchor-114"></a>       TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProUtilMdlDataArrayOut()&quot;,
+                     err, err != PRO_TK_NO_ERROR);
+  }
+  
+  *out = out_ar;
+<a name="anchor-115"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+  Function : ProTestModelErase
+<a name="anchor-116"></a>  Purpose  : Erase Current / Not Displayed objects from session
+\*====================================================================*/
+int ProTestModelErase(ProAppData data, int action)
+{
+    ProMdl *mdl_array, *mdl_list, model, cur_model;
+<a name="anchor-117"></a>    ProMdlnameShortdata *model_list;
+    ProMdlfileType *filetypes;
+    MdlData *mdl_data_ar;
+    ProError err;
+    int n_mdl, i, j, k, *p_ids,  n_win, n, n_nd;
+<a name="anchor-118"></a>    ProCharLine str, line;
+    ProMdlName w_name = L&quot;&quot;;
+    ProMdlType mod_types[]={PRO_MDL_MFG, PRO_MDL_DRAWING, PRO_MDL_ASSEMBLY,
+	PRO_MDL_PART, PRO_MDL_2DSECTION,  PRO_MDL_LAYOUT}, type;
+
+<a name="anchor-119"></a>    err = ProArrayAlloc(0, sizeof(ProMdl), 1, (ProArray*)&amp;mdl_array);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProTestModelErase()&quot;, 
+            err, err != PRO_TK_NO_ERROR);
+            
+    if (action == ERASE_OBJECT)
+<a name="anchor-120"></a>    {
+	err = ProUtilMdlInput((char*)&quot;Enter object to erase []:&quot;, PRO_B_FALSE,
+	    w_name, &amp;type);
+	if (err == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-121"></a>	    err = ProMdlnameInit(w_name, (ProMdlfileType)type, &amp;model);
+	    TEST_CALL_REPORT(&quot;ProMdlnameInit()&quot;, 
+                &quot;ProTestModelErase()&quot;, err, err != PRO_TK_NO_ERROR);
+	}
+	if (err == PRO_TK_NO_ERROR)
+<a name="anchor-122"></a>	{
+	    err = ProMdlCurrentGet(&amp;cur_model);
+	    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestModelErase()&quot;, 
+	        err, (err != PRO_TK_NO_ERROR)&amp;&amp;(err != PRO_TK_BAD_CONTEXT));
+	    if (err == PRO_TK_NO_ERROR &amp;&amp; model == cur_model)
+<a name="anchor-123"></a>	    {
+		ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, 
+		    &quot;Unable to erase current object&quot;);
+		return (0);
+	    }
+<a name="anchor-124"></a>
+	    /* If object open in window close window first */
+	    err = ProUtilCollectWindowIds(&amp;p_ids);
+
+	    err = ProArraySizeGet((ProArray)p_ids, &amp;n_win);
+<a name="anchor-125"></a>	    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+	    for (i=0; i&lt;n_win; i++)
+	    {
+		err = ProWindowMdlGet(p_ids[i], &amp;cur_model);
+<a name="anchor-126"></a>		TEST_CALL_REPORT(&quot;ProWindowMdlGet()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+
+		if (cur_model == model)
+		{
+<a name="anchor-127"></a>		    err = ProWindowDelete(p_ids[i]);
+		    TEST_CALL_REPORT(&quot;ProWindowDelete()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+		    break;
+		}
+<a name="anchor-128"></a>	    }
+
+	    err = ProArrayFree((ProArray*)&amp;p_ids);
+	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+<a name="anchor-129"></a>
+	}
+	/* Find models and dependencies */
+	err = ProArrayObjectAdd((ProArray*)&amp;mdl_array, PRO_VALUE_UNUSED, 1,
+	    &amp;model);
+<a name="anchor-130"></a>	TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestModelErase()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+	err = ProMdlDependenciesDataList (model, &amp;model_list, &amp;filetypes, &amp;n_mdl);
+	TEST_CALL_REPORT(&quot;ProMdlDependenciesDataList ()&quot;, &quot;ProTestModelErase()&quot;, 
+					    err, (err != PRO_TK_NO_ERROR)&amp;&amp;
+<a name="anchor-131"></a>					    (err != PRO_TK_E_NOT_FOUND));
+	if (err == PRO_TK_NO_ERROR)
+	    err = ProUtilModelToMdl(&amp;model_list, &amp;mdl_list, filetypes, &amp;n_mdl);
+	if (err == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-132"></a>	    err = ProArrayObjectAdd((ProArray*)&amp;mdl_array, PRO_VALUE_UNUSED,
+		n_mdl, mdl_list);
+	    TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+	    err = ProArrayFree((ProArray*)&amp;mdl_list);
+<a name="anchor-133"></a>	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+	    err = ProArrayFree((ProArray*)&amp;filetypes);
+	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+<a name="anchor-134"></a>	}
+    }
+    else
+    {
+	/* Collect all models */
+<a name="anchor-135"></a>	for (i=0; i&lt;sizeof(mod_types)/sizeof(mod_types[0]); i++)
+	{
+	    err = ProSessionMdlList(mod_types[i], &amp;mdl_list, &amp;n_mdl);
+	    TEST_CALL_REPORT(&quot;ProSessionMdlList()&quot;, &quot;ProTestModelErase()&quot;, 
+					    err, (err != PRO_TK_NO_ERROR)&amp;&amp;
+<a name="anchor-136"></a>                                                 (err != PRO_TK_E_NOT_FOUND));
+	    if (err != PRO_TK_NO_ERROR)
+		continue;
+
+	    err = ProArrayObjectAdd((ProArray*)&amp;mdl_array, PRO_VALUE_UNUSED,
+<a name="anchor-137"></a>		n_mdl, mdl_list);
+	    TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+
+	    err = ProArrayFree((ProArray*)&amp;mdl_list);
+<a name="anchor-138"></a>	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+	}
+    }
+
+<a name="anchor-139"></a>    /* Remove objects which currently displayed */
+    err = ProUtilCollectWindowIds(&amp;p_ids);
+
+    err = ProArraySizeGet((ProArray)p_ids, &amp;n_win);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestModelErase()&quot;, 
+<a name="anchor-140"></a>						err, err != PRO_TK_NO_ERROR);
+    err = ProArraySizeGet((ProArray)mdl_array, &amp;n);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-141"></a>    /* for each window found displayed objects and depend. */
+    for (i=0; i&lt;n_win; i++)
+    {
+	err = ProWindowMdlGet(p_ids[i], &amp;model);
+	TEST_CALL_REPORT(&quot;ProWindowMdlGet()&quot;, &quot;ProTestModelErase()&quot;, 
+<a name="anchor-142"></a>						err, err != PRO_TK_NO_ERROR);
+	if (err != PRO_TK_NO_ERROR)
+	    continue;
+
+ 	if(model!=NULL) {
+<a name="anchor-143"></a>		err = ProMdlDependenciesDataList (model, &amp;model_list, &amp;filetypes, &amp;n_mdl);
+		TEST_CALL_REPORT(&quot;ProMdlDependenciesDataList()&quot;, &quot;ProTestModelErase()&quot;, 
+					    err, (err != PRO_TK_NO_ERROR)&amp;&amp;
+					    (err != PRO_TK_E_NOT_FOUND));
+		if (err != PRO_TK_NO_ERROR)   n_mdl = 0;		
+<a name="anchor-144"></a>		if (err == PRO_TK_NO_ERROR)
+		      err = ProUtilModelToMdl(&amp;model_list, &amp;mdl_list, filetypes, &amp;n_mdl);
+
+		for (j=0; j&lt;n; j++)
+		{
+<a name="anchor-145"></a>		    for (k=0; k&lt;=n_mdl; k++)
+			if (mdl_array[j] == (k&lt;n_mdl ? mdl_list[k] : model))
+			{
+			    err = ProArrayObjectRemove((ProArray*)&amp;mdl_array, j, 1);
+			    TEST_CALL_REPORT(&quot;ProArrayObjectRemove()&quot;, 
+<a name="anchor-146"></a>				    &quot;ProTestModelErase()&quot;, err, err != PRO_TK_NO_ERROR);
+			    n--;
+			    if (j>=n)
+				break;
+			}
+<a name="anchor-147"></a>		}
+
+	} else n_mdl=0;
+
+
+<a name="anchor-148"></a>	if (n_mdl >0)
+	{
+	    err = ProArrayFree((ProArray*)&amp;mdl_list);
+	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+<a name="anchor-149"></a>	    err = ProArrayFree((ProArray*)&amp;filetypes);
+	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestModelErase()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+	}
+    }
+<a name="anchor-150"></a>
+    err = ProArrayFree((ProArray*)&amp;p_ids);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestModelErase()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-151"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, 
+	&quot;Are you sure to erase models from memory? [N]:&quot;);
+    if (ProUtilYesnoGet((char *)&quot;n&quot;))
+    {
+       if( action == ERASE_NOT_DISPLAYED)
+<a name="anchor-152"></a>       {
+        /* Replaced for loop ProMdlErase call with ProMdlEraseNotDisplayed
+           to get get rid of FMR error in purify */
+        err = ProMdlEraseNotDisplayed();
+        TEST_CALL_REPORT(&quot;ProMdlEraseNotdisplayed()&quot;, &quot;ProTestModelErase()&quot;, 
+<a name="anchor-153"></a>		                               err, err != PRO_TK_NO_ERROR);
+
+      }
+      else if (action == ERASE_OBJECT)
+      {
+<a name="anchor-154"></a>
+        err =ProUtilMdlDataArrayOut (mdl_array, &amp;mdl_data_ar);
+        TEST_CALL_REPORT(&quot;ProUtilMdlDataArrayOut()&quot;, &quot;ProTestModelErase()&quot;, 
+		                               err, err != PRO_TK_NO_ERROR);
+     
+<a name="anchor-155"></a>        err = ProArraySizeGet (mdl_data_ar, &amp;n_nd);
+        TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestModelErase()&quot;, 
+		                               err, err != PRO_TK_NO_ERROR);
+       
+	/* Erase all collected models */
+<a name="anchor-156"></a>	for (i=0; i&lt;n_nd; i++)
+	{
+          ProMdl tmp_mdl;
+        
+	    /* Check that model still valid after erasing previous models */		
+<a name="anchor-157"></a>	     if(ProMdlnameInit(mdl_data_ar[i].name,
+                                         (ProMdlfileType)mdl_data_ar[i].type ,&amp;tmp_mdl) != PRO_TK_NO_ERROR)
+	     {
+                ProTKSprintf(line, &quot;%ws not in session &quot;,mdl_data_ar[i].name);
+		TEST_CALL_REPORT(line,&quot;ProTestModelErase()&quot;,
+<a name="anchor-158"></a>                                                 err, err != PRO_TK_NO_ERROR);
+                continue;
+             }
+
+	    err = ProMdlTypeGet(mdl_data_ar[i].mdl, &amp;type);
+<a name="anchor-159"></a>	    if (err != PRO_TK_NO_ERROR || (int)type &lt; 1 || (int)type > PRO_MDL_DIAGRAM)
+		continue;
+
+	    ProTKSprintf(line, &quot;%s has been cleared&quot;, 
+		ProUtilMdlStr(mdl_data_ar[i].mdl, str));
+<a name="anchor-160"></a>              
+	    err = ProMdlErase(mdl_data_ar[i].mdl); 
+ 	    TEST_CALL_REPORT(&quot;ProMdlErase()&quot;, &quot;ProTestModelErase()&quot;, 
+			err, (err != PRO_TK_NO_ERROR) &amp;&amp; (err != PRO_TK_E_IN_USE));
+	    if (err == PRO_TK_NO_ERROR)
+<a name="anchor-161"></a>	    {
+		ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+		ProUtilLogFileWrite( line);
+	    }
+           
+<a name="anchor-162"></a>            
+	}
+
+      }
+    }
+<a name="anchor-163"></a>    /* Free allocated memory */
+    err = ProArrayFree((ProArray*)&amp;mdl_array);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestModelErase()&quot;,
+					err, err != PRO_TK_NO_ERROR);     
+
+<a name="anchor-164"></a>    if (action == ERASE_OBJECT)
+    {
+	/* Free allocated memory */
+       err = ProArrayFree((ProArray*)&amp;mdl_data_ar);
+       TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestModelErase()&quot;, 
+<a name="anchor-165"></a>					err, err != PRO_TK_NO_ERROR);
+    }
+
+ return (0);
+
+<a name="anchor-166"></a>}
+
+/*====================================================================*\
+  Function : ProTestModelEraseAll
+  Purpose  : Erase objects from session, including submodels
+<a name="anchor-167"></a>\*====================================================================*/
+int ProTestModelEraseAll(ProAppData data)
+{
+    ProMdl mdl;
+    ProError err; 
+<a name="anchor-168"></a>	ProMdlName w_name = L&quot;&quot;;
+    ProMdlType type;
+    
+    err = ProUtilMdlInput((char*)&quot;Enter object to erase []:&quot;, PRO_B_FALSE,
+                          w_name, &amp;type);
+<a name="anchor-169"></a>    if (err != PRO_TK_NO_ERROR)
+        return err;
+
+    err = ProMdlnameInit(w_name, (ProMdlfileType)type, &amp;mdl);
+    TEST_CALL_REPORT(&quot;ProMdlnameInit()&quot;, &quot;ProTestModelEraseAll()&quot;,
+<a name="anchor-170"></a>                     err, err != PRO_TK_NO_ERROR);
+
+    if (err != PRO_TK_NO_ERROR)
+        return err;
+        
+<a name="anchor-171"></a>    err = ProMdlEraseAll(mdl);
+    TEST_CALL_REPORT(&quot;ProMdlEraseAll()&quot;, &quot;ProTestModelEraseAll()&quot;, 
+                     err, (err != PRO_TK_NO_ERROR));
+    
+    return err;
+<a name="anchor-172"></a>}
+
+/*====================================================================*\
+  Function : ProUtilCompareVersion()
+  Purpose  : compare two files by version
+<a name="anchor-173"></a>\*====================================================================*/
+int ProUtilCompareVersion(ProPath p1, ProPath p2)
+{
+    int ver1 =0, ver2 =0;
+    ProError err;
+<a name="anchor-174"></a>
+    err = ProFileMdlnameParse(p1, NULL, NULL, NULL, &amp;ver1);
+    TEST_CALL_REPORT(&quot;ProFileMdlnameParse()&quot;, &quot;ProTestModelOpen()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+    err = ProFileMdlnameParse(p2, NULL, NULL, NULL, &amp;ver2);
+<a name="anchor-175"></a>    TEST_CALL_REPORT(&quot;ProFileMdlnameParse()&quot;, &quot;ProTestModelOpen()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+
+
+    return (ver1-ver2);
+<a name="anchor-176"></a>}
+
+/*====================================================================*\
+  Function : ProUtilMdlPurge
+  Purpose  : Delete old version of an model
+<a name="anchor-177"></a>\*====================================================================*/
+ProError ProUtilMdlPurge(ProName w_name, ProMdlType type)
+{
+    ProError err;
+    ProCharLine line, str;
+<a name="anchor-178"></a>    ProLine w_line;
+    ProPath *file_list, *dir_list;
+    ProName w_nm;
+    int i, n_files;
+
+<a name="anchor-179"></a>
+    ProUtilstrcpy(line, (const char *)ProUtilGetMdlTypeStr(type));
+    ProWstringToString(str, w_name); 
+    ProUtilstrcat(str, (const char *)&quot;.&quot;);
+    ProUtilstrcat(str, (const char *)line);
+<a name="anchor-180"></a>    ProUtilStringLower(str, str);
+    ProStringToWstring(w_line, str);
+
+    ProStringToWstring(w_nm, (char*)&quot;.&quot;);
+
+<a name="anchor-181"></a>    err = ProArrayAlloc(0, sizeof(ProPath), 1, (ProArray*)&amp;file_list);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProUtilMdlPurge()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+
+    err = ProArrayAlloc(0, sizeof(ProPath), 1, (ProArray*)&amp;dir_list);
+<a name="anchor-182"></a>    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProUtilMdlPurge()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+
+    err = ProFilesList(w_nm, w_line, PRO_FILE_LIST_ALL,  &amp;file_list, &amp;dir_list);
+    TEST_CALL_REPORT(&quot;ProFilesList()&quot;, &quot;ProUtilMdlPurge()&quot;, 
+<a name="anchor-183"></a>					err, err != PRO_TK_NO_ERROR);
+    if (err == PRO_TK_NO_ERROR)
+    { 
+	err = ProArraySizeGet((ProArray)file_list, &amp;n_files);
+	TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProUtilMdlPurge()&quot;, 
+<a name="anchor-184"></a>					    err, err != PRO_TK_NO_ERROR);
+	if (n_files > 1)
+	{
+	    qsort(file_list, n_files, sizeof(file_list[0]), 
+		(int (*)(PRO_CONST_ARG void *, PRO_CONST_ARG void *))
+<a name="anchor-185"></a>		ProUtilCompareVersion);
+	}
+	for (i=0; i&lt;n_files-1; i++)
+	{
+	    ProWstringToString(str, file_list[i]);
+<a name="anchor-186"></a>	    remove(str);
+	}
+    }
+    err = ProArrayFree((ProArray*)&amp;file_list);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProUtilMdlPurge()&quot;, 
+<a name="anchor-187"></a>					err, err != PRO_TK_NO_ERROR);
+    err = ProArrayFree((ProArray*)&amp;dir_list);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProUtilMdlPurge()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-188"></a>
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-189"></a>  Function : ProTestModelDelete
+  Purpose  : delete object from memory and disk
+\*====================================================================*/
+int ProTestModelDelete(ProAppData data, int action)
+{
+<a name="anchor-190"></a>    ProError err;
+    ProMdl  mdl, cur_model;
+    ProMdlType type;
+    ProCharLine str, line;
+    ProMdlName w_name = L&quot;&quot;;
+<a name="anchor-191"></a>    int i, n_win, *p_ids;
+
+    err = ProMdlCurrentGet(&amp;cur_model);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestModelDelete()&quot;, 
+					err, (err != PRO_TK_NO_ERROR)&amp;&amp;
+<a name="anchor-192"></a>                                             (err != PRO_TK_BAD_CONTEXT));
+    if (err != PRO_TK_NO_ERROR)
+	cur_model = (ProMdl)NULL;
+	    
+    if (action == DELETE_ALL)
+<a name="anchor-193"></a>    {
+	err = ProUtilMdlInput((char*)&quot;Enter object to delete []:&quot;, PRO_B_FALSE,
+	    w_name, &amp;type);
+	if (err == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-194"></a>	    err = ProMdlnameInit(w_name, (ProMdlfileType)type, &amp;mdl);
+	    TEST_CALL_REPORT(&quot;ProMdlnameInit()&quot;, &quot;ProTestModelDelete()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+	}
+	if (err != PRO_TK_NO_ERROR)
+<a name="anchor-195"></a>	    return (-1);
+	if (mdl == cur_model)
+	{
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, 
+		&quot;Unable to delete current object&quot;);
+<a name="anchor-196"></a>	    return (0);
+	}
+
+	/* If object open in window close window first */
+	err = ProUtilCollectWindowIds(&amp;p_ids);
+<a name="anchor-197"></a>
+	err = ProArraySizeGet((ProArray)p_ids, &amp;n_win);
+	TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestModelDelete()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+	for (i=0; i&lt;n_win; i++)
+<a name="anchor-198"></a>	{
+	    err = ProWindowMdlGet(p_ids[i], &amp;cur_model);
+	    TEST_CALL_REPORT(&quot;ProWindowMdlGet()&quot;, &quot;ProTestModelDelete()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-199"></a>	    if (cur_model == mdl)
+	    {
+		err = ProWindowDelete(p_ids[i]);
+		TEST_CALL_REPORT(&quot;ProWindowDelete()&quot;, &quot;ProTestModelDelete()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-200"></a>		break;
+	    }
+	}
+
+	err = ProArrayFree((ProArray*)&amp;p_ids);
+<a name="anchor-201"></a>	TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestModelDelete()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Are you sure to delete models &quot;
+	    &quot;from memory and work directory? [N]:&quot;);
+<a name="anchor-202"></a>
+	if (ProUtilYesnoGet((char *)&quot;n&quot;))
+	{
+	    ProTKSprintf(line, &quot;%s has been deleted&quot;, ProUtilMdlStr(mdl, str));
+
+<a name="anchor-203"></a>	    err = ProMdlDelete(mdl);
+	    TEST_CALL_REPORT(&quot;ProMdlDelete()&quot;, &quot;ProTestModelDelete()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+	    if (err == PRO_TK_NO_ERROR)
+	    {
+<a name="anchor-204"></a>	    	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+		ProUtilLogFileWrite( line);
+	    }
+	}
+    }
+<a name="anchor-205"></a>    else 
+    {
+	if (cur_model == NULL)
+	{
+	    err = ProUtilMdlInput((char*)&quot;Enter object to purge []:&quot;, PRO_B_FALSE,
+<a name="anchor-206"></a>		w_name, &amp;type);
+	}
+	else
+	{
+	    mdl = cur_model;
+<a name="anchor-207"></a>	    err = ProMdlMdlnameGet(mdl, w_name);
+	    TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProTestModelDelete()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+	    err = ProMdlTypeGet(mdl, &amp;type);
+	    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestModelDelete()&quot;, 
+<a name="anchor-208"></a>					    err, err != PRO_TK_NO_ERROR);
+	}
+	
+	if (err == PRO_TK_NO_ERROR)
+	    err = ProUtilMdlPurge(w_name, type);
+<a name="anchor-209"></a>
+	if (err == PRO_TK_NO_ERROR)
+	{
+	    ProWstringToString(str, w_name);
+	    ProTKSprintf(line, &quot;%s has been purged&quot;, str);
+<a name="anchor-210"></a>	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+	    ProUtilLogFileWrite( line);
+	}
+    }
+    return (0);
+<a name="anchor-211"></a>}
+
+/*====================================================================*\
+  Function : ProTestModelSave
+  Purpose  : Save current model
+<a name="anchor-212"></a>\*====================================================================*/
+int ProTestModelSave(ProAppData appdata, int action)
+{
+    ProError err;
+    ProMdl  model, new_model, current_model;
+<a name="anchor-213"></a>    ProMdlType type, type1, current_type;
+    ProLine buff;
+    ProCharLine str, line;
+	ProMdlName w_name = L&quot;&quot;, w_name1 = L&quot;&quot;, w_current_name = L&quot;&quot;;
+    char name[PRO_NAME_SIZE];
+<a name="anchor-214"></a>    ProBoolean modif, current_exists;
+	ProPath dir_path;
+
+    switch(action)
+    {
+<a name="anchor-215"></a>    case SAVE:
+	err = ProUtilMdlInput((char*)&quot;Enter object to save [%s]:&quot;, PRO_B_TRUE,
+	    w_name, &amp;type);
+	if (err != PRO_TK_NO_ERROR)
+	    break;
+<a name="anchor-216"></a>
+	err = ProMdlnameInit(w_name, (ProMdlfileType)type, &amp;model);
+	TEST_CALL_REPORT(&quot;ProMdlnameInit()&quot;, &quot;ProTestModelSave()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+	if (err != PRO_TK_NO_ERROR)
+<a name="anchor-217"></a>	    break;
+
+    err = ProMdlModificationVerify (model, &amp;modif);
+    TEST_CALL_REPORT(&quot;ProMdlModificationVerify()&quot;, &quot;ProTestModelSave()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+<a name="anchor-218"></a>    if (err == PRO_TK_NO_ERROR)
+	{
+        ProTKSprintf (line, &quot;%s %s since last save&quot;, ProUtilMdlStr(model, str),
+            modif ? &quot;has been changed&quot; : &quot;has not been changed&quot;);
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+<a name="anchor-219"></a>    }
+
+	err = ProMdlSave(model);
+	TEST_CALL_REPORT(&quot;ProMdlSave()&quot;, &quot;ProTestModelSave()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+<a name="anchor-220"></a>	if (err == PRO_TK_NO_ERROR)
+	{
+	    ProTKSprintf(line, &quot;%s has been saved&quot;, ProUtilMdlStr(model, str));
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+	    ProUtilLogFileWrite( line);
+<a name="anchor-221"></a>	}
+	break;
+    case SAVE_AS:
+	err = ProUtilMdlInput((char*)&quot;Enter object to save as [%s]:&quot;, PRO_B_TRUE,
+	    w_name, &amp;type);
+<a name="anchor-222"></a>	if (err != PRO_TK_NO_ERROR)
+	    break;
+
+	err = ProUtilMdlInput((char*)&quot;Enter object to save to []:&quot;, PRO_B_FALSE,
+	    w_name1, &amp;type1);
+<a name="anchor-223"></a>	if (err != PRO_TK_NO_ERROR)
+	    break;
+
+	err = ProMdlnameInit(w_name, (ProMdlfileType)type, &amp;model);
+	TEST_CALL_REPORT(&quot;ProMdlnameInit()&quot;, &quot;ProTestModelSave()&quot;, 
+<a name="anchor-224"></a>					err, (err != PRO_TK_NO_ERROR)&amp;&amp;
+                                        (err != PRO_TK_E_NOT_FOUND));
+
+	if (err == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-225"></a>	    /* Get name and type of the current Pro/E model */
+            current_exists = PRO_B_FALSE;
+            err = ProMdlCurrentGet( &amp;current_model );
+            TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestModelSave()&quot;,
+		err, (err != PRO_TK_NO_ERROR)&amp;&amp;
+<a name="anchor-226"></a>                     (err != PRO_TK_BAD_CONTEXT));
+
+	    if( err  == PRO_TK_NO_ERROR )
+	    {
+		current_exists = PRO_B_TRUE;
+<a name="anchor-227"></a>
+                err = ProMdlMdlnameGet( current_model, w_current_name );
+                TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProTestModelSave()&quot;,
+                    err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-228"></a>                err = ProMdlTypeGet( current_model, &amp;current_type );
+                TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestModelSave()&quot;,
+                    err, err != PRO_TK_NO_ERROR);
+            }
+
+<a name="anchor-229"></a>	    /* Copy the specified model */
+	    err = ProMdlnameCopy (model, w_name1, &amp;new_model);
+	    TEST_CALL_REPORT(&quot;ProMdlnameCopy ()&quot;, &quot;ProTestModelSave()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+	    /* Delete the copy from memory */
+<a name="anchor-230"></a>	    err = ProMdlErase(new_model);
+	    TEST_CALL_REPORT(&quot;ProMdlErase()&quot;, &quot;ProTestModelSave()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+
+            if( current_exists == PRO_B_TRUE )
+<a name="anchor-231"></a>            {
+	        /* Restore current model */
+	        err = ProMdlnameRetrieve (w_current_name, (ProMdlfileType)current_type, 
+			&amp;current_model); 
+                TEST_CALL_REPORT(&quot;ProMdlnameRetrieve ()&quot;, &quot;ProTestModelSave()&quot;,
+<a name="anchor-232"></a>                    err, err != PRO_TK_NO_ERROR);
+	    }
+	}
+	else
+	{
+<a name="anchor-233"></a>	    err = ProMdlfileMdlnameCopy((ProMdlfileType)type, w_name, w_name1);
+	    TEST_CALL_REPORT(&quot;ProMdlfileMdlnameCopy()&quot;, &quot;ProTestModelSave()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+	}
+
+<a name="anchor-234"></a>	if (err == PRO_TK_NO_ERROR)
+	{
+	    ProWstringToString(str, w_name);
+	    ProTKSprintf(line, &quot;%s has been copied&quot;, str);
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+<a name="anchor-235"></a>	    ProUtilLogFileWrite( line);
+	}
+	break;
+    case BACKUP:		    
+	err = ProUtilMdlInput((char*)&quot;Enter object to backup [%s]:&quot;, PRO_B_TRUE,
+<a name="anchor-236"></a>	    w_name, &amp;type);
+	if (err != PRO_TK_NO_ERROR)
+	    break;
+
+	err = ProMdlnameInit(w_name, (ProMdlfileType)type, &amp;model);
+<a name="anchor-237"></a>	TEST_CALL_REPORT(&quot;ProMdlnameInit()&quot;, &quot;ProTestModelSave()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+	if (err != PRO_TK_NO_ERROR)
+	    break;
+
+<a name="anchor-238"></a>	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter dir to backup to [.]:&quot;);
+	ProStringToWstring(w_name1, (char*)&quot;.&quot;);
+	if( ProUtilStringGet(buff, w_name1, PRO_FILE_NAME_SIZE) == 0)
+	    break;
+
+<a name="anchor-239"></a>	ProUtilWstrcpy(dir_path, buff);
+	err = ProMdlnameBackup( model, dir_path );
+	TEST_CALL_REPORT(&quot;ProMdlnameBackup()&quot;, &quot;ProTestModelSave()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-240"></a>	if (err == PRO_TK_NO_ERROR)
+	{
+	    ProTKSprintf(line, &quot;%s has been saved&quot;, ProUtilMdlStr(model, str));
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+	    ProUtilLogFileWrite( line);
+<a name="anchor-241"></a>	}
+	break;
+    case RENAME:
+	err = ProUtilMdlInput((char*)&quot;Enter object to rename [%s]:&quot;, PRO_B_TRUE,
+	    w_name, &amp;type);
+<a name="anchor-242"></a>	if (err != PRO_TK_NO_ERROR)
+	    break;
+
+	err = ProUtilMdlInput((char*)&quot;Enter new object name []:&quot;, PRO_B_FALSE,
+	    w_name1, &amp;type1);
+<a name="anchor-243"></a>	if (err != PRO_TK_NO_ERROR)
+	    break;
+
+	err = ProMdlnameInit(w_name, (ProMdlfileType)type, &amp;model);
+	TEST_CALL_REPORT(&quot;ProMdlnameInit()&quot;, &quot;ProTestModelSave()&quot;, 
+<a name="anchor-244"></a>					err, err != PRO_TK_NO_ERROR);
+
+	if (err == PRO_TK_NO_ERROR)
+	{
+	    ProUtilMdlStr(model, str);
+<a name="anchor-245"></a>	    err = ProMdlnameRename (model, w_name1);
+	    TEST_CALL_REPORT(&quot;ProMdlnameRename ()&quot;, &quot;ProTestModelSave()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+	}
+	if (err == PRO_TK_NO_ERROR)
+<a name="anchor-246"></a>	{
+	    ProTKSprintf(line, &quot;%s has been renamed to %s&quot;, str,
+		ProWstringToString(name, w_name1));
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+	    ProUtilLogFileWrite( line);
+<a name="anchor-247"></a>	}
+	break;
+    }
+    return (0);
+}
+<a name="anchor-248"></a>
+/*====================================================================*\
+  Function : ProTestDbmsInfo
+  Purpose  : Write info file
+\*====================================================================*/
+<a name="anchor-249"></a>int ProTestDbmsInfo()
+{
+    ProMdlType mod_types[]={PRO_MDL_PART, PRO_MDL_ASSEMBLY, PRO_MDL_DRAWING,
+	PRO_MDL_2DSECTION,  PRO_MDL_LAYOUT};
+    char *mdl_name[]={&quot;Parts&quot;, &quot;Assemblies&quot;, &quot;Drawings&quot;, &quot;Sections&quot;, &quot;Notebooks&quot;};
+<a name="anchor-250"></a>    int i, j, k, n_mdl, n_dep, n_dec;
+    FILE *fp;
+    ProMdlnameShortdata *model_listdp;
+	ProMdlnameShortdata *model_listdc;
+    ProMdl *mdl_list;
+<a name="anchor-251"></a>    ProError err;
+    ProMdlName w_name = L&quot;&quot;;
+    ProCharLine line1, line2;
+
+    fp = PTApplsUnicodeFopen(&quot;names.inf&quot;, &quot;w&quot;);
+<a name="anchor-252"></a>    if (fp == NULL)
+	return (0);
+
+    ProTKFprintf(fp, &quot;Objects\t \t \t \tDependencies\t \tDeclared\n&quot;);
+
+<a name="anchor-253"></a>    for (i=0; i&lt;sizeof(mod_types)/sizeof(mod_types[0]); i++)
+    {
+	ProTKFprintf(fp, &quot;\n%s\n----------------\n&quot;, mdl_name[i]);
+
+	err = ProSessionMdlList(mod_types[i], &amp;mdl_list, &amp;n_mdl);
+<a name="anchor-254"></a>	TEST_CALL_REPORT(&quot;ProSessionMdlList()&quot;, &quot;ProTestDbmsInfo()&quot;, 
+					err, (err != PRO_TK_NO_ERROR)&amp;&amp;
+                                        (err != PRO_TK_E_NOT_FOUND));
+	if (err != PRO_TK_NO_ERROR)
+	    continue;
+<a name="anchor-255"></a>
+	for (j=0; j&lt;n_mdl; j++)
+	{
+	    /* Write model name */
+	    err = ProMdlMdlnameGet(mdl_list[j], w_name);
+<a name="anchor-256"></a>	    TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProTestDbmsInfo()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+
+	    ProWstringToString(line1, w_name);
+	    ProTKFprintf(fp, &quot;    %s\n&quot;, line1);
+<a name="anchor-257"></a>
+	    err = ProMdlDependenciesMdlnameList (mdl_list[j], &amp;model_listdp, &amp;n_dep);
+	    TEST_CALL_REPORT(&quot;ProMdlDependenciesMdlnameList ()&quot;, &quot;ProTestDbmsInfo()&quot;, 
+						err, (err != PRO_TK_NO_ERROR)&amp;&amp;
+                                                (err != PRO_TK_E_NOT_FOUND));
+<a name="anchor-258"></a>	    if (err != PRO_TK_NO_ERROR)
+		n_dep = 0;
+
+	    err = ProMdlDeclaredMdlnameList (mdl_list[j], &amp;model_listdc, &amp;n_dec);
+	    TEST_CALL_REPORT(&quot;ProMdlDeclaredMdlnameList ()&quot;, &quot;ProTestDbmsInfo()&quot;, 
+<a name="anchor-259"></a>						err, (err != PRO_TK_NO_ERROR)&amp;&amp;
+                                                (err != PRO_TK_E_NOT_FOUND));
+	    if (err != PRO_TK_NO_ERROR)
+		n_dec = 0;
+	    
+<a name="anchor-260"></a>	    for (k=0; k&lt;n_dec || k&lt;n_dep; k++)
+	    {
+		if (k&lt;n_dep)
+		{
+		    ProWstringToString(line1, model_listdp[k].name);
+<a name="anchor-261"></a>		    ProUtilstrcat(line1, &quot;.&quot;);
+		    ProWstringToString(line1 + strlen(line1), 
+			model_listdp[k].type);
+		}
+		else
+<a name="anchor-262"></a>		    ProUtilstrcpy(line1, &quot; &quot;);
+		if (k&lt;n_dec)
+		{
+		    ProWstringToString(line2, model_listdc[k].name);
+		    ProUtilstrcat(line2, &quot;.&quot;);
+<a name="anchor-263"></a>		    ProWstringToString(line2 + strlen(line2), 
+			model_listdp[k].type);
+		}
+		else
+		    ProUtilstrcpy(line2, &quot; &quot;);
+<a name="anchor-264"></a>
+		ProTKFprintf(fp, &quot;\t \t \t \t%-24s%s\n&quot;, line1, line2);
+	    }
+	    if (n_dec>0)
+	    {
+<a name="anchor-265"></a>		err = ProArrayFree((ProArray*)&amp;model_listdc);
+		TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestDbmsInfo()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+	    }
+	    if (n_dep>0)
+<a name="anchor-266"></a>	    {
+		err = ProArrayFree((ProArray*)&amp;model_listdp);
+		TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestDbmsInfo()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+	    }
+<a name="anchor-267"></a>	}
+	err = ProArrayFree((ProArray*)&amp;mdl_list);
+	TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestDbmsInfo()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-268"></a>
+    fclose(fp);
+    ProStringToWstring(w_name, (char*)&quot;names.inf&quot;);
+    ProInfoWindowDisplay(w_name, NULL, NULL);
+    return (0);
+<a name="anchor-269"></a>}
+
+/*====================================================================*\
+  Function : ProTestCurClose
+  Purpose  : Close current window
+<a name="anchor-270"></a>\*====================================================================*/
+int ProTestCurClose()
+{
+    ProError err;
+
+<a name="anchor-271"></a>    err = ProWindowCurrentClose();
+    TEST_CALL_REPORT(&quot;ProWindowCurrentClose()&quot;, &quot;ProTestCurClose()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+    return (0);
+}
+<a name="anchor-272"></a>
+/*====================================================================*\
+  Function : ProTestModelMultipleOpen
+  Purpose  : Retrieves the models specified in the names list
+\*====================================================================*/
+<a name="anchor-273"></a>int ProTestModelMultipleOpen ()
+{
+    ProError err;
+    ProName *p_names, name;
+    ProBoolean display = PRO_B_TRUE;
+<a name="anchor-274"></a>    int n_models, i;
+    ProMdl retrieved_mdl;
+    
+    static ProUtilMenuButtons disp_flag[] = { 
+        {&quot;DisplayFlag&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+<a name="anchor-275"></a>        {&quot;Display&quot;, PRO_B_TRUE, 0},
+        {&quot;Not Display&quot;, PRO_B_FALSE, 0},
+        {&quot;&quot;,0,0}
+    };
+    
+<a name="anchor-276"></a>    err = ProUtilMenuIntValueSelect(disp_flag, (int*)&amp;display);
+   
+                
+    err = ProArrayAlloc(0, sizeof(ProName), 1, (ProArray*)&amp;p_names);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProTestRetrieve()&quot;, 
+<a name="anchor-277"></a>					err, err != PRO_TK_NO_ERROR);
+     
+    while (1)
+    {
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter file name: &quot;);
+<a name="anchor-278"></a>        if (!ProUtilStringGet (name, NULL, PRO_NAME_SIZE))
+            break;
+        err = ProArrayObjectAdd ((ProArray*)&amp;p_names, PRO_VALUE_UNUSED,
+                1, &amp;name);
+    } 
+<a name="anchor-279"></a>    err = ProArraySizeGet ((ProArray)p_names, &amp;n_models);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestRetrieve()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+    if (err == PRO_TK_NO_ERROR &amp;&amp; n_models > 0)
+    {
+<a name="anchor-280"></a>		for (i = 0; i &lt; n_models; i++)
+		{			
+			err = ProMdlFiletypeLoad(p_names[i], PRO_MDLFILE_UNUSED, PRO_B_FALSE, &amp;retrieved_mdl);
+			TEST_CALL_REPORT(&quot;ProMdlFiletypeLoad()&quot;, &quot;ProTestRetrieve()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+<a name="anchor-281"></a>
+			if(err == PRO_TK_NO_ERROR)
+			{
+				if(display == PRO_B_TRUE)
+				{
+<a name="anchor-282"></a>					err = ProMdlDisplay(retrieved_mdl);
+					TEST_CALL_REPORT(&quot;ProMdlDisplay()&quot;, &quot;ProTestRetrieve()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+				}
+			}
+<a name="anchor-283"></a>		}                               
+    }
+    
+    err = ProArrayFree ((ProArray*)&amp;p_names);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestRetrieve()&quot;, 
+<a name="anchor-284"></a>					err, err != PRO_TK_NO_ERROR);
+    
+    return (0);
+    
+}
+<a name="anchor-285"></a>
+/*====================================================================*\
+  Function : ProTestDbms
+  Purpose  : Create a menu used to test dbms functions
+\*====================================================================*/
+<a name="anchor-286"></a>int ProTestDbms()
+{
+    ProError err;
+    int menu_id, action;
+    int ProTestSolidFunc();
+<a name="anchor-287"></a>    int ProTestSolidProject();
+
+    err = ProMenuFileRegister((char*)&quot;TkDbms&quot;, (char*)&quot;tkdbms.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-New&quot;,
+	(ProMenubuttonAction)ProTestNewModel, NULL, 0);
+<a name="anchor-288"></a>    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Open&quot;,
+	(ProMenubuttonAction)ProTestModelOpen, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Erase&quot;,
+	(ProMenubuttonAction)ProTestModelErase, NULL, ERASE_OBJECT);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Erase not disp&quot;,
+<a name="anchor-289"></a>	(ProMenubuttonAction)ProTestModelErase, NULL, ERASE_NOT_DISPLAYED);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Erase with sub&quot;,
+	(ProMenubuttonAction)ProTestModelEraseAll, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Delete old ver&quot;,
+	(ProMenubuttonAction)ProTestModelDelete, NULL, DELETE_OLD);
+<a name="anchor-290"></a>    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Delete all ver&quot;,
+	(ProMenubuttonAction)ProTestModelDelete, NULL, DELETE_ALL);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Save&quot;,
+	(ProMenubuttonAction)ProTestModelSave, NULL, SAVE);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Save as&quot;,
+<a name="anchor-291"></a>	(ProMenubuttonAction)ProTestModelSave, NULL, SAVE_AS);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Backup&quot;,
+	(ProMenubuttonAction)ProTestModelSave, NULL, BACKUP);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Rename&quot;,
+	(ProMenubuttonAction)ProTestModelSave, NULL, RENAME);
+<a name="anchor-292"></a>    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Info&quot;,
+	(ProMenubuttonAction)ProTestDbmsInfo, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Close Cur Win&quot;,
+	(ProMenubuttonAction)ProTestCurClose, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-SolidFunctions&quot;, 
+<a name="anchor-293"></a>	(ProMenubuttonAction)ProTestSolidFunc, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-SolidProject&quot;, 
+	(ProMenubuttonAction)ProTestSolidProject, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-MultipleOpen&quot;, 
+	(ProMenubuttonAction)ProTestModelMultipleOpen, NULL, 0);
+<a name="anchor-294"></a>    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;-Done&quot;,
+	(ProMenubuttonAction) ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkDbms&quot;, (char*)&quot;TkDbms&quot;,
+	(ProMenubuttonAction) ProMenuDelete, NULL, 0);
+    err = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkDbms&quot;, &amp;menu_id);
+<a name="anchor-295"></a>    err = ProMenuProcess((char*)&quot;TkDbms&quot;, &amp;action);
+
+    return(0);
+}
+
+<a name="anchor-296"></a>
+</pre>
+</body>
+</html>

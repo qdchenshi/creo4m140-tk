@@ -1,0 +1,558 @@
+<html>
+<head>
+<title>TestDrag.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProAssembly.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMessage.h>
+#include &lt;ProModelitem.h>
+<a name="anchor-3"></a>#include &lt;ProMenu.h>
+#include &lt;ProSelection.h>
+#include &lt;ProSolid.h>
+#include &lt;ProUtil.h>
+#include &lt;ProValue.h>
+<a name="anchor-4"></a>#include &lt;ProWindows.h>
+#include &lt;ProSkeleton.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProKinDrag.h>
+#include &lt;ProSelbuffer.h>
+<a name="anchor-5"></a>#include &lt;ProSelection.h>
+
+
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-6"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilFiles.h&quot;
+#include &quot;UtilMessage.h&quot;
+<a name="anchor-7"></a>#include &quot;UtilString.h&quot;
+#include &quot;UtilNames.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;UtilTree.h&quot;
+#include &quot;UtilMenu.h&quot;
+<a name="anchor-8"></a>#include &quot;PTApplsUnicodeUtils.h&quot;
+
+#define PROKIN_TXT    &quot;gen_msg.txt&quot;
+#define QCR_NAME      &quot;snapshotinfo.inf&quot;
+
+<a name="anchor-9"></a>
+FILE *fptr;
+ProSelection select_drag_point (void);
+ProError ProTestSnapshotInfoWrite ();
+ProError  ProTestSnapshotInfo (ProName snapshot_name, ProAsmcomppath *path);
+<a name="anchor-10"></a>ProError ProTestSnapshotConstraintInfo (ProSnapshotConstraint constraint);
+
+/*====================================================================*\
+  Function : ProTestDrag()
+  Purpose  : to test some ProAssembly functions
+<a name="anchor-11"></a>\*====================================================================*/
+int ProTestDrag(ProMdl *model)
+{
+    ProError 		status;
+    int                 menu_id;    /* The identifier of the created menu */
+<a name="anchor-12"></a>    int                 menu_action;
+    int			ProTestPerformTransXMove(ProAppData	p_appdata, int option);
+    int			ProTestSnapshotConstraintInfoGet(ProAppData	p_appdata, int option);
+    int 		ProTestDeleteConstraints(ProAppData p_appdata, int option);
+    int 		ProTestDeleteSnapshots(ProAppData p_appdata, int option);
+<a name="anchor-13"></a>
+    /* Load menu from file */
+    status = ProMenuFileRegister((char *)&quot;TkDrag&quot;, (char *)&quot;tkdrag.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestDrag()&quot;,
+                        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-14"></a>
+    /* Define menu buttons */
+
+    ProMenubuttonActionSet((char *)&quot;TkDrag&quot;, (char *)&quot;Perform TransX Move&quot;,
+        (ProMenubuttonAction)ProTestPerformTransXMove, model, 0 );
+<a name="anchor-15"></a>    ProMenubuttonActionSet((char *)&quot;TkDrag&quot;, (char *)&quot;Snapshot and Constraint Info&quot;,
+        (ProMenubuttonAction)ProTestSnapshotConstraintInfoGet, model, 0 );
+    ProMenubuttonActionSet((char *)&quot;TkDrag&quot;, (char *)&quot;Delete constraints&quot;,
+        (ProMenubuttonAction)ProTestDeleteConstraints, model, 0 );
+    ProMenubuttonActionSet((char *)&quot;TkDrag&quot;, (char *)&quot;Delete snapshots&quot;,
+<a name="anchor-16"></a>        (ProMenubuttonAction)ProTestDeleteSnapshots, model, 0 );
+    ProMenubuttonActionSet((char *)&quot;TkDrag&quot;, (char *)&quot;TkDrag&quot;,
+        (ProMenubuttonAction)ProMenuDelete, model, 0 );
+
+    /* Run menu */
+<a name="anchor-17"></a>    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;TkDrag&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestDrag()&quot;,
+                        status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-18"></a>        status = ProMenuProcess((char *)&quot;TkDrag&quot;, &amp;menu_action );
+        TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestDrag()&quot;,
+                            status, status != PRO_TK_NO_ERROR );
+    }
+
+<a name="anchor-19"></a>
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-20"></a>  Function : ProTestPerformTransXMove()
+  Purpose  : This function will perform the move for 
+	     drag type PRO_KIN_ADVANCED_TRANS_X
+\*====================================================================*/
+int ProTestPerformTransXMove( 
+<a name="anchor-21"></a>    ProAppData		p_appdata,
+    int			option
+)
+{
+	
+<a name="anchor-22"></a>	ProError status = PRO_TK_NO_ERROR;
+	ProAsmcomppath sel_path = { NULL, {PRO_VALUE_UNUSED}, 0};  
+	ProModelitem sel_item = { PRO_TYPE_UNUSED, 0, NULL};
+	Pro2dPnt *screenx_y = NULL;
+	double d_x = 100.0, d_y = 50.0;
+<a name="anchor-23"></a>	int i = 0;
+	ProSelection dragpoint = NULL;
+	ProSelection selection_in = NULL;
+	ProPoint3d sel_pnt = {0., 0., 0.};
+
+<a name="anchor-24"></a>
+	/* Starting the drag session */
+	status = ProKinDragStart();
+	TEST_CALL_REPORT( &quot;ProKinDragStart()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-25"></a>
+	/* Setting environment for drag type PRO_KIN_ADVANCED_TRANS_X */
+	status = ProKinDragEnvironmentSet (NULL, NULL,  
+				PRO_KIN_ADVANCED_TRANS_X, NULL);
+	TEST_CALL_REPORT( &quot;ProKinDragEnvironmentSet()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+<a name="anchor-26"></a>                      	status, status != PRO_TK_NO_ERROR );
+
+	status = ProArrayAlloc (0, sizeof(Pro2dPnt), 1, (ProArray *)&amp;screenx_y);
+	TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-27"></a>
+	for ( i = 0 ; i &lt; 40 ; i++)
+	{
+	  Pro2dPnt scr = {0., 0.};
+
+<a name="anchor-28"></a>	  d_x += 15;
+          d_y += 20;
+	  scr[0] = d_x;
+	  scr[1] = d_y;
+
+<a name="anchor-29"></a>	  status = ProArrayObjectAdd ((ProArray*)&amp;screenx_y, PRO_VALUE_UNUSED, 
+			1, (void*)&amp;scr);
+	  TEST_CALL_REPORT( &quot;ProArrayObjectAdd()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+	}
+<a name="anchor-30"></a>
+	selection_in = select_drag_point ();        
+
+	status = ProSelectionAsmcomppathGet(selection_in, &amp;sel_path);
+	TEST_CALL_REPORT( &quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+<a name="anchor-31"></a>                      	status, status != PRO_TK_NO_ERROR );
+
+	status = ProSelectionModelitemGet (selection_in, &amp;sel_item);
+	TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-32"></a>
+	status = ProSelectionPoint3dGet(selection_in, sel_pnt);
+	TEST_CALL_REPORT( &quot;ProSelectionPoint()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-33"></a>	status = ProSelectionAlloc (&amp;sel_path, &amp;sel_item, &amp;dragpoint);
+	TEST_CALL_REPORT( &quot;ProSelectionAlloc()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+  
+	status = ProSelectionPoint3dSet (sel_pnt, &amp;dragpoint);
+<a name="anchor-34"></a>	TEST_CALL_REPORT( &quot;ProSelectionPoint()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+  
+	/* Performing the move */
+	status = ProKinDragPerformMove (dragpoint, screenx_y);
+<a name="anchor-35"></a>	TEST_CALL_REPORT( &quot;ProKinDragPerformMove()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+	if (status != PRO_TK_NO_ERROR)
+	{
+	  ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;General error&quot;);
+<a name="anchor-36"></a>	}
+
+	/* Stopping the drag session */
+	status = ProKinDragStop();
+	TEST_CALL_REPORT( &quot;ProKinDragStop()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+<a name="anchor-37"></a>                      	status, status != PRO_TK_NO_ERROR );
+
+	status = ProSelectionFree( &amp;selection_in);
+	TEST_CALL_REPORT( &quot;ProSelectionFree()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-38"></a>
+	status = ProSelectionFree( &amp;dragpoint);
+	TEST_CALL_REPORT( &quot;ProSelectionFree()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-39"></a>	status = ProArrayFree ((ProArray*)&amp;screenx_y);
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestPerformTransXMove()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+
+    return 0;
+<a name="anchor-40"></a>}
+
+ProSelection select_drag_point (void)
+{
+    ProSelFunctions     sel_funcs = {(ProSelectionPreFilter)NULL, 
+<a name="anchor-41"></a>                                     (ProSelectionPostFilter)NULL, 
+                                     (ProSelectionPostSelact)NULL, 
+                                     (ProAppData)NULL};
+    ProSelection       *ref = NULL;
+    int                 sel_ct = 0;
+<a name="anchor-42"></a>    ProError            retval = PRO_TK_NO_ERROR;
+    char               *option = (char *)&quot;part&quot;;
+
+    retval = ProSelect ( option, 1, NULL, &amp;sel_funcs, NULL, NULL, &amp;ref, &amp;sel_ct);
+
+<a name="anchor-43"></a>    if (retval == PRO_TK_NO_ERROR &amp;&amp; sel_ct > 0)
+        ProSelbufferClear();
+
+    if (ref &amp;&amp; retval == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-44"></a>        ProSelection  selection = 0;
+        ProSelectionCopy(ref[0], &amp;selection);
+        return selection;
+    }
+    else
+<a name="anchor-45"></a>    {
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select part&quot;);
+        return NULL;
+    }
+}
+<a name="anchor-46"></a>
+/*====================================================================*\
+  Function : ProTestSnapshotConstraintInfoGet()
+  Purpose  : Writes snapshot and constraints info.
+\*====================================================================*/
+<a name="anchor-47"></a>int ProTestSnapshotConstraintInfoGet( 
+    ProAppData		p_appdata,
+    int			option
+)
+{
+<a name="anchor-48"></a>
+
+	fptr = PTApplsUnicodeFopen (QCR_NAME, &quot;w&quot;);
+
+	if (fptr != NULL)
+<a name="anchor-49"></a>	{
+	  ProTestSnapshotInfoWrite ();
+	}
+
+	if (fptr != NULL)
+<a name="anchor-50"></a>          fclose (fptr);
+
+    return 0;
+}
+
+<a name="anchor-51"></a>/*====================================================================*\
+  Function : ProTestSnapshotInfoWrite()
+  Purpose  : Writes snapshot info.
+\*====================================================================*/
+
+<a name="anchor-52"></a>ProError ProTestSnapshotInfoWrite ()
+{
+  ProName *snap_names;
+  ProAsmcomppath *path_arr;
+  int i, num_snapshots;
+<a name="anchor-53"></a>  ProError status;
+
+  status = ProKinDragStart();
+  TEST_CALL_REPORT( &quot;ProKinDragStart()&quot;, &quot;ProTestSnapshotInfoWrite()&quot;,
+               	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-54"></a>
+
+  status = ProKinDragSessionInquire();
+  TEST_CALL_REPORT( &quot;ProKinDragSessionInquire()&quot;, &quot;ProTestSnapshotInfoWrite()&quot;,
+               	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-55"></a>
+  /* Getting names of all the snapshots */
+  status = ProKinDragSnapshotsNamesGet (&amp;snap_names, &amp;path_arr);  
+  TEST_CALL_REPORT( &quot;ProKinDragSnapshotsNamesGet()&quot;, &quot;ProTestSnapshotInfoWrite()&quot;,
+               	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-56"></a>  
+  if (status == PRO_TK_NO_ERROR)
+  {
+        status = ProArraySizeGet (snap_names, &amp;num_snapshots);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestSnapshotInfoWrite()&quot;,
+<a name="anchor-57"></a>               	status, status != PRO_TK_NO_ERROR );
+
+        ProTKFprintf (fptr,&quot;      - Number of snapshots: %d&quot;,
+                        num_snapshots );
+        
+<a name="anchor-58"></a>	for (i=0;i&lt;num_snapshots;i++)
+        {
+          ProTestSnapshotInfo (snap_names[i], &amp;path_arr[i]);
+
+          ProTKFprintf (fptr,&quot;        ------------------------    \n&quot; );
+<a name="anchor-59"></a>          
+        }
+
+        status = ProArrayFree ((ProArray *)&amp;snap_names);
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestSnapshotInfoWrite()&quot;,
+<a name="anchor-60"></a>              	status, status != PRO_TK_NO_ERROR );        
+
+        status = ProArrayFree ((ProArray *)&amp;path_arr);
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestSnapshotInfoWrite()&quot;,
+               	status, status != PRO_TK_NO_ERROR );   
+<a name="anchor-61"></a>
+  }
+  
+  status = ProKinDragStop();
+  TEST_CALL_REPORT( &quot;ProKinDragStop()&quot;, &quot;ProTestSnapshotInfoWrite()&quot;,
+<a name="anchor-62"></a>               	status, status != PRO_TK_NO_ERROR );  
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-63"></a>ProError  ProTestSnapshotInfo (ProName snapshot_name, ProAsmcomppath *path)
+{
+ 	ProCharName snap_name;
+        ProSnapshotConstraint *constraints;
+        int num_constraints, i;
+<a name="anchor-64"></a>        ProAsmcomppath *path_arr;
+        ProMatrix *trfs;
+	ProError status;
+        int num_trfs;
+
+<a name="anchor-65"></a>        ProWstringToString (snap_name, snapshot_name);
+
+        ProTKFprintf (fptr,&quot;\n        - Name of the snapshot: %s&quot;,
+                        snap_name);
+  
+<a name="anchor-66"></a>  	/* Getting the constraints associated with each snapshot */     
+        status = ProSnapshotConstraintsGet (snapshot_name, path,
+                                                &amp;constraints);
+	TEST_CALL_REPORT( &quot;ProSnapshotConstraintsGet()&quot;, &quot;ProTestSnapshotInfo()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-67"></a>
+        status = ProArraySizeGet (constraints, &amp;num_constraints);
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestSnapshotInfo()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+       
+<a name="anchor-68"></a>        ProTKFprintf (fptr,&quot;\n        - Number of constraints: %d&quot;,
+                        num_constraints);
+       
+        for (i=0;i&lt;num_constraints;i++)
+        {
+<a name="anchor-69"></a>                ProTestSnapshotConstraintInfo (constraints[i]);
+        }
+
+        ProTKFprintf (fptr,
+        &quot;\n        - Transformation path and transformations matrices info. &quot;);
+<a name="anchor-70"></a>
+        status = ProSnapshotTrfsGet (snapshot_name, path, &amp;path_arr, &amp;trfs);
+	TEST_CALL_REPORT( &quot;ProSnapshotTrfsGet()&quot;, &quot;ProTestSnapshotInfo()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+        
+<a name="anchor-71"></a>        status = ProArraySizeGet (trfs, &amp;num_trfs);
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestSnapshotInfo()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+        
+        ProTKFprintf (fptr,
+<a name="anchor-72"></a>                        &quot;\n          - Number of transformation matrices: %d \n&quot;,
+                                 num_trfs);
+  
+        status = ProArrayFree ((ProArray *)&amp;constraints);
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestSnapshotInfo()&quot;,
+<a name="anchor-73"></a>                      	status, status != PRO_TK_NO_ERROR );
+        
+        status = ProArrayFree ((ProArray *)&amp;path_arr);
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestSnapshotInfo()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-74"></a>        
+        status = ProArrayFree ((ProArray *)&amp;trfs);
+       	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestSnapshotInfo()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-75"></a>  return PRO_TK_NO_ERROR;
+}
+
+
+/*====================================================================*\
+<a name="anchor-76"></a>  Function : ProTestSnapshotConstraintInfo()
+  Purpose  : Writes constraint info.
+\*====================================================================*/
+ProError ProTestSnapshotConstraintInfo (ProSnapshotConstraint constraint)
+{
+<a name="anchor-77"></a>        int num_selections = 0;
+        double value = 0.0;
+	ProError status;
+
+        ProTKFprintf (fptr ,
+<a name="anchor-78"></a>        &quot;\n         +  -------- Constraint  info. ---------- &quot;);
+       
+        ProTKFprintf (fptr , &quot;\n          + Constraint  Type is   %d   &quot;
+							,constraint.type);
+
+<a name="anchor-79"></a>        ProTKFprintf (fptr , &quot;\n          + Constraint  value:   %f   &quot;,
+         constraint.value);
+        
+        status = ProArraySizeGet (constraint.sel_array, &amp;num_selections);
+        
+<a name="anchor-80"></a>        if (status ==PRO_TK_NO_ERROR)
+        {
+          ProTKFprintf (fptr , &quot;\n          + Number of selections:   %d   &quot;,
+                         num_selections);
+        }
+<a name="anchor-81"></a>
+        ProTKFprintf (fptr , &quot;\n          + Constraint is:   %s   &quot;,
+           (constraint.user_active == PRO_B_TRUE)?&quot;User active&quot;:&quot;Not user active&quot;);
+        
+        ProTKFprintf (fptr , &quot;\n          + Constraint is:   %s   &quot;,
+<a name="anchor-82"></a>           (constraint.valid == PRO_B_TRUE)?&quot;Valid&quot;:&quot;Invalid&quot;);
+        
+        if (constraint.type == PRO_SNAP_MOTION_AXIS_POS)
+        {
+          status = ProSnapshotConstraintEvaluate (&amp;constraint, &amp;value);
+<a name="anchor-83"></a>       	  TEST_CALL_REPORT( &quot;ProSnapshotConstraintEvaluate()&quot;, 
+			&quot;ProTestSnapshotConstraintInfo()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+        
+          ProTKFprintf (fptr , &quot;\n          + Current motion axis position:   %f   &quot;,
+<a name="anchor-84"></a>                         value);
+        }
+
+  return PRO_TK_NO_ERROR;
+}
+<a name="anchor-85"></a>
+
+/*====================================================================*\
+  Function : ProTestDeleteConstraints()
+  Purpose  : Writes snapshot and constraints info.
+<a name="anchor-86"></a>\*====================================================================*/
+int ProTestDeleteConstraints( 
+    ProAppData		p_appdata,
+    int			option
+)
+<a name="anchor-87"></a>{
+  int i;
+  ProError status;
+  ProSnapshotConstraint *constraints;
+  int num_constraints;
+<a name="anchor-88"></a>  ProFileName   wFilename;
+
+
+  status = ProKinDragStart();
+  TEST_CALL_REPORT( &quot;ProKinDragStart()&quot;, &quot;ProTestDeleteConstraints()&quot;,
+<a name="anchor-89"></a>               	status, status != PRO_TK_NO_ERROR );
+
+  /* Getting input from the user */
+  ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, 
+	&quot;Enter snapshot name for which constraints are to be deleted&quot;);
+<a name="anchor-90"></a>	    
+  if (ProMessageStringRead (PRO_FILE_NAME_SIZE, wFilename) != PRO_TK_NO_ERROR)
+     return (0);
+
+  ProMessageClear();
+<a name="anchor-91"></a>
+  /* Getting the constraints for the snapshot */
+  status = ProSnapshotConstraintsGet (wFilename, NULL,
+                                                &amp;constraints);
+  TEST_CALL_REPORT( &quot;ProSnapshotConstraintsGet()&quot;, &quot;ProTestDeleteConstraints()&quot;,
+<a name="anchor-92"></a>               	status, status != PRO_TK_NO_ERROR );
+
+  if (status != PRO_TK_NO_ERROR)
+  {
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;general error in ProSnapshotConstraintsGet&quot;);
+<a name="anchor-93"></a>  }
+  else
+  {
+    status = ProArraySizeGet (constraints, &amp;num_constraints);
+    TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestSnapshotInfo()&quot;,
+<a name="anchor-94"></a>                     	status, status != PRO_TK_NO_ERROR );
+
+    /* Deleting constraints associated with the snapshot */
+    for (i=0;i&lt;num_constraints;i++)
+    {
+<a name="anchor-95"></a>      status = ProSnapshotConstraintDelete (wFilename,0);
+      TEST_CALL_REPORT( &quot;ProSnapshotConstraintDelete()&quot;, 
+			&quot;ProTestDeleteConstraints()&quot;,
+                      	status, status != PRO_TK_NO_ERROR );
+      if (status != PRO_TK_NO_ERROR)
+<a name="anchor-96"></a>      {
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,
+		 &quot;general error in ProSnapshotConstraintDelete&quot;);
+      }
+	
+<a name="anchor-97"></a>    }
+	
+  }
+
+  status = ProKinDragStop();
+<a name="anchor-98"></a>  TEST_CALL_REPORT( &quot;ProKinDragStop()&quot;, &quot;ProTestDeleteConstraints()&quot;,
+               	status, status != PRO_TK_NO_ERROR );
+
+  return 0;
+}
+<a name="anchor-99"></a>
+/*====================================================================*\
+  Function : ProTestDeleteSnapshots()
+  Purpose  : Writes snapshot and constraints info.
+\*====================================================================*/
+<a name="anchor-100"></a>int ProTestDeleteSnapshots( 
+    ProAppData		p_appdata,
+    int			option
+)
+{
+<a name="anchor-101"></a>  ProName *snap_names;
+  ProAsmcomppath *path_arr;
+  int i, num_snapshots;
+  ProError status;
+
+<a name="anchor-102"></a>  status = ProKinDragStart();
+  TEST_CALL_REPORT( &quot;ProKinDragStart()&quot;, &quot;ProTestDeleteSnapshots()&quot;,
+               	status, status != PRO_TK_NO_ERROR );
+
+  /* Getting all the snapshots */
+<a name="anchor-103"></a>  status = ProKinDragSnapshotsNamesGet (&amp;snap_names, &amp;path_arr);  
+  TEST_CALL_REPORT( &quot;ProKinDragSnapshotsNamesGet()&quot;, &quot;ProTestDeleteSnapshots()&quot;,
+               	status, status != PRO_TK_NO_ERROR );
+  
+  if (status == PRO_TK_NO_ERROR)
+<a name="anchor-104"></a>  {
+        status = ProArraySizeGet (snap_names, &amp;num_snapshots);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestDeleteSnapshots()&quot;,
+               	status, status != PRO_TK_NO_ERROR );
+      
+<a name="anchor-105"></a>  	/* Deleting all the snapshots */
+	for (i=0;i&lt;num_snapshots;i++)
+        {
+	/* Deleting all top-level snapshots */
+	  status =   ProSnapshotDelete (snap_names[i],NULL);
+<a name="anchor-106"></a>          TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestDeleteSnapshots()&quot;,
+               	status, status != PRO_TK_NO_ERROR );         
+        }
+
+        status = ProArrayFree ((ProArray *)&amp;snap_names);
+<a name="anchor-107"></a>	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestDeleteSnapshots()&quot;,
+              	status, status != PRO_TK_NO_ERROR );        
+
+        status = ProArrayFree ((ProArray *)&amp;path_arr);
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestDeleteSnapshots()&quot;,
+<a name="anchor-108"></a>               	status, status != PRO_TK_NO_ERROR );   
+
+  }
+
+  status = ProKinDragStop();
+<a name="anchor-109"></a>  TEST_CALL_REPORT( &quot;ProKinDragStop()&quot;, &quot;ProTestDeleteSnapshots()&quot;,
+               	status, status != PRO_TK_NO_ERROR );
+
+  return 0;
+}
+</pre>
+</body>
+</html>

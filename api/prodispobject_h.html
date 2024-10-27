@@ -1,0 +1,226 @@
+<HTML>
+<HEAD>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<TITLE>ProDispObject.h</TITLE>
+</HEAD>
+<BODY BGCOLOR="#ffffff">
+<PRE>
+
+#ifndef <A HREF="prodispobject_h.html#PRODISPOBJECT_H">PRODISPOBJECT_H</A>
+<A name="PRODISPOBJECT_H"></A>#define PRODISPOBJECT_H
+
+#include &lt;<A HREF="prosurface_h.html">ProSurface.h</A>&gt;
+
+
+<A name="ProDispObject"></A>typedef void *<A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A>;
+
+<A name="ProTriVertex"></A>typedef struct _ProTriVertex
+{
+  float pnt[3];
+  float norm[3];
+}ProTriVertex;
+
+
+<A name="PRO_DISP_OBJECT_TWO_SIDED"></A>#define PRO_DISP_OBJECT_TWO_SIDED         (0x1&lt;&lt;0) /* <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> with two sided display */
+<A name="PRO_DISP_OBJECT_DYNAMIC_PREVIEW"></A>#define PRO_DISP_OBJECT_DYNAMIC_PREVIEW   (0x1&lt;&lt;1) /* <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> is dynamic i.e. will be used for very little 
+                                              time and deleted. */
+
+
+<A HREF="proansi_h.html#PRO_BEGIN_C_DECLS">PRO_BEGIN_C_DECLS</A>
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="693.html">ProDispObjectCreate</A>(<A HREF="prosizeconst_h.html#ProName">ProName</A> object_name, int flag, int num_strips,
+                                    int *strip_size, <A HREF="prodispobject_h.html#ProTriVertex">ProTriVertex</A> **strips_array,
+                                    <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> *p_disp_obj);
+/*
+    Purpose: Create a Display Object. Display object is used to record 
+             application specific triangle data which is then displayed by Creo 
+             using creo lighting and materials. Display objects are attached to 
+             creo scene graph using <A HREF="695.html">ProDispObjectAttach</A> and are rendered along 
+             creo native scene. Display objects will not participate in creo 
+             HLR calculations. They will always be displayed in shaded mode 
+             irrespective of what current view display mode is.
+
+    Input Arguments:
+        object_name - Name of new object. Name must be unique.
+        flag - Bit encoded flag to set property of display object 0x0 : If no 
+               bit is set display object will behave like a solid 
+               PRO_DISP_OBJECT_TWO_SIDED: When this bit is set object will 
+               behave like quilts PRO_DISP_OBJECT_DYNAMIC_PREVIEW: Object is 
+               temporary and will be deleted/recreated frequently. If this flag 
+               is not set then creo will try to put the data on graphics card 
+               to speed up its display. But if the flag is set this 
+               optimization will not be done because transferring data to 
+               graphics card will take more time than performance gain we will 
+               achieve by such transfer.
+        num_strips - The number of triangle strips
+        strip_size - <A HREF="proarray_h.html#ProArray">ProArray</A> (of size num_strips) indicating the number of 
+                     triangles in each strip
+        strips_array - An array of num_strips triangle strips.
+
+    Output Arguments:
+        p_disp_obj - a handle to the object that was created
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_FOUND">PRO_TK_E_FOUND</A> - Object with same name already exist. Delete previous 
+                         object (or use new name)
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="694.html">ProDispObjectDelete</A>(<A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> *obj);
+/*
+    Purpose: Delete a display object. Object must be detached before it is 
+             deleted.
+
+    Input Arguments:
+        obj - ProDisplayObject which will be deleted
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - One or more input arguments was invalid.
+
+*/
+
+
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="695.html">ProDispObjectAttach</A>(int window, <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> obj, int *key_list,
+                                    int new_key, <A HREF="proobjects_h.html#ProMatrix">ProMatrix</A> transform);
+/*
+    Purpose: Attach a display object to creo scene. Once attached display 
+             object will be rendered along with rest of creo graphics. If scene 
+             is regenerated i.e. creo scene graph is recreated for some reason, 
+             application must reattach them. This API is only for 3d mode 
+             (part/assembly etc) and won't work in 2D (drawings, sketch, CE).
+
+    Input Arguments:
+        window - Identifier of window in which <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> will be attached 
+                 to Creo scene.
+        obj - Display object which will be attached to creo scene
+        key_list - <A HREF="proarray_h.html#ProArray">ProArray</A> containing member identifier table of the component 
+                   to which the display object will be attached. If the display 
+                   object is to be attached on top level component this should 
+                   be NULL.
+        new_key - a unique(in the scope of key_list) identifier for the new 
+                  node which will contain the display object.
+        transform - transform from the parent(specified by key list) to the new 
+                    object node
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - Parent (attach point) doesn't exist
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NOT_VALID">PRO_TK_NOT_VALID</A> - new_key for <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> is already in use.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - Invalid input arguments (bad window or NULL display 
+                            object)
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - One or more input arguments was invalid
+        <A HREF="protoolkiterrors_h.html#PRO_TK_UNSUPPORTED">PRO_TK_UNSUPPORTED</A> - Function is not supported on given window(because 
+                             it is 2D window, like drawing or sketcher).
+
+*/
+
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="696.html">ProDispObjectDetach</A>(int window, int *key_list);
+/*
+    Purpose: Detach a display object that was added to creo scene. Object must 
+             be detached before it is deleted. This API is only for 3d mode 
+             (part/assembly etc) and won't work in 2D (drawings, sketch, CE).
+
+    Input Arguments:
+        window - Identifier of window in which <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> will be detached 
+                 from Creo scene
+        key_list - <A HREF="proarray_h.html#ProArray">ProArray</A> containing member_identification table of 
+                   <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> which will be detached from scene graph. This 
+                   is the "key_list" passed to <A HREF="695.html">ProDispObjectAttach</A> plus the 
+                   "new_key"
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - Invalid window
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> not found in the scene graph of 
+                             window
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - One or more input arguments was invalid
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="697.html">ProDispObjectSetTransform</A>( int window, int *key_list,
+                                           <A HREF="proobjects_h.html#ProMatrix">ProMatrix</A> trf, <A HREF="proobjects_h.html#ProMatrix">ProMatrix</A> old_trf );
+/*
+    Purpose: Sets the transform of an object relative to it's parent in creo 
+             scene. This API is only for 3d mode (part/assembly etc) and won't 
+             work in 2D (drawings, sketch, CE).
+
+    Input Arguments:
+        window - Identifier of window in which <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> will be detached 
+                 from Creo scene
+        key_list - <A HREF="proarray_h.html#ProArray">ProArray</A> containing member_identification table of 
+                   <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> which will be detached from scene graph. This 
+                   is the "key_list" passed to <A HREF="695.html">ProDispObjectAttach</A> plus the 
+                   "new_key
+        trf - new transform for this display object relative to its parent.
+
+    Output Arguments:
+        old_trf - old transform for this display object
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - Invalid window
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> not found in the scene graph of 
+                             window
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - One or more input arguments was invalid
+        <A HREF="protoolkiterrors_h.html#PRO_TK_UNSUPPORTED">PRO_TK_UNSUPPORTED</A> - Function is not supported on given window(because 
+                             it is 2D window, like drawing or sketcher).
+
+*/
+
+
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="698.html">ProDispObjectSetSurfaceAppearanceProps</A>( int window, int *key_list,
+                                                 <A HREF="prosurface_h.html#ProSurfaceAppearanceProps">ProSurfaceAppearanceProps</A>  surf_appearance_props );
+/*
+    Purpose: Sets appearance prop of a disp object attached to scene. This API 
+             is only for 3d mode (part/assembly etc) and won't work in 2D 
+             (drawings, sketch, CE).
+
+    Input Arguments:
+        window - Identifier of window in which <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> will be detached 
+                 from Creo scene
+        key_list - <A HREF="proarray_h.html#ProArray">ProArray</A> containing member_identification table of 
+                   <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> which will be detached from scene graph. This 
+                   is the "key_list" passed to <A HREF="695.html">ProDispObjectAttach</A> plus the 
+                   "new_key
+        surf_appearance_props - New appearance property for display object.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - Invalid window
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - <A HREF="prodispobject_h.html#ProDispObject">ProDispObject</A> not found in the scene graph of 
+                             window
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - One or more input arguments was invalid
+        <A HREF="protoolkiterrors_h.html#PRO_TK_UNSUPPORTED">PRO_TK_UNSUPPORTED</A> - Function is not supported on given window(because 
+                             it is 2D window, like drawing or sketcher).
+
+*/
+
+<A HREF="proansi_h.html#PRO_END_C_DECLS">PRO_END_C_DECLS</A>
+
+#endif /* <A HREF="prodispobject_h.html#PRODISPOBJECT_H">PRODISPOBJECT_H</A> */
+</PRE>
+</BODY>
+</HTML>

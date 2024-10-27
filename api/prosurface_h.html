@@ -1,0 +1,1334 @@
+<HTML>
+<HEAD>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<TITLE>ProSurface.h</TITLE>
+</HEAD>
+<BODY BGCOLOR="#ffffff">
+<PRE>#ifndef <A HREF="prosurface_h.html#PROSRF_H">PROSRF_H</A>
+<A name="PROSRF_H"></A>#define PROSRF_H
+
+
+#include   &lt;<A HREF="proobjects_h.html">ProObjects.h</A>&gt;
+#include   &lt;<A HREF="progeomitem_h.html">ProGeomitem.h</A>&gt;
+#include   &lt;<A HREF="prouvstat_h.html">ProUvStat.h</A>&gt;
+#include   &lt;<A HREF="propart_h.html">ProPart.h</A>&gt;
+/*
+   Function declarations for <A HREF="proobjects_h.html#ProSurface">ProSurface.</A>
+*/
+
+
+
+
+<A HREF="proansi_h.html#PRO_BEGIN_C_DECLS">PRO_BEGIN_C_DECLS</A>
+
+<A name="ProSurfaceTessellationInput"></A>typedef struct pro_surface_tessellation_input* <A HREF="prosurface_h.html#ProSurfaceTessellationInput">ProSurfaceTessellationInput</A>; 
+<A name="ProTessellation"></A>typedef struct pro_tessellation* <A HREF="prosurface_h.html#ProTessellation">ProTessellation</A>;
+<A name="ProSurfaceTessellationProjection"></A>typedef enum
+{
+<A name="PRO_SRFTESS_DEFAULT_PROJECTION"></A>  PRO_SRFTESS_DEFAULT_PROJECTION,  /* Default projection; this will provide UV params for the
+				      tessellation points which map to a plane whose 
+				      U and V extents are each [0,1] */
+<A name="PRO_SRFTESS_PLANAR_PROJECTION"></A>  PRO_SRFTESS_PLANAR_PROJECTION, /* Project the UV params using a planar transform, where
+				    u = x, v = y, z is ignored. */
+<A name="PRO_SRFTESS_CYLINDRICAL_PROJECTION"></A>  PRO_SRFTESS_CYLINDRICAL_PROJECTION, /* Project the UV params using a cylindrical transform,
+					 where where x = r*cos(theta) and y = r*sin(theta);
+					 u = theta, v = z, r is ignored */
+<A name="PRO_SRFTESS_SPHERICAL_PROJECTION"></A>  PRO_SRFTESS_SPHERICAL_PROJECTION, /* Project the UV params onto a sphere, 
+				      where x = r*cos(theta)*sin(phi), y = r*sin(theta)*sin(phi), 
+				      z = r*cos(phi); u = theta, v = phi, r is ignored */
+<A name="PRO_SRFTESS_NO_PROJECTION"></A>  PRO_SRFTESS_NO_PROJECTION,   /* no projection; this will provide unmodified UV params for the
+				      tessellation points  */
+<A name="PRO_SRFTESS_BOX_PROJECTION"></A>  PRO_SRFTESS_BOX_PROJECTION  /* Project the UV params using a box transform, where we project 
+                      point on face of box which intersects normal. u = x in local coordinate 
+                      system of face of box, v = y in local coordinate system of face of box, z is ignored.*/
+
+
+} <A HREF="prosurface_h.html#ProSurfaceTessellationProjection">ProSurfaceTessellationProjection</A>;
+
+<A name="ProLightType"></A>typedef enum
+{
+<A name="PRO_TK_LIGHT_AMBIENT"></A>   PRO_TK_LIGHT_AMBIENT = 0, /* Read only, not allowed to set */
+<A name="PRO_TK_LIGHT_DIRECTION"></A>   PRO_TK_LIGHT_DIRECTION,
+<A name="PRO_TK_LIGHT_POINT"></A>   PRO_TK_LIGHT_POINT,
+<A name="PRO_TK_LIGHT_SPOT"></A>   PRO_TK_LIGHT_SPOT,
+<A name="PRO_TK_LIGHT_HDRI"></A>   PRO_TK_LIGHT_HDRI, /* Image Map / HDRI Lighting / Read only, not allowed to set */
+<A name="PRO_TK_LIGHT_SKY"></A>   PRO_TK_LIGHT_SKY
+} <A HREF="prosurface_h.html#ProLightType">ProLightType</A>;
+
+<A name="ProTextureProjectionType"></A>typedef enum pro_texture_projection_type
+{
+<A name="PRO_TEXTURE_PROJECTION_UNSET"></A>  PRO_TEXTURE_PROJECTION_UNSET = 0,
+<A name="PRO_TEXTURE_PROJECTION_PLANER"></A>  PRO_TEXTURE_PROJECTION_PLANER = 1,
+<A name="PRO_TEXTURE_PROJECTION_SPHERICAL"></A>  PRO_TEXTURE_PROJECTION_SPHERICAL = 2,
+<A name="PRO_TEXTURE_PROJECTION_CYLINDRICAL"></A>  PRO_TEXTURE_PROJECTION_CYLINDRICAL = 3,
+<A name="PRO_TEXTURE_PROJECTION_APPLICATION"></A>  PRO_TEXTURE_PROJECTION_APPLICATION = 4,
+<A name="PRO_TEXTURE_PROJECTION_BOX"></A>  PRO_TEXTURE_PROJECTION_BOX = 5
+} <A HREF="prosurface_h.html#ProTextureProjectionType">ProTextureProjectionType</A>;
+
+<A name="ProLightInfo"></A>typedef struct pro_tk_light
+{
+   <A HREF="prowchar_h.html#wchar_t">wchar_t</A> name[<A HREF="prosizeconst_h.html#PRO_NAME_SIZE">PRO_NAME_SIZE</A>];
+   <A HREF="prosurface_h.html#ProLightType">ProLightType</A> type;
+   <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A> status;   /* active or inactive */
+   double rgb[3]; /* for all types */
+   double position[3]; /* for point and spot */
+   double direction[3]; /* for direction and spot */
+   double spread_angle; /* for spot, in radian */
+   <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A> cast_shadows;
+} <A HREF="prosurface_h.html#ProLightInfo">ProLightInfo</A>;
+
+<A name="ProSurfaceTextureProperties"></A>typedef struct pro_surface_texture_properties
+{
+  <A HREF="prosizeconst_h.html#ProCharPath">ProCharPath</A>       decal;
+  double            decal_intensity;      /* future use only */
+  <A HREF="prosizeconst_h.html#ProCharPath">ProCharPath</A>       texture_map;
+  <A HREF="prosizeconst_h.html#ProCharPath">ProCharPath</A>       bump_map;
+  double            bump_height;          /* future use only */
+  <A HREF="prosurface_h.html#ProTextureProjectionType">ProTextureProjectionType</A>   projection;
+  double            local_csys[4][3];
+  int               copies;               /* future use only */
+  float             horizontal_offset;
+  float             vertical_offset;
+  float             rotate;
+  float             horizontal_scale;
+  float             vertical_scale;
+} <A HREF="prosurface_h.html#ProSurfaceTextureProperties">ProSurfaceTextureProperties</A>;
+
+<A name="ProSurfaceTextureProps"></A>typedef struct pro_surface_texture_props
+{
+  <A HREF="prosizeconst_h.html#ProCharPath">ProCharPath</A>       decal;
+  <A HREF="prosizeconst_h.html#ProCharPath">ProCharPath</A>       texture_map;
+  <A HREF="prosizeconst_h.html#ProCharPath">ProCharPath</A>       bump_map;
+} <A HREF="prosurface_h.html#ProSurfaceTextureProps">ProSurfaceTextureProps</A>;
+
+<A name="ProTextureType"></A>typedef enum pro_texture_type
+{
+<A name="PRO_NULL_TEXTURE"></A>  PRO_NULL_TEXTURE = -1,
+<A name="PRO_BUMP_TEXTURE"></A>  PRO_BUMP_TEXTURE = 0,
+<A name="PRO_COLOR_TEXTURE"></A>  PRO_COLOR_TEXTURE = 1,
+<A name="PRO_DECAL_TEXTURE"></A>  PRO_DECAL_TEXTURE = 2
+} <A HREF="prosurface_h.html#ProTextureType">ProTextureType</A>;
+
+<A name="ProSurfaceTexturePlacementProps"></A>typedef struct pro_surface_texture_placement_props
+{
+
+  <A HREF="prosurface_h.html#ProTextureProjectionType">ProTextureProjectionType</A>   projection;
+  <A HREF="prosurface_h.html#ProTextureType">ProTextureType</A>    texture_type;
+  <A HREF="proobjects_h.html#ProLineEnvelope">ProLineEnvelope</A>            local_csys;
+  double             horizontal_offset;
+  double             vertical_offset;
+  double             rotate;
+  double             horizontal_scale;
+  double             vertical_scale;
+  double            bump_height;
+  double            decal_intensity;
+  <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A>        flip_horizontal;
+  <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A>        flip_vertical;
+} <A HREF="prosurface_h.html#ProSurfaceTexturePlacementProps">ProSurfaceTexturePlacementProps</A>;
+
+<A name="ProSurfaceAllTexturePlacementProps"></A>typedef struct pro_surface_all_texture_placement_props
+{
+
+	<A HREF="prosurface_h.html#ProTextureProjectionType">ProTextureProjectionType</A>   projection;
+	<A HREF="prosurface_h.html#ProTextureType">ProTextureType</A>    texture_type;
+	<A HREF="proobjects_h.html#ProLineEnvelope">ProLineEnvelope</A>            local_csys;
+	double             horizontal_offset;
+	double             vertical_offset;
+	double             rotate;
+	double             horizontal_scale;
+	double             vertical_scale;
+	double            bump_height;
+	double            decal_intensity;
+	<A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A>        flip_horizontal;
+	<A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A>        flip_vertical;
+	<A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A>		  boundary_repeat_type;
+} <A HREF="prosurface_h.html#ProSurfaceAllTexturePlacementProps">ProSurfaceAllTexturePlacementProps</A>;
+
+<A name="ProSurfaceAppearanceProps"></A>typedef struct pro_surf_appearance_props
+{
+  double ambient;
+  double diffuse;
+  double highlite;
+  double shininess;
+  double transparency;
+  <A HREF="proobjects_h.html#ProVector">ProVector</A> color_rgb;
+  <A HREF="proobjects_h.html#ProVector">ProVector</A> highlight_color;
+  double reflection;
+  <A HREF="prosizeconst_h.html#ProPath">ProPath</A> name;
+  <A HREF="prosizeconst_h.html#ProPath">ProPath</A> label;
+  <A HREF="prosizeconst_h.html#ProPath">ProPath</A> description;
+  <A HREF="prosizeconst_h.html#ProPath">ProPath</A> keywords;
+} <A HREF="prosurface_h.html#ProSurfaceAppearanceProps">ProSurfaceAppearanceProps</A>;
+
+
+/*===========================================================================*/
+   
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3996.html">ProSurfaceInit</A>     (<A HREF="proobjects_h.html#ProMdl">ProMdl</A>        p_owner_handle,
+				    int           surf_id,
+				    <A HREF="proobjects_h.html#ProSurface">ProSurface</A>   *p_surface);
+/*
+    Purpose: Initializes the &lt;i&gt;<A HREF="proobjects_h.html#ProSurface">ProSurface</A>&lt;/i&gt; handle.
+
+    Input Arguments:
+        p_owner_handle - The solid owner of the surface
+        surf_id - The surface identifier
+
+    Output Arguments:
+        p_surface - The handle being initialized
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully initialized the handle.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3997.html">ProSurfaceIdGet</A> (<A HREF="proobjects_h.html#ProSurface">ProSurface</A>   surface,
+                                int       *p_id);
+/*
+    Purpose: Retrieves the identifier of the curve object.
+             &lt;p&gt; NOTE: 
+             &lt;p&gt; Although the pointer can be reallocated, the identifier will 
+             not change.
+
+    Input Arguments:
+        surface - The surface handle
+
+    Output Arguments:
+        p_id - The identifier of the coordinate system object
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+
+*/
+
+<A name="ProSurfaceDatatypeGet()"></A>#define ProSurfaceDatatypeGet() (<A HREF="proobjects_h.html#PRO_SURFACE">PRO_SURFACE</A>)
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3998.html">ProSurfaceDataGet</A>  (<A HREF="proobjects_h.html#ProSurface">ProSurface</A>         p_surface,
+				    <A HREF="progeomitemdata_h.html#ProGeomitemdata">ProGeomitemdata</A>  **p_data_ptr);
+/*
+    Purpose: Retrieves the geometric representation data of the specified 
+             surface.
+
+    Input Arguments:
+        p_surface - The surface handle.
+
+    Output Arguments:
+        p_data_ptr - The surface data. The function allocates the memory for 
+                     this argument. Use the function 
+                     &lt;b&gt;<A HREF="1522.html">ProGeomitemdataFree</A>()&lt;/b&gt; to free the memory.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+
+    See Also:
+        <A HREF="1522.html">ProGeomitemdataFree</A>()
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3999.html">ProSurfaceXyzdataEval</A> (<A HREF="proobjects_h.html#ProSurface">ProSurface</A>   p_surface,
+				       <A HREF="proobjects_h.html#ProUvParam">ProUvParam</A>   uv_point,
+				       <A HREF="proobjects_h.html#ProVector">ProVector</A>    xyz_point,
+				       <A HREF="proobjects_h.html#ProVector">ProVector</A>    deriv1[2],
+				       <A HREF="proobjects_h.html#ProVector">ProVector</A>    deriv2[3],
+				       <A HREF="proobjects_h.html#ProVector">ProVector</A>    normal);
+/*
+    Purpose: Evaluates the surface in the specified UV point.
+
+    Input Arguments:
+        p_surface - The surface handle
+        uv_point - The UV parameter on the surface
+
+    Output Arguments:
+        xyz_point - The resulting XYZ point
+        deriv1 - The first derivative in the UV point
+        deriv2 - The second derivative in the UV point
+        normal - The outward normal to the surface in the UV point
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully evaluated the surface.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4000.html">ProSurfaceParamEval</A>  (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>      solid_handle,
+                                      <A HREF="proobjects_h.html#ProSurface">ProSurface</A>    surface,
+				      <A HREF="proobjects_h.html#ProVector">ProVector</A>     xyz_point,
+				      <A HREF="proobjects_h.html#ProUvParam">ProUvParam</A>    uv_point);
+/*
+    Purpose: Finds the closest corresponding UV point on the surface, given the 
+             xyz point. NOTE: This function returns the closest point in the 
+             geometric surface, not the closest point inside the surface 
+             contour (face) specified.
+
+    Input Arguments:
+        solid_handle - The owner of the surface.
+        surface - The surface handle.
+        xyz_point - The XYZ point. The point does not necessarily have to lie 
+                    on the surface. If the point is off the surface, the 
+                    function finds the closest surface point.
+
+    Output Arguments:
+        uv_point - The corresponding UV point on the surface.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully evaluated the point.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of input arguments are invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - Projection of the point to the surface was not 
+                             found.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4001.html">ProSurfaceAreaEval</A>   (<A HREF="proobjects_h.html#ProSurface">ProSurface</A>      p_surface,
+				       double         *p_area);
+/*
+    Purpose: Finds the surface area.
+
+    Input Arguments:
+        p_surface - The surface handle
+
+    Output Arguments:
+        p_area - The surface area
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully found the surface area.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_OUT_OF_RANGE">PRO_TK_OUT_OF_RANGE</A> - Surface area is too small (almost zero).
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4002.html">ProSurfaceUvpntVerify</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>       solid_handle,
+                                       <A HREF="proobjects_h.html#ProSurface">ProSurface</A>     p_surface, 
+				       <A HREF="proobjects_h.html#ProUvParam">ProUvParam</A>     uv_point,
+				       <A HREF="prouvstat_h.html#ProUvStatus">ProUvStatus</A>   *p_result);
+/*
+    Purpose: Verifies whether the specified UV point lies within the surface 
+             boundaries.
+
+    Input Arguments:
+        solid_handle - The owner of the surface
+        p_surface - The surface handle
+        uv_point - The UV point to test
+
+    Output Arguments:
+        p_result - The resulting status
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully verified the point.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4003.html">ProSurfaceDiameterEval</A> (<A HREF="proobjects_h.html#ProSurface">ProSurface</A>    p_surface,
+					<A HREF="proobjects_h.html#ProUvParam">ProUvParam</A>    uv_point,
+					double       *p_diameter);
+/*
+    Purpose: Finds the surface diameter in the specified UV point.
+
+    Input Arguments:
+        p_surface - The surface handle. Only revolved surfaces are allowed 
+                    (cylinder, cone, and so on).
+        uv_point - The UV point. This is ignored when the surface diameter is 
+                   constant.
+
+    Output Arguments:
+        p_diameter - The resulting diameter.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully evaluated the diameter.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4004.html">ProSurfaceExtremesEval</A> (<A HREF="proobjects_h.html#ProSurface">ProSurface</A>   p_surface,
+				        <A HREF="proobjects_h.html#ProVector">ProVector</A>    dir,
+				        <A HREF="proobjects_h.html#ProVector">ProVector</A>    xyz_min,
+				        <A HREF="proobjects_h.html#ProVector">ProVector</A>    xyz_max);
+/*
+    Purpose: Finds the coordinates of the surface edges at the extremes, in the 
+             specified direction. The accuracy of this result is limited to the 
+             accuracy of the edge tessellation.
+
+    Input Arguments:
+        p_surface - The surface handle
+        dir - The direction of projection
+
+    Output Arguments:
+        xyz_min - The coordinates of the point where the function finds the 
+                  minimum projection
+        xyz_max - The coordinates of the point where the function finds the 
+                  maximum projection
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully evaluated the surface.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4005.html">ProSurfaceTypeGet</A>      (<A HREF="proobjects_h.html#ProSurface">ProSurface</A>    p_surface, 
+				        <A HREF="prosurfacedata_h.html#ProSrftype">ProSrftype</A>   *p_srf_type);
+/*
+    Purpose: Retrieves the surface type.
+
+    Input Arguments:
+        p_surface - The surface handle
+
+    Output Arguments:
+        p_srf_type - The surface type
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the surface type.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4006.html">ProSurfaceQuiltGet</A>  (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>       owner_handle,
+                                     <A HREF="proobjects_h.html#ProSurface">ProSurface</A>    p_surface, 
+                                     <A HREF="proobjects_h.html#ProQuilt">ProQuilt</A>     *p_quilt);
+/*
+    Purpose: Retrieves the quilt that owns the specified surface.
+
+    Input Arguments:
+        owner_handle - The owner of the surface
+        p_surface - The surface handle
+
+    Output Arguments:
+        p_quilt - The handle to the owner quilt
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - The specified surface does not belong to any 
+                             quilt.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+
+*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="4007.html">ProSurfaceContourVisitAction</A>) 
+                           ( <A HREF="proobjects_h.html#ProContour">ProContour</A>  p_contour,
+                             <A HREF="protoolkiterrors_h.html#ProError">ProError</A>    status,
+                             <A HREF="proobjects_h.html#ProAppData">ProAppData</A>  app_data
+                           );
+/*
+    Purpose: This is the generic function for visiting contours on surfaces.
+
+    Input Arguments:
+        p_contour - The contour handle
+        status - The status
+        app_data - The application data passed to the function 
+                   &lt;b&gt;<A HREF="4009.html">ProSurfaceContourVisit</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Continue visiting.
+        Any other value - Stop visiting and return this error from the visit 
+                          function.
+
+*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="4008.html">ProSurfaceContourFilterAction</A>) 
+                           ( <A HREF="proobjects_h.html#ProContour">ProContour</A>  p_contour,
+                             <A HREF="proobjects_h.html#ProAppData">ProAppData</A>  app_data
+                           );
+/*
+    Purpose: This is the generic function for filtering contours.
+
+    Input Arguments:
+        p_contour - The contour handle
+        app_data - The application data passed to the function 
+                   &lt;b&gt;<A HREF="4009.html">ProSurfaceContourVisit</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CONTINUE">PRO_TK_CONTINUE</A> - Skip visiting this contour and go to the next 
+                          contours.
+        Other - Call the visit action for this contour. The return value is 
+                passed as input to the visit action.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4009.html">ProSurfaceContourVisit</A>    (<A HREF="proobjects_h.html#ProSurface">ProSurface</A>   p_surface, 
+					   <A HREF="4007.html">ProSurfaceContourVisitAction</A>  action,
+				           <A HREF="4008.html">ProSurfaceContourFilterAction</A> filter,
+				           <A HREF="proobjects_h.html#ProAppData">ProAppData</A>   app_data);
+/*
+    Purpose: Visits all the contours of the specified surface.
+
+    Input Arguments:
+        p_surface - The surface handle.
+        action - The action function called for each contour being visited. 
+                 Visiting stops if this function returns anything other than 
+                 <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR.</A>
+        filter - The filter function called for each contour before the action 
+                 is taken. If this function returns <A HREF="protoolkiterrors_h.html#PRO_TK_CONTINUE">PRO_TK_CONTINUE</A>, the action 
+                 function skips that contour. Any other return value is passed 
+                 to the action function. If NULL, all contours are visited 
+                 using the action function.
+        app_data - The application data passed to the action and filter 
+                   functions.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully visited all the contours.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the arguments are invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - No contours were visited (either because of the 
+                             filter or for another reason).
+        Other - Any other value is the value returned from the action function 
+                (visiting stopped).
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4010.html">ProSldsurfaceVolumesFind</A> ( <A HREF="proobjects_h.html#ProPart">ProPart</A> part,
+                                           int    *p_count,
+                                           int   **p_count_array,
+                                           int  ***p_surface_id_array );
+/*
+    Purpose: Analyzes and returns the number of connect volumes of a part, and 
+             the surfaces that bound them.
+             &lt;p&gt; Free the memory for the &lt;i&gt;p_surface_id_array&lt;/i&gt; as follows: 
+             &lt;pre&gt;for (i = 0; i &lt; p_count; i++)&lt;/pre&gt; 
+             &lt;pre&gt;<A HREF="140.html">ProArrayFree</A>(<A HREF="proarray_h.html#ProArray">ProArray</A>) p_surface_id_array[i]);&lt;/pre&gt;
+
+    Input Arguments:
+        part - The part handle.
+
+    Output Arguments:
+        p_count - The number of distinct volumes found.
+        p_count_array - The array that contains the number of surfaces in each 
+                        identified volume. The function allocates the memory 
+                        for this argument, but you must free it.
+        p_surface_id_array - An array of arrays of surface identifiers that 
+                             contains the connected volumes found. The function 
+                             allocates the memory for this argument.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully performed the analysis.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - The specified volume was not found.
+
+    See Also:
+        <A HREF="140.html">ProArrayFree</A>()
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4011.html">ProSurfaceToNURBS</A> (<A HREF="proobjects_h.html#ProSurface">ProSurface</A> surface,
+                                   <A HREF="prosurfacedata_h.html#ProSurfacedata">ProSurfacedata</A>** p_nurb_surf_data);
+/*
+    Purpose: Generates the NURBS surface representation, given the surface 
+             handle.
+
+    Input Arguments:
+        surface - The surface handle.
+
+    Output Arguments:
+        p_nurb_surf_data - A pointer to a &lt;i&gt;<A HREF="prosurfacedata_h.html#ProSurfacedata">ProSurfacedata</A>&lt;/i&gt; structure. The 
+                           function allocates the memory for this argument. To 
+                           free it, call the function 
+                           &lt;b&gt;<A HREF="4046.html">ProSurfacedataFree</A>()&lt;/b&gt;.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully generated the NURBS 
+                          surface.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+
+    See Also:
+        <A HREF="4046.html">ProSurfacedataFree</A>()
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4012.html">ProSurfaceDataFree</A> ( <A HREF="prosurfacedata_h.html#ProSurfacedata">ProSurfacedata</A>** p_curve_data );
+/*
+    Purpose: Frees the memory for the &lt;i&gt;<A HREF="proobjects_h.html#ProSurface">ProSurface</A>&lt;/i&gt; structure.
+
+    Input Arguments:
+        p_curve_data - The address to the &lt;i&gt;<A HREF="procurvedata_h.html#ProCurvedata">ProCurvedata</A>*&lt;/i&gt;, allocated by 
+                       &lt;b&gt;<A HREF="4011.html">ProSurfaceToNURBS</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully freed the memory.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input is invalid.
+
+    See Also:
+        <A HREF="4011.html">ProSurfaceToNURBS</A>()
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4013.html">ProSurfaceSameSrfsFind</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>      solid,
+                                        <A HREF="proobjects_h.html#ProSurface">ProSurface</A>    surface,
+                                        <A HREF="proobjects_h.html#ProSurface">ProSurface</A>  **r_surf_arr,
+                                        int          *r_size);
+/*
+    Purpose: Finds and returns an array of surfaces that are the same as the 
+             input surface. For example, in the case of a cylinder, Creo 
+             Parametric creates two half-cylindrical surfaces. If you input one 
+             half, the other half is returned by this function.
+
+    Input Arguments:
+        solid - The owner of the surface.
+        surface - The surface whose same surfaces are to be found.
+
+    Output Arguments:
+        r_surf_arr - The returned array of surfaces. This will include the 
+                     input surface. You must preallocate this array using 
+                     &lt;b&gt;<A HREF="139.html">ProArrayAlloc</A>()&lt;/b&gt;. Free it using 
+                     &lt;b&gt;<A HREF="140.html">ProArrayFree</A>()&lt;/b&gt;
+        r_size - The size of the array. This argument is optional (can be 
+                 NULL).
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+
+    See Also:
+        <A HREF="139.html">ProArrayAlloc</A>()
+*/
+
+
+extern   <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4014.html">ProSurfacePrincipalCrvtEval</A> 
+        (
+        <A HREF="proobjects_h.html#ProSurface">ProSurface</A>       p_srf_handle,
+        <A HREF="proobjects_h.html#ProUvParam">ProUvParam</A>       uv_point,
+        double           *r_max_curvature,
+        double           *r_min_curvature,
+        <A HREF="proobjects_h.html#ProVector">ProVector</A>        r_curv_dirs[2]
+        );
+/*
+    Purpose: Finds principal curvatures and directions of the surface at the 
+             given UV point.
+
+    Input Arguments:
+        p_srf_handle - The surface handle
+        uv_point - The point on the surface
+
+    Output Arguments:
+        r_max_curvature - Maximum curvature at the point
+        r_min_curvature - Minimum curvature at the point
+        r_curv_dirs - Principal directions at the point
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully found the surface area.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_SRF_CRV">PRO_TK_BAD_SRF_CRV</A> - The input argument is invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4015.html">ProSurfacetessellationinputAlloc</A> (<A HREF="prosurface_h.html#ProSurfaceTessellationInput">ProSurfaceTessellationInput</A>* input_data);
+/*
+    Purpose: Allocates the handle to the input data used for surface 
+             tessellation.
+
+    Input Arguments:
+        none
+
+    Output Arguments:
+        input_data - The input data handle.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4016.html">ProSurfacetessellationinputFree</A> (<A HREF="prosurface_h.html#ProSurfaceTessellationInput">ProSurfaceTessellationInput</A> input_data);
+/*
+    Purpose: Frees the handle to the input data used for surface tessellation.
+
+    Input Arguments:
+        input_data - The input data handle.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+<A name="PRO_SRFTESS_CHORD_HT_DEFAULT"></A>#define PRO_SRFTESS_CHORD_HT_DEFAULT 0.0
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4017.html">ProSurfacetessellationinputChordheightSet</A> (<A HREF="prosurface_h.html#ProSurfaceTessellationInput">ProSurfaceTessellationInput</A> input_data, double chord_height);
+/*
+    Purpose: Assigns the chord height used for the surface tessellation.
+
+    Input Arguments:
+        input_data - The input data handle.
+        chord_height - The chord height used for the tessellation. Pass 
+                       PRO_SRFTESS_CHORD_HT_DEFAULT to use the tessellation 
+                       routine used by Creo Parametric to perform shading 
+                       operations.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4018.html">ProSurfacetessellationinputAnglecontrolSet</A> (<A HREF="prosurface_h.html#ProSurfaceTessellationInput">ProSurfaceTessellationInput</A> input_data, double angle_control);
+/*
+    Purpose: Assigns the angle control value used for the tessellation.
+
+    Input Arguments:
+        input_data - The input data handle.
+        angle_control - The angle control value.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4019.html">ProSurfacetessellationinputStepsizeSet</A> (<A HREF="prosurface_h.html#ProSurfaceTessellationInput">ProSurfaceTessellationInput</A> input_data, double step_size);
+/*
+    Purpose: Assigns the maximum step size value used for the tessellation.
+
+    Input Arguments:
+        input_data - The input data handle.
+        step_size - The maximum step size value.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4020.html">ProSurfaceTessellationGet</A> (<A HREF="proobjects_h.html#ProSurface">ProSurface</A> surface,
+                                           <A HREF="prosurface_h.html#ProSurfaceTessellationInput">ProSurfaceTessellationInput</A> input,
+                                           <A HREF="prosurface_h.html#ProTessellation">ProTessellation</A>* tessellation);
+/*
+    Purpose: Calculates the tessellation of a given surface.
+
+    Input Arguments:
+        surface - The surface.
+        input - Input instructions for the tessellation.
+
+    Output Arguments:
+        tessellation - The tessellation data. Free this using 
+                       <A HREF="4021.html">ProTessellationFree</A>().
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_OUT_OF_MEMORY">PRO_TK_OUT_OF_MEMORY</A> - Creo Parametric could not allocate memory for 
+                               the output.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - The function could not generate the tessellation 
+                               for the input surface.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4021.html">ProTessellationFree</A> (<A HREF="prosurface_h.html#ProTessellation">ProTessellation</A> tessellation);
+/*
+    Purpose: Frees the tessellation data for an individual surface.
+
+    Input Arguments:
+        tessellation - The tessellation data handle.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4022.html">ProTessellationVerticesGet</A> (<A HREF="prosurface_h.html#ProTessellation">ProTessellation</A> tessellation, <A HREF="proobjects_h.html#Pro3dPnt">Pro3dPnt</A>** vertices);
+/*
+    Purpose: Obtains the vertices that make up this tessellation.
+
+    Input Arguments:
+        tessellation - The tessellation data handle.
+
+    Output Arguments:
+        vertices - <A HREF="proarray_h.html#ProArray">ProArray</A> of vertices. Free this using <A HREF="140.html">ProArrayFree</A>().
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4023.html">ProTessellationNormalsGet</A> (<A HREF="prosurface_h.html#ProTessellation">ProTessellation</A> tessellation, <A HREF="proobjects_h.html#ProVector">ProVector</A>** normals);
+/*
+    Purpose: Obtains the normal vectors for each of the tessellation vertices.
+
+    Input Arguments:
+        tessellation - The tessellation data handle.
+
+    Output Arguments:
+        normals - <A HREF="proarray_h.html#ProArray">ProArray</A> of normal vectors for the tessellation. Free this 
+                  using <A HREF="140.html">ProArrayFree</A>().
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4024.html">ProTessellationParamsGet</A> (<A HREF="prosurface_h.html#ProTessellation">ProTessellation</A> tessellation, <A HREF="proobjects_h.html#ProUvParam">ProUvParam</A>** params);
+/*
+    Purpose: Obtains the UV parameters for each of the tessellation vertices.
+
+    Input Arguments:
+        tessellation - The tessellation data handle.
+
+    Output Arguments:
+        params - <A HREF="proarray_h.html#ProArray">ProArray</A> of UV parameters for the tessellation points. Free 
+                 this using <A HREF="140.html">ProArrayFree</A>().
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - The UV projection was not calculated for this 
+                             tessellation operation. Call 
+                             <A HREF="4027.html">ProSurfacetessellationinputUvprojectionSet</A>() 
+                             before <A HREF="4020.html">ProSurfaceTessellationGet</A>().
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4025.html">ProTessellationFacetsGet</A> (<A HREF="prosurface_h.html#ProTessellation">ProTessellation</A> tessellation, <A HREF="propart_h.html#ProTriangle">ProTriangle</A>** facets);
+/*
+    Purpose: Obtains the indices indicating the vertices used for each facet 
+             for the tessellated item.
+
+    Input Arguments:
+        tessellation - The tessellation data handle.
+
+    Output Arguments:
+        facets - <A HREF="proarray_h.html#ProArray">ProArray</A> of indices for the facets in the tessellation. Free 
+                 this using <A HREF="140.html">ProArrayFree</A>().
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4026.html">ProSurfaceIsDatumPlane</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A> p_solid, <A HREF="proobjects_h.html#ProSurface">ProSurface</A> p_surface, <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A>* p_is_datum_plane);
+/*
+    Purpose: Identifies if the given surface is a datum plane.
+
+    Input Arguments:
+        p_solid - The surface owner.
+        p_surface - The surface.
+
+    Output Arguments:
+        p_is_datum_plane - <A HREF="protoolkit_h.html#PRO_B_TRUE">PRO_B_TRUE</A> if the surface is a datum plane, 
+                           <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE</A> if the surface is a solid or quilt 
+                           surface.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4027.html">ProSurfacetessellationinputUvprojectionSet</A> (<A HREF="prosurface_h.html#ProSurfaceTessellationInput">ProSurfaceTessellationInput</A> input_data,
+                                                            <A HREF="prosurface_h.html#ProSurfaceTessellationProjection">ProSurfaceTessellationProjection</A> projection_type,
+                                                            <A HREF="procsysdata_h.html#ProCsysdata">ProCsysdata</A>* projection_csys);
+/*
+    Purpose: Assigns the parameters used to calculate a UV projection for 
+             texture mapping to the tessellation inputs.
+
+    Input Arguments:
+        input_data - The input data handle.
+        projection_type - The type of projection to use for the UV 
+                          calculations.
+        projection_csys - The csys data to use for the projection, if 
+                          applicable. Pass NULL for a default projection.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4028.html">ProLightSourcesGet</A>( int window_id, 
+                                    <A HREF="prosurface_h.html#ProLightInfo">ProLightInfo</A>** light_info);
+/*
+    Purpose: Retrieves the light information associated with the specified 
+             window in model space.
+
+    Input Arguments:
+        window_id - The identifier of the Creo Parametric window. Use 
+                    <A HREF="protoolkit_h.html#PRO_VALUE_UNUSED">PRO_VALUE_UNUSED</A> (or a value less than 0)for the current 
+                    window.
+
+    Output Arguments:
+        light_info - <A HREF="proarray_h.html#ProArray">ProArray</A> of structures of light properties. The function 
+                     allocates memory for this argument. To free it, call the 
+                     function <A HREF="140.html">ProArrayFree.</A>
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The argument is invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4029.html">ProLightSourcesSet</A>( int window_id,
+                                    <A HREF="prosurface_h.html#ProLightInfo">ProLightInfo</A>* light_info);
+/*
+    Purpose: Sets the light information associated with the specified window in 
+             model space.
+
+    Input Arguments:
+        window_id - The identifier of the Creo Parametric window. Use 
+                    <A HREF="protoolkit_h.html#PRO_VALUE_UNUSED">PRO_VALUE_UNUSED</A> (or a value less than 0)for the current 
+                    window.
+        light_info - <A HREF="proarray_h.html#ProArray">ProArray</A> of structures of light properties. Since the 
+                     number of user defined lights cannot exceed 5, this array 
+                     must have no more than 5 elements.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The argument is invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CANT_MODIFY">PRO_TK_CANT_MODIFY</A> - This type of light is not allowed to be set. 
+                             (<A HREF="prosurface_h.html#PRO_TK_LIGHT_AMBIENT">PRO_TK_LIGHT_AMBIENT</A>, <A HREF="prosurface_h.html#PRO_TK_LIGHT_HDRI">PRO_TK_LIGHT_HDRI</A>).
+        <A HREF="protoolkiterrors_h.html#PRO_TK_UNSUPPORTED">PRO_TK_UNSUPPORTED</A> - light_info has more than 5 elements.
+
+*/
+
+<A name="ProSldsurfaceShellorder"></A>typedef struct pro_sldsurface_shell_order
+{
+  int orientation;   /* 1 if the shell is oriented outward; -1 if inward      */
+                     /* (in which case the shell is actually a void)          */
+  int first_face;    /* index in shell_faces array                            */
+  int number_of_faces;
+  int ambient_shell; /* index in shell_order array                            */
+                     /* if the shell is external this field is equal to -1    */
+} <A HREF="prosurface_h.html#ProSldsurfaceShellorder">ProSldsurfaceShellorder</A>;
+
+
+<A name="ProSldsurfaceShellface"></A>typedef struct pro_sldsurface_shell_face
+{
+  int        surf_id;
+  <A HREF="proobjects_h.html#ProContour">ProContour</A> contour; /* NULL if face is fully in the shell */
+} <A HREF="prosurface_h.html#ProSldsurfaceShellface">ProSldsurfaceShellface</A>;
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4030.html">ProSldsurfaceShellsAndVoidsFind</A>(
+ <A HREF="proobjects_h.html#ProSolid">ProSolid</A> solid,
+ <A HREF="prosurface_h.html#ProSldsurfaceShellorder">ProSldsurfaceShellorder</A> **shell_order,
+ <A HREF="prosurface_h.html#ProSldsurfaceShellface">ProSldsurfaceShellface</A>  **shell_faces
+);
+/*
+    Purpose: For each shell and void of this solid, returns surface-contour 
+             pairs which describe them. 
+             &lt;p&gt;NOTE: When the surface is split into a few pieces (has more 
+             than one external contour) these pieces may belong to different 
+             shells. Hence, each shell face has to be described by a pair 
+             (surface id, <A HREF="proobjects_h.html#ProContour">ProContour</A>) - see <A HREF="prosurface_h.html#ProSldsurfaceShellface">ProSldsurfaceShellface.</A>
+
+    Input Arguments:
+        solid - The solid handle. Cannot be NULL.
+
+    Output Arguments:
+        shell_order - <A HREF="proarray_h.html#ProArray">ProArray</A> of <A HREF="prosurface_h.html#ProSldsurfaceShellorder">ProSldsurfaceShellorder</A> structures. The 
+                      function allocates the memory for this argument. Cannot 
+                      be NULL. Free this output using <A HREF="140.html">ProArrayFree</A>().
+        shell_faces - <A HREF="proarray_h.html#ProArray">ProArray</A> of <A HREF="prosurface_h.html#ProSldsurfaceShellface">ProSldsurfaceShellface</A> structures. For each 
+                      shell or void, their faces take a contingent segment in 
+                      this array. The function allocates the memory for this 
+                      argument. Cannot be NULL. Free this output using 
+                      <A HREF="140.html">ProArrayFree</A>().
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully performed the task.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - NULL was passed for some arguments.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - The solid has no geometry.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NOT_VALID">PRO_TK_NOT_VALID</A> - the topology of solid is not valid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4031.html">ProSurfaceAppearancepropsGet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A>* item,
+  <A HREF="prosurface_h.html#ProSurfaceAppearanceProps">ProSurfaceAppearanceProps</A> *appearance_properties
+);
+/*
+    Purpose: Gets the appearance properties of the surface. This API will be 
+             deprecated in future release.
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+
+    Output Arguments:
+        appearance_properties - Structure containing appearance related 
+                                properties.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NOT_EXIST">PRO_TK_NOT_EXIST</A> - The property does not exists.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4032.html">ProSurfaceAppearancepropsSet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A>* item,
+  <A HREF="prosurface_h.html#ProSurfaceAppearanceProps">ProSurfaceAppearanceProps</A> *appearance_properties
+);
+/*
+    Purpose: Sets the appearance properties of the surface. This API will be 
+             deprecated in future release
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+        appearance_properties - Structure containing surface appearance 
+                                properties. Pass NULL to set default surface 
+                                appearance properties.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CANT_MODIFY">PRO_TK_CANT_MODIFY</A> - The property cannot be modified.
+
+*/
+   
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4033.html">ProSurfaceTextureplacementpropsGet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A> *item,
+  <A HREF="prosurface_h.html#ProSurfaceTexturePlacementProps">ProSurfaceTexturePlacementProps</A> **texture_placement_properties
+);
+/*
+    Purpose: Gets the texture placement related properties of the surface. This 
+             API will be deprecated in future release.
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+
+    Output Arguments:
+        texture_placement_properties - <A HREF="proarray_h.html#ProArray">ProArray</A> of structures containing 
+                                       texture placement properties. The 
+                                       function allocates memory for this 
+                                       argument. To free it, call the function 
+                                       <A HREF="140.html">ProArrayFree.</A>
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NOT_EXIST">PRO_TK_NOT_EXIST</A> - Properties does not exist on item.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4034.html">ProSurfaceTextureplacementpropsSet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A> *item,
+  <A HREF="prosurface_h.html#ProSurfaceTexturePlacementProps">ProSurfaceTexturePlacementProps</A> *texture_placement_properties
+);
+/*
+    Purpose: Sets the texture placement placement properties of the surface. 
+             This API will be deprecated in future release.
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+        texture_placement_properties - <A HREF="proarray_h.html#ProArray">ProArray</A> of structures containing 
+                                       texture placement properties.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CANT_MODIFY">PRO_TK_CANT_MODIFY</A> - The property cannot be modified.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4035.html">ProSurfaceTexturepropsGet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A> *item,
+  <A HREF="prosurface_h.html#ProSurfaceTextureProps">ProSurfaceTextureProps</A> *texture_properties
+);
+/*
+    Purpose: Gets the texture related properties of the surface. This API will 
+             be deprecated in future release.
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+
+    Output Arguments:
+        texture_properties - Pointer to structure containing texture related 
+                             properties.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NOT_EXIST">PRO_TK_NOT_EXIST</A> - Properties does not exist on item.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4036.html">ProSurfaceTexturepropsSet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A> *item,
+  <A HREF="prosurface_h.html#ProSurfaceTextureProps">ProSurfaceTextureProps</A> *texture_properties
+);
+/*
+    Purpose: Sets the texture related properties of the surface. This API will 
+             be deprecated in future release.
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+        texture_properties - Structure containing texture related properties.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CANT_MODIFY">PRO_TK_CANT_MODIFY</A> - The property cannot be modified.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4037.html">ProSurfaceNextGet</A> (
+  <A HREF="proobjects_h.html#ProSurface">ProSurface</A> this_surface,
+  <A HREF="proobjects_h.html#ProSurface">ProSurface</A> *p_next_surface
+);
+/*
+    Purpose: Returns the next surface in the surface list (or NULL, if there is 
+             no next surface) &lt;B&gt;Note:&lt;/B&gt; If the model geometry has changed, 
+             the next surface must be obtained again.
+
+    Input Arguments:
+        this_surface - the surface for which the next surface is queried; can 
+                       be NULL.
+
+    Output Arguments:
+        p_next_surface - a non-NULL pointer for returning the next surface; if 
+                         this_surface is the last in the list (or this_surface 
+                         is NULL) then the returned surface will be NULL
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - p_next_surface is passed NULL.
+
+*/
+
+
+/* ====================================================================== */
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4038.html">ProSurfacePeriodicityGet</A>(<A HREF="proobjects_h.html#ProSurface">ProSurface</A> surface, 
+                                         <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A> *periodic_in_u,
+                                         double     *period_in_u,
+                                         <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A> *periodic_in_v,
+                                         double     *period_in_v);
+/*
+    Purpose: Provides the periodicity data of a surface. &lt;b&gt;Warning: &lt;/b&gt;. The 
+             function only returns periodicity flags as stored by Creo, not the 
+             actual geometric periodicity. Even if the actual geometry of the 
+             surface is periodic in u or v direction but is not marked as 
+             periodic by Creo, this function will not attempt to recognize it 
+             and will return <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE.</A>
+
+    Input Arguments:
+        surface - the surface. Cannot be NULL.
+
+    Output Arguments:
+        periodic_in_u - periodicity in u-direction. Can be NULL.
+        period_in_u - the value of the period in u-direction. Can be NULL.
+        periodic_in_v - periodicity in v-direction. Can be NULL.
+        period_in_v - the value of the period in v-direction. Can be NULL.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - surface is NILL.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4039.html">ProSurfaceSideAppearancepropsSet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A>* item,
+  int surface_side,
+  <A HREF="prosurface_h.html#ProSurfaceAppearanceProps">ProSurfaceAppearanceProps</A> *appearance_properties
+);
+/*
+    Purpose: Sets the appearance properties on given side of the surface.
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+        surface_side - Set to 0 (the direction of the surface normal) or 1 (the 
+                       other side).
+        appearance_properties - Structure containing surface appearance 
+                                properties. Pass NULL to set default surface 
+                                appearance properties.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CANT_MODIFY">PRO_TK_CANT_MODIFY</A> - The property cannot be modified.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4040.html">ProSurfaceSideAppearancepropsGet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A>* item,
+  int surface_side,
+  <A HREF="prosurface_h.html#ProSurfaceAppearanceProps">ProSurfaceAppearanceProps</A> *appearance_properties
+);
+/*
+    Purpose: Gets the appearance properties of given side of the surface.
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+        surface_side - Set to 0 (the direction of the surface normal) or 1 (the 
+                       other side).
+
+    Output Arguments:
+        appearance_properties - Structure containing appearance related 
+                                properties.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NOT_EXIST">PRO_TK_NOT_EXIST</A> - The property does not exists.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4041.html">ProSurfaceSideTexturepropsSet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A> *item,
+  int surface_side,
+  <A HREF="prosurface_h.html#ProSurfaceTextureProps">ProSurfaceTextureProps</A> *texture_properties
+);
+/*
+    Purpose: Sets the texture related properties on given side of the surface.
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+        surface_side - Set to 0 (the direction of the surface normal) or 1 (the 
+                       other side).
+        texture_properties - Structure containing texture related properties.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CANT_MODIFY">PRO_TK_CANT_MODIFY</A> - The property cannot be modified.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4042.html">ProSurfaceSideTexturepropsGet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A> *item,
+  int surface_side,
+  <A HREF="prosurface_h.html#ProSurfaceTextureProps">ProSurfaceTextureProps</A> *texture_properties
+);
+/*
+    Purpose: Gets the texture related properties on given side of the surface.
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+        surface_side - Set to 0 (the direction of the surface normal) or 1 (the 
+                       other side).
+
+    Output Arguments:
+        texture_properties - Pointer to structure containing texture related 
+                             properties.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NOT_EXIST">PRO_TK_NOT_EXIST</A> - Properties does not exist on item.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4043.html">ProSurfaceSideTextureplacementpropsSet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A> *item,
+  int surface_side,
+  <A HREF="prosurface_h.html#ProSurfaceTexturePlacementProps">ProSurfaceTexturePlacementProps</A> *texture_placement_properties
+);
+/*
+    Purpose: Sets the texture placement placement properties on given side of 
+             the surface.
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+        surface_side - Set to 0 (the direction of the surface normal) or 1 (the 
+                       other side).
+        texture_placement_properties - <A HREF="proarray_h.html#ProArray">ProArray</A> of structures containing 
+                                       texture placement properties.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CANT_MODIFY">PRO_TK_CANT_MODIFY</A> - The property cannot be modified.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="4044.html">ProSurfaceSideTextureplacementpropsGet</A>(
+  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A> *item,
+  int surface_side,
+  <A HREF="prosurface_h.html#ProSurfaceTexturePlacementProps">ProSurfaceTexturePlacementProps</A> **texture_placement_properties
+);
+/*
+    Purpose: Gets the texture placement related properties on given side of the 
+             surface.
+
+    Input Arguments:
+        item - The modelitem representing the part, assembly component, 
+               subassembly, quilt or surface.
+        surface_side - Set to 0 (the direction of the surface normal) or 1 (the 
+                       other side).
+
+    Output Arguments:
+        texture_placement_properties - <A HREF="proarray_h.html#ProArray">ProArray</A> of structures containing 
+                                       texture placement properties. The 
+                                       function allocates memory for this 
+                                       argument. To free it, call the function 
+                                       <A HREF="140.html">ProArrayFree.</A>
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NOT_EXIST">PRO_TK_NOT_EXIST</A> - Properties does not exist on item.
+
+*/
+
+/*===========================================================================*/
+
+
+<A HREF="proansi_h.html#PRO_END_C_DECLS">PRO_END_C_DECLS</A>
+#endif /* <A HREF="prosurface_h.html#PROSRF_H">PROSRF_H</A> */
+
+</PRE>
+</BODY>
+</HTML>

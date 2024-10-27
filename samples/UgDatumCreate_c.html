@@ -1,0 +1,260 @@
+<html>
+<head>
+<title>UgDatumCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include	&quot;ProToolkit.h&quot;
+#include	&quot;ProMdl.h&quot;
+#include	&quot;ProFeature.h&quot;
+#include	&quot;ProAsmcomppath.h&quot;
+<a name="anchor-2"></a>#include	&quot;ProAsmcomp.h&quot;
+#include	&quot;ProMenu.h&quot;
+#include	&quot;ProSelection.h&quot;
+#include	&quot;ProMessage.h&quot;
+#include	&quot;ProGeomitem.h&quot;
+<a name="anchor-3"></a>#include	&quot;ProModelitem.h&quot;
+#include	&quot;ProFeatType.h&quot;
+#include	&quot;ProDtmPln.h&quot;
+#include        &quot;ProWstring.h&quot;
+#include        &quot;ProUtil.h&quot;
+<a name="anchor-4"></a>
+#include	&quot;TestError.h&quot;
+#include    &quot;ProSolid.h&quot;
+
+int ProDatumPlaneCreate(ProSelection offset_surface, double offset_dist, int dtm_level);
+<a name="anchor-5"></a>int UserDatumRefs();
+
+#define ASSEMBLY  100
+#define PART	200
+
+<a name="anchor-6"></a>/* =============================================================== *\
+	Function:  UserDatumRefs()
+	Purpose:   Obtain reference surface and offset for datum 
+			plane creation
+\* =============================================================== */
+<a name="anchor-7"></a>int UserDatumRefs()
+{
+
+	static wchar_t msgfil[80];
+	ProError	status;
+<a name="anchor-8"></a>	ProSelection *ref_surf;
+	int sel_num = -1, level_flag;
+	double	offset_value;
+	wchar_t w_level[PRO_TYPE_SIZE];
+	char level[PRO_TYPE_SIZE]; 
+<a name="anchor-9"></a>	ProMdl model;
+	ProMdlType p_type;
+	ProStringToWstring(msgfil, &quot;msg_ugdatum.txt&quot;);
+
+/* =============================================================== *\
+<a name="anchor-10"></a>	Prompt user for reference surface ...
+\* =============================================================== */
+	status = ProMessageDisplay(msgfil, &quot;USER Select a reference surface&quot;);
+	status = ProSelect(&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;ref_surf, &amp;sel_num);
+	ERROR_CHECK(&quot;ProSelect()&quot;, &quot;UserDatumRefs()&quot;, status);
+<a name="anchor-11"></a>
+	if(sel_num &lt; 1)
+		return status;
+
+/* =============================================================== *\
+<a name="anchor-12"></a>	... then, offset distance
+\* =============================================================== */
+
+	status = ProMessageDisplay(msgfil, &quot;USER Enter the offset value:&quot;);
+	if ((status = ProMessageDoubleRead(NULL, &amp;offset_value)) 
+<a name="anchor-13"></a>			!= PRO_TK_NO_ERROR)
+		return(status);
+
+/* =============================================================== *\
+	... finally, level at which datum is to be created (part vs. asm)
+<a name="anchor-14"></a>\* =============================================================== */
+	
+	status = ProMdlCurrentGet(&amp;model);
+	ERROR_CHECK(&quot;ProMdlCurrentGet&quot;, &quot;ProDatumPlaneCreate()&quot;, status);
+	status = ProMdlTypeGet(model,&amp;p_type);
+<a name="anchor-15"></a>	ERROR_CHECK(&quot;ProMdlTypeGet&quot;, &quot;ProDatumPlaneCreate()&quot;, status);
+	if (p_type == PRO_MDL_PART)
+	{
+		level_flag = PART;
+	}
+<a name="anchor-16"></a>	else if(p_type == PRO_MDL_ASSEMBLY){
+		
+		status = ProMessageDisplay(msgfil, &quot;USER Create datum plane at part or assembly level (prt or asm):&quot;);
+		status = ProMessageStringRead(PRO_TYPE_SIZE, w_level);
+		ERROR_CHECK(&quot;ProMessageStringRead()&quot;, &quot;UserDatumRefs()&quot;, status);
+<a name="anchor-17"></a>
+		ProWstringToString(level, w_level);
+		if (!strcmp(level, &quot;prt&quot;))
+			level_flag = PART;
+		else if (!strcmp(level, &quot;asm&quot;))
+<a name="anchor-18"></a>			level_flag = ASSEMBLY;
+		else
+			return(status);
+	}
+	else
+<a name="anchor-19"></a>		return(status);
+
+	status = ProDatumPlaneCreate(*ref_surf, offset_value, level_flag);
+	ERROR_CHECK(&quot;ProDatumPlaneCreate()&quot;, &quot;UserDatumRefs()&quot;, status);
+
+<a name="anchor-20"></a>	return(status);
+}
+
+/* =============================================================== *\
+	Function: ProDatumPlaneCreate()
+<a name="anchor-21"></a>	Purpose:  Creates a datum plane as an assembly feature at an
+		offset distance from a surface on a part	
+\* =============================================================== */
+int ProDatumPlaneCreate(ProSelection offset_surface, double offset_dist, int dtm_level)
+{
+<a name="anchor-22"></a>
+	ProReference REPDEP_ref1;
+	ProError	status;
+	ProElement	elem_tree, elem_ftype, elem_consts, elem_offset;
+	ProElement	elem_const_type, elem_offset_ref, elem_offset_dist;
+<a name="anchor-23"></a>	ProValueData	value_data;
+	ProValue	value;
+	ProModelitem	surf_modelitem, model_modelitem;
+	ProSelection	mdl_sel;
+	ProFeature	feature;
+<a name="anchor-24"></a>	ProErrorlist	errors;
+	ProAsmcomppath   p_cmp_path;
+	ProFeatureCreateOptions *opts = 0;
+
+/* =============================================================== *\
+<a name="anchor-25"></a>	Allocate tree root element
+\* =============================================================== */
+	status = ProElementAlloc(PRO_E_FEATURE_TREE, &amp;elem_tree);
+
+/* =============================================================== *\
+<a name="anchor-26"></a>	Allocate feature type element; add to tree root.
+\* =============================================================== */
+	status = ProElementAlloc(PRO_E_FEATURE_TYPE, &amp;elem_ftype);
+	ProElementIntegerSet(elem_ftype,PRO_FEAT_DATUM);
+	
+<a name="anchor-27"></a>	ProElemtreeElementAdd(elem_tree, NULL, elem_ftype);
+
+/* =============================================================== *\
+	Allocate constraints element; add to tree root.
+\* =============================================================== */
+<a name="anchor-28"></a>	status = ProElementAlloc(PRO_E_DTMPLN_CONSTRAINTS, &amp;elem_consts);
+	ProElemtreeElementAdd(elem_tree, NULL, elem_consts);
+
+/* =============================================================== *\
+	Allocate constraint element; add under constraints element.
+<a name="anchor-29"></a>\* =============================================================== */
+	status = ProElementAlloc(PRO_E_DTMPLN_CONSTRAINT, &amp;elem_offset);
+	status = ProElemtreeElementAdd(elem_consts, NULL, elem_offset);
+
+/* =============================================================== *\
+<a name="anchor-30"></a>	Allocate constraint type element; add under constraint element.
+\* =============================================================== */
+	status = ProElementAlloc(PRO_E_DTMPLN_CONSTR_TYPE, &amp;elem_const_type);
+	ProElementIntegerSet(elem_const_type,PRO_DTMPLN_OFFS);
+
+<a name="anchor-31"></a>	status = ProElemtreeElementAdd(elem_offset, NULL, elem_const_type);
+
+/* =============================================================== *\
+	Allocate constraint ref element; add under constraint element.
+\* =============================================================== */
+<a name="anchor-32"></a>	status = ProElementAlloc(PRO_E_DTMPLN_CONSTR_REF, &amp;elem_offset_ref);
+	ProSelectionToReference( offset_surface,&amp;REPDEP_ref1 );
+	ProElementReferenceSet(elem_offset_ref,REPDEP_ref1);
+
+	status = ProElemtreeElementAdd(elem_offset, NULL, elem_offset_ref);
+<a name="anchor-33"></a>
+/* =============================================================== *\
+	Allocate ref offset value element; add under constraint element.
+\* =============================================================== */
+	status = ProElementAlloc(PRO_E_DTMPLN_CONSTR_REF_OFFSET, &amp;elem_offset_dist);
+<a name="anchor-34"></a>	ProElementDecimalsSet( elem_offset_dist,4 );
+	ProElementDoubleSet(elem_offset_dist,offset_dist);
+
+	status = ProElemtreeElementAdd(elem_offset, NULL, elem_offset_dist);
+
+<a name="anchor-35"></a>/* =============================================================== *\
+	Get assembly component path to part containing offset surface
+\* =============================================================== */
+
+	status = ProSelectionAsmcomppathGet(offset_surface, &amp;p_cmp_path);
+<a name="anchor-36"></a>	ERROR_CHECK(&quot;ProSelectionAsmcomppathGet&quot;, &quot;ProDatumPlaneCreate()&quot;, status);
+
+	switch (dtm_level)
+	{
+
+<a name="anchor-37"></a>		case ASSEMBLY:
+		/* =============================================================== *\
+			Obtain a ProModelitem handle to the root assembly
+		\* =============================================================== */
+
+<a name="anchor-38"></a>		status = ProMdlToModelitem(p_cmp_path.owner, &amp;model_modelitem);
+		ERROR_CHECK(&quot;ProMdlToModelitem&quot;, &quot;ProDatumPlaneCreate()&quot;, status);
+
+		/* =============================================================== *\
+			Allocate ProSection object for root assembly
+<a name="anchor-39"></a>		\* =============================================================== */
+		status = ProSelectionAlloc(NULL, &amp;model_modelitem, &amp;mdl_sel);
+		ERROR_CHECK(&quot;ProSelectionAlloc&quot;, &quot;ProDatumPlaneCreate()&quot;, status);
+
+		break;
+<a name="anchor-40"></a>
+		case PART:
+		/* =============================================================== *\
+			Obtain a ProModelitem handle to selected surface
+		\* =============================================================== */
+<a name="anchor-41"></a>
+		status = ProSelectionModelitemGet(offset_surface, &amp;surf_modelitem);
+		ERROR_CHECK(&quot;ProSelectionModelitemGet&quot;, &quot;ProDatumPlaneCreate()&quot;, status);
+
+		/* =============================================================== *\
+<a name="anchor-42"></a>			Obtain a ProModelitem to the owner of the selected surface
+		\* =============================================================== */
+		status = ProMdlToModelitem(surf_modelitem.owner, &amp;model_modelitem);
+		ERROR_CHECK(&quot;ProMdlToModelitem&quot;, &quot;ProDatumPlaneCreate()&quot;, status);
+
+<a name="anchor-43"></a>		/* =============================================================== *\
+			Allocate ProSection object for part to which selected surface
+			 belongs
+		\* =============================================================== */
+
+<a name="anchor-44"></a>		status = ProSelectionAlloc(&amp;p_cmp_path, &amp;model_modelitem, &amp;mdl_sel);
+		ERROR_CHECK(&quot;ProSelectionAlloc&quot;, &quot;ProDatumPlaneCreate()&quot;, status);
+
+		break;
+
+<a name="anchor-45"></a>		default:
+		return(0);
+
+	}
+	
+<a name="anchor-46"></a>/* =============================================================== *\
+	Create datum plane
+\* =============================================================== */
+
+	status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+<a name="anchor-47"></a>		1, (ProArray*)&amp;opts);
+
+	opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+	status = ProFeatureWithoptionsCreate(mdl_sel, elem_tree,
+<a name="anchor-48"></a>		opts, PRO_REGEN_NO_FLAGS, &amp;feature, &amp;errors);	
+	ERROR_CHECK(&quot;ProFeatureWithoptionsCreate&quot;, &quot;ProDatumPlaneCreate()&quot;, status);
+
+	status = ProArrayFree((ProArray*)&amp;opts);
+	
+<a name="anchor-49"></a>	status = ProElementFree(&amp;elem_tree);
+	ERROR_CHECK(&quot;ProElementFree&quot;, &quot;ProDatumPlaneCreate()&quot;, status);
+	status = ProSelectionFree(&amp;mdl_sel);
+	ERROR_CHECK(&quot;ProSelectionFree&quot;, &quot;ProDatumPlaneCreate()&quot;, status);
+
+<a name="anchor-50"></a>	return(status);
+}
+</pre>
+</body>
+</html>

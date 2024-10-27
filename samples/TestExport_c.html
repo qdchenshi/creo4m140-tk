@@ -1,0 +1,659 @@
+<html>
+<head>
+<title>TestExport.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit  includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProColor.h>
+#include &lt;ProMdl.h>
+#include &lt;ProPart.h>
+#include &lt;ProMenu.h>
+<a name="anchor-3"></a>#include &lt;ProGtol.h>
+#include &lt;ProGraphic.h>
+#include &lt;ProFeature.h>
+#include &lt;ProSurface.h>
+#include &lt;ProWstring.h>
+<a name="anchor-4"></a>#include &lt;ProUtil.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProMessage.h>
+
+#include &quot;TestError.h&quot;
+<a name="anchor-5"></a>#include &quot;UtilMenu.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilMath.h&quot;
+#include &quot;UtilTypes.h&quot;
+<a name="anchor-6"></a>#include &quot;PTApplsUnicodeUtils.h&quot;
+
+
+#define EXPORT_MN_SETUP     01
+#define EXPORT_MN_WIREFRAME 11
+<a name="anchor-7"></a>#define EXPORT_MN_RENDER    12
+#define EXPORT_MN_DUMP      13
+#define EXPORT_MN_ANGLE     21
+#define EXPORT_MN_CHORD     22
+#define EXPORT_MN_QUILT     23
+<a name="anchor-8"></a>#define EXPORT_MN_OPT       24
+#define EXPORT_MN_ASSM      33
+#define EXPORT_MN_SEL_PART  34
+
+typedef struct pro_test_export_data
+<a name="anchor-9"></a>{
+    ProMdl      mdl;
+    double      chord_ht;
+    double      angle_cntrl;
+    ProBoolean  include_quilts;
+<a name="anchor-10"></a>    ProCharLine file_name;
+    int         file_format;
+    ProBoolean  optimization;
+} ProTestExportData;
+
+<a name="anchor-11"></a>/*=================================================================*\
+    FUNCTION : ProTestExportVertexIsEq()
+    PURPOSE  : Compare two vectors.
+\*=================================================================*/
+int ProTestExportVertexIsEq(ProVector v1, ProVector v2)
+<a name="anchor-12"></a>{
+    if((v1 == NULL)||(v2 == NULL))
+        return(-1);
+        
+    if((fabs(v1[0]-v2[0])&lt;EPSM6)&amp;&amp;(fabs(v1[1]-v2[1])&lt;EPSM6)&amp;&amp;(fabs(v1[2]-v2[2])&lt;EPSM6))
+<a name="anchor-13"></a>        return(1); 
+        
+    return(0);
+}
+
+<a name="anchor-14"></a>/*=================================================================*\
+    FUNCTION : ProTestExportFindVertex()
+    PURPOSE  : Find vertex position in the array.
+\*=================================================================*/
+int ProTestExportFindVertex(ProVector *v_arr, ProVector v)
+<a name="anchor-15"></a>{   
+    ProError error;
+    int i, n;
+
+    if((v_arr == NULL)||(v == NULL))
+<a name="anchor-16"></a>        return(-1);
+        
+    error = ProArraySizeGet((ProArray)v_arr, &amp;n);
+    TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+            &quot;ProTestExportFindVertex()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-17"></a>    
+    if((error!=PRO_TK_NO_ERROR)||(n&lt;=0))     
+        return(-1);
+        
+    for(i=(n-1); i&lt;=0; i--)
+<a name="anchor-18"></a>    {
+       if (ProTestExportVertexIsEq(v_arr[i], v) == 1)
+            return(i);
+    }    
+    
+<a name="anchor-19"></a>    return(-1);        
+}
+
+/*=================================================================*\
+    FUNCTION : ProTestExportVertexAdd()
+<a name="anchor-20"></a>    PURPOSE  : Add vertex to the array
+\*=================================================================*/
+int ProTestExportVertexAdd(ProVector **v_arr, ProVector v, ProBoolean opt)
+{
+    int n;
+<a name="anchor-21"></a>    ProError error;
+
+    if(v == NULL)
+        return(-1);
+    
+<a name="anchor-22"></a>    if(*v_arr == NULL)
+    {
+        error = ProArrayAlloc(0, sizeof(ProVector),1,(ProArray*)v_arr);
+        TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+            &quot;ProTestExportVertexAdd()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-23"></a>        
+        if(error!=PRO_TK_NO_ERROR)
+            return(-1);
+    }
+    
+<a name="anchor-24"></a>    if(opt == PRO_B_TRUE)
+    {
+        n = ProTestExportFindVertex(*v_arr, v);
+        if(n>=0)
+            return(n);    
+<a name="anchor-25"></a>    }        
+
+    error = ProArrayObjectAdd((ProArray*)v_arr, PRO_VALUE_UNUSED, 1, &amp;v);
+    TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;,
+        &quot;ProTestExportVertexAdd()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-26"></a>    
+    if(error!=PRO_TK_NO_ERROR)
+        return(-1);
+    
+    error = ProArraySizeGet((ProArray)*v_arr, &amp;n);
+<a name="anchor-27"></a>    TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+        &quot;ProTestExportVertexAdd()&quot;, error, error != PRO_TK_NO_ERROR);
+        
+    if(error!=PRO_TK_NO_ERROR)
+        return(-1);
+<a name="anchor-28"></a>        
+    (*v_arr)[n-1][0] =v[0];
+    (*v_arr)[n-1][1] =v[1];
+    (*v_arr)[n-1][2] =v[2];
+
+<a name="anchor-29"></a>    return(n-1);            
+}
+
+/*=================================================================*\
+    FUNCTION : ProTestExportCollectAllTringles()
+<a name="anchor-30"></a>    PURPOSE  : Collect all triangles into the single array
+\*=================================================================*/
+ProError ProTestExportCollectAllTringles(ProSurfaceTessellationData *data, 
+                                         ProTriangle **trn, 
+                                         ProVector **ver, 
+<a name="anchor-31"></a>                                         ProBoolean opt)
+{
+    ProError error, err = PRO_TK_NO_ERROR;
+    int i, n_trn = 0, k, j;
+    int SurfCount=0;
+<a name="anchor-32"></a>    
+    if(data == NULL)
+        return(PRO_TK_BAD_INPUTS);
+
+    if(*trn == NULL)
+<a name="anchor-33"></a>    {
+        error = ProArrayAlloc(0, sizeof(ProTriangle),1,(ProArray*)trn);
+        TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+            &quot;ProTestExportCollectAllTringles()&quot;, error, error != PRO_TK_NO_ERROR);
+        
+<a name="anchor-34"></a>        if(error!=PRO_TK_NO_ERROR)
+            return(error);
+    }
+    
+    error = ProArraySizeGet((ProArray)data, &amp;SurfCount);
+<a name="anchor-35"></a>    TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+            &quot;ProTestExportCollectAllTringles()&quot;, error, error != PRO_TK_NO_ERROR);
+    
+    if((error != PRO_TK_NO_ERROR)||(SurfCount&lt;=0))
+        return(PRO_TK_BAD_INPUTS);
+<a name="anchor-36"></a>
+    for(i=0; i&lt;SurfCount; i++)
+    {   
+        for(j=0; j&lt;data[i].n_facets; j++)
+        {
+<a name="anchor-37"></a>            error = ProArrayObjectAdd((ProArray*)trn,PRO_VALUE_UNUSED,1, &amp;data[i].facets[j]);
+            TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;,
+                &quot;ProTestExportCollectAllTringles()&quot;, error, error != PRO_TK_NO_ERROR);
+            
+            if(error!=PRO_TK_NO_ERROR)
+<a name="anchor-38"></a>            {
+                err = error;
+                continue;
+            }    
+                
+<a name="anchor-39"></a>            for(k=0; k&lt;3; k++)
+                (*trn)[n_trn][k] = ProTestExportVertexAdd(ver,
+                    data[i].vertices[data[i].facets[j][k]], opt);
+            n_trn++;
+        }        
+<a name="anchor-40"></a>    }    
+    
+    return(err);
+}
+
+<a name="anchor-41"></a>/*=================================================================*\
+    FUNCTION : ProTestExportToRender()
+    PURPOSE  : Print tessllation data to SLP file
+\*=================================================================*/
+ProError ProTestExportToRender(FILE *fp, ProSurfaceTessellationData *data, char *name)
+<a name="anchor-42"></a>{
+    ProError error;
+    int n,i,j,k;
+    
+    error = ProArraySizeGet((ProArray)data, &amp;n);
+<a name="anchor-43"></a>    if((error!=PRO_TK_NO_ERROR)||(n&lt;=0))
+        return(PRO_TK_BAD_INPUTS);
+    
+    ProTKFprintf(fp,&quot;solid %s\n&quot;, name);   
+/*-----------------------------------------------------------------*\
+<a name="anchor-44"></a>    Print all facets with gray color
+\*-----------------------------------------------------------------*/
+    ProTKFprintf(fp,&quot;\tcolor 0.8 0.8 0.8\n&quot;);
+    for(i=0; i&lt;n; i++)
+    {
+<a name="anchor-45"></a>        for(j=0; j&lt;data[i].n_facets; j++)
+        {
+            ProTKFprintf(fp,&quot;\tfacet\n&quot;);
+            for(k=0; k&lt;3; k++)
+            {
+<a name="anchor-46"></a>                ProTKFprintf(fp,&quot;\t\t\tnormal %5.5f %5.5f %5.5f\n&quot;, 
+                    data[i].normals[data[i].facets[j][k]][0],
+                    data[i].normals[data[i].facets[j][k]][1],
+                    data[i].normals[data[i].facets[j][k]][2]);
+            }                
+<a name="anchor-47"></a>                
+            ProTKFprintf(fp,&quot;\t\touter loop\n&quot;);
+            for(k=0; k&lt;3; k++)
+            {
+                ProTKFprintf(fp,&quot;\t\t\tvertex %5.5f %5.5f %5.5f\n&quot;, 
+<a name="anchor-48"></a>                    data[i].vertices[data[i].facets[j][k]][0],
+                    data[i].vertices[data[i].facets[j][k]][1],
+                    data[i].vertices[data[i].facets[j][k]][2]);
+            }                
+            ProTKFprintf(fp,&quot;\t\tendloop\n&quot;);
+<a name="anchor-49"></a>            ProTKFprintf(fp,&quot;\tendfacet\n&quot;);
+        }
+    }        
+    ProTKFprintf(fp,&quot;endsolid %s&quot;,name);
+    
+<a name="anchor-50"></a>    return(error);
+}
+
+/*=================================================================*\
+    FUNCTION : ProTestExportToDUMP()
+<a name="anchor-51"></a>    PURPOSE  : DUMP tessllation data to file
+\*=================================================================*/
+ProError ProTestExportToDUMP(FILE *fp, ProSurfaceTessellationData *data)
+{
+    ProError error;
+<a name="anchor-52"></a>    int i, j, SurfCount =0, SurfId;
+    ProSrftype SurfType;
+    ProCharLine c_name;
+    double SurfArea;
+
+<a name="anchor-53"></a>/*-----------------------------------------------------------------*\
+    Get surface count
+\*-----------------------------------------------------------------*/
+    error = ProArraySizeGet((ProArray)data, &amp;SurfCount); 
+    TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+<a name="anchor-54"></a>        &quot;ProTestExportToDUMP()&quot;, error, error != PRO_TK_NO_ERROR);
+    
+    if((error != PRO_TK_NO_ERROR)||(SurfCount&lt;=0))
+        return(PRO_TK_E_NOT_FOUND);
+        
+<a name="anchor-55"></a>/*-----------------------------------------------------------------*\
+    Print file header
+\*-----------------------------------------------------------------*/
+    ProTKFprintf(fp, &quot;#Surface tessellation data\n&quot;);
+    ProTKFprintf(fp, &quot;#Version 1.0\n\n&quot;);
+<a name="anchor-56"></a>    ProTKFprintf(fp, &quot;Surface count: %d\n&quot;,SurfCount);
+    for(i=0; i&lt;SurfCount;i++)
+    {
+/*-----------------------------------------------------------------*\
+        Print information about current surface
+<a name="anchor-57"></a>\*-----------------------------------------------------------------*/
+        ProTKFprintf(fp, &quot;Surface_%d {\n&quot;,i);
+        error = ProSurfaceIdGet(data[i].surface, &amp;SurfId);
+        TEST_CALL_REPORT (&quot;ProSurfaceIdGet()&quot;,
+            &quot;ProTestExportToDUMP()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-58"></a>        
+        ProTKFprintf(fp,&quot;\tid: %d\n&quot;, SurfId);
+        
+        error = ProSurfaceTypeGet(data[i].surface, &amp;SurfType);
+        TEST_CALL_REPORT (&quot;ProSurfaceTypeGet()&quot;,
+<a name="anchor-59"></a>            &quot;ProTestExportToDUMP()&quot;, error, error != PRO_TK_NO_ERROR);
+        
+        ProUtilSrftypeStr(SurfType,c_name);
+        ProTKFprintf(fp,&quot;\ttype: (%d) %s\n&quot;, SurfType, c_name);
+        
+<a name="anchor-60"></a>        error = ProSurfaceAreaEval(data[i].surface, &amp;SurfArea); 
+        TEST_CALL_REPORT (&quot;ProSurfaceAreaEval()&quot;,
+            &quot;ProTestExportToDUMP()&quot;, error, error != PRO_TK_NO_ERROR);
+        
+        ProTKFprintf(fp,&quot;\tarea: %5.5f\n&quot;, SurfArea);
+<a name="anchor-61"></a>        ProTKFprintf(fp,&quot;\tvertices count: %d\n&quot;, data[i].n_vertices);
+        ProTKFprintf(fp,&quot;\tfacets count: %d\n&quot;, data[i].n_facets);
+        
+/*-----------------------------------------------------------------*\
+        Print array of vertices
+<a name="anchor-62"></a>\*-----------------------------------------------------------------*/
+        ProTKFprintf(fp,&quot;\tVertices {\n&quot;);
+        for(j=0; j&lt;data[i].n_vertices; j++)
+        {
+            ProTKFprintf(fp,&quot;\t\t %5.5f, %5.5f, %5.5f\n&quot;,
+<a name="anchor-63"></a>                data[i].vertices[j][0], data[i].vertices[j][1], data[i].vertices[j][2]); 
+        }
+        ProTKFprintf(fp,&quot;\t}\n&quot;);
+        
+/*-----------------------------------------------------------------*\
+<a name="anchor-64"></a>        Print array of normals
+\*-----------------------------------------------------------------*/
+        ProTKFprintf(fp,&quot;\tNormals {\n&quot;);
+        for(j=0; j&lt;data[i].n_vertices; j++)
+        {
+<a name="anchor-65"></a>            ProTKFprintf(fp,&quot;\t\t %5.5f, %5.5f, %5.5f\n&quot;,
+                data[i].normals[j][0], data[i].normals[j][1], data[i].normals[j][2]); 
+        }
+        ProTKFprintf(fp,&quot;\t}\n&quot;);
+        
+<a name="anchor-66"></a>/*-----------------------------------------------------------------*\
+        Print array of facets
+\*-----------------------------------------------------------------*/
+        ProTKFprintf(fp,&quot;\tFacets {\n&quot;);
+        for(j=0; j&lt;data[i].n_facets; j++)
+<a name="anchor-67"></a>        {
+            ProTKFprintf(fp,&quot;\t\t %d, %d, %d\n&quot;, 
+                data[i].facets[j][0],data[i].facets[j][1],data[i].facets[j][2]);
+        }
+        ProTKFprintf(fp,&quot;\t}\n&quot;);
+<a name="anchor-68"></a>
+                
+        ProTKFprintf(fp,&quot;}\n\n&quot;);
+    
+    }     
+<a name="anchor-69"></a>    
+    return(PRO_TK_NO_ERROR);
+}
+
+/*=================================================================*\
+<a name="anchor-70"></a>    FUNCTION : ProTestExportToWireFrame
+    PURPOSE  : Output tessellation data to the wire frame file.
+\*=================================================================*/
+ProError ProTestExportToWireFrame(FILE *fp, ProSurfaceTessellationData *data, ProBoolean opt)
+{
+<a name="anchor-71"></a>
+    ProError error;
+    ProTriangle *trn=NULL;
+    ProVector *ver=NULL;    
+    int n_v, n_t, i;
+<a name="anchor-72"></a>        
+    error = ProTestExportCollectAllTringles(data, &amp;trn, &amp;ver, opt);
+    
+    error = ProArraySizeGet((ProArray)ver, &amp;n_v);
+    TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+<a name="anchor-73"></a>        &quot;ProTestExportToWireFrame()&quot;, error, error != PRO_TK_NO_ERROR);
+    
+    if((error != PRO_TK_NO_ERROR)||(n_v&lt;=0))
+        return(PRO_TK_BAD_INPUTS);
+    
+<a name="anchor-74"></a>    for(i=0; i&lt;n_v; i++)
+        ProTKFprintf(fp,&quot;v %5.5f %5.5f %5.5f\n&quot;,ver[i][0], ver[i][1], ver[i][2]);
+    
+    error = ProArraySizeGet((ProArray)trn, &amp;n_t);
+    TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+<a name="anchor-75"></a>        &quot;ProTestExportToWireFrame()&quot;, error, error != PRO_TK_NO_ERROR);
+    
+    if((error != PRO_TK_NO_ERROR)||(n_t&lt;=0))
+        return(PRO_TK_BAD_INPUTS);
+    
+<a name="anchor-76"></a>    for(i=0;i&lt;n_t; i++)
+        ProTKFprintf(fp, &quot;f %d %d %d\n&quot;, trn[i][0]+1, trn[i][1]+1, trn[i][2]+1);
+        
+    error = ProArrayFree((ProArray*)&amp;ver);
+    TEST_CALL_REPORT (&quot;ProArrayFree()&quot;,
+<a name="anchor-77"></a>        &quot;ProTestExportToWireFrame()&quot;, error, error != PRO_TK_NO_ERROR);
+        
+    error = ProArrayFree((ProArray*)&amp;trn);
+    TEST_CALL_REPORT (&quot;ProArrayFree()&quot;,
+        &quot;ProTestExportToWireFrame()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-78"></a>    
+    return(PRO_TK_NO_ERROR);
+}
+
+
+<a name="anchor-79"></a>/*=================================================================*\
+    FUNCTION : ProTestExportModelTo()
+    PURPOSE  : Export part tessellation data to the file
+\*=================================================================*/
+ProError ProTestExportModelTo(ProTestExportData *data)
+<a name="anchor-80"></a>{   
+    ProError error;
+    ProSurfaceTessellationData *tes_data = NULL;
+    ProMdlName w_name;
+    ProCharLine c_name;
+<a name="anchor-81"></a>    FILE *fp;
+
+    if(data == NULL)
+        return(PRO_TK_BAD_INPUTS);
+
+<a name="anchor-82"></a>    error = ProPartTessellate ((ProPart)(data->mdl),
+                               data->chord_ht,
+                               data->angle_cntrl, 
+                               data->include_quilts, 
+                               &amp;tes_data);
+<a name="anchor-83"></a>                               
+    TEST_CALL_REPORT (&quot;ProPartTessellate()&quot;,
+        &quot;ProTestExportTo()&quot;, error, error != PRO_TK_NO_ERROR);
+    if (error!=PRO_TK_NO_ERROR)
+        return(error);    
+<a name="anchor-84"></a>
+    error = ProMdlMdlnameGet(data->mdl, w_name);
+    TEST_CALL_REPORT (&quot;ProMdlMdlnameGet()&quot;,
+        &quot;ProTestExportTo()&quot;, error, error != PRO_TK_NO_ERROR);
+    
+<a name="anchor-85"></a>    ProWstringToString(c_name, w_name);
+    switch(data->file_format)
+    {
+        case EXPORT_MN_WIREFRAME:
+            ProTKSprintf(data->file_name,&quot;%s.%s&quot;,c_name,&quot;obj&quot;);
+<a name="anchor-86"></a>            break;
+        case EXPORT_MN_RENDER:
+            ProTKSprintf(data->file_name,&quot;%s.%s&quot;,c_name,&quot;slp&quot;);
+            break;
+        case EXPORT_MN_DUMP:
+<a name="anchor-87"></a>            ProTKSprintf(data->file_name,&quot;%s.%s&quot;,c_name,&quot;dump&quot;);
+            break;
+    }
+    
+    if ((fp = PTApplsUnicodeFopen(data->file_name, &quot;w&quot;)) == NULL)
+<a name="anchor-88"></a>    {
+	ProTKPrintf(&quot;Cannot open output file\n&quot;);
+	return (PRO_TK_GENERAL_ERROR);
+    }
+            
+<a name="anchor-89"></a>    switch (data->file_format)
+    {
+        case EXPORT_MN_WIREFRAME:
+            error = ProTestExportToWireFrame(fp, tes_data, data->optimization);
+            break;
+<a name="anchor-90"></a>        case EXPORT_MN_RENDER:
+            error = ProTestExportToRender(fp, tes_data, ProWstringToString(c_name, w_name));
+            break;
+        case EXPORT_MN_DUMP:
+            error = ProTestExportToDUMP(fp,tes_data);
+<a name="anchor-91"></a>            break;
+    }
+    
+    error = ProPartTessellationFree(&amp;tes_data);
+    TEST_CALL_REPORT (&quot;ProPartTessellationFree()&quot;,
+<a name="anchor-92"></a>        &quot;ProTestExportTo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    fclose(fp);
+    return(error);
+}
+<a name="anchor-93"></a>
+/*=================================================================*\
+    FUNCTION : ProTestExportTo()
+    PURPOSE  : Export part tessellation data to the file
+\*=================================================================*/
+<a name="anchor-94"></a>ProError ProTestExportTo(ProTestExportData *data)
+{   
+    ProError error;
+    ProMdlType mdl_type;
+    int n, n_sel,i;
+<a name="anchor-95"></a>    ProSelection *sel;
+    ProModelitem part_item;    
+    static ProUtilMenuButtons  TkMenu[] ={
+		{&quot;ExportAsm&quot;,  -1, TEST_CALL_PRO_MENU_DELETE},
+		{&quot;-As assembly&quot;,    EXPORT_MN_ASSM,    0},
+<a name="anchor-96"></a>		{&quot;-Selected parts&quot;, EXPORT_MN_SEL_PART,0},
+		{&quot;-Quit&quot;,          -1,    TEST_CALL_PRO_MENU_DELETE},
+		{&quot;&quot;,               -1,                 0}};
+
+    if(data == NULL)
+<a name="anchor-97"></a>        return(PRO_TK_BAD_INPUTS);
+
+    error = ProMdlTypeGet(data->mdl, &amp;mdl_type);
+    TEST_CALL_REPORT (&quot;ProMdlTypeGet()&quot;,
+        &quot;ProTestExportTo()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-98"></a>
+    switch(mdl_type)
+    {    
+        case PRO_MDL_ASSEMBLY:
+            error = ProUtilMenuIntValueSelect(TkMenu, &amp;n);
+<a name="anchor-99"></a>            if((error!=PRO_TK_NO_ERROR)||(n&lt;0))
+                return(PRO_TK_NO_ERROR);
+        
+            if (n == EXPORT_MN_SEL_PART) 
+            {       
+<a name="anchor-100"></a>                error = ProSelect((char*)&quot;part&quot;,PRO_VALUE_UNUSED,
+                    NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+                TEST_CALL_REPORT (&quot;ProSelect()&quot;,
+                    &quot;ProTestExportTo()&quot;, error, error != PRO_TK_NO_ERROR);
+                
+<a name="anchor-101"></a>                if((error!=PRO_TK_NO_ERROR)||(n_sel&lt;=0))
+                    return(PRO_TK_E_NOT_FOUND);
+                for(i=0; i&lt;n_sel; i++)
+                {
+                    error = ProSelectionModelitemGet(sel[i], &amp;part_item);
+<a name="anchor-102"></a>                    TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;,
+                        &quot;ProTestExportTo()&quot;, error, error != PRO_TK_NO_ERROR);
+                    if (error != PRO_TK_NO_ERROR)
+                        continue;
+                    error = ProModelitemMdlGet (&amp;part_item, (ProMdl*)&amp;(data->mdl));                
+<a name="anchor-103"></a>                    TEST_CALL_REPORT (&quot;ProModelitemMdlGet()&quot;,
+                        &quot;ProTestExportTo()&quot;, error, error != PRO_TK_NO_ERROR);
+                    if (error != PRO_TK_NO_ERROR)
+                        continue;
+                    error = ProTestExportModelTo(data);
+<a name="anchor-104"></a>                }
+            } else
+            {
+                error = ProTestExportModelTo(data);
+            }       
+<a name="anchor-105"></a>            break;
+        case PRO_MDL_PART:
+            error = ProTestExportModelTo(data);
+        break;    
+        default:
+<a name="anchor-106"></a>            return(PRO_TK_BAD_INPUTS);
+    }
+    
+    return(error);
+}
+<a name="anchor-107"></a>
+/*=================================================================*\
+    FUNCTION : ProTestExportSetup()
+    PURPOSE  : Setup tesselation parameters
+\*=================================================================*/
+<a name="anchor-108"></a>ProError ProTestExportSetup(ProTestExportData *data)
+{
+    int n;
+    ProError error;
+    static ProUtilMenuButtons  TkMenu[] ={
+<a name="anchor-109"></a>		{&quot;ExpSetup&quot;,  -1, TEST_CALL_PRO_MENU_DELETE},
+		{&quot;-Chord height&quot;,  EXPORT_MN_CHORD,    0},
+		{&quot;-Angle control&quot;, EXPORT_MN_ANGLE,    0},
+		{&quot;-Quilt&quot;,         EXPORT_MN_QUILT,    0},
+		{&quot;-Optimization&quot;,  EXPORT_MN_OPT,      0},
+<a name="anchor-110"></a>		{&quot;-Quit&quot;,          -1,    TEST_CALL_PRO_MENU_DELETE},
+		{&quot;&quot;,      -1,0}};
+
+    error = ProUtilMenuIntValueSelect(TkMenu, &amp;n);
+
+<a name="anchor-111"></a>    if((error!=PRO_TK_NO_ERROR)||(n&lt;0))
+        return(PRO_TK_NO_ERROR);
+
+    switch(n)
+    {
+<a name="anchor-112"></a>        case EXPORT_MN_CHORD:
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;The maximum allowable chord height(>0):&quot;);
+            error = ProMessageDoubleRead(NULL, &amp;(data->chord_ht));
+            break;
+        case EXPORT_MN_ANGLE:
+<a name="anchor-113"></a>            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;The angle control (between 0.0 and 1.0):&quot;);
+            error = ProMessageDoubleRead(NULL, &amp;(data->angle_cntrl));
+            break;
+        case EXPORT_MN_QUILT:
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Include quilt surfaces or not(Y/N):&quot;);
+<a name="anchor-114"></a>            data->include_quilts = (ProBoolean)(ProUtilYesnoGet((char*)&quot;Yes&quot;) == PRO_B_TRUE);
+            break;
+        case EXPORT_MN_OPT:
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enable optimization(Y/N):&quot;);
+            data->optimization = (ProBoolean)(ProUtilYesnoGet((char*)&quot;Yes&quot;) == PRO_B_TRUE);   
+<a name="anchor-115"></a>            break;           
+    }        
+    
+    ProTestExportSetup(data);
+    
+<a name="anchor-116"></a>    return(PRO_TK_NO_ERROR);    
+}
+
+/*=================================================================*\
+    FUNCTION : ProTestExportMainMenu()
+<a name="anchor-117"></a>    PURPOSE  : Create &quot;TkModify&quot; menu 
+\*=================================================================*/
+ProError ProTestExportMainMenu(ProMdl mdl)
+{
+    int n;
+<a name="anchor-118"></a>    ProError error;
+    static ProUtilMenuButtons  TkMenu[] ={
+		{&quot;ExportGeom&quot;,  -1, TEST_CALL_PRO_MENU_DELETE},
+		{&quot;-WireFrame&quot;,  EXPORT_MN_WIREFRAME, 0},
+		{&quot;-Render&quot;,     EXPORT_MN_RENDER,    0},
+<a name="anchor-119"></a>		{&quot;-Dump&quot;,       EXPORT_MN_DUMP,      0},
+		{&quot;-Setup&quot;,      EXPORT_MN_SETUP,     0},
+		{&quot;-Quit&quot;,-1,    TEST_CALL_PRO_MENU_DELETE},
+		{&quot;&quot;,      -1,0}};
+    static ProTestExportData data; 
+<a name="anchor-120"></a>    static int FirstCall =0;               
+
+
+    if (mdl == NULL)
+    {
+<a name="anchor-121"></a>        error = ProMdlCurrentGet(&amp;mdl);
+        TEST_CALL_REPORT (&quot;ProMdlCurrentGet()&quot;,
+                &quot;ProTestExportMainMenu()&quot;, error, error != PRO_TK_NO_ERROR);
+        if(error != PRO_TK_NO_ERROR)
+            return(error);    
+<a name="anchor-122"></a>    }       
+/*--------------------------------------------------------------------*\
+    Initialization default data
+\*--------------------------------------------------------------------*/
+    if(FirstCall == 0)
+<a name="anchor-123"></a>    {
+        data.chord_ht = 0.1;
+        data.angle_cntrl = 0.5;
+        data.include_quilts = PRO_B_FALSE;
+        data.optimization = PRO_B_FALSE;   
+<a name="anchor-124"></a>        FirstCall++;
+    }    
+/*--------------------------------------------------------------------*\
+    Show &quot;ExportGeom&quot; menu  
+\*--------------------------------------------------------------------*/
+<a name="anchor-125"></a>    do
+    {
+        error = ProUtilMenuIntValueSelect(TkMenu, &amp;n);
+
+        if((error!=PRO_TK_NO_ERROR)||(n&lt;0))
+<a name="anchor-126"></a>            return(PRO_TK_NO_ERROR);
+            
+        data.mdl = mdl;
+    
+        switch(n)
+<a name="anchor-127"></a>        {        
+            case EXPORT_MN_WIREFRAME:
+            case EXPORT_MN_RENDER:
+            case EXPORT_MN_DUMP:
+                data.file_format = n;    
+<a name="anchor-128"></a>                error = ProTestExportTo(&amp;data); 
+                break;
+            case EXPORT_MN_SETUP:
+                error = ProTestExportSetup(&amp;data);
+                break;
+<a name="anchor-129"></a>            
+        }            
+    } while(1);    
+   return(error);    
+}
+<a name="anchor-130"></a>
+</pre>
+</body>
+</html>

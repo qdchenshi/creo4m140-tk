@@ -1,0 +1,146 @@
+<html>
+<head>
+<title>TestWindow.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMdl.h>
+#include &lt;ProMenu.h>
+#include &lt;ProWindows.h>
+#include &lt;ProView.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-4"></a>#if (PRO_MACHINE == SUN4 || PRO_MACHINE == SOLARISx64 || PRO_MACHINE == HP8000)
+#include &lt;unistd.h>
+#endif
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-5"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestSleep.h&quot;
+#include &quot;TestMenu.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilFiles.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &lt;time.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-7"></a>#include &lt;UtilMessage.h>
+
+/*====================================================================*\
+    FUNCTION :  ProTestObjWinMenu()
+    PURPOSE  :  Set view test menu.
+<a name="anchor-8"></a>\*====================================================================*/
+int ProTestObjWinMenu()
+{
+    ProMdl    mdl;
+    ProMatrix matrix;
+<a name="anchor-9"></a>    ProError  err;
+    int	*w_id, i, j, k, l, cur_win, num_win;
+    char name[PRO_MDLNAME_SIZE];
+    double scale[3] = {0.5, 0.5, 4};
+    ProMdlName w_name;
+<a name="anchor-10"></a>    ProPath w_path;
+    FILE *fp;
+
+
+    err = ProUtilCollectWindowIds(&amp;w_id);
+<a name="anchor-11"></a>    if (err != PRO_TK_NO_ERROR)
+    {
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;No windows found&quot;);
+	return (0);
+    }
+<a name="anchor-12"></a>
+    err = ProWindowCurrentGet(&amp;cur_win);
+    TEST_CALL_REPORT(&quot;ProWindowCurrentGet()&quot;, &quot;ProTestObjWinMenu()&quot;,
+						err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-13"></a>    fp = PTApplsUnicodeFopen(&quot;win_info.log&quot;, &quot;w&quot;);
+    ProStringToWstring(w_path, (char*)&quot;win_info.log&quot;);
+
+    err = ProArraySizeGet((ProArray)w_id, &amp;num_win);
+    for (i=0; i&lt;num_win; i++)
+<a name="anchor-14"></a>    {
+#ifndef PT_PRODUCTS_BUILD
+	err = ProWindowCurrentSet(w_id[i]);
+	TEST_CALL_REPORT(&quot;ProWindowCurrentSet()&quot;, &quot;ProTestObjWinMenu()&quot;,
+						err, err != PRO_TK_NO_ERROR);
+<a name="anchor-15"></a>#endif
+	ProTKFprintf(fp ,&quot;Window Id %d (%s)\n\n&quot;, w_id[i], w_id[i] == cur_win ?
+	    &quot;active&quot; : &quot;not active&quot;);
+
+	err = ProWindowMdlGet(w_id[i], &amp;mdl);
+<a name="anchor-16"></a>	TEST_CALL_REPORT(&quot;ProWindowMdlGet()&quot;, &quot;ProTestObjWinMenu()&quot;,
+						err, err != PRO_TK_NO_ERROR);
+
+	if (err == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-17"></a>	    err = ProMdlMdlnameGet(mdl, w_name);
+	    TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProTestObjWinMenu()&quot;,
+						err, err != PRO_TK_NO_ERROR);
+	    ProWstringToString(name, w_name);
+	    ProTKFprintf(fp, &quot;Contains model %s\n&quot;, name);
+<a name="anchor-18"></a>
+	    err = ProWindowCurrentMatrixGet(matrix);
+	    TEST_CALL_REPORT(&quot;ProWindowCurrentMatrixGet()&quot;, 
+			    &quot;ProTestObjWinMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-19"></a>	    for (k=0; k&lt;3; k++)
+	    {
+		/* Change model scale to check window matrix functions */
+		for (j=0; j&lt;3; j++)
+		    for (l=0; l&lt;3; l++)
+<a name="anchor-20"></a>			matrix[j][l] *= scale[k];
+
+		err = ProWindowPanZoomMatrixSet(w_id[i], matrix);
+		TEST_CALL_REPORT(&quot;ProWindowPanZoomMatrixSet()&quot;, 
+			    &quot;ProTestObjWinMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>
+		err = ProWindowRepaint(	w_id[i]);
+		TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;, 
+			    &quot;ProTestObjWinMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+		ProTestSleep(1);
+<a name="anchor-22"></a>
+	    }
+    
+	    ProTKFprintf(fp, &quot;Window matrix:\n&quot;);
+	    for (j=0; j&lt;4; j++)
+<a name="anchor-23"></a>		ProTKFprintf(fp, &quot;%8.4f %8.4f %8.4f\n&quot;, 
+		    matrix[j][0], matrix[j][1], matrix[j][2]);
+
+	    ProTKFprintf(fp, &quot;\n\n&quot;);
+
+<a name="anchor-24"></a>	}
+
+    }
+    fclose(fp);
+
+<a name="anchor-25"></a>#ifndef PT_PRODUCTS_BUILD
+    err = ProWindowCurrentSet(cur_win);
+    TEST_CALL_REPORT(&quot;ProWindowCurrentSet()&quot;, &quot;ProTestObjWinMenu()&quot;,
+					    err, err != PRO_TK_NO_ERROR);
+#endif
+<a name="anchor-26"></a>
+    err = ProInfoWindowDisplay(w_path, NULL, NULL);
+    TEST_CALL_REPORT(&quot;ProInfoWindowDisplay()&quot;, 
+			    &quot;ProTestObjWinMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-27"></a>    return (0);
+}
+
+</pre>
+</body>
+</html>

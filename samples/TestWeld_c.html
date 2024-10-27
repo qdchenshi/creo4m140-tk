@@ -1,0 +1,366 @@
+<html>
+<head>
+<title>TestWeld.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*----------------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*----------------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProSelection.h>
+#include &lt;ProWeld.h>
+#include &lt;ProMenu.h>
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-3"></a>Application includes
+\*----------------------------------------------------------------------------*/
+#include &quot;UtilMenu.h&quot;
+#include &quot;UtilFiles.h&quot;
+#include &quot;UtilMessage.h&quot;
+<a name="anchor-4"></a>#include &quot;UtilString.h&quot;
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;ProUtil.h>
+
+<a name="anchor-5"></a>/*----------------------------------------------------------------------------*\
+Application macros
+\*----------------------------------------------------------------------------*/
+#define  WELD_INFO      0
+#define  PARAM_INFO     1
+<a name="anchor-6"></a>
+#define  WELD_QCR       &quot;.wld&quot;
+#define  PARAM_QCR      &quot;_param.wld&quot;
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-7"></a>Application prototypes
+\*----------------------------------------------------------------------------*/
+char* ProTestWeldTypeGet (ProWeldtype );
+char* ProTestWeldSubtypeGet (ProWeldsubtype );
+ProError    ProTestWeldIntermittencePrint (ProFeature *, ProStandard, FILE *);
+<a name="anchor-8"></a>
+/*============================================================================*\
+    FUNCTION :	ProTestWeldMenu()
+    PURPOSE  :	Create a weld Menu.
+\*============================================================================*/
+<a name="anchor-9"></a>int ProTestWeldMenu ()
+{
+    ProError err;
+    int menu_id, action;
+    int ProTestWeldAct();
+<a name="anchor-10"></a>    
+    err= ProMenuFileRegister( (char *)&quot;TkWelding&quot;, (char *)&quot;tkwelding.mnu&quot;, 
+	&amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestWeldMenu()&quot;,
+    	err, err!= PRO_TK_NO_ERROR );
+<a name="anchor-11"></a>    ProMenubuttonActionSet( (char *)&quot;TkWelding&quot;, (char *)&quot;WeldInfo&quot;,
+        (ProMenubuttonAction)ProTestWeldAct, NULL,  0 );
+    ProMenubuttonActionSet( (char *)&quot;TkWelding&quot;, (char *)&quot;TkWelding&quot;,
+    	(ProMenubuttonAction)ProMenuDelete, NULL,  0 );
+    err= ProMenuCreate( PROMENUTYPE_MAIN,(char *)&quot;TkWelding&quot;, &amp;menu_id );
+<a name="anchor-12"></a>    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestWeldMenu()&quot;,
+        err, err!= PRO_TK_NO_ERROR );
+   ProMenuProcess( (char *)&quot;TkWelding&quot;, &amp;action );
+   
+   return (0);  
+<a name="anchor-13"></a>
+}
+
+/*============================================================================*\
+    FUNCTION :	ProTestWeldMenu()
+<a name="anchor-14"></a>    PURPOSE  :	Get options for testing
+\*============================================================================*/
+int ProTestWeldAct ()
+{
+    int     	    	id, num_sel;
+<a name="anchor-15"></a>    ProError	    	err;
+    ProUtilMenuButtons  buttons[] = {
+        {&quot;WeldInfo&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Weld&quot;, WELD_INFO, 0},
+        {&quot;Parameters&quot;, PARAM_INFO, 0},
+<a name="anchor-16"></a>        {&quot;&quot;, 0, 0}
+        };
+    ProSelection    	*sel = NULL;
+    ProModelitem    	model_item;
+    int ProTestWeldParam (ProFeature *weld);
+<a name="anchor-17"></a>    int ProTestWeldInfo (ProFeature *weld);
+
+    if (ProUtilMenuIntValueSelect( buttons, &amp;id) != PRO_TK_NO_ERROR)
+        return -1;
+
+<a name="anchor-18"></a>    while (1)
+    {
+    	ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select weld.&quot;);
+    
+    	if (ProSelect((char *)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL,
+<a name="anchor-19"></a>    	    &amp;sel, &amp;num_sel) != PRO_TK_NO_ERROR || sel == NULL)
+            return(0);
+	
+    	ProSelectionModelitemGet(sel[0], &amp;model_item);
+	
+<a name="anchor-20"></a>	err = ProWeldSequenceIdGet ((ProFeature*)&amp;model_item,
+	    &amp;num_sel);
+	TEST_CALL_REPORT (&quot;ProWeldSequenceIdGet&quot;, &quot;ProTestWeldAct&quot;,
+	    err, err!=PRO_TK_NO_ERROR);
+
+<a name="anchor-21"></a>	if (err != PRO_TK_NO_ERROR )
+	{
+	    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;The selected feature is not&quot;
+	    	    	    	    	    	&quot; weld. Try again.&quot;);
+    	    continue;
+<a name="anchor-22"></a>	}
+	break;
+    }
+
+    switch (id)
+<a name="anchor-23"></a>    {
+    case WELD_INFO:
+	    ProTestWeldInfo ((ProFeature*)&amp;model_item);
+            
+            break;
+<a name="anchor-24"></a>    case PARAM_INFO:        
+            ProTestWeldParam((ProFeature*)&amp;model_item);
+            
+            break;
+    default:;
+<a name="anchor-25"></a>    }
+    return (0);
+}
+
+/*============================================================================*\
+<a name="anchor-26"></a>    FUNCTION :	ProTestWeldInfo ()
+    PURPOSE  :  Store weld information.
+\*============================================================================*/
+int ProTestWeldInfo (ProFeature *weld)
+{
+<a name="anchor-27"></a>    int     	    sequence_id;
+    FILE            *fp = NULL;
+    char            c_name[PRO_MDLNAME_SIZE];
+    ProMdlName 	    w_name;
+    ProError	    err;
+<a name="anchor-28"></a>    ProWeldtype     type;
+    ProWeldsubtype  subtype;
+    ProWeldInfo     info;
+    ProFeature	    rod; 
+    ProUtilCname    fname;
+<a name="anchor-29"></a>    
+    ProTestQcrName(&amp;(weld->owner), (char *)WELD_QCR, fname);
+    if ((fp = PTApplsUnicodeFopen (fname, &quot;w&quot;)) != NULL)
+    {
+        err = ProMdlMdlnameGet(weld->owner, w_name);
+<a name="anchor-30"></a>        ProWstringToString (c_name, w_name);
+        ProTKFprintf (fp, &quot;\n\t Weld information \n&quot;);
+        ProTKFprintf (fp, &quot;\nAssembly Name: %s\n&quot;, c_name);
+        
+        err = ProWeldRodGet (weld, &amp;rod);
+<a name="anchor-31"></a>	TEST_CALL_REPORT (&quot;ProWeldRodGet&quot;, &quot;ProTestWeldInfo&quot;,
+	    err, err!=PRO_TK_NO_ERROR);
+	err = ProWeldRodNameGet (&amp;rod, w_name);
+	TEST_CALL_REPORT (&quot;ProWeldRodNameGet&quot;, &quot;ProTestWeldInfo&quot;,
+	    err, err!=PRO_TK_NO_ERROR);
+<a name="anchor-32"></a>	ProWstringToString (c_name, w_name);
+	ProTKFprintf (fp, &quot;Rod : %s\n&quot;, c_name);
+
+        
+	err = ProWeldTypeGet (weld, &amp;type, &amp;subtype);
+<a name="anchor-33"></a>	TEST_CALL_REPORT (&quot;ProWeldTypeGet&quot;, &quot;ProTestWeldInfo&quot;,
+	    err, err!=PRO_TK_NO_ERROR);
+	ProTKFprintf (fp, &quot;Type %s, Subtype %s \n&quot;,
+	    ProTestWeldTypeGet (type), ProTestWeldSubtypeGet (subtype));
+        
+<a name="anchor-34"></a>        err = ProWeldSequenceIdGet (weld, &amp;sequence_id);
+	TEST_CALL_REPORT (&quot;ProWeldSequenceIdGet&quot;, &quot;ProTestWeldInfo&quot;,
+	    err, err!=PRO_TK_NO_ERROR);
+	ProTKFprintf (fp, &quot;Sequ id = %d\n&quot;, sequence_id);
+
+<a name="anchor-35"></a>    	err = ProWeldInfoGet (weld, &amp;info);
+	TEST_CALL_REPORT (&quot;ProWeldInfoGet&quot;, &quot;ProTestWeldInfo&quot;,
+	    err, err!=PRO_TK_NO_ERROR);
+	ProTKFprintf (fp, &quot;Size = (%f, %f)\n x_sec_area = %f\n length = %f\n&quot;,
+	    info.size[0],info.size[1], info.x_sec_area, info.length);
+<a name="anchor-36"></a>	ProTKFprintf (fp, &quot; volume = %f\n mass = %f\n time = %f\n rod_length = %f&quot;,
+	    info.volume, info.mass, info.time, info.rod_length);
+        
+    	fclose (fp);
+        ProStringToWstring(w_name, fname);
+<a name="anchor-37"></a>        ProInfoWindowDisplay(w_name, NULL, NULL); 
+    }
+    return (0);
+}
+
+<a name="anchor-38"></a>/*============================================================================*\
+    FUNCTION :	ProTestWeldInfo ()
+    PURPOSE  :  Store weld specific information.
+\*============================================================================*/
+int ProTestWeldParam (ProFeature *weld)
+<a name="anchor-39"></a>{
+    ProError err;
+    ProWeldFilletdata  fillet ;
+    ProWeldGroovedata  groove ;
+    ProWeldPlugdata    plug ;
+<a name="anchor-40"></a>    ProWeldSlotdata    slot ;
+    ProWeldSpotdata    spot ;
+    ProUtilCname    fname;
+    char            c_name[PRO_MDLNAME_SIZE];
+    ProMdlName 	    w_name;
+<a name="anchor-41"></a>    FILE            *fp;
+    ProWeldtype     type;
+    ProWeldsubtype  subtype;
+    int num_belongs = 0;
+    ProFeature *belongs = NULL;
+<a name="anchor-42"></a>    
+    ProTestQcrName(&amp;(weld->owner), (char *)PARAM_QCR, fname);
+    if ((fp = PTApplsUnicodeFopen (fname, &quot;w&quot;)) != NULL)
+    {
+        err = ProMdlMdlnameGet(weld->owner, w_name);
+<a name="anchor-43"></a>        ProWstringToString (c_name, w_name);
+        ProTKFprintf (fp, &quot;\n\t Weld parameters \n&quot;);
+        ProTKFprintf (fp, &quot;\nAssembly Name: %s\n&quot;, c_name);
+	err = ProWeldTypeGet (weld, &amp;type, &amp;subtype);
+	TEST_CALL_REPORT (&quot;ProWeldTypeGet&quot;, &quot;ProTestWeldParam&quot;,
+<a name="anchor-44"></a>	    err, err!=PRO_TK_NO_ERROR);
+	ProTKFprintf (fp, &quot;Type %s, Subtype %s \n&quot;,
+	    ProTestWeldTypeGet (type), ProTestWeldSubtypeGet (subtype));
+        switch(type)
+        {
+<a name="anchor-45"></a>        case  PRO_WELD_FILLET :
+            err = ProWeldFilletdataGet(weld, &amp;fillet);
+            TEST_CALL_REPORT (&quot;ProWeldFilletdataGet&quot;, &quot;ProTestWeldParam&quot;,
+                err, err!=PRO_TK_NO_ERROR);
+            ProTKFprintf (fp, &quot;\n all_around is %s\n trajectory_length = %f&quot;, 
+<a name="anchor-46"></a>                (fillet.all_around == PRO_B_TRUE) ? &quot;true&quot; : &quot;false&quot;, 
+                fillet.trajectory_length);
+            
+            break;
+        case  PRO_WELD_GROOVE :
+<a name="anchor-47"></a>            err = ProWeldGroovedataGet(weld, &amp;groove);
+            TEST_CALL_REPORT (&quot;ProWeldGroovedataGet&quot;, &quot;ProTestWeldParam&quot;,
+                err, err!=PRO_TK_NO_ERROR);
+            ProTKFprintf (fp, &quot;\n butt_width = %f\n face_offset = %f\n&quot;
+                &quot;trajectory_length = %f\n penetration = %f&quot;, groove.butt_width,
+<a name="anchor-48"></a>            groove.face_offset, groove.trajectory_length, groove.penetration);
+            
+            break;
+        case  PRO_WELD_PLUG :
+            err = ProWeldPlugdataGet(weld, &amp;plug);
+<a name="anchor-49"></a>            TEST_CALL_REPORT (&quot;ProWeldPlugdataGet&quot;, &quot;ProTestWeldParam&quot;,
+                err, err!=PRO_TK_NO_ERROR);
+            ProTKFprintf (fp, &quot;\n depth = %f&quot;, plug.depth);    
+            
+            break;    
+<a name="anchor-50"></a>        case  PRO_WELD_SLOT :
+            err = ProWeldSlotdataGet(weld, &amp;slot);
+            TEST_CALL_REPORT (&quot;ProWeldSlotdataGet&quot;, &quot;ProTestWeldParam&quot;,
+                err, err!=PRO_TK_NO_ERROR);
+            ProTKFprintf (fp, &quot;\n depth = %f&quot;, slot.depth); 
+<a name="anchor-51"></a>            
+            break;             
+        case  PRO_WELD_SPOT :
+            err = ProWeldSpotdataGet(weld, &amp;spot);
+            TEST_CALL_REPORT (&quot;ProWeldSpotdataGet&quot;, &quot;ProTestWeldParam&quot;,
+<a name="anchor-52"></a>                err, err!=PRO_TK_NO_ERROR);
+            ProTKFprintf (fp, &quot;\n number_of_points = %d\n diameter = %f\n&quot;
+                &quot;penetration = %f&quot;, spot.number_of_points, spot.diameter, 
+                spot.penetration);
+            
+<a name="anchor-53"></a>            break; 
+        default:;
+        }
+
+	err = ProTestWeldIntermittencePrint (weld, PROSTANDARD_ANSI, fp);
+<a name="anchor-54"></a>	if (err == PRO_TK_E_NOT_FOUND)
+            ProTKFprintf(fp,&quot;\n The weld is not intermittent&quot;);
+	
+	err = ProWeldCompoundGet (weld, &amp;belongs, &amp;num_belongs);
+	TEST_CALL_REPORT (&quot;ProWeldCompoundGet&quot;, &quot;ProTestWeldParam&quot;,
+<a name="anchor-55"></a>	    err, err!=PRO_TK_NO_ERROR);
+	
+	if (num_belongs>0)
+	{
+	    ProTKFprintf (fp, &quot;\n Weld is a compound. Belong features %s&quot;,
+<a name="anchor-56"></a>                num_belongs);
+	    err = ProArrayFree ((ProArray*)&amp;belongs);
+	}
+        else if (err == PRO_TK_E_NOT_FOUND)
+            ProTKFprintf(fp,&quot;\n The weld is not compound weld&quot;);
+<a name="anchor-57"></a>    	fclose (fp);
+        ProStringToWstring(w_name, fname);
+        ProInfoWindowDisplay(w_name, NULL, NULL); 
+    }
+    return (0);
+<a name="anchor-58"></a>}
+
+/*============================================================================*\
+    FUNCTION :	ProTestWeldTypeGet()
+    PURPOSE  :	Convert ProWeldtype to string.
+<a name="anchor-59"></a>\*============================================================================*/
+char* ProTestWeldTypeGet (ProWeldtype     type)
+{
+    switch (type)
+    {
+<a name="anchor-60"></a>    case PRO_WELD_FILLET:   return (char *)&quot;FILLET&quot;;
+    case PRO_WELD_GROOVE:   return (char *)&quot;GROOVE&quot;;
+    case PRO_WELD_PLUG:     return (char *)&quot;PLUG&quot;;
+    case PRO_WELD_SLOT:     return (char *)&quot;SLOT&quot;;
+    case PRO_WELD_SPOT:     return (char *)&quot;SPOT&quot;;
+<a name="anchor-61"></a>    }
+    return (char *)&quot;Unknown&quot;;
+}
+
+/*============================================================================*\
+<a name="anchor-62"></a>    FUNCTION :	ProTestWeldSubtypeGet ()
+    PURPOSE  :  Convert ProWeldsubtype to string.
+\*============================================================================*/
+char* ProTestWeldSubtypeGet (ProWeldsubtype     subtype)
+{
+<a name="anchor-63"></a>    switch (subtype)
+    {
+    case PRO_WELD_GROOVE_NONE:      	return (char *)&quot;NONE&quot;;
+    case PRO_WELD_GROOVE_SQUARE:    	return (char *)&quot;SQUARE&quot;;
+    case PRO_WELD_GROOVE_V:   	    	return (char *)&quot;V&quot;;
+<a name="anchor-64"></a>    case PRO_WELD_GROOVE_BEVEL:     	return (char *)&quot;BEVEL&quot;;
+    case PRO_WELD_GROOVE_U:   	    	return (char *)&quot;U&quot;;
+    case PRO_WELD_GROOVE_J:   	    	return (char *)&quot;J&quot;;
+    case PRO_WELD_GROOVE_FLARED_V:  	return (char *)&quot;FLARED V&quot;;
+    case PRO_WELD_GROOVE_FLARED_BEVEL:	return (char *)&quot;FLARED BEVEL&quot;;
+<a name="anchor-65"></a>    }
+    return (char *)&quot;Unknown&quot;;
+}
+
+/*============================================================================*\
+<a name="anchor-66"></a>    FUNCTION :	ProTestWeldIntermittencePrint()
+    PURPOSE  :	Print weld intermittence information.
+\*============================================================================*/
+ProError   ProTestWeldIntermittencePrint (
+    ProFeature *weld,
+<a name="anchor-67"></a>    ProStandard standard,
+    FILE* fp)
+{
+    ProError	err;
+    ProWeldIntermittence ince;
+<a name="anchor-68"></a>    err = ProWeldIntermittenceGet (weld, standard,
+	    &amp;ince);
+	TEST_CALL_REPORT (&quot;ProWeldIntermittenceGet&quot;,
+	    &quot;ProTestWeldIntermittencePrint&quot;,
+	    err, err!=PRO_TK_NO_ERROR);
+<a name="anchor-69"></a>    if(err != PRO_TK_NO_ERROR)
+        return(err);
+    ProTKFprintf (fp, &quot;\n Intermittence in %s standard:\n&quot;,
+    	(standard == PROSTANDARD_ANSI)?&quot;ANSI&quot;:&quot;ISO&quot;);
+
+<a name="anchor-70"></a>    ProTKFprintf (fp, &quot; angular is %s\n&quot;,
+    	(ince.angular == PRO_B_TRUE) ? &quot;true&quot; : &quot;false&quot;);
+    ProTKFprintf (fp, &quot; at_center is %s\n&quot;,
+    	(ince.at_center == PRO_B_TRUE) ? &quot;true&quot; : &quot;false&quot;);
+    ProTKFprintf (fp, &quot; length = %f\n pitch = %f\n number_of_welds = %d\n&quot;,
+<a name="anchor-71"></a>    	ince.length, ince.pitch, ince.number_of_welds);
+    return(err); 
+}
+</pre>
+</body>
+</html>

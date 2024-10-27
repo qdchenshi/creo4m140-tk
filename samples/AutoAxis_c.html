@@ -1,0 +1,1022 @@
+<html>
+<head>
+<title>AutoAxis.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMdl.h>
+#include &lt;ProMenuBar.h>
+#include &lt;ProArray.h>
+#include &lt;ProObjects.h>
+#include &lt;ProSurfacedata.h>
+<a name="anchor-3"></a>#include &lt;ProSurface.h>
+#include &lt;ProAxis.h>
+#include &lt;ProDtmAxis.h>
+#include &lt;ProElemId.h>
+#include &lt;ProValue.h>
+<a name="anchor-4"></a>#include &lt;ProElement.h>
+#include &lt;ProFeature.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProSelection.h>
+<a name="anchor-5"></a>#include &lt;ProElempath.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProGroup.h>
+#include &lt;math.h>
+#include &lt;ProTKRunTime.h>
+<a name="anchor-6"></a>
+typedef struct auto_srf_data
+{
+  ProSurface rev_srf;
+  int axis_id;
+<a name="anchor-7"></a>  double diameter;
+} Auto_srf_data; 
+
+typedef struct auto_axis_pnts
+{
+<a name="anchor-8"></a>  Pro3dPnt p1;
+  Pro3dPnt p2;
+} Axis_p12;
+
+typedef struct auto_srfs_data
+<a name="anchor-9"></a>{
+  int total_srfs; 
+  int num_rev_srfs; 
+  Auto_srf_data *srfs_array;
+  int num_axes; 
+<a name="anchor-10"></a>  Axis_p12 *axes_pnts;
+  int axes_created; 
+  ProMdl owner;
+} Auto_srfs_data; 
+
+<a name="anchor-11"></a>/* Signals that a representative axis was already found for this &quot;hole&quot; */
+#define AXIS_ALT_FOUND -5 
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-12"></a>  PROTOTYPES OF LOCAL FUNCTIONS
+\*--------------------------------------------------------------------*/
+ProError AutoaxisMain( ProMdl imported_model );
+
+ProError AutoaxisCollectAxes ( ProAxis  axis,
+<a name="anchor-13"></a>                                 ProError status,
+                                 ProAppData app_data );
+
+ProError AutoaxisCollectRevSurfaces ( ProSurface p_surface,
+                                        ProError status,
+<a name="anchor-14"></a>                                        ProAppData app_data );
+
+ProError AutoaxisSurfaceFilter( ProSurface p_surface, 
+                                  ProAppData app_data );
+
+<a name="anchor-15"></a>ProError AutoaxisElementAdd( ProElemId id, ProElement *parent,
+                      ProValueData *elem_data, ProElement *elem );
+
+ProError AutoaxisSurfaceAxisCreate( Auto_srfs_data *srfs,
+                                       ProSurface surface, int* axis_id);
+<a name="anchor-16"></a>
+ProError AutoaxisSurfaceCheckAxis( ProSurface p_surface,
+                                            Axis_p12 *p12 );
+
+ProError AutoaxisGeomVisitAction ( ProGeomitem *p_geomitem,
+<a name="anchor-17"></a>                                   ProError  err,
+                                   ProAppData app_data) ; 
+
+ProError AutoaxisCheckAxis( ProSurface surface , 
+                                 Auto_srfs_data *srfs );
+<a name="anchor-18"></a>
+/*--------------------------------------------------------------------*\
+  USER INTRFACE
+\*--------------------------------------------------------------------*/
+static uiCmdAccessState TestAccessDefault(uiCmdAccessMode access_mode)
+<a name="anchor-19"></a>{
+    return (ACCESS_AVAILABLE);
+}
+
+/*====================================================================*\
+<a name="anchor-20"></a>FUNCTION : user_initialize()
+PURPOSE  : 
+\*====================================================================*/
+int user_initialize(
+    int argc,			
+<a name="anchor-21"></a>    char *argv[],
+    char *version, 
+    char *build,
+    wchar_t errbuf[80])
+{
+<a name="anchor-22"></a>    uiCmdCmdId	cmd_id;
+    ProError status;
+    int RunAutoAxis( );
+
+    status = ProCmdActionAdd(&quot;AutoAxis&quot;, (uiCmdCmdActFn)RunAutoAxis,
+<a name="anchor-23"></a>	uiProe2ndImmediate, TestAccessDefault,
+	PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+
+    status = ProMenubarmenuPushbuttonAdd(
+	&quot;Applications&quot;, &quot;AutoAxis&quot;, &quot;AutoAxis&quot;, &quot;Creates axes in the model&quot;,
+<a name="anchor-24"></a>	NULL, PRO_B_FALSE, cmd_id, L&quot;usrmsg.txt&quot;);
+
+    return (0);
+}
+
+<a name="anchor-25"></a>/*====================================================================*\
+FUNCTION : user_terminate()
+PURPOSE  : To handle any termination actions
+\*====================================================================*/
+void user_terminate()
+<a name="anchor-26"></a>{
+}
+
+int RunAutoAxis( )
+{
+<a name="anchor-27"></a>  ProMdl cur_mdl;
+  ProError status; 
+
+  status = ProMdlCurrentGet( &amp;cur_mdl);
+  if ( status == PRO_TK_NO_ERROR )
+<a name="anchor-28"></a>  {
+    status = AutoaxisMain(cur_mdl);
+  }
+  return 0;
+}
+<a name="anchor-29"></a>
+/*--------------------------------------------------------------------*\
+  --------------------------------------------------------------------
+  FUNCTION DEFINITIONS
+  --------------------------------------------------------------------
+<a name="anchor-30"></a>\*--------------------------------------------------------------------*/
+
+/*====================================================*\
+  Function : AutoaxisSurfaceCheckAxis()
+  Purpose  : To check if any axis exists which can be
+<a name="anchor-31"></a>             related to given surface.
+\*====================================================*/
+ProError AutoaxisSurfaceCheckAxis( ProSurface p_surface, Axis_p12 *p12)
+{
+  ProError status;
+<a name="anchor-32"></a>  ProGeomitemdata *gitem_data;
+  ProSrftype srftype;
+  ProUvParam uv_min, uv_max;
+  ProSurfaceOrient s_orient;
+  ProSurfaceshapedata s_shapedata;
+<a name="anchor-33"></a>  ProVector e1, e2, e3;
+  Pro3dPnt origin;
+  ProCurvedata cur1;
+  double rad1, alpha;
+  int s_id;
+<a name="anchor-34"></a>
+  double epsilan;
+  double a,b,c;
+  double x01,y01,z01;
+  double det1,det2,det3;
+<a name="anchor-35"></a>  double cp,dist,abc;
+  ProVector a_v;
+  ProError axis_stat;
+
+  if ( p_surface == NULL || p12 == NULL )
+<a name="anchor-36"></a>     return PRO_TK_BAD_INPUTS;
+
+  gitem_data = NULL;
+  epsilan = 0.00000001; /* Value is enough ? */
+  axis_stat = PRO_TK_E_NOT_FOUND;
+<a name="anchor-37"></a>
+  status = ProSurfaceDataGet(p_surface, &amp;gitem_data);
+  if ( status == PRO_TK_NO_ERROR )
+  {
+    status = ProSurfacedataGet( gitem_data->data.p_surface_data,
+<a name="anchor-38"></a>                                &amp;srftype, uv_min, uv_max, &amp;s_orient, 
+                                &amp;s_shapedata, &amp;s_id);
+
+    if ( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-39"></a>      switch(srftype)
+      {
+        case PRO_SRF_CYL:
+          status = ProCylinderdataGet( &amp;s_shapedata, e1, e2, e3, 
+				       origin, &amp;rad1);
+<a name="anchor-40"></a>          break;
+
+        case PRO_SRF_CONE:
+          status = ProConedataGet( &amp;s_shapedata, e1, e2, e3, origin, 
+				   &amp;alpha);
+<a name="anchor-41"></a>          break;
+
+        case PRO_SRF_REV:
+          status = ProSrfrevdataGet( &amp;s_shapedata, e1, e2, e3, origin, 
+				     &amp;cur1);
+<a name="anchor-42"></a>          break;
+
+        default :
+          ProTKPrintf(&quot;Not a Rev. Type  surface..\n&quot;);
+      }
+<a name="anchor-43"></a>    }
+  }
+
+  if ( status == PRO_TK_NO_ERROR )
+  {
+<a name="anchor-44"></a>  /* To find collinearity between exsting axis with
+     axis to be created using the given surface.
+     1. Data available from axis ( p1,p2 )
+     2. Data available from surface Origin(x0,y0,z0) and Vectors(X,Y,Z)
+
+<a name="anchor-45"></a>     Assumption is made that the axis will be always
+     coincident/parallel with Z vector of the surface.
+     In this scenario, the condition for being parallel
+     and coincident vectors,
+     a) Cross product must be zero, ( Axis x Z = 0 )
+<a name="anchor-46"></a>     b) The distance between the Axis and O(origin) of the surface
+        must be zero
+     If above two conditions are true, no axis will be created because 
+     one already exists.
+   */
+<a name="anchor-47"></a>
+    /* Axis from p1,p2 */
+    /* In vector form (a,b,c) */
+    a = p12->p1[0] - p12->p2[0] ;
+    b = p12->p1[1] - p12->p2[1] ;
+<a name="anchor-48"></a>    c = p12->p1[2] - p12->p2[2] ;
+
+    abc = sqrt ( a*a + b*b + c*c );
+
+    /* Unit vector along axis */
+<a name="anchor-49"></a>    a_v[0] = a/abc ; 
+    a_v[1] = b/abc ; 
+    a_v[2] = c/abc ; 
+
+    /* Cross Product  ( Axis x Z_vec ) */
+<a name="anchor-50"></a>
+    cp = a_v[1]*e3[2] - a_v[2]*e3[1] ;
+    cp += a_v[2]*e3[0] - a_v[0]*e3[2] ;
+    cp += a_v[0]*e3[1] - a_v[1]*e3[0] ;
+
+<a name="anchor-51"></a>    if (  cp &lt;= epsilan )
+    {
+      /* Distance between origin an Axis */
+      x01 = origin[0] - p12->p1[0] ;
+      y01 = origin[1] - p12->p1[1] ;
+<a name="anchor-52"></a>      z01 = origin[2] - p12->p1[2] ;
+
+      det1 = c*y01 - b*z01 ;
+      det2 = a*z01 - c*x01 ;
+      det3 = b*x01 - a*y01 ;
+<a name="anchor-53"></a>
+      /*
+      Actual formula for Shortest Distace to a line( Localized vector)
+      from a point. 
+      dist =  sqrt (( det1*det1 + det2*det2 + det3*det3 ) 
+<a name="anchor-54"></a>                        / ( a*a + b*b + c*c ) ) ;
+      But denominator can be ignored .
+      */ 
+
+      dist = det1*det1 + det2*det2 + det3*det3 ;
+<a name="anchor-55"></a>
+      if (  dist  &lt;= epsilan )
+      { 
+        axis_stat = PRO_TK_E_FOUND;
+      } 
+<a name="anchor-56"></a>      else
+      {
+        axis_stat = PRO_TK_E_NOT_FOUND;
+      }
+    }
+<a name="anchor-57"></a>  }
+
+  if( gitem_data != NULL )
+  {
+     ProGeomitemdataFree( &amp;gitem_data );
+<a name="anchor-58"></a>  }
+
+  return axis_stat;
+}
+
+<a name="anchor-59"></a>/*====================================================*\
+  Function : AutoaxisSurfaceIsHole()
+  Purpose  : Determine if the surface is likely a part of a &quot;hole&quot; that needs
+             an axis.
+\*====================================================*/
+<a name="anchor-60"></a>ProBoolean AutoaxisSurfaceIsHole (ProSolid solid, ProSurface surface)
+{
+  ProError status;
+  ProSurface* same_surfs;
+  int n_same_surfs;
+<a name="anchor-61"></a>
+/*-----------------------------------------------------*\
+  Determine if the surface has a matching surface 
+  (typically  the other half of a split cylinder or cone).  
+\*-----------------------------------------------------*/
+<a name="anchor-62"></a>  ProArrayAlloc (0, sizeof (ProSurface), 1, (ProArray*)&amp;same_surfs);
+
+  status = ProSurfaceSameSrfsFind (solid,
+				   surface,
+				   &amp;same_surfs,
+<a name="anchor-63"></a>				   &amp;n_same_surfs);
+
+  ProArrayFree ((ProArray*)&amp;same_surfs);
+
+  if (status == PRO_TK_NO_ERROR &amp;&amp; n_same_surfs > 1)
+<a name="anchor-64"></a>      return PRO_B_TRUE;
+  else
+    return PRO_B_FALSE;		 
+}
+
+<a name="anchor-65"></a>/*====================================================*\
+  Function : AutoaxisSurfaceFilter()
+  Purpose  : Filter function for ProSolidSurfaceVisit
+\*====================================================*/
+ProError AutoaxisSurfaceFilter( ProSurface p_surface, ProAppData app_data )
+<a name="anchor-66"></a>{
+  ProSrftype surface_type;
+  ProError status;
+  Auto_srfs_data *data;
+  ProFeattype ftype;
+<a name="anchor-67"></a>  ProFeature feature;
+  ProGeomitem geom;
+  int s_id;
+
+  status = PRO_TK_NO_ERROR;
+<a name="anchor-68"></a>  data = (Auto_srfs_data *)app_data;
+  data->total_srfs++;
+
+  status = ProSurfaceIdGet ( p_surface, &amp;s_id );
+  if(status == PRO_TK_NO_ERROR)
+<a name="anchor-69"></a>  {
+    geom.id = s_id;
+    geom.owner = data->owner;
+    geom.type = PRO_SURFACE;
+  }
+<a name="anchor-70"></a>
+  if(status == PRO_TK_NO_ERROR)
+    status = ProSurfaceTypeGet ( p_surface, &amp;surface_type); 
+
+  if ( status == PRO_TK_NO_ERROR &amp;&amp;
+<a name="anchor-71"></a>       ( surface_type == PRO_SRF_CYL ||
+         surface_type == PRO_SRF_CONE ||
+         surface_type == PRO_SRF_REV ) &amp;&amp;
+      AutoaxisSurfaceIsHole (data->owner, p_surface) )
+    {
+<a name="anchor-72"></a>    return PRO_TK_NO_ERROR ;
+  }
+
+  return PRO_TK_CONTINUE; 
+}
+<a name="anchor-73"></a>
+/*====================================================*\
+  Function : AutoaxisAddSortedSurface()
+  Purpose :  Add the given surface to the surface array, 
+             in a position sorted
+<a name="anchor-74"></a>	     by diameter (largest to smallest).  Non-cylindrical
+	     surfaces are added to the end of the array.
+\*====================================================*/
+ProError AutoaxisAddSortedSurface (Auto_srfs_data* data, 
+				   Auto_srf_data* srf)
+<a name="anchor-75"></a>{
+  int num_srfs = data->num_rev_srfs;
+  int i;
+  ProSurface current_srf;
+  ProSrftype surface_type;
+<a name="anchor-76"></a>  double current_diam = 0.0;
+  ProError status;
+  ProUvParam param = {0.0, 0.0};
+  
+  status = ProSurfaceTypeGet ( srf->rev_srf, &amp;surface_type); 
+<a name="anchor-77"></a>  if (surface_type == PRO_SRF_CYL)
+    {
+      ProSurfaceDiameterEval (srf->rev_srf, param, &amp;srf->diameter);
+    }
+  else
+<a name="anchor-78"></a>    srf->diameter = -1.0;
+  
+  if (num_srfs == 0)
+    {
+      ProArrayObjectAdd ((ProArray*)&amp;data->srfs_array,
+<a name="anchor-79"></a>			 PRO_VALUE_UNUSED, 1, srf);
+      data->num_rev_srfs++;
+      
+    }
+  else
+<a name="anchor-80"></a>    {
+      for (i = 0; i &lt; num_srfs; i++)
+	{
+	  current_srf = data->srfs_array[i].rev_srf;
+	  current_diam = data->srfs_array[i].diameter;
+<a name="anchor-81"></a>	  
+	  /* If its bigger than this surface, add it to the array just
+	     before */
+	  if (srf->diameter > current_diam)
+	    {
+<a name="anchor-82"></a>	      ProArrayObjectAdd ((ProArray*)&amp;data->srfs_array,
+				 i, 1, srf);
+	      data->num_rev_srfs++;
+	      break;
+	    }				
+<a name="anchor-83"></a>	  
+	  /* If its smaller than all other surfaces, add it to the end 
+	     of the array */
+	  if (i == num_srfs - 1)
+	    {
+<a name="anchor-84"></a>	      ProArrayObjectAdd ((ProArray*)&amp;data->srfs_array,
+				 PRO_VALUE_UNUSED, 1, srf);
+	      data->num_rev_srfs++;
+	    }
+	}
+<a name="anchor-85"></a>    }
+  
+  return PRO_TK_NO_ERROR; 
+}
+
+<a name="anchor-86"></a>
+/*====================================================*\
+  Function : AutoaxisCollectRevSurfaces()
+  Purpose  : Action function for ProSolidSurfaceVisit
+             Collects revolved surfaces
+<a name="anchor-87"></a>\*====================================================*/
+ProError AutoaxisCollectRevSurfaces ( ProSurface p_surface,
+                                        ProError status,
+                                        ProAppData app_data )
+{
+<a name="anchor-88"></a>  ProError err;
+  int  srf_id;
+  Auto_srf_data srf;
+  Auto_srfs_data *data;
+
+<a name="anchor-89"></a>  data = (Auto_srfs_data *)app_data;
+
+  if ( status == PRO_TK_NO_ERROR )
+  {
+    err = PRO_TK_NO_ERROR ;
+<a name="anchor-90"></a>    srf_id = 0;
+    err = ProSurfaceIdGet ( p_surface, &amp;srf_id);
+    if ( err == PRO_TK_NO_ERROR )
+    {
+      srf.axis_id = PRO_VALUE_UNUSED ;
+<a name="anchor-91"></a>      err = ProSurfaceInit ( data->owner, srf_id, &amp;srf.rev_srf);
+      if ( err == PRO_TK_NO_ERROR )
+      {		  
+	err = AutoaxisAddSortedSurface (data, &amp;srf);
+      }
+<a name="anchor-92"></a>    }
+  }
+  return status; 
+}
+/*====================================================*\
+<a name="anchor-93"></a>  Function : AutoaxisCollectQuiltSurfaces()
+  Purpose  : Action function for ProSolidQuiltVisit
+             Collects the rev surfaces in the model.
+\*====================================================*/
+ProError AutoaxisCollectQuiltSurfaces ( ProQuilt p_quilt,
+<a name="anchor-94"></a>                                        ProError status,
+                                        ProAppData app_data )
+{
+  ProError err;
+
+<a name="anchor-95"></a>  if ( status == PRO_TK_NO_ERROR )
+  {
+    err = ProQuiltSurfaceVisit( p_quilt,AutoaxisCollectRevSurfaces,
+                                AutoaxisSurfaceFilter,app_data );
+  }
+<a name="anchor-96"></a>  return err;
+}
+/*====================================================*\
+  Function : AutoaxisCollectAxes()
+  Purpose  : Action function for ProSolidAxisVisit
+<a name="anchor-97"></a>             Collects the axes in the model.
+\*====================================================*/
+
+ProError AutoaxisCollectAxes ( ProAxis  axis,
+                               ProError status,
+<a name="anchor-98"></a>                               ProAppData app_data )
+{
+  ProError err;
+  Auto_srfs_data *data;
+  Axis_p12 pnts;
+<a name="anchor-99"></a>  ProGeomitemdata *a_gitem_data;
+
+  a_gitem_data = NULL;
+  data = ( Auto_srfs_data * ) app_data;
+
+<a name="anchor-100"></a>  err = ProAxisDataGet(axis, &amp;a_gitem_data);
+  if ( err == PRO_TK_NO_ERROR &amp;&amp; a_gitem_data != NULL )
+  {
+    err = ProLinedataGet( a_gitem_data->data.p_curve_data,
+			  pnts.p1, pnts.p2);
+<a name="anchor-101"></a>  }
+
+  if ( err == PRO_TK_NO_ERROR  )
+  {
+    err = ProArrayObjectAdd ((ProArray*)&amp;data->axes_pnts,
+<a name="anchor-102"></a>                           PRO_VALUE_UNUSED, 1, &amp;pnts);
+    if ( err == PRO_TK_NO_ERROR )
+    {
+      data->num_axes++;
+    }
+<a name="anchor-103"></a>  }
+
+  if( a_gitem_data != NULL )
+  {
+     ProGeomitemdataFree( &amp;a_gitem_data );
+<a name="anchor-104"></a>  }
+  return status;
+}
+
+/*====================================================*\
+<a name="anchor-105"></a>  Function : AutoaxisElementAdd()
+  Purpose  : Adds elem to parent
+\*====================================================*/
+ProError AutoaxisElementAdd( ProElemId id, ProElement *parent,
+      ProValueData *elem_data, ProElement *elem )
+<a name="anchor-106"></a>{
+   ProValue value ;
+   ProError status = PRO_TK_NOT_VALID ;
+
+   if ( elem_data == NULL || elem == NULL || parent == NULL )
+<a name="anchor-107"></a>      return PRO_TK_BAD_INPUTS ;
+
+   status =  ProElementAlloc(id, elem) ;
+   if ( status != PRO_TK_NO_ERROR )
+       return status;
+<a name="anchor-108"></a>
+   status = ProValueAlloc (&amp;value) ;
+   if ( status == PRO_TK_NO_ERROR )
+       status = ProValueDataSet (value, elem_data) ;
+       if ( status == PRO_TK_NO_ERROR )
+<a name="anchor-109"></a>          status = ProElementValueSet (*elem, value) ;
+
+   if ( elem_data != NULL &amp;&amp; status != PRO_TK_NO_ERROR )
+      return status;
+
+<a name="anchor-110"></a>   status = ProElemtreeElementAdd( *parent, NULL, *elem ) ;
+   return status;
+}
+
+/*====================================================*\
+<a name="anchor-111"></a>  Function : AutoaxisGeomVisitAction()
+  Purpose  : Collects end points of an axis
+\*====================================================*/
+ProError AutoaxisGeomVisitAction ( ProGeomitem *p_geomitem,
+                                   ProError  err,
+<a name="anchor-112"></a>                                   ProAppData app_data)   
+{
+  ProError status;
+  Auto_srfs_data *data;
+  Axis_p12 pnts;
+<a name="anchor-113"></a>  ProGeomitemdata *a_gitem_data;
+  ProAxis axis;
+   
+  if ( app_data == NULL )
+     return PRO_TK_BAD_INPUTS;
+<a name="anchor-114"></a>
+  status = PRO_TK_NO_ERROR;
+  a_gitem_data = NULL;
+  data = (Auto_srfs_data*) app_data;
+
+<a name="anchor-115"></a>  if ( status == PRO_TK_NO_ERROR )
+  status = ProGeomitemToAxis(p_geomitem, &amp;axis);
+
+  if ( status == PRO_TK_NO_ERROR )
+  status = ProAxisDataGet(axis, &amp;a_gitem_data);
+<a name="anchor-116"></a>  if ( status == PRO_TK_NO_ERROR &amp;&amp; a_gitem_data != NULL )
+  {
+    status = ProLinedataGet( a_gitem_data->data.p_curve_data, 
+			     pnts.p1, pnts.p2);
+  }
+<a name="anchor-117"></a>
+  if ( status == PRO_TK_NO_ERROR  )
+  {
+    status = ProArrayObjectAdd ((ProArray*)&amp;data->axes_pnts,
+                           PRO_VALUE_UNUSED, 1, &amp;pnts);
+<a name="anchor-118"></a>    if ( status == PRO_TK_NO_ERROR )
+    {
+      data->axes_created++ ;
+    }
+  }
+<a name="anchor-119"></a>
+  if( a_gitem_data != NULL )
+  {
+     ProGeomitemdataFree( &amp;a_gitem_data );
+  }
+<a name="anchor-120"></a>  return err;
+}
+/*====================================================*\
+  Function : AutoaxisSurfaceAxisCreate()
+  Purpose  : Creates axis for given revolve surface
+<a name="anchor-121"></a>\*====================================================*/
+ProError AutoaxisSurfaceAxisCreate( Auto_srfs_data *srfs, 
+				    ProSurface surface, int* axis_id)
+{
+  ProValueData value_data;
+<a name="anchor-122"></a>  ProElement root_tree, feat_type;
+  ProElement cnstrnts, cnstrnt;
+  ProElement cnstrnt_type, cnstrnt_ref;
+  ProElemId  elemid;
+  
+<a name="anchor-123"></a>  ProError status;
+  ProFeature feature;
+  ProFeatureCreateOptions opts[1];
+  ProModelitem modelitem;
+  ProSelection  mdl_sel;
+<a name="anchor-124"></a>
+  ProErrorlist        errors;
+  ProGeomitem	      rev_srf;
+  ProSelection	      rev_srf_sel;
+  int	              srf_id;
+<a name="anchor-125"></a>  ProMdl              model;
+
+  if ( srfs == NULL || surface == NULL )
+     return PRO_TK_BAD_INPUTS;
+
+<a name="anchor-126"></a>  status = PRO_TK_NO_ERROR;
+  srf_id = -1;
+  mdl_sel = NULL;
+  rev_srf_sel = NULL;
+  root_tree = NULL;
+<a name="anchor-127"></a>  model = srfs->owner ;
+
+  status = ProSurfaceIdGet (surface, &amp;srf_id);
+  if ( status == PRO_TK_NO_ERROR &amp;&amp; srf_id )
+  {
+<a name="anchor-128"></a>    rev_srf.owner = model ;
+    rev_srf.id = srf_id ;
+    rev_srf.type = PRO_SURFACE ;
+    status = ProSelectionAlloc(NULL, &amp;rev_srf, &amp;rev_srf_sel);
+    if ( status != PRO_TK_NO_ERROR )
+<a name="anchor-129"></a>       return status;
+  }
+
+/*---------------------------------------------------------------------------*\
+  Prepare element tree for Axis Feature 
+<a name="anchor-130"></a>\*---------------------------------------------------------------------------*/
+  status = ProElementAlloc(PRO_E_FEATURE_TREE, &amp;root_tree);
+
+  elemid = PRO_E_FEATURE_TYPE ;
+  value_data.type = PRO_VALUE_TYPE_INT;
+<a name="anchor-131"></a>  value_data.v.i = PRO_FEAT_DATUM_AXIS ;
+  status = AutoaxisElementAdd(elemid, &amp;root_tree,&amp;value_data, 
+			      &amp;feat_type);
+
+  elemid = PRO_E_DTMAXIS_CONSTRAINTS ;
+<a name="anchor-132"></a>  status = ProElementAlloc(elemid, &amp;cnstrnts );
+  status = ProElemtreeElementAdd(root_tree, NULL, cnstrnts );
+
+  elemid = PRO_E_DTMAXIS_CONSTRAINT ;
+  status = ProElementAlloc(elemid, &amp;cnstrnt );
+<a name="anchor-133"></a>  status = ProElemtreeElementAdd(cnstrnts, NULL, cnstrnt );
+
+  elemid = PRO_E_DTMAXIS_CONSTR_TYPE ;
+  value_data.type = PRO_VALUE_TYPE_INT;
+  value_data.v.i =  PRO_DTMAXIS_CONSTR_TYPE_THRU ;
+<a name="anchor-134"></a>  status = AutoaxisElementAdd(elemid, &amp;cnstrnt,&amp;value_data, 
+			      &amp;cnstrnt_type);
+
+  if ( rev_srf_sel != NULL )
+  {
+<a name="anchor-135"></a>     elemid = PRO_E_DTMAXIS_CONSTR_REF ;
+     value_data.type = PRO_VALUE_TYPE_SELECTION;
+     value_data.v.r =  rev_srf_sel ;
+     status = AutoaxisElementAdd(elemid, &amp;cnstrnt,&amp;value_data, 
+				 &amp;cnstrnt_ref);
+<a name="anchor-136"></a>  }
+
+  status = ProMdlToModelitem(model, &amp;modelitem);
+  if ( status == PRO_TK_NO_ERROR )
+  status = ProSelectionAlloc(NULL, &amp;modelitem, &amp;mdl_sel);
+<a name="anchor-137"></a>  opts[0] = PRO_FEAT_CR_NO_OPTS;
+
+  if ( status == PRO_TK_NO_ERROR )
+  {
+    status = ProFeatureCreate(mdl_sel, root_tree, opts, 1, &amp;feature, 
+<a name="anchor-138"></a>			      &amp;errors);
+  }
+  
+  if ( status == PRO_TK_NO_ERROR )
+  { 
+<a name="anchor-139"></a>	*axis_id = feature.id;
+    /* Collect the axis end points. 
+       This is to avoid visiting it
+       again while creating another axis.
+    */
+<a name="anchor-140"></a>    ProFeatureGeomitemVisit( &amp;feature, PRO_AXIS,
+                             AutoaxisGeomVisitAction,
+                              NULL,(ProAppData)srfs);
+  } 
+  
+<a name="anchor-141"></a>  if( rev_srf_sel != NULL )
+    ProSelectionFree(&amp;rev_srf_sel);
+
+  if( rev_srf_sel != NULL )
+    ProSelectionFree(&amp;mdl_sel);
+<a name="anchor-142"></a>
+  if( root_tree != NULL )
+    ProElementFree( &amp;root_tree);
+
+  return status;
+<a name="anchor-143"></a>}
+
+/*====================================================*\
+  Function : AutoaxisCheckAxis()
+  Purpose  : Checks existance of any axis related to
+<a name="anchor-144"></a>             given surface
+\*====================================================*/
+ProError AutoaxisCheckAxis( ProSurface surface, Auto_srfs_data *srfs )
+{
+  ProError status;
+<a name="anchor-145"></a>  int i,total_axes;
+  
+  if ( surface == NULL || srfs == NULL )
+     return PRO_TK_BAD_INPUTS;
+
+<a name="anchor-146"></a>  status = PRO_TK_E_NOT_FOUND ;
+  total_axes = srfs->num_axes + srfs->axes_created ;
+
+  for ( i = 0 ; i &lt; total_axes ; i++ )
+  {
+<a name="anchor-147"></a>    status = AutoaxisSurfaceCheckAxis ( surface, &amp;srfs->axes_pnts[i] );
+    if ( status == PRO_TK_E_FOUND )
+       return status;
+  }
+
+<a name="anchor-148"></a>  return PRO_TK_E_NOT_FOUND;
+}
+/*====================================================*\
+  Function : AutoaxisAxesCreate()
+  Purpose  : Creates axes for revolve surfaces
+<a name="anchor-149"></a>\*====================================================*/
+ProError AutoaxisAxesCreate( Auto_srfs_data *surfaces)
+{
+  ProError status;
+  int j, axis_id = PRO_VALUE_UNUSED;
+<a name="anchor-150"></a> 
+  for ( j = 0; j &lt;  surfaces->num_rev_srfs ; j++ )
+  {
+    if( surfaces->srfs_array[j].axis_id != PRO_VALUE_UNUSED &amp;&amp; 
+			surfaces->srfs_array[j].axis_id != AXIS_ALT_FOUND)
+<a name="anchor-151"></a>       continue;
+
+    /* Any axis exists ? */
+    status = AutoaxisCheckAxis ( surfaces->srfs_array[j].rev_srf,
+                                 surfaces );
+<a name="anchor-152"></a>    if ( status == PRO_TK_E_FOUND )
+    { 
+      surfaces->srfs_array[j].axis_id = AXIS_ALT_FOUND;
+      continue;
+    }
+<a name="anchor-153"></a>       
+    status = AutoaxisSurfaceAxisCreate( surfaces, 
+                             surfaces->srfs_array[j].rev_srf, &amp;axis_id);
+    if ( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-154"></a>      surfaces->srfs_array[j].axis_id = axis_id;
+    }
+  }
+  return status;
+}
+<a name="anchor-155"></a>
+/*====================================================*\
+  Function : AutoaxisAsmComponent()
+  Purpose  : Action function for components
+             This is to run AutoAxis on Asm Comps.
+<a name="anchor-156"></a>\*====================================================*/
+ProError  AutoaxisAsmComponent ( ProFeature *p_feature, ProError status,
+                                 ProAppData app_data )
+{
+  ProMdl p_mdl;
+<a name="anchor-157"></a>
+  status = ProAsmcompMdlGet ((ProAsmcomp *)p_feature, &amp;p_mdl);
+  if ( status == PRO_TK_NO_ERROR ) 
+    status = AutoaxisMain(p_mdl);
+
+<a name="anchor-158"></a>  return status;
+}
+
+/*====================================================*\
+  Function : AutoaxisAsmcompFilter()
+<a name="anchor-159"></a>  Purpose  : Filter function for components
+\*====================================================*/
+ProError AutoaxisAsmcompFilter ( ProFeature* p_feature,
+				 ProAppData app_data )
+{
+<a name="anchor-160"></a>  ProError    status;
+  ProFeattype ftype;
+  ProMdl p_mdl;
+  ProMdlType p_type;
+
+<a name="anchor-161"></a>  status = ProFeatureTypeGet(p_feature, &amp;ftype);
+  if ( status == PRO_TK_NO_ERROR &amp;&amp; ftype == PRO_FEAT_COMPONENT)
+  {
+    status = ProAsmcompMdlGet ((ProAsmcomp *)p_feature, &amp;p_mdl);
+    if ( status == PRO_TK_NO_ERROR ) 
+<a name="anchor-162"></a>    {
+      status = ProMdlTypeGet (p_mdl, &amp;p_type);
+      if ( status == PRO_TK_NO_ERROR )
+      {
+        if (p_type == PRO_MDL_ASSEMBLY || p_type == PRO_MDL_PART)
+<a name="anchor-163"></a>        {
+          return(PRO_TK_NO_ERROR);
+        }
+      }
+    }
+<a name="anchor-164"></a>  }
+
+  return PRO_TK_CONTINUE;
+}
+
+<a name="anchor-165"></a>/*====================================================*\
+  Function : AutoaxisGroupCreate
+  Purpose  : Create group of axes that go to matching diameter holes.
+\*====================================================*/
+ProError AutoaxisGroupCreate (ProSolid owner, double target_diameter, 
+<a name="anchor-166"></a>			      int* feat_ids)
+{
+  int num_feats;
+  ProCharName name_buff;
+  ProName name;
+<a name="anchor-167"></a>  ProGroup group;
+  
+  ProArraySizeGet (feat_ids, &amp;num_feats);
+
+  if (target_diameter > 0.0)
+<a name="anchor-168"></a>    {
+      ProTKSprintf (name_buff, &quot;AXES_DIAM_%.1lf&quot;, target_diameter);
+      ProStringToWstring (name, name_buff);
+    }
+  else
+<a name="anchor-169"></a>    {
+      ProTKSprintf (name_buff, &quot;AXES_NOT_CYLINDRICAL&quot;);
+      ProStringToWstring (name, name_buff);
+    }
+  ProLocalGroupCreate (owner, feat_ids, num_feats, name, &amp;group);
+<a name="anchor-170"></a>  
+  return (PRO_TK_NO_ERROR);
+}
+
+#define D_EPS 0.1
+<a name="anchor-171"></a>
+/*====================================================*\
+  Function : AutoaxisAxesGroup
+  Purpose  : Group axes by diameter.
+\*====================================================*/
+<a name="anchor-172"></a>ProError  AutoaxisAxesGroup ( Auto_srfs_data* data )
+{
+  int i, num_feats, current_id;
+  int num_srfs = data->num_rev_srfs;
+  int* feat_ids = NULL;
+<a name="anchor-173"></a>  double target_diameter = -1.0;
+  double current_diameter;
+
+  for (i = 0; i &lt; num_srfs; i++)
+    {
+<a name="anchor-174"></a>      current_diameter = data->srfs_array [i].diameter;
+      current_id = data->srfs_array[i].axis_id;
+	
+      /* For the first surface found */
+      if (feat_ids == NULL)
+<a name="anchor-175"></a>	{
+	  target_diameter = current_diameter;
+	  /* if (target_diameter > 0.0) */
+	  if (current_id > 0)
+	    {
+<a name="anchor-176"></a>	      ProArrayAlloc (1, sizeof (int), 1, (ProArray*)&amp;feat_ids);
+	      feat_ids [0] = current_id;
+	    }
+	}
+      else
+<a name="anchor-177"></a>	{	
+	  /* If there's a true axis assigned to this surface */
+	  if (current_id > 0)
+	    {
+	      /* If the diameter matches the target, add it and 
+<a name="anchor-178"></a>		 continue */
+	      if (fabs (current_diameter - target_diameter) &lt; D_EPS)
+		{
+		  ProArrayObjectAdd ((ProArray*)&amp;feat_ids, 
+				     PRO_VALUE_UNUSED, 1, &amp;current_id);
+<a name="anchor-179"></a>		}
+	      /* Otherwise, process the set of axes in the current group,
+		 and start collecting a new one */
+	      else if (i != num_srfs -1)
+		{	
+<a name="anchor-180"></a>		  AutoaxisGroupCreate (data->owner, target_diameter, 
+				       feat_ids);
+		  ProArrayFree ((ProArray*)&amp;feat_ids);
+		  target_diameter = current_diameter;
+	
+<a name="anchor-181"></a>		  ProArrayAlloc (1, sizeof (int), 1, (ProArray*)&amp;feat_ids);
+		  feat_ids [0] = current_id;
+		}
+	    }
+	  /* Finish the last group for the last surface */
+<a name="anchor-182"></a>	  if (i == num_srfs - 1)
+	    {
+	      AutoaxisGroupCreate (data->owner, target_diameter, feat_ids);
+	      ProArrayFree ((ProArray*)&amp;feat_ids);
+	    }
+<a name="anchor-183"></a>	}
+    }
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-184"></a>#undef D_EPS
+
+/*====================================================*\
+  Function : AutoaxisMain()
+  Purpose  : Top level function to
+<a name="anchor-185"></a>             create Axes for Revolved surfaces 
+\*====================================================*/
+ProError AutoaxisMain( ProMdl imported_model )
+{
+  ProError status;
+<a name="anchor-186"></a>  Auto_srfs_data surfaces;
+  ProMdlType mdl_type;
+
+  status = PRO_TK_NO_ERROR;
+
+<a name="anchor-187"></a>  status = ProMdlTypeGet ( imported_model, &amp;mdl_type);
+  if ( status != PRO_TK_NO_ERROR ||
+       (mdl_type != PRO_MDL_PART &amp;&amp; 
+       mdl_type != PRO_MDL_ASSEMBLY &amp;&amp;
+       mdl_type != PRO_MDL_MFG) )
+<a name="anchor-188"></a>  return PRO_TK_BAD_INPUTS;
+
+  if ( status == PRO_TK_NO_ERROR )
+  {
+    if ( mdl_type != PRO_MDL_PART )
+<a name="anchor-189"></a>    {
+    /* In case of assemblies visit all components recursively */
+      status = ProSolidFeatVisit (( ProSolid )imported_model, 
+                                    AutoaxisAsmComponent,
+                                    AutoaxisAsmcompFilter, NULL ) ;
+<a name="anchor-190"></a>    }
+  }
+  surfaces.total_srfs = 0 ;
+  surfaces.num_rev_srfs = 0 ;
+  surfaces.srfs_array = NULL ;
+<a name="anchor-191"></a>  surfaces.num_axes = 0 ;
+  surfaces.axes_pnts = NULL ;
+  surfaces.axes_created = 0 ;
+  surfaces.owner = imported_model ;
+
+<a name="anchor-192"></a>/* Collect all Axes(End points) in the Model */
+  status = ProArrayAlloc (0, sizeof (Axis_p12), 1, 
+        (ProArray*)&amp;surfaces.axes_pnts);
+  if ( status == PRO_TK_NO_ERROR )
+  {
+<a name="anchor-193"></a>    status = ProSolidAxisVisit( (ProSolid) imported_model,
+                               AutoaxisCollectAxes,
+			       NULL, ( ProAppData ) &amp;surfaces );
+  }
+
+<a name="anchor-194"></a>/* Collect all revolve type surfaces in the Model */
+  status = ProArrayAlloc (0, sizeof (Auto_srf_data), 1, 
+        (ProArray*)&amp;surfaces.srfs_array);
+  if ( status == PRO_TK_NO_ERROR )
+  {
+<a name="anchor-195"></a>    status = ProSolidSurfaceVisit( (ProSolid) imported_model,
+                                 AutoaxisCollectRevSurfaces,
+			         AutoaxisSurfaceFilter, 
+                                 ( ProAppData ) &amp;surfaces );
+  }
+<a name="anchor-196"></a>
+  status = ProSolidQuiltVisit( (ProSolid) imported_model,
+                               AutoaxisCollectQuiltSurfaces,
+                               NULL, ( ProAppData ) &amp;surfaces );
+
+<a name="anchor-197"></a>  if ( surfaces.num_rev_srfs > 0 )
+  {
+    /* Create and group the axes */
+    status = AutoaxisAxesCreate( &amp;surfaces );
+    status = AutoaxisAxesGroup ( &amp;surfaces );
+<a name="anchor-198"></a>  }
+
+  ProTKPrintf(&quot;\n&quot;);
+  ProTKPrintf(&quot;\n**********************************************************&quot;);
+  ProTKPrintf(&quot;\n******************* AutoAxis Summary *********************&quot;);
+<a name="anchor-199"></a>  ProTKPrintf(&quot;\n**********************************************************&quot;);
+  ProTKPrintf(&quot;\nTotal Surfaces found = %d&quot;,surfaces.total_srfs);
+  ProTKPrintf(&quot;\nRev Surfaces found = %d&quot;,surfaces.num_rev_srfs);
+  ProTKPrintf(&quot;\nAxes found = %d&quot;,surfaces.num_axes);
+  ProTKPrintf(&quot;\nAxes Created = %d&quot;,surfaces.axes_created);
+<a name="anchor-200"></a>  ProTKPrintf(&quot;\n**********************************************************&quot;);
+  ProTKPrintf(&quot;\n**********************************************************&quot;);
+  ProTKPrintf(&quot;\n&quot;);
+
+  if ( surfaces.axes_pnts != NULL )
+<a name="anchor-201"></a>  {
+    status = ProArrayFree( ( ProArray *)&amp;surfaces.axes_pnts);
+  }
+  if ( surfaces.srfs_array != NULL )
+  {
+<a name="anchor-202"></a>    status = ProArrayFree( ( ProArray *) &amp;surfaces.srfs_array);
+  }
+  return PRO_TK_NO_ERROR;
+}
+</pre>
+</body>
+</html>

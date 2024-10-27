@@ -1,0 +1,91 @@
+<html>
+<head>
+<title>UgGeomChildDisp.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProSelection.h>
+<a name="anchor-2"></a>#include &lt;ProFeature.h>
+#include &lt;ProArray.h>
+#include &lt;ProMdl.h>
+#include &lt;ProUtil.h>
+
+<a name="anchor-3"></a>/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+
+/*---------------------- Function Prototypes -------------------------*/
+ProError UserChildDisp();
+<a name="anchor-4"></a>
+
+/*============================================================================*\
+	Function: UserChildDisp()
+        Purpose: Display Children of selected feature
+<a name="anchor-5"></a>\*============================================================================*/
+ProError UserChildDisp()
+{
+    int n, sel_count, kid_count;
+    int *children=NULL;
+<a name="anchor-6"></a>    ProError status;
+    ProFeature p_child;
+    ProFileName msgfile;
+    ProSelection *psels=NULL;
+    ProMdl p_solid;
+<a name="anchor-7"></a>    ProModelitem p_mdl_item;
+    ProAsmcomppath path;
+
+/*----------------------------------------------------------------------------*\
+	Prompt for selection of feature
+<a name="anchor-8"></a>\*----------------------------------------------------------------------------*/
+    ProStringToWstring(msgfile,&quot;msg_uggeom.txt&quot;);
+    status = ProMessageDisplay(msgfile,&quot;USER Select Feature:&quot;);
+    if((ProSelect(&quot;feature&quot;,1,NULL,NULL,NULL,NULL,&amp;psels, &amp;sel_count) != 
+       PRO_TK_NO_ERROR) || (sel_count &lt; 1))
+<a name="anchor-9"></a>       return((int)PRO_TK_GENERAL_ERROR);
+
+    ProMessageClear();
+    status = ProSelectionModelitemGet(psels[0],&amp;p_mdl_item);
+    ERROR_CHECK( &quot;UserChildDisp&quot;, &quot;ProSelectionModelitemGet&quot;, status );
+<a name="anchor-10"></a>    
+/*----------------------------------------------------------------------------*\
+	Get selected feature's children
+\*----------------------------------------------------------------------------*/
+    status = ProFeatureChildrenGet(&amp;p_mdl_item,&amp;children, &amp;kid_count);
+<a name="anchor-11"></a>    ERROR_CHECK( &quot;UserChildDisp&quot;, &quot;ProFeatureChildrenGet&quot;, status );
+    status = ProSelectionAsmcomppathGet(psels[0],&amp;path);
+    ERROR_CHECK( &quot;UserChildDisp&quot;, &quot;ProSelectionAsmcomppathGet&quot;, status);
+    status = ProMdlCurrentGet(&amp;p_solid);
+    ERROR_CHECK( &quot;UserChildDisp&quot;,&quot;ProMdlCurrentGet&quot;,status);
+<a name="anchor-12"></a>
+/*----------------------------------------------------------------------------*\
+	Highlight children
+\*----------------------------------------------------------------------------*/
+    for(n=0; n &lt; kid_count; n++)
+<a name="anchor-13"></a>    {
+       status = ProFeatureInit(p_solid,children[n],&amp;p_child);
+       ERROR_CHECK( &quot;UserChildDisp&quot;,&quot;ProFeatureInit&quot;,status);
+       if (status == PRO_TK_NO_ERROR)
+	 {
+<a name="anchor-14"></a>	   status = ProSelectionSet(psels[0],&amp;path,(ProModelitem *)&amp;p_child);
+	   ERROR_CHECK( &quot;UserChildDisp&quot;, &quot;ProSelectionSet&quot;, status);
+	 }
+       if (status == PRO_TK_NO_ERROR)
+	 {
+<a name="anchor-15"></a>	   status = ProSelectionHighlight(psels[0], PRO_COLOR_ERROR);
+	   ERROR_CHECK( &quot;UserChildDisp&quot;, &quot;ProSelectionHighlight&quot;, status );
+	 }
+    }
+
+<a name="anchor-16"></a>    ProArrayFree((ProArray *)&amp;children);
+    return(PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

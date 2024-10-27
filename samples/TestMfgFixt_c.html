@@ -1,0 +1,468 @@
+<html>
+<head>
+<title>TestMfgFixt.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProFeature.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProSolid.h>
+#include &lt;ProMfg.h>
+<a name="anchor-3"></a>#include &lt;ProMenu.h>
+#include &lt;ProUtil.h>
+
+#include &lt;ctype.h>
+
+<a name="anchor-4"></a>#include &lt;TestMfgNew.h>
+#include &lt;UtilMfgNew.h>
+#include &lt;MfgMenu.h>
+#include &lt;TestError.h>
+#include &lt;UtilTree.h>
+<a name="anchor-5"></a>#include &lt;UtilMenu.h>
+#include &lt;UtilString.h>
+#include &lt;UtilMessage.h>
+#include &lt;ProTKRunTime.h>
+
+<a name="anchor-6"></a>/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-7"></a>Application data types
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+<a name="anchor-8"></a>\*--------------------------------------------------------------------*/
+#define TK_FIXT_CREATE     1 &lt;&lt; 15
+#define TK_FIXT_MODIFY     1 &lt;&lt; 16
+#define TK_FIXT_DELETE     1 &lt;&lt; 17
+#define TK_FIXT_ACTIVATE   1 &lt;&lt; 18
+<a name="anchor-9"></a>
+
+ProError test_func(ProAppData, ProAppData, int);
+
+/*====================================================================*\
+<a name="anchor-10"></a>FUNCTION : ProTestFixtureCreate
+PURPOSE  : Create Fixture feature
+\*====================================================================*/
+ProError ProTestFixtureCreate(MfgMenuChoice *obj_action)
+{
+<a name="anchor-11"></a>    ProElement     fixt_elem_tree = (ProElement)NULL; /* Entire tree   */
+    ProElement     fixt_elem      = (ProElement)NULL; /* One element   */
+    ProError       status = PRO_TK_NO_ERROR;
+    int            feat_type = PRO_FEAT_FIXSETUP;
+
+<a name="anchor-12"></a>    static char*   menu[] = {&quot;TkFixtSet&quot;,&quot;TkMfgDQ&quot;,&quot;&quot;};
+    int            menu_id, n_menus;
+    
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-13"></a>    Allocate space for workcell element tree
+\*--------------------------------------------------------------------*/
+    if (status == PRO_TK_NO_ERROR)
+    {
+	status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;fixt_elem_tree );
+<a name="anchor-14"></a>	TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;, &quot;ProTestFixtureCreate()&quot;,
+				status, (status != PRO_TK_NO_ERROR));
+/*--------------------------------------------------------------------*\
+	Set feature type
+\*--------------------------------------------------------------------*/
+<a name="anchor-15"></a>	if (status == PRO_TK_NO_ERROR)
+	{
+	    status = ProElementAlloc ( PRO_E_FEATURE_TYPE, 
+	    			       &amp;fixt_elem );
+	    TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;, &quot;ProTestFixtureCreate()&quot;,
+<a name="anchor-16"></a>					status, (status != PRO_TK_NO_ERROR));
+	    
+	    if (status == PRO_TK_NO_ERROR)
+		status = ProUtilElementBuild ( PRO_VALUE_TYPE_INT, &amp;feat_type, 
+	    						 	&amp;fixt_elem); 
+<a name="anchor-17"></a>	    
+	    if (status == PRO_TK_NO_ERROR)
+		status = ProElemtreeElementAdd(fixt_elem_tree, NULL, fixt_elem);
+	    TEST_CALL_REPORT(&quot;ProElemtreeElementAdd()&quot;,&quot;ProTestFixtureCreate()&quot;,
+					status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-18"></a>
+	}
+    }
+
+
+<a name="anchor-19"></a>/*--------------------------------------------------------------------*\
+    Create the setup menu
+\*--------------------------------------------------------------------*/
+    ProMenuFileRegister((char*)&quot;TkFixtSet&quot;,(char*)&quot;tkfixtset.mnu&quot;,&amp;menu_id);
+    ProMenubuttonActionSet((char*)&quot;TkFixtSet&quot;,(char*)&quot;TkFixtSet&quot;, 
+<a name="anchor-20"></a>				(ProMenubuttonAction)ProUtilMenuKill, NULL,2);
+    ProMenubuttonActionSet((char*)&quot;TkFixtSet&quot;,(char*)&quot;-Name&quot;, (ProMenubuttonAction)ProTestFixtAction, 
+					(ProAppData)&amp;fixt_elem_tree,PRO_E_FEAT_NAME );
+    ProMenubuttonActionSet((char*)&quot;TkFixtSet&quot;,(char*)&quot;-Component&quot;, (ProMenubuttonAction)ProTestFixtAction,
+					(ProAppData)&amp;fixt_elem_tree, PRO_E_COMPONENTS );
+<a name="anchor-21"></a>    ProMenubuttonActionSet((char*)&quot;TkFixtSet&quot;,(char*)&quot;-Setup time&quot;, (ProMenubuttonAction)ProTestFixtAction,
+					(ProAppData)&amp;fixt_elem_tree, PRO_E_SETUP_TIME );
+
+    ProMenuFileRegister((char*)&quot;TkMfgDQ&quot;,(char*)&quot;tkmfgdq.mnu&quot;, &amp;menu_id );
+    ProMenubuttonActionSet((char*)&quot;TkMfgDQ&quot;,(char*)&quot;TkMfgDQ&quot;,
+<a name="anchor-22"></a>				 (ProMenubuttonAction) ProMenuDelete, NULL, 0);
+    ProMenubuttonActionSet((char*)&quot;TkMfgDQ&quot;,(char*)&quot;Done&quot;, (ProMenubuttonAction)ProTestFixtCreate,
+						   (ProAppData) &amp;fixt_elem_tree, 0 );
+    ProMenubuttonActionSet((char*)&quot;TkMfgDQ&quot;,(char*)&quot;Quit&quot;,(ProMenubuttonAction) ProUtilMenuKill,
+						    NULL, 2 );
+<a name="anchor-23"></a>
+    ProCompoundmenuCreate(menu, &amp;n_menus);
+    
+    return ((ProError)1);
+}
+<a name="anchor-24"></a>
+
+/*====================================================================*\
+FUNCTION :  ProTestFixtCreate
+PURPOSE  :  Create the fixture from the element tree
+<a name="anchor-25"></a>\*====================================================================*/
+int ProTestFixtCreate (
+    ProAppData element_tree,
+    int dummy )
+{
+<a name="anchor-26"></a>    ProSelection   selection;
+    ProFeature     fixture;
+    ProErrorlist   errors;
+    ProMfg         mfg_model;
+    ProSolid       mfg_solid;
+<a name="anchor-27"></a>    ProAssembly    mfg_asm;
+    ProAsmcomppath comp_path;
+    ProModelitem   model_item;
+    ProError       status;
+    int            id;
+<a name="anchor-28"></a>    ProFeatureCreateOptions *opts = 0;
+
+    if ( element_tree == NULL)
+	return PRO_TK_BAD_INPUTS;
+
+<a name="anchor-29"></a>    (void) ProUtilElementtreePrint(*((ProElement*)element_tree), 
+    			PRO_TEST_INFO_WINDOW, NULL);
+
+    status = ProTestGetModels( &amp;mfg_model, &amp;mfg_solid, &amp;comp_path);
+
+<a name="anchor-30"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+	status = ProMfgAssemGet( mfg_model, &amp;mfg_asm );
+	TEST_CALL_REPORT(&quot;ProMfgAssemGet()&quot;, &quot;ProTestFixtCreate()&quot;, 
+				status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-31"></a>
+    }
+
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-32"></a>	status = ProMdlIdGet((ProMdl) mfg_asm, &amp;id );
+	TEST_CALL_REPORT(&quot;ProMfgAssemGet()&quot;, &quot;ProTestFixtCreate()&quot;, 
+				status, (status != PRO_TK_NO_ERROR));
+    }
+
+<a name="anchor-33"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+	status = ProModelitemInit( mfg_asm, id, PRO_ASSEMBLY, &amp;model_item );
+	TEST_CALL_REPORT(&quot;ProModelitemInit()&quot;,&quot;ProTestFixtCreate()&quot;,
+				status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-34"></a>    }
+
+    if ( status == PRO_TK_NO_ERROR)
+    {
+	status = ProSelectionAlloc(NULL, &amp;model_item, &amp;selection);
+<a name="anchor-35"></a>	TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;, &quot;ProTestFixtCreate()&quot;,
+				status, (status != PRO_TK_NO_ERROR));
+    }
+
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-36"></a>    {
+	status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+		1, (ProArray*)&amp;opts);
+
+	opts[0]= PRO_FEAT_CR_NO_OPTS;
+<a name="anchor-37"></a>
+	status = ProFeatureWithoptionsCreate( selection, *((ProElement*)element_tree),
+		opts, PRO_REGEN_NO_FLAGS, &amp;fixture, &amp;errors);
+	TEST_CALL_REPORT(&quot;ProFeatureWithoptionsCreate()&quot;, &quot;ProTestFixtCreate()&quot;,
+				status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-38"></a>
+	status = ProArrayFree((ProArray*)&amp;opts);
+    }
+ 
+    /*
+<a name="anchor-39"></a>    status = ProElementFree(*((ProElement*)element_tree);
+    TEST_CALL_REPORT(&quot;ProElementFree()&quot;, &quot;ProTestCreateWkcell()&quot;,
+			    status, (status != PRO_TK_NO_ERROR));
+
+    */
+<a name="anchor-40"></a>    ProMenuDelete();
+    return(status);
+}
+
+/*====================================================================*\
+<a name="anchor-41"></a>FUNCTION : ProTestFixtAction
+PURPOSE  : Prompt user for a specified element and add it to tree.
+\*====================================================================*/
+int ProTestFixtAction ( ProAppData element, int element_id )
+{
+<a name="anchor-42"></a>    wchar_t    wstr[PRO_LINE_SIZE];
+    char       str[PRO_LINE_SIZE];
+    void      *entry;
+    ProError   status = PRO_TK_NO_ERROR;
+    ProElement elem = (ProElement)NULL;
+<a name="anchor-43"></a>    int        value_type, comp_id, c_range[2] = {0,9999};
+    double     d_val, d_range[2] = {0.0, 9999.9};
+    
+    status = ProElementAlloc( element_id, &amp;elem );
+
+<a name="anchor-44"></a>    if (status == PRO_TK_NO_ERROR) 
+    {
+	switch ( element_id )
+	{
+	    case PRO_E_FEAT_NAME:
+<a name="anchor-45"></a>	        ProTKSprintf(str,(char*)&quot;Enter fixture name : &quot;);
+		ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+		if (!ProUtilStringGet(wstr, NULL, PRO_LINE_SIZE))
+		{
+		    status = PRO_TK_USER_ABORT;
+<a name="anchor-46"></a>		}
+		else
+		{
+		    value_type = PRO_VALUE_TYPE_WSTRING;
+		    entry = wstr;
+<a name="anchor-47"></a>		}
+		break;
+	    case PRO_E_COMPONENTS:
+	        ProTKSprintf(str,(char*)&quot;Enter fixture component id : &quot;);
+		ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+<a name="anchor-48"></a>		if (!ProUtilIntGet(c_range, NULL, &amp;comp_id))
+		{
+		    status = PRO_TK_USER_ABORT;
+		}
+		else 
+<a name="anchor-49"></a>		{
+		    value_type = PRO_VALUE_TYPE_INT;
+                    entry = &amp;comp_id;
+		}
+		break;
+<a name="anchor-50"></a>	    case PRO_E_SETUP_TIME:
+	        ProTKSprintf(str,(char*)&quot;Enter fixture setup time : &quot;);
+		ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+                if (!ProUtilDoubleGet(d_range, NULL, &amp;d_val)) 
+		{
+<a name="anchor-51"></a>                    status = PRO_TK_USER_ABORT;
+		}
+		else
+		{
+		    value_type = PRO_VALUE_TYPE_DOUBLE;
+<a name="anchor-52"></a>		    entry = &amp;d_val;
+		}
+		break;
+	    default:
+		status = PRO_TK_BAD_INPUTS;
+<a name="anchor-53"></a>	}
+
+	if (status == PRO_TK_NO_ERROR)
+	{
+	    status = ProUtilElementBuild((ProValueDataType)value_type, entry, &amp;elem);
+<a name="anchor-54"></a>
+	    if (status == PRO_TK_NO_ERROR)
+	    {
+		status = ProElemtreeElementAdd(*(ProElement*)element, NULL,
+						elem);
+<a name="anchor-55"></a>		TEST_CALL_REPORT(&quot;ProElemtreeElementAdd()&quot;,
+				 &quot;ProTestFixtAction()&quot;,
+				 status, (status != PRO_TK_NO_ERROR));
+	    }
+	}
+<a name="anchor-56"></a>    }
+   
+    return ((int)status);
+}
+
+<a name="anchor-57"></a>ProError test_func(ProAppData p_fixt, ProAppData app_data, int ts)
+{
+    ProTKFprintf(stderr, (char*)&quot;In test_func()\n&quot;);
+    ProTKFprintf(stderr, (char*)&quot;Fixture id  = %d\n&quot;, ((ProFixture*)p_fixt)->id );
+    ProTKFprintf(stderr, (char*)&quot;Test double = %f\n&quot;, *((double*)app_data));
+<a name="anchor-58"></a>    ProTKFprintf(stderr, (char*)&quot;Test int    = %d\n&quot;, ts );
+
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-59"></a>
+/*====================================================================*\
+FUNCTION : ProTestFixtList
+PURPOSE  : 
+\*====================================================================*/
+<a name="anchor-60"></a>int ProTestFixtList( MfgMenuChoice *obj_action )
+{
+    ProError status;
+    double   dval = 678.323;
+    int      ival = 123;
+<a name="anchor-61"></a>    status = ProUtilMfgobjAction ( obj_action, MFGOBJ_FIXTURE,
+        obj_action->mfgobj_list->n_fixture, test_func, &amp;dval, ival );
+
+
+    return 0;
+<a name="anchor-62"></a>}
+
+
+/*====================================================================*\
+FUNCTION : ProTestFixtureDisp
+<a name="anchor-63"></a>PURPOSE  :
+\*====================================================================*/
+ProError ProTestFixtureDisp(
+    MfgMenuChoice *obj_action)
+{
+<a name="anchor-64"></a>    int menu_id, action;
+
+/*--------------------------------------------------------------------*\
+    Create the fixture menu
+\*--------------------------------------------------------------------*/
+<a name="anchor-65"></a>    ProMenuFileRegister((char*)&quot;TkFixt&quot;, (char*)&quot;tkfixt.mnu&quot;, &amp;menu_id);
+    ProMenubuttonActionSet((char*)&quot;TkFixt&quot;, (char*)&quot;Activate&quot;, 
+                     (ProMenubuttonAction)ProTestFixtureActivate,
+                                               (ProAppData)obj_action, 0);
+    ProMenubuttonActionSet((char*)&quot;TkFixt&quot;, (char*)&quot;Deactivate All&quot;, 
+<a name="anchor-66"></a>                         (ProMenubuttonAction)ProTestFixtDeactivate, NULL, 0);
+    ProMenubuttonActionSet((char*)&quot;TkFixt&quot;, (char*)&quot;Done&quot;,
+                            (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    ProMenubuttonActionSet((char*)&quot;TkFixt&quot;, (char*)&quot;TkFixt&quot;,
+                            (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-67"></a>
+    ProMenuCreate (PROMENUTYPE_MAIN, (char*)&quot;TkFixt&quot;, &amp;menu_id);
+    ProMenuProcess ((char*)&quot;&quot;, &amp;action);
+
+    return PRO_TK_NO_ERROR;
+<a name="anchor-68"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestFixtDeactivate
+PURPOSE  : Deactivate all fixtures
+<a name="anchor-69"></a>\*====================================================================*/
+ProError ProTestFixtDeactivate()
+{
+    ProError       status = PRO_TK_NO_ERROR;
+    ProMfg         mfg_model;
+<a name="anchor-70"></a>    ProSolid       mfg_solid;
+    ProAsmcomppath comp_path;
+
+    status = ProTestGetModels ( &amp;mfg_model, &amp;mfg_solid, &amp;comp_path );
+
+<a name="anchor-71"></a>    status = ProMfgFixtActivate ( mfg_model, NULL);
+    TEST_CALL_REPORT(&quot;ProMfgFixtActivate()&quot;, &quot;ProTestFixtDeactivate&quot;,
+                                    status, status != PRO_TK_NO_ERROR ); 
+ 
+    return status;
+<a name="anchor-72"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestFixtureActivate
+PURPOSE  : general function to activate a fixture
+<a name="anchor-73"></a>\*====================================================================*/
+ProError ProTestFixtureActivate (
+    MfgMenuChoice *obj_action)
+{
+    ProError status;
+<a name="anchor-74"></a>    double   dval = 0;
+    int      ival = 0;
+
+    status = ProUtilMfgobjAction ( obj_action, MFGOBJ_FIXTURE, 1,
+                                  ProTestFixtActivate, &amp;dval, ival );
+<a name="anchor-75"></a>
+    return status;
+}
+
+
+<a name="anchor-76"></a>/*====================================================================*\
+FUNCTION : ProTestFixtActivate
+PURPOSE  : Activate selected fixture
+\*====================================================================*/
+ProError ProTestFixtActivate ( 
+<a name="anchor-77"></a>    ProAppData p_fixt,
+    ProAppData app_data,
+    int dummy)
+    
+{
+<a name="anchor-78"></a>    ProError       status = PRO_TK_NO_ERROR;
+    ProMfg         mfg_model;
+    ProSolid       mfg_solid;
+    ProAsmcomppath comp_path;
+
+<a name="anchor-79"></a>    status = ProTestGetModels ( &amp;mfg_model, &amp;mfg_solid, &amp;comp_path );
+
+    status = ProMfgFixtActivate( mfg_model, (ProFixture *) p_fixt);
+    TEST_CALL_REPORT(&quot;ProMfgFixtActivate&quot;, &quot;ProTestFixtActivate&quot;,
+                                    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-80"></a>    return status;
+}
+
+/*====================================================================*\
+FUNCTION : ProTestFixtureDelete
+<a name="anchor-81"></a>PURPOSE  : general function to delete fixtures
+\*====================================================================*/
+ProError ProTestFixtureDelete(
+    MfgMenuChoice *obj_action )
+{
+<a name="anchor-82"></a>    ProError status;
+    double   dval = 0;
+    int      ival = 0;
+
+    status = ProUtilMfgobjAction(obj_action, MFGOBJ_FIXTURE,
+<a name="anchor-83"></a>         obj_action->mfgobj_list->n_fixture, ProTestFixtDelete, &amp;dval, ival );
+
+    return status;
+}
+
+<a name="anchor-84"></a>
+
+/*====================================================================*\
+FUNCTION : ProTestFixtDelete
+PURPOSE  : Delete selected fixture from the mfg model
+<a name="anchor-85"></a>\*====================================================================*/
+ProError ProTestFixtDelete (
+    ProAppData p_fixt,
+    ProAppData app_data,
+    int dummy)
+<a name="anchor-86"></a>{
+    ProError       status = PRO_TK_NO_ERROR;
+    ProMfg         mfg_model;
+    ProSolid       mfg_solid;
+    ProAsmcomppath comp_path;
+<a name="anchor-87"></a>    ProFeatureDeleteOptions *delete_opts = 0;
+    int *feat_ids = NULL;
+
+    status = ProTestGetModels ( &amp;mfg_model, &amp;mfg_solid, &amp;comp_path );
+
+<a name="anchor-88"></a>    status = ProArrayAlloc(1,sizeof(ProFeatureDeleteOptions),
+        1, (ProArray*)&amp;delete_opts);
+
+    delete_opts[0] = PRO_FEAT_DELETE_NO_OPTS;
+
+<a name="anchor-89"></a>    status = ProArrayAlloc(1,sizeof(int),
+        1, (ProArray*)&amp;feat_ids);
+
+    feat_ids[0] = ((ProFixture *)p_fixt)->id;
+
+<a name="anchor-90"></a>    status = ProFeatureWithoptionsDelete ( mfg_solid, feat_ids, delete_opts,
+      PRO_REGEN_NO_FLAGS);
+    TEST_CALL_REPORT(&quot;ProFeatureWithoptionsDelete()&quot;, &quot;ProTestFixturesDelete()&quot;,
+				  status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-91"></a>    status = ProArrayFree((ProArray*)&amp;delete_opts);
+    status = ProArrayFree((ProArray*)&amp;feat_ids);
+
+    return status;
+}
+</pre>
+</body>
+</html>

@@ -1,0 +1,1248 @@
+<html>
+<head>
+<title>UtilMfgNew.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit  includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProElement.h>
+#include &lt;ProFeature.h>
+#include &lt;ProSelection.h>
+#include &lt;ProNcseq.h>
+#include &lt;ProNcseqElem.h>
+<a name="anchor-3"></a>#include &lt;ProMenu.h>
+#include &lt;ProPecktable.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProUtil.h>
+<a name="anchor-4"></a>#include &lt;ProModelitem.h>
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProMessage.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-5"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;MfgMenu.h&quot;
+#include &quot;TestConsts.h&quot;
+#include &quot;UtilString.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilGeom.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;UtilTree.h&quot;
+#include &quot;TestMfgNew.h&quot;
+#include &quot;UtilMfgNew.h&quot;
+<a name="anchor-7"></a>#include &quot;UtilMenu.h&quot;
+#include &quot;UtilMessage.h&quot;
+
+#include &lt;ctype.h>
+
+<a name="anchor-8"></a>#define BLIND_SURFACE 0
+#define BLIND_ENTER   1
+
+#define DRILL_STANDART	0
+#define DRILL_DEEP	1
+<a name="anchor-9"></a>#define DRILL_CSINK	2
+
+typedef struct
+{
+    int n_ranges;
+<a name="anchor-10"></a>    struct
+    {
+        double  low_dia, high_dia;
+        int     n_pecks;
+        double  peck_depth_ratios[5];
+<a name="anchor-11"></a>        double  feed_rates[5];
+    }ranges[2];
+}PecktableData;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-12"></a>Function prototypes
+\*--------------------------------------------------------------------*/
+static ValueType parse_string( const char *s, char *out);
+
+
+<a name="anchor-13"></a>/*====================================================================*\
+FUNCTION : ProUtilMfgobjAction
+PURPOSE  : List features of specified type and call the supplied
+           function for each feature type
+\*====================================================================*/
+<a name="anchor-14"></a>ProError ProUtilMfgobjAction ( 
+    MfgMenuChoice *obj_action, 
+    int            obj_type,
+    int            max_sels,
+    MfgActionFunc  func,
+<a name="anchor-15"></a>    ProAppData     app_data,
+    int            int_val)
+{
+    wchar_t **menu_items, **selected;
+    wchar_t   wtitle[PRO_NAME_SIZE], item_name[PRO_NAME_SIZE];
+<a name="anchor-16"></a>    char      title[] = &quot;TK_MFG_FEATS&quot;, obj_name[PRO_NAME_SIZE];
+    int       i,j, num_selected, num_objs;
+    ProError status = PRO_TK_NO_ERROR;
+    ProModelitem   *mdl_item = NULL;
+    ProTool        *tool_item = NULL;
+<a name="anchor-17"></a>     
+/*--------------------------------------------------------------------*\
+    Initial input checking
+\*--------------------------------------------------------------------*/
+    if (obj_action == NULL || obj_action->mfgobj_list == NULL || 
+<a name="anchor-18"></a>					func == (MfgActionFunc) NULL )
+	status = PRO_TK_BAD_INPUTS;
+    
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-19"></a>	switch ( obj_type )
+	{
+	    case MFGOBJ_WKCELL:
+	        num_objs = obj_action->mfgobj_list->n_wcell;
+		mdl_item = obj_action->mfgobj_list->wcell;
+<a name="anchor-20"></a>		break;
+	    case MFGOBJ_OPER:
+	        num_objs = obj_action->mfgobj_list->n_oper;
+		mdl_item = obj_action->mfgobj_list->oper;
+		break;
+<a name="anchor-21"></a>	    case MFGOBJ_NC_SEQ:
+	        num_objs = obj_action->mfgobj_list->n_nc_seq;
+		mdl_item = obj_action->mfgobj_list->nc_seq;
+		break;
+	    case MFGOBJ_FIXTURE:
+<a name="anchor-22"></a>	        num_objs = obj_action->mfgobj_list->n_fixture;
+		mdl_item = obj_action->mfgobj_list->fixture;
+		break;
+	    case MFGOBJ_TOOL:
+	        num_objs = obj_action->mfgobj_list->n_tool;
+<a name="anchor-23"></a>		tool_item = obj_action->mfgobj_list->tool;
+		break;
+	    default :
+		status = PRO_TK_BAD_INPUTS;
+	}
+<a name="anchor-24"></a>    }
+
+    if (status != PRO_TK_NO_ERROR)
+	return status;
+
+<a name="anchor-25"></a>    ProTKFprintf(stderr, (char*)&quot; Number of objects = %d \n&quot;, num_objs );
+    ProTKFprintf(stderr, (char*)&quot; Modelitem ptr     = %x \n&quot;, mdl_item );
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-26"></a>    Allocate space for strings array ( add one item for empty string )
+\*--------------------------------------------------------------------*/
+    menu_items = (wchar_t **) calloc ( num_objs + 1, sizeof(wchar_t *));
+    
+    if ( menu_items == NULL)
+<a name="anchor-27"></a>	status = PRO_TK_GENERAL_ERROR;
+
+    for ( i = 0; i &lt; num_objs &amp;&amp; status == PRO_TK_NO_ERROR ; i++)
+    {
+	menu_items[i] = (wchar_t*) calloc (PRO_NAME_SIZE,sizeof(wchar_t));
+<a name="anchor-28"></a>	if ( menu_items[i] == NULL)
+	    status = PRO_TK_GENERAL_ERROR;
+
+        if ( status == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-29"></a>	    if (tool_item != NULL)
+	    {
+		ProUtilWstrcpy( menu_items[i], (wchar_t*) tool_item[i].tool_id); 
+	    }
+	    else
+<a name="anchor-30"></a>	    {
+		status = ProModelitemNameGet ( &amp;(mdl_item[i]), menu_items[i]);
+		TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;,
+			         &quot;ProUtilMfgobjAction()&quot;,
+				  status, status != PRO_TK_NO_ERROR );
+<a name="anchor-31"></a>	    }
+	}
+    }
+
+    for (i= 0 ; i &lt; num_objs ; i++)
+<a name="anchor-32"></a>    {
+	ProWstringToString(obj_name, menu_items[i]);
+        ProTKFprintf(stderr,(char*)&quot;Menu item [%d] = %s\n&quot;, i, obj_name); 
+    }
+
+<a name="anchor-33"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+/*--------------------------------------------------------------------*\
+	Add a blank line
+\*--------------------------------------------------------------------*/
+<a name="anchor-34"></a>        menu_items[num_objs] = (wchar_t*) calloc (1, sizeof(wchar_t));
+	ProStringToWstring(menu_items[num_objs],(char*)&quot;&quot;);
+
+/*--------------------------------------------------------------------*\
+	Get selections
+<a name="anchor-35"></a>\*--------------------------------------------------------------------*/
+	status = ProMenuStringsSelect(ProStringToWstring(wtitle,title),
+		    menu_items, max_sels, NULL, &amp;selected, &amp;num_selected);  
+	TEST_CALL_REPORT(&quot;ProMenuStringsSelect()&quot;, &quot;ProUtilMfgobjAction()&quot;,
+					status, status != PRO_TK_NO_ERROR );
+<a name="anchor-36"></a>    }
+    
+/*--------------------------------------------------------------------*\
+    Call func for each of the features selected
+\*--------------------------------------------------------------------*/
+<a name="anchor-37"></a>    if ( status == PRO_TK_NO_ERROR &amp;&amp; num_selected > 0 )
+    {
+	for ( i = 0; status == PRO_TK_NO_ERROR &amp;&amp;  i &lt; num_selected; i++)
+	{
+
+<a name="anchor-38"></a>	    for ( j = 0; j &lt; num_objs; j++)
+	    {
+	    
+		if (tool_item != NULL)
+		{
+<a name="anchor-39"></a>		    ProUtilWstrcpy( item_name, tool_item[j].tool_id);
+		}
+		else
+		{
+		    status = ProModelitemNameGet ( &amp;(mdl_item[j]), item_name);
+<a name="anchor-40"></a>		    TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;,
+					&quot;ProUtilMfgobjAction()&quot;,
+					status, status != PRO_TK_NO_ERROR );
+		}
+
+<a name="anchor-41"></a>		if (!ProUtilWstrCmp ( item_name, selected[i] ))
+		{
+		    if ( tool_item != NULL)
+		    {
+			status = func((ProAppData) &amp;(tool_item[j]), 
+<a name="anchor-42"></a>							app_data, int_val);
+		    }
+		    else
+		    {
+			status = func((ProAppData) &amp;(mdl_item[j]), 
+<a name="anchor-43"></a>							app_data, int_val);
+		    }
+		    break;
+		}
+	    }
+<a name="anchor-44"></a>	}
+    }
+    
+    for (i= 0 ; i &lt; num_objs + 1; i++)
+    {
+<a name="anchor-45"></a>	free(menu_items[i]);
+    }
+
+    free(menu_items);
+
+<a name="anchor-46"></a>    return status;
+}
+
+/*====================================================================*\
+FUNCTION : ProUtilElementBuild
+<a name="anchor-47"></a>PURPOSE  : Given a value type and a value return the element
+\*====================================================================*/
+ProError ProUtilElementBuild (
+    ProValueDataType data_type,
+    void            *data,
+<a name="anchor-48"></a>    ProElement      *element)
+{
+    ProError status = PRO_TK_NO_ERROR;
+    ProSelection *s;
+    int *i;
+<a name="anchor-49"></a>    double *d;
+    char *c;
+    wchar_t *w;
+	ProReference ref;
+
+<a name="anchor-50"></a>    switch (data_type)
+    {
+	case PRO_VALUE_TYPE_INT:
+	    i = (int*) data;
+		status = ProElementIntegerSet(*element, *i);
+<a name="anchor-51"></a>	    TEST_CALL_REPORT(&quot;ProElementIntegerSet()&quot;,&quot;ProUtilElementBuild()&quot;,
+				    status, (status != PRO_TK_NO_ERROR));
+	    break;
+	case PRO_VALUE_TYPE_DOUBLE:
+	    d = (double*) data;
+<a name="anchor-52"></a>		status = ProElementDoubleSet(*element, *d);
+	    TEST_CALL_REPORT(&quot;ProElementDoubleSet()&quot;,&quot;ProUtilElementBuild()&quot;,
+				    status, (status != PRO_TK_NO_ERROR));
+	    break;
+	case PRO_VALUE_TYPE_STRING:
+<a name="anchor-53"></a>		c = (char*) data;
+				status = ProElementStringSet(*element, c);
+	    TEST_CALL_REPORT(&quot;ProElementStringSet()&quot;,&quot;ProUtilElementBuild()&quot;,
+				    status, (status != PRO_TK_NO_ERROR));
+	    break;
+<a name="anchor-54"></a>	case PRO_VALUE_TYPE_WSTRING:
+		w = (wchar_t*) data;    
+		status = ProElementWstringSet(*element, w);
+	    TEST_CALL_REPORT(&quot;ProElementWstringSet()&quot;,&quot;ProUtilElementBuild()&quot;,
+				    status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-55"></a>	    break;
+	case PRO_VALUE_TYPE_SELECTION:
+		s = (ProSelection*) data;
+
+		status = ProSelectionToReference(*s, &amp;ref);
+<a name="anchor-56"></a>		TEST_CALL_REPORT(&quot;ProSelectionToReference()&quot;,&quot;ProUtilElementBuild()&quot;,
+				    status, (status != PRO_TK_NO_ERROR));
+
+		 status = ProElementReferenceSet(*element, ref);
+	    TEST_CALL_REPORT(&quot;ProElementReferenceSet()&quot;,&quot;ProUtilElementBuild()&quot;,
+<a name="anchor-57"></a>				    status, (status != PRO_TK_NO_ERROR));
+	    break;
+        default:
+	    break;
+    }
+<a name="anchor-58"></a>    return status;
+}
+
+/*====================================================================*\
+FUNCTION : ProTestWcParamSetup
+<a name="anchor-59"></a>PURPOSE  : Set a couple of wc parameters
+\*====================================================================*/
+ProError ProTestWcParamSetup( ProElement *wc_elem )
+{
+    ProError status = PRO_TK_NO_ERROR;
+<a name="anchor-60"></a>    ProElement wc_param, name_elem, value_elem;
+    ParamTable wc_params[] = {{&quot;CELL_MAX_SPINDLE&quot;, 1800.0 },
+                              {&quot;TOOL_CHANGE_TIME&quot;, 1.0    },
+              	              {&quot;CELL_MAX_FEED&quot;,    300.0  }};
+    int wc_param_size = sizeof(wc_params)/sizeof(ParamTable), i;
+<a name="anchor-61"></a>
+    for (i = 0; i &lt; wc_param_size; i++)
+    {
+	status = ProElementAlloc(PRO_E_MFG_PARAM, &amp;wc_param);
+
+<a name="anchor-62"></a>        if (status == PRO_TK_NO_ERROR)
+	    status = ProElementAlloc(PRO_E_MFG_PARAM_NAME, &amp;name_elem);
+	
+        if (status == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-63"></a>	    status = ProUtilElementBuild(PRO_VALUE_TYPE_STRING, 
+	    			wc_params[i].param_name, &amp;name_elem); 
+	}
+
+        if (status == PRO_TK_NO_ERROR)
+<a name="anchor-64"></a>	    status = ProElementAlloc(PRO_E_MFG_PARAMVAL, &amp;value_elem);
+
+        if (status == PRO_TK_NO_ERROR)
+	    status = ProUtilElementBuild(PRO_VALUE_TYPE_DOUBLE,
+	    			&amp;(wc_params[i].paramval), &amp;value_elem);
+<a name="anchor-65"></a>	
+        if (status == PRO_TK_NO_ERROR)
+            status = ProElemtreeElementAdd(wc_param, NULL, name_elem);
+	    
+        if (status == PRO_TK_NO_ERROR)
+<a name="anchor-66"></a>            status = ProElemtreeElementAdd(wc_param, NULL, value_elem);
+	
+        if (status == PRO_TK_NO_ERROR)
+	    status = ProElemtreeElementAdd(*wc_elem, NULL, wc_param);
+    }
+<a name="anchor-67"></a>
+    return status;
+}
+
+/*====================================================================*\
+<a name="anchor-68"></a>Function: ProTestCreateSelection
+Purpose : Creates a selection structure used in feature creation
+\*====================================================================*/
+ProError  ProTestCreateSelection(
+    int item_id, 
+<a name="anchor-69"></a>    ProType item_type, 
+    ProSelection *p_selection)
+{
+    ProError status;
+    ProMfg mfg_model;
+<a name="anchor-70"></a>    ProSolid mfg_solid;
+    ProAsmcomppath comp_path;
+    ProModelitem wkpiece_item;
+
+    ProType type;
+<a name="anchor-71"></a> 
+    status = PRO_TK_NO_ERROR;
+ 
+    status = ProTestGetModels( &amp;mfg_model, &amp;mfg_solid, &amp;comp_path);
+    ProMdlTypeGet(mfg_model, (ProMdlType *) &amp;type);
+<a name="anchor-72"></a>    ProTKPrintf((char*)&quot;Mfg solid type (%d)\n&quot;, type);
+
+    status = ProModelitemInit( mfg_solid, item_id, item_type, &amp;wkpiece_item );
+    TEST_CALL_REPORT(&quot;ProModelitemInit()&quot;,
+	&quot;ProTestCreateWkcell()&quot;, status,
+<a name="anchor-73"></a>	(status != PRO_TK_NO_ERROR));
+
+    status = ProSelectionAlloc(&amp;comp_path, &amp;wkpiece_item, p_selection);
+	
+    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;,
+<a name="anchor-74"></a>		&quot;ProTestCreateSelection()&quot;, status,
+		(status != PRO_TK_NO_ERROR));
+
+    return ( status );
+}
+<a name="anchor-75"></a>
+/*====================================================================*\
+FUNCTION   : ProTestGetModels
+PURPOSE    : Retrieves structures for mfg_model, solid and component path
+PT_KEYWORD : retrieve, model, component path
+<a name="anchor-76"></a>PT_SEEALSO : ProAsmcompTypeGet, ProMdlCurrentGet
+\*====================================================================*/
+ProError ProTestGetModels(
+    ProMfg *p_mfg_model, 
+    ProSolid *p_mfg_solid, 
+<a name="anchor-77"></a>    ProAsmcomppath *p_comp_path)
+{ 
+    ProError status;
+    ProMdlType mfg_model_type;
+
+<a name="anchor-78"></a>    status = ProMdlCurrentGet((ProMdl *)p_mfg_model);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;,
+                &quot;ProTestGetModels()&quot;, status,
+                (status != PRO_TK_NO_ERROR));
+
+<a name="anchor-79"></a>    ProMdlTypeGet(*p_mfg_model, &amp;mfg_model_type);
+    if ( mfg_model_type == PRO_MDL_MFG )
+    {
+	if (status == PRO_TK_NO_ERROR )
+	{
+<a name="anchor-80"></a>	    status = ProMfgSolidGet(*p_mfg_model, p_mfg_solid);
+            TEST_CALL_REPORT(&quot;ProMfgSolidGet()&quot;,
+                &quot;ProTestGetModels()&quot;, status,
+                (status != PRO_TK_NO_ERROR));
+
+<a name="anchor-81"></a>	    if (status == PRO_TK_NO_ERROR)
+	    {
+		status= ProMfgFeatureOwnerGet(*p_mfg_model, p_comp_path);
+                TEST_CALL_REPORT(&quot;ProMfgFeatureOwnerGet()&quot;,
+               		 &quot;ProTestGetModels()&quot;, status,
+<a name="anchor-82"></a>               		 (status != PRO_TK_NO_ERROR));
+	    }
+	}
+    }    
+    else
+<a name="anchor-83"></a>    {
+	status = PRO_TK_BAD_CONTEXT;
+    }
+
+  return(status);
+<a name="anchor-84"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestDepTypeAction
+PURPOSE  : Action function for Depth type menu
+<a name="anchor-85"></a>\*====================================================================*/
+int ProTestDepTypeAction(
+    void* p_dummy, 
+    int action )
+{
+<a name="anchor-86"></a>    ProError status;
+    status = ProMenuDeleteWithStatus (action);
+    return (status);
+}
+
+<a name="anchor-87"></a>/*====================================================================*\
+FUNCTION : ProTestSelectionPostSelact
+PURPOSE  : Selection post selaction
+\*====================================================================*/
+ProError ProTestSelectionPostSelact(
+<a name="anchor-88"></a>         Pro3dPnt point,
+         ProSelection selection,
+         ProAppData app_data)
+{
+    TEST_CALL_REPORT (&quot;ProSelectionPostSelact()&quot;, 
+<a name="anchor-89"></a>        &quot;ProTestSelectionPostSelact()&quot;,
+        PRO_TK_NO_ERROR, 0);
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-90"></a>/*====================================================================*\
+FUNCTION : ProUtilNcseqElemMillsurfSet
+PURPOSE  : Add milling surface to the element (PRO_E_SURFACES).
+\*====================================================================*/
+ProError ProUtilNcseqElemMillsurfSet (
+<a name="anchor-91"></a>    ProElement *surfaces )
+{
+    ProError err;
+	int mill_srf_id;
+	ProBoolean  flip;
+<a name="anchor-92"></a>
+	static ProUtilMenuButtons set_flip[] = {
+	{&quot;TkSetFlip&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+	{&quot;Flip&quot;, PRO_B_TRUE, 0 },
+	{&quot;Natural&quot;, PRO_B_FALSE, 0 },
+<a name="anchor-93"></a>	{&quot;&quot;,0,0}
+    };
+
+	if (ProUtilIntGet(NULL, NULL, &amp;mill_srf_id) == 0)
+	{
+<a name="anchor-94"></a>		return PRO_TK_MSG_USER_QUIT;
+	}
+
+	err = ProUtilMenuIntValueSelect(set_flip, (int *)&amp;flip);
+	
+<a name="anchor-95"></a>	if (err != PRO_TK_NO_ERROR)
+	     return (PRO_TK_MSG_USER_QUIT);
+
+	err =  ProNcseqElemMillsurfSet (*surfaces, flip, mill_srf_id);
+	TEST_CALL_REPORT(&quot;ProNcseqElemMillsurfSet()&quot;,
+<a name="anchor-96"></a>			 &quot;ProUtilNcseqElemMillsurfSet()&quot;, err,
+                          (err != PRO_TK_NO_ERROR));
+	return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-97"></a>/*====================================================================*\
+FUNCTION : ProUtilNcseqElemVolumeSet
+PURPOSE  : Add a volume to the element (PRO_E_SURFACES, PRO_E_VOLUME).
+\*====================================================================*/
+ProError ProUtilNcseqVolumeSet (
+<a name="anchor-98"></a>    ProElement *surfaces )
+{
+    ProError err;
+	int volume_id;
+
+<a name="anchor-99"></a>
+	if (ProUtilIntGet(NULL, NULL, &amp;volume_id) == 0)
+	{
+		return PRO_TK_MSG_USER_QUIT;
+	}
+<a name="anchor-100"></a>
+	err =  ProNcseqElemVolumeSet (*surfaces, volume_id  );
+	TEST_CALL_REPORT(&quot;ProNcseqElemVolumeSet()&quot;,
+			 &quot;ProUtilNcseqVolumeSet()&quot;, err,
+                          (err != PRO_TK_NO_ERROR));
+<a name="anchor-101"></a>	return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION : ProUtilNcseqElemWindowSet
+<a name="anchor-102"></a>PURPOSE  : Add a window to the element (PRO_E_MACH_WINDOW).
+\*====================================================================*/
+ProError ProUtilNcseqWindowSet (
+    ProElement *mach_wnd )
+{
+<a name="anchor-103"></a>    ProError err;
+	int wind_id;
+
+
+	if (ProUtilIntGet(NULL, NULL, &amp;wind_id) == 0)
+<a name="anchor-104"></a>	{
+		return PRO_TK_MSG_USER_QUIT;
+	}
+
+	err =  ProNcseqElemWindowSet (*mach_wnd, wind_id  );
+<a name="anchor-105"></a>	TEST_CALL_REPORT(&quot;ProNcseqElemWindowSet()&quot;,
+			 &quot;ProUtilNcseqWindowSet()&quot;, err,
+                          (err != PRO_TK_NO_ERROR));
+	return PRO_TK_NO_ERROR;
+}
+<a name="anchor-106"></a>
+/*====================================================================*\
+FUNCTION : ProUtilNcseqStartEndPntSet
+PURPOSE  : Adds start or end pont to the element (PRO_E_START, PRO_E_END).
+\*====================================================================*/
+<a name="anchor-107"></a>ProError ProUtilNcseqStartEndPntSet (
+    ProElement *start_end )
+{
+    ProError err;
+    ProMachHead    head;
+<a name="anchor-108"></a>    ProSelection * point;
+    int n_sel;
+    ProElemId start_or_end;
+
+/*----------------------------------------------------------------------*\
+<a name="anchor-109"></a>  select a point
+\*----------------------------------------------------------------------*/
+
+   err = ProSelect((char*)&quot;point&quot;, 1, NULL, NULL, NULL, NULL,
+	    &amp;point, &amp;n_sel);
+<a name="anchor-110"></a>   TEST_CALL_REPORT(&quot;ProSelect()&quot;, 
+	    &quot;ProUtilNcseqStartEndPntSet()&quot;, err, err != PRO_TK_NO_ERROR);
+   if (err != PRO_TK_NO_ERROR)
+	    return (PRO_TK_MSG_USER_QUIT);
+/*----------------------------------------------------------------------*\
+<a name="anchor-111"></a>  select a head
+\*----------------------------------------------------------------------*/
+   
+   
+	if (ProUtilIntGet(NULL, NULL, (int*)&amp;head) == 0)
+<a name="anchor-112"></a>	{
+		return PRO_TK_MSG_USER_QUIT;
+	}
+
+	err = ProElementIdGet (*start_end, &amp;start_or_end);
+<a name="anchor-113"></a>	TEST_CALL_REPORT(&quot;ProElementIdGet()&quot;,
+			 &quot;ProUtilNcseqStartEndPntSet()&quot;, err,
+                          (err != PRO_TK_NO_ERROR));
+	if (start_or_end == PRO_E_START)
+	{
+<a name="anchor-114"></a>		err = ProNcseqElemStartPntSet (*start_end,
+			head, point[0]);
+		TEST_CALL_REPORT(&quot;ProNcseqElemStartPntSet()&quot;,
+			 &quot;ProUtilNcseqStartEndPntSet()&quot;, err,
+                          (err != PRO_TK_NO_ERROR));
+<a name="anchor-115"></a>		return PRO_TK_NO_ERROR;
+	}
+
+	if (start_or_end == PRO_E_END)
+	{
+<a name="anchor-116"></a>		err = ProNcseqElemEndPntSet (*start_end,
+			head, point[0]);
+		TEST_CALL_REPORT(&quot;ProNcseqElemEndPntSet()&quot;,
+			 &quot;ProUtilNcseqStartEndPntSet()&quot;, err,
+                          (err != PRO_TK_NO_ERROR));
+<a name="anchor-117"></a>		return PRO_TK_NO_ERROR;
+	}
+
+		
+	return PRO_TK_BAD_INPUTS;
+<a name="anchor-118"></a>}	
+
+/*====================================================================*\
+FUNCTION : ProUtilNcseqElemSurfacesAdd
+PURPOSE  : Add surfaces to element
+<a name="anchor-119"></a>NOTE     : Surfaces must be added using the api function
+\*====================================================================*/
+ProError ProUtilNcseqElemSurfacesAdd (
+    ProElement *surfaces )
+{
+<a name="anchor-120"></a>    ProError      status;
+    ProSelection *selection;
+    int           num_selected, i, action, menu_id;
+    ProModelitem  modelitem;
+    
+<a name="anchor-121"></a>    status = ProSelect((char*)&quot;surface&quot;, -1, NULL, NULL, NULL, NULL, 
+				    &amp;selection, &amp;num_selected);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProUtilNcseqElemSurfacesAdd()&quot;, 
+    				status, status != PRO_TK_NO_ERROR);
+	
+<a name="anchor-122"></a>	if (num_selected == 0 &amp;&amp; status == PRO_TK_NO_ERROR)
+	{
+		 status = ProUtilNcseqElemMillsurfSet(surfaces);
+		 if (status == PRO_TK_MSG_USER_QUIT)
+			 status = ProUtilNcseqVolumeSet(surfaces);
+<a name="anchor-123"></a>		 return status;
+	}
+
+    for (i=0; i&lt;num_selected; i++)
+    {
+<a name="anchor-124"></a>	status = ProNcseqElemSurfaceAdd(*surfaces, selection[i]);
+	TEST_CALL_REPORT(&quot;ProNcseqElemSurfaceAdd()&quot;,
+			 &quot;ProUtilNcseqElemSurfacesAdd()&quot;, status,
+                          (status != PRO_TK_NO_ERROR));
+        
+<a name="anchor-125"></a>        status = ProSelectionModelitemGet (selection[i], &amp;modelitem);
+        TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, 
+            &quot;ProUtilNcseqElemSurfacesAdd()&quot;, 
+	    status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-126"></a>        status = ProMenuFileRegister( (char*)&quot;TkDirect&quot;, (char*)&quot;tkdepdirect.mnu&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, 
+            &quot;ProUtilNcseqElemSurfacesAdd()&quot;, 
+	    status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-127"></a>        /* Define menu buttons */
+        ProMenubuttonActionSet( (char*)&quot;TkDirect&quot;, (char*)&quot;Natural&quot;,
+            (ProMenubuttonAction)ProTestDepTypeAction, NULL, PRO_B_FALSE);
+        ProMenubuttonActionSet( (char*)&quot;TkDirect&quot;, (char*)&quot;Flip&quot;,
+            (ProMenubuttonAction)ProTestDepTypeAction, NULL, PRO_B_TRUE);
+<a name="anchor-128"></a>        ProMenubuttonActionSet( (char*)&quot;TkDirect&quot;, (char*)&quot;TkDirect&quot;, 
+            (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+        status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkDirect&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProUtilNcseqElemSurfacesAdd()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-129"></a>        if( status == PRO_TK_NO_ERROR )
+        {
+            status = ProMenuProcess( (char*)&quot;TkDirect&quot;, &amp;action );
+            TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProUtilNcseqElemSurfacesAdd()&quot;, 
+	        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-130"></a>        }
+        status = ProNcseqElemSurfaceflipSet (*surfaces, (ProBoolean)action);
+        TEST_CALL_REPORT(&quot;ProNcseqElemSurfaceflipSet()&quot;,
+			 &quot;ProUtilNcseqElemSurfacesAdd()&quot;, status,
+                          (status != PRO_TK_NO_ERROR));
+<a name="anchor-131"></a>    }
+
+    return status;
+}
+
+<a name="anchor-132"></a>
+/*====================================================================*\
+FUNCTION : ProTestPecktabledataSet
+PURPOSE  : Fills ProPecktableData structure
+\*====================================================================*/
+<a name="anchor-133"></a>ProError ProTestPecktabledataSet(ProPecktableData *p_pecktable_data)
+{
+    int i, j, n_ranges = 0;
+    FILE *fp;
+    float peck_depth_ratios; 
+<a name="anchor-134"></a>    float feed_rates;
+    int ranges_size[50];
+    char cstr[80];
+    float low_dia, high_dia;
+    
+<a name="anchor-135"></a>    if ((fp = PTApplsUnicodeFopen (&quot;pecktable.pec&quot;, &quot;rt&quot;)) == NULL)
+        return (PRO_TK_GENERAL_ERROR);
+
+    ranges_size[n_ranges] = 0;  
+    for (i = 0; fgets (cstr, PRO_PATH_SIZE, fp) != NULL; i++)
+<a name="anchor-136"></a>    {
+         if (cstr[0] == '\0')
+             break;
+         sscanf (cstr, &quot;%f %f %f %f&quot;, &amp;low_dia, &amp;high_dia,
+             &amp;peck_depth_ratios, &amp;feed_rates);
+<a name="anchor-137"></a>         if (low_dia > 0.0)
+         {
+             ranges_size[n_ranges] = 0;
+             n_ranges++;            
+         }
+<a name="anchor-138"></a>         ranges_size[n_ranges-1]++;
+    }
+    
+    fclose (fp);
+
+<a name="anchor-139"></a>    p_pecktable_data->n_ranges = n_ranges;
+    p_pecktable_data->ranges = (ProPecktableRange*)calloc (
+        n_ranges, sizeof (ProPecktableRange));
+    
+    
+<a name="anchor-140"></a>    if ((fp = PTApplsUnicodeFopen (&quot;pecktable.pec&quot;, &quot;rt&quot;)) == NULL)
+        return (PRO_TK_GENERAL_ERROR);
+      
+    for (i = 0, j = 0; fgets (cstr, PRO_PATH_SIZE, fp) != NULL; i++)
+    {
+<a name="anchor-141"></a>         sscanf (cstr, &quot;%f %f %f %f&quot;, &amp;low_dia, &amp;high_dia,
+             &amp;peck_depth_ratios, &amp;feed_rates);
+         if (low_dia > 0.0 &amp;&amp; high_dia > 0.0)
+         {
+             p_pecktable_data->ranges[j].n_pecks = ranges_size[j];
+<a name="anchor-142"></a>             p_pecktable_data->ranges[j].low_dia = low_dia;
+             p_pecktable_data->ranges[j].high_dia = high_dia;
+             p_pecktable_data->ranges[j].peck_depth_ratios = 
+                 (double*)calloc (ranges_size[j], sizeof (double));
+             p_pecktable_data->ranges[j].feed_rates = 
+<a name="anchor-143"></a>                 (double*)calloc (ranges_size[j], sizeof (double));
+             j++;
+             i = 0;
+         }
+         p_pecktable_data->ranges[j-1].peck_depth_ratios[i] = 
+<a name="anchor-144"></a>             peck_depth_ratios;
+         p_pecktable_data->ranges[j-1].feed_rates[i] = 
+             feed_rates;
+    }
+    
+<a name="anchor-145"></a>    fclose (fp);
+       
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-146"></a>/*====================================================================*\
+FUNCTION : ProUtilNcseqElemHolesAdd
+PURPOSE  : Add holes to element
+NOTE     : Holes must be added using the api function
+\*====================================================================*/
+<a name="anchor-147"></a>ProError ProUtilNcseqElemHolesAdd (
+    ProElement *holes )
+{
+    ProError status;
+    int      set_nmb, num_selected, i;
+<a name="anchor-148"></a>    ProSelection *p_selection, *start_sels;
+    int menu_id, action, blind_action, drill_action;
+    double depth, csink;
+    ProMfgType type;
+    ProMfg mfg_model;
+<a name="anchor-149"></a>    ProPecktable peck_table;
+    ProPecktableData pecktable_data;
+    
+        status = ProMdlCurrentGet ((ProMdl*)&amp;mfg_model);
+        TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;,
+<a name="anchor-150"></a>            &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+            (status != PRO_TK_NO_ERROR));
+    
+        status = ProMenuFileRegister( (char*)&quot;TkDrillType&quot;, (char*)&quot;tkdrilltype.mnu&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, 
+<a name="anchor-151"></a>            &quot;ProTestCreateHoleMkNCseq()&quot;, 
+	    status, status != PRO_TK_NO_ERROR );
+
+        /* Define menu buttons */
+        ProMenubuttonActionSet( (char*)&quot;TkDrillType&quot;, (char*)&quot;Standart&quot;,
+<a name="anchor-152"></a>            (ProMenubuttonAction)ProTestDepTypeAction, NULL, DRILL_STANDART);
+        ProMenubuttonActionSet( (char*)&quot;TkDrillType&quot;, (char*)&quot;Deep&quot;,
+            (ProMenubuttonAction)ProTestDepTypeAction, NULL, DRILL_DEEP);
+        ProMenubuttonActionSet( (char*)&quot;TkDrillType&quot;, (char*)&quot;Countersink&quot;,
+            (ProMenubuttonAction)ProTestDepTypeAction, NULL, DRILL_CSINK);
+<a name="anchor-153"></a>        ProMenubuttonActionSet( (char*)&quot;TkDrillType&quot;, (char*)&quot;TkDrillType&quot;, 
+            (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+        status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkDrillType&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-154"></a>        if( status == PRO_TK_NO_ERROR )
+        {
+            status = ProMenuProcess( (char*)&quot;TkDrillType&quot;, &amp;drill_action );
+            TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+	        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-155"></a>        }
+        if (drill_action == DRILL_DEEP)
+        {
+            if (ProTestPecktabledataSet (&amp;pecktable_data) == PRO_TK_NO_ERROR)
+            {
+<a name="anchor-156"></a>                status = ProPecktableCreate ((ProPecktableData*)
+                    &amp;pecktable_data, &amp;peck_table);
+                TEST_CALL_REPORT( &quot;ProPecktableCreate()&quot;, 
+                    &quot;ProTestCreateHoleMkNCseq()&quot;, 
+                    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-157"></a>                status = ProMfgPecktableSet (mfg_model, 
+                    (ProConstPecktable)peck_table);
+                TEST_CALL_REPORT( &quot;ProMfgPecktableSet()&quot;, 
+                    &quot;ProTestCreateHoleMkNCseq()&quot;, 
+                    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-158"></a>                status = ProPecktableFree (peck_table);
+                TEST_CALL_REPORT( &quot;ProPecktableFree()&quot;, 
+                    &quot;ProTestCreateHoleMkNCseq()&quot;, 
+                    status, status != PRO_TK_NO_ERROR );
+            }
+<a name="anchor-159"></a>        }
+  
+        status = ProNcseqElemHolesetAdd( *holes, &amp;set_nmb);
+        TEST_CALL_REPORT(&quot;ProNcseqElemHolesetAdd()&quot;,
+                             &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+<a name="anchor-160"></a>                             (status != PRO_TK_NO_ERROR));
+
+        status = ProSelect((char*)&quot;axis&quot;, -1,
+                      NULL, NULL, NULL, NULL, &amp;p_selection, &amp;num_selected);
+        TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+<a name="anchor-161"></a>                        status != PRO_TK_NO_ERROR);
+        for (i=0; i&lt;num_selected; i++)
+        {
+            status = ProNcseqElemHolesetAxisAdd( *holes,
+                                      set_nmb, p_selection[i]);
+<a name="anchor-162"></a>            TEST_CALL_REPORT(&quot;ProNcseqElemHolesetAxisAdd()&quot;,
+                             &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+                             (status != PRO_TK_NO_ERROR));
+        }
+
+<a name="anchor-163"></a>	   
+	
+/*--------------------------------------------------------------------*\
+        Set the holeset depth type (can be _BLIND, _THRU_ALL or _AUTO)
+\*--------------------------------------------------------------------*/
+<a name="anchor-164"></a>        status = ProMenuFileRegister( (char*)&quot;TkDepType&quot;, (char*)&quot;tkdeptype.mnu&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, 
+            &quot;ProTestCreateHoleMkNCseq()&quot;, 
+	    status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-165"></a>        /* Define menu buttons */
+        ProMenubuttonActionSet( (char*)&quot;TkDepType&quot;, (char*)&quot;Blind&quot;,
+            (ProMenubuttonAction)ProTestDepTypeAction, NULL, PRO_DRILL_BLIND);
+        ProMenubuttonActionSet( (char*)&quot;TkDepType&quot;, (char*)&quot;Thru all&quot;,
+            (ProMenubuttonAction)ProTestDepTypeAction, NULL, PRO_DRILL_THRU_ALL);
+<a name="anchor-166"></a>        ProMenubuttonActionSet( (char*)&quot;TkDepType&quot;, (char*)&quot;Auto&quot;,
+            (ProMenubuttonAction)ProTestDepTypeAction, NULL, PRO_DRILL_AUTO);
+        ProMenubuttonActionSet( (char*)&quot;TkDepType&quot;, (char*)&quot;TkDepType&quot;, 
+            (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+        status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkDepType&quot;, &amp;menu_id );
+<a name="anchor-167"></a>        TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+        if( status == PRO_TK_NO_ERROR )
+        {
+            status = ProMenuProcess( (char*)&quot;TkDepType&quot;, &amp;action );
+<a name="anchor-168"></a>            TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+	        status, status != PRO_TK_NO_ERROR );
+        } 
+        else
+            action = PRO_DRILL_AUTO;
+<a name="anchor-169"></a>            
+        status = ProNcseqElemHolesetDepthTypeSet( *holes, set_nmb, (ProDrillDepthType)action);
+        TEST_CALL_REPORT(&quot;ProNcseqElemHolesetDepthTypeSet()&quot;,
+                             &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+                             (status != PRO_TK_NO_ERROR));
+<a name="anchor-170"></a>        
+        if (action == PRO_DRILL_BLIND ||
+            drill_action == DRILL_CSINK)
+        {
+            ProUtilMsgPrint ((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, 
+<a name="anchor-171"></a>                &quot;Select start surface or datum plane&quot;);
+            status = ProSelect((char*)&quot;surface,datum&quot;, 1,
+                      NULL, NULL, NULL, NULL, &amp;start_sels, &amp;num_selected);
+            TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-172"></a>            if (status != PRO_TK_NO_ERROR || num_selected != 1)
+                return ((ProError)0);
+            status = ProNcseqElemHolesetStartSet (*holes, 
+                set_nmb, start_sels[0]);
+            TEST_CALL_REPORT(&quot;ProNcseqElemHolesetStartSet()&quot;,
+<a name="anchor-173"></a>                             &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+                             (status != PRO_TK_NO_ERROR));
+        }
+        
+        if (action == PRO_DRILL_BLIND)
+<a name="anchor-174"></a>        {
+            status = ProMenuFileRegister( (char*)&quot;TkDepBlind&quot;, (char*)&quot;tkdepblind.mnu&quot;, &amp;menu_id );
+            TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, 
+                &quot;ProTestCreateHoleMkNCseq()&quot;, 
+                status, status != PRO_TK_NO_ERROR );
+<a name="anchor-175"></a>
+            /* Define menu buttons */
+            ProMenubuttonActionSet( (char*)&quot;TkDepBlind&quot;, (char*)&quot;Surface&quot;,
+                (ProMenubuttonAction)ProTestDepTypeAction, NULL, 
+                BLIND_SURFACE);
+<a name="anchor-176"></a>            ProMenubuttonActionSet( (char*)&quot;TkDepBlind&quot;, (char*)&quot;Enter&quot;,
+                (ProMenubuttonAction)ProTestDepTypeAction, NULL, 
+                BLIND_ENTER);
+            ProMenubuttonActionSet( (char*)&quot;TkDepBlind&quot;, (char*)&quot;TkDepBlind&quot;, 
+                (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+<a name="anchor-177"></a>            status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkDepBlind&quot;, &amp;menu_id );
+            TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+            if( status == PRO_TK_NO_ERROR )
+            {
+<a name="anchor-178"></a>                status = ProMenuProcess( (char*)&quot;TkDepBlind&quot;, &amp;blind_action );
+                TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, 
+                    &quot;ProTestCreateHoleMkNCseq()&quot;, 
+	            status, status != PRO_TK_NO_ERROR );
+            }             
+<a name="anchor-179"></a>            if (blind_action == BLIND_ENTER)
+            {
+                ProUtilMsgPrint ((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, 
+                    &quot;Enter drill depth [0.0]:&quot;);
+                status = ProMessageDoubleRead (NULL, &amp;depth);
+<a name="anchor-180"></a>                TEST_CALL_REPORT(&quot;ProMessageDoubleRead()&quot;,
+                             &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+                             (status != PRO_TK_NO_ERROR));
+                if (status != PRO_TK_NO_ERROR)
+                   depth = 0.0;
+<a name="anchor-181"></a>                status = ProNcseqElemHolesetDepthSet (*holes, set_nmb, depth);
+                TEST_CALL_REPORT(&quot;ProNcseqElemHolesetDepthSet()&quot;,
+                             &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+                             (status != PRO_TK_NO_ERROR));
+            }
+<a name="anchor-182"></a>            else
+            {
+                ProUtilMsgPrint ((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, 
+                    &quot;Select end surface or datum plane&quot;);
+                status = ProSelect((char*)&quot;surface,datum&quot;, 1,
+<a name="anchor-183"></a>                    NULL, NULL, NULL, NULL, &amp;start_sels, &amp;num_selected);
+                TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+                    status, status != PRO_TK_NO_ERROR);
+                if (status != PRO_TK_NO_ERROR || num_selected != 1)
+                    return ((ProError)0);
+<a name="anchor-184"></a>                status = ProNcseqElemHolesetEndSet (*holes, 
+                    set_nmb, start_sels[0]);
+                TEST_CALL_REPORT(&quot;ProNcseqElemHolesetEndSet()&quot;,
+                             &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+                             (status != PRO_TK_NO_ERROR));
+<a name="anchor-185"></a>            }
+        }
+        else
+        {            
+            status = ProMfgTypeGet (mfg_model, &amp;type);
+<a name="anchor-186"></a>            TEST_CALL_REPORT(&quot;ProMfgTypeGet()&quot;,
+                &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+                (status != PRO_TK_NO_ERROR));
+            ProTKPrintf ((char*)&quot;Current type %d\n&quot;, type);
+            ProTKPrintf ((char*)&quot;ASSM %d, PART %d&quot;, PRO_MFGTYPE_MACH_ASSEM, PRO_MFGTYPE_MACH_PART);
+<a name="anchor-187"></a>            if (type == PRO_MFGTYPE_MACH_ASSEM)
+            {
+                ProUtilMsgPrint ((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, 
+                    &quot;Select drill parts&quot;);
+                status = ProSelect((char*)&quot;part&quot;, -1,
+<a name="anchor-188"></a>                    NULL, NULL, NULL, NULL, &amp;start_sels, &amp;num_selected);
+                TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+                    status, status != PRO_TK_NO_ERROR);
+                if (status != PRO_TK_NO_ERROR || num_selected != 1)
+                    return ((ProError)0);
+<a name="anchor-189"></a>                for (i = 0; i &lt; num_selected; i++)
+                {
+                    status = ProNcseqElemHolesetDrillpartAdd (*holes, set_nmb,
+                        start_sels[i]);
+                    TEST_CALL_REPORT(&quot;ProNcseqElemHolesetDrillpartAdd()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+<a name="anchor-190"></a>                        status, status != PRO_TK_NO_ERROR);
+                }
+            }
+        }
+        
+<a name="anchor-191"></a>        if (action == PRO_DRILL_BLIND ||
+            action == PRO_DRILL_AUTO)
+        {
+/*--------------------------------------------------------------------*\
+            Set the depth type (can be _BY_TIP or _BY_SHOULDER)
+<a name="anchor-192"></a>\*--------------------------------------------------------------------*/
+            status = ProMenuFileRegister( (char*)&quot;TkDepBySet&quot;, (char*)&quot;tkdepbyset.mnu&quot;, &amp;menu_id );
+            TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, 
+                &quot;ProTestCreateHoleMkNCseq()&quot;, 
+                status, status != PRO_TK_NO_ERROR );
+<a name="anchor-193"></a>
+            /* Define menu buttons */
+            ProMenubuttonActionSet( (char*)&quot;TkDepBySet&quot;, (char*)&quot;By Shoulder&quot;,
+                (ProMenubuttonAction)ProTestDepTypeAction, NULL, 
+                PRO_DRILL_BY_SHOULDER);
+<a name="anchor-194"></a>            ProMenubuttonActionSet( (char*)&quot;TkDepBySet&quot;, (char*)&quot;By Tip&quot;,
+                (ProMenubuttonAction)ProTestDepTypeAction, NULL, 
+                PRO_DRILL_BY_TIP);
+            ProMenubuttonActionSet( (char*)&quot;TkDepBySet&quot;, (char*)&quot;TkDepBySet&quot;, 
+                (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+<a name="anchor-195"></a>            status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkDepBySet&quot;, &amp;menu_id );
+            TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+            if( status == PRO_TK_NO_ERROR )
+            {
+<a name="anchor-196"></a>                status = ProMenuProcess( (char*)&quot;TkDepBySet&quot;, &amp;action );
+                TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, 
+                    &quot;ProTestCreateHoleMkNCseq()&quot;, 
+	            status, status != PRO_TK_NO_ERROR );
+            }
+<a name="anchor-197"></a>            status = ProNcseqElemHolesetDepthBySet( *holes, set_nmb, (ProDrillDepthByType)action);
+            TEST_CALL_REPORT(&quot;ProNcseqElemHolesetDepthBySet()&quot;,
+                             &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+                             (status != PRO_TK_NO_ERROR));
+        }
+<a name="anchor-198"></a>                         
+        status = ProMenuFileRegister( (char*)&quot;TkDirect&quot;, (char*)&quot;tkdepdirect.mnu&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, 
+            &quot;ProTestCreateHoleMkNCseq()&quot;, 
+	    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-199"></a>
+        /* Define menu buttons */
+        ProMenubuttonActionSet( (char*)&quot;TkDirect&quot;, (char*)&quot;Natural&quot;,
+            (ProMenubuttonAction)ProTestDepTypeAction, NULL, PRO_HS_DIR_NATURAL);
+        ProMenubuttonActionSet( (char*)&quot;TkDirect&quot;, (char*)&quot;Flip&quot;,
+<a name="anchor-200"></a>            (ProMenubuttonAction)ProTestDepTypeAction, NULL, PRO_HS_DIR_FLIP);
+        ProMenubuttonActionSet( (char*)&quot;TkDirect&quot;, (char*)&quot;TkDirect&quot;, 
+            (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+        status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkDirect&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+<a name="anchor-201"></a>			status, status != PRO_TK_NO_ERROR );
+        if( status == PRO_TK_NO_ERROR )
+        {
+            status = ProMenuProcess( (char*)&quot;TkDirect&quot;, &amp;action );
+            TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestCreateHoleMkNCseq()&quot;, 
+<a name="anchor-202"></a>	        status, status != PRO_TK_NO_ERROR );
+        }                     
+        status = ProNcseqElemHolesetDirectionSet (*holes, set_nmb, (ProHolesetDirection)action);
+        TEST_CALL_REPORT(&quot;ProNcseqElemHolesetDirectionSet()&quot;,
+                             &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+<a name="anchor-203"></a>                             (status != PRO_TK_NO_ERROR));
+        if (drill_action == DRILL_CSINK)
+        {
+            ProUtilMsgPrint ((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, 
+                &quot;Enter countersink diameter [QUIT]:&quot;);
+<a name="anchor-204"></a>            status = ProMessageDoubleRead (NULL, &amp;csink);
+            TEST_CALL_REPORT(&quot;ProMessageDoubleRead()&quot;,
+                             &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+                             (status != PRO_TK_NO_ERROR));
+            if (status == PRO_TK_NO_ERROR)
+<a name="anchor-205"></a>            {
+                status = ProNcseqElemHolesetCsinkdiamSet (*holes, set_nmb, csink);
+                TEST_CALL_REPORT(&quot;ProNcseqElemHolesetCsinkdiamSet()&quot;,
+                             &quot;ProTestCreateHoleMkNCseq()&quot;, status,
+                             (status != PRO_TK_NO_ERROR));
+<a name="anchor-206"></a>            }
+        }
+        return status;
+}
+
+<a name="anchor-207"></a>
+/*====================================================================*\
+FUNCTION : ProUtilParamFileRead()
+PURPOSE  : Read in a file of parameters output an filled elem structure
+\*====================================================================*/
+<a name="anchor-208"></a>ProError ProUtilParamFileRead(
+    char *file_name,
+    ParamFileType param_type,
+    void *p_elem)
+{
+<a name="anchor-209"></a>    ProParamvalue temp_val;
+    ProError status;
+    char param_name[PARAM_FIELD_WIDTH];
+    char param_value[PARAM_FIELD_WIDTH];
+    char name[PARAM_FIELD_WIDTH];
+<a name="anchor-210"></a>    char value[PARAM_FIELD_WIDTH];
+    wchar_t wvalue[PARAM_FIELD_WIDTH];
+    FILE *fp;
+    int ivalue, line_number = 0;
+    double dvalue;
+<a name="anchor-211"></a>    ValueType type;
+    int cont = 1;
+
+/*--------------------------------------------------------------------*\
+    Open Manufacturing parameters file
+<a name="anchor-212"></a>\*--------------------------------------------------------------------*/
+    if ( (fp = PTApplsUnicodeFopen(file_name,&quot;r&quot;) ) == NULL)
+        return (PRO_TK_BAD_INPUTS);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-213"></a>    Read in parameters line by line
+\*--------------------------------------------------------------------*/
+    while(cont)
+    {
+        line_number++;
+<a name="anchor-214"></a>
+        if ( (fgets(param_name,  PARAM_FIELD_WIDTH, fp)) == NULL)
+        {
+            fclose(fp);
+            return (PRO_TK_NO_ERROR);
+<a name="anchor-215"></a>        }
+        parse_string(param_name, name);
+
+        fgets(param_value, PARAM_FIELD_WIDTH, fp);
+        type = parse_string(param_value, value);
+<a name="anchor-216"></a>
+        switch (type)
+        {
+            case ERROR:
+                ProTKFprintf(stderr, (char*)&quot;Error parsing param file: line %d\n&quot;,
+<a name="anchor-217"></a>                                                           line_number);
+                fclose(fp);
+                return(PRO_TK_BAD_INPUTS);
+            case EMPTY:
+                break;
+<a name="anchor-218"></a>            case STRING:
+                ProStringToWstring(wvalue, value);
+                status = ProParamvalueSet(&amp;temp_val,&amp;wvalue,PRO_PARAM_STRING);
+                TEST_CALL_REPORT(&quot;ProParamvalueSet()&quot;,
+                    &quot;ProUtilParamFileRead()&quot;, status,
+<a name="anchor-219"></a>                        (status != PRO_TK_NO_ERROR));
+                break;
+            case INT:
+                ivalue = atoi(param_value);
+                status = ProParamvalueSet(&amp;temp_val,&amp;ivalue,PRO_PARAM_INTEGER);
+<a name="anchor-220"></a>                TEST_CALL_REPORT(&quot;ProParamvalueSet()&quot;,
+                    &quot;ProUtilParamFileRead()&quot;, status,
+                        (status != PRO_TK_NO_ERROR));
+                break;
+            case DOUBLE:
+<a name="anchor-221"></a>                dvalue = (double) atof(param_value);
+                status = ProParamvalueSet(&amp;temp_val,&amp;dvalue,PRO_PARAM_DOUBLE);
+                TEST_CALL_REPORT(&quot;ProParamvalueSet()&quot;,
+                    &quot;ProUtilParamFileRead()&quot;, status,
+                        (status != PRO_TK_NO_ERROR));
+<a name="anchor-222"></a>                break;
+            }
+
+        if ((type != ERROR ) &amp;&amp; ( type != EMPTY))
+        {
+<a name="anchor-223"></a>/*--------------------------------------------------------------------*\
+            Now add the parameter to the correct element type
+\*--------------------------------------------------------------------*/
+            switch(param_type)
+            {
+<a name="anchor-224"></a>                case MACHINE:
+                    /* Add code to create a value object, set its
+                       data and add to the element. */
+                    break;
+
+<a name="anchor-225"></a>                case TOOL:
+                    status =
+                        ProToolElemParamAdd((ProToolElem)(p_elem),
+                                                           &amp;temp_val, name);
+                    TEST_CALL_REPORT(&quot;ProToolElemParamAdd()&quot;,
+<a name="anchor-226"></a>                        &quot;ProUtilParamFileRead()&quot;, status,
+                        (status != PRO_TK_NO_ERROR));
+                    break;
+            }
+        }
+<a name="anchor-227"></a>    }
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-228"></a>/*====================================================================*\
+FUNCTION : ProTestToolPathDisplay()
+PURPOSE  : query the user for the Nc sequence and display its tool path
+\*====================================================================*/
+ProError ProTestNcseqToolPathDisplay()
+<a name="anchor-229"></a>{
+    ProMfg mfg_model;
+    ProAsmcomppath comp_path;
+    ProSolid mfg_solid;
+    ProNcseq* p_sel_ncseq;
+<a name="anchor-230"></a>    ProError status;
+
+    status = ProTestGetModels( &amp;mfg_model, &amp;mfg_solid, &amp;comp_path);
+
+    p_sel_ncseq = ProUtilNcseqChoose( &amp;mfg_solid);
+<a name="anchor-231"></a>
+    if (p_sel_ncseq != NULL)
+     {
+       status = ProNcseqToolpathDisplay(p_sel_ncseq);
+       TEST_CALL_REPORT(&quot;ProNcseqToolpathDisplay()&quot;,
+<a name="anchor-232"></a>                        &quot;ProTestToolPathDisplay()&quot;, status,
+                        (status != PRO_TK_NO_ERROR));
+     }
+    else
+       ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,(char*)&quot;No NCsequences available&quot;);
+<a name="anchor-233"></a>
+    return ((ProError)0);
+}
+
+/*====================================================================*\
+<a name="anchor-234"></a>FUNCTION : parse_string()
+PURPOSE  : return type and removes leading and trailing whitespace
+\*====================================================================*/
+static ValueType parse_string(
+    const char *s,
+<a name="anchor-235"></a>    char *out)
+{
+    int is_number = 0;
+    ValueType type = ERROR;
+
+<a name="anchor-236"></a>    while( *s == ' ') s++;
+
+    if ( *s == '-' &amp;&amp; !isalnum(*(s+1)))
+    {
+        out = '\0';
+<a name="anchor-237"></a>        return (EMPTY);
+    }
+
+    if (isdigit(*s))
+        is_number = 1;
+<a name="anchor-238"></a>
+    if (isalpha(*s))
+        type = STRING;
+
+    for (; isprint(*s) &amp;&amp; *s != ' ' &amp;&amp; *s != '\n' ; s++,out++)
+<a name="anchor-239"></a>    {
+        if (is_number &amp;&amp; *s == '.')
+            type = DOUBLE;
+        *out = *s;
+    }
+<a name="anchor-240"></a>    *out = '\0';
+
+    if (type == DOUBLE)
+        return (DOUBLE);
+
+<a name="anchor-241"></a>    if (is_number)
+        return (INT);
+    else
+                return type;
+}
+<a name="anchor-242"></a>
+ProError ProUtilSectionRetr(ProSection *section);
+/*====================================================================*\
+FUNCTION : ProTestToolPathDisplay()
+PURPOSE  : query the user for the Nc sequence and display its tool path
+<a name="anchor-243"></a>\*====================================================================*/
+ProError ProUtilStockBoundSketchAdd (
+    ProElement *stk_bnd_sk_elem )
+{
+    ProError status;
+<a name="anchor-244"></a>    ProSection sec;
+    ProValueData vd;
+    ProValue vl;
+
+    status = ProValueAlloc(&amp;vl);
+<a name="anchor-245"></a>    if (status != PRO_TK_NO_ERROR)
+	return status;   
+
+    status = ProUtilSectionRetr(&amp;sec);
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-246"></a>	return status;
+
+	status = ProElementSpecialvalueSet(*stk_bnd_sk_elem, (ProAppData) sec);
+	TEST_CALL_REPORT(&quot;ProElementSpecialvalueSet()&quot;,
+                        &quot;ProUtilStockBoundSketchAdd()&quot;, status,
+<a name="anchor-247"></a>                        (status != PRO_TK_NO_ERROR));
+
+    return status;
+}
+
+</pre>
+</body>
+</html>

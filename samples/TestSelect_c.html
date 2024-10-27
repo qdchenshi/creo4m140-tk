@@ -1,0 +1,942 @@
+<html>
+<head>
+<title>TestSelect.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-2"></a>#include &quot;ProToolkit.h&quot;
+#include &quot;ProFeature.h&quot;
+#include &quot;ProMdl.h&quot;
+#include &quot;ProModelitem.h&quot;
+#include &quot;ProParameter.h&quot;
+<a name="anchor-3"></a>#include &quot;ProSelection.h&quot;
+#include &quot;ProCsys.h&quot;
+#include &quot;ProEdge.h&quot;
+#include &quot;ProCurve.h&quot;
+#include &quot;ProSurface.h&quot;
+<a name="anchor-4"></a>#include &quot;ProQuilt.h&quot;
+#include &quot;ProArray.h&quot;
+#include &quot;ProUtil.h&quot;
+#include &quot;ProMenu.h&quot;
+
+<a name="anchor-5"></a>#include &quot;TestError.h&quot;
+
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-6"></a>
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestSelect.h&quot;
+<a name="anchor-7"></a>#include &quot;UtilFiles.h&quot;
+#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+#include &quot;UtilString.h&quot;
+<a name="anchor-8"></a>/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-9"></a>Application data types
+\*--------------------------------------------------------------------*/
+
+struct sel_to_opt
+{
+<a name="anchor-10"></a>    char option[40];
+    ProType sel_type;
+    char sel_str[40];
+};
+
+<a name="anchor-11"></a>/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+
+#define TRUE 1
+<a name="anchor-12"></a>#define FALSE 0
+
+static struct sel_to_opt selopt_table[] = 
+    {
+        {&quot;point&quot;,    PRO_POINT,      &quot;PRO_POINT&quot;},
+<a name="anchor-13"></a>        {&quot;axis&quot;,     PRO_AXIS,       &quot;PRO_AXIS&quot;},
+        {&quot;csys&quot;,     PRO_CSYS,       &quot;PRO_CSYS&quot;},
+        {&quot;feature&quot;,  PRO_FEATURE,    &quot;PRO_FEATURE&quot;},
+        {&quot;edge&quot;,     PRO_EDGE,       &quot;PRO_EDGE&quot;},
+        {&quot;edge_end&quot;, PRO_EDGE_END,   &quot;PRO_EDGE_END&quot;},
+<a name="anchor-14"></a>        {&quot;curve&quot;,    PRO_CURVE,      &quot;PRO_CURVE&quot;},
+        {&quot;curve_end&quot;,PRO_CRV_END,    &quot;PRO_CRV_END&quot;},
+        {&quot;surface&quot;,  PRO_SURFACE,    &quot;PRO_SURFACE&quot;},
+        {&quot;dtmqlt&quot;,   PRO_QUILT,      &quot;PRO_QUILT&quot;},
+        {&quot;part&quot;,     PRO_PART,       &quot;PRO_PART&quot;},
+<a name="anchor-15"></a>        {&quot;prt_or_asm&quot;, PRO_ASSEMBLY, &quot;PRO_ASSEMBLY&quot;},
+        {&quot;parameter&quot;,PRO_PARAMETER,  &quot;PRO_PARAMETER&quot;},
+        {&quot;dimension&quot;,PRO_DIMENSION,  &quot;PRO_DIMENSION&quot;},
+        {&quot;ref_dim&quot;,  PRO_REF_DIMENSION, &quot;PRO_REF_DIMENSION&quot;},
+        {&quot;datum&quot;,    PRO_DATUM_PLANE,&quot;PRO_DATUM_PLANE&quot;},
+<a name="anchor-16"></a>        {&quot;comp_crv&quot;, PRO_COMP_CRV,   &quot;PRO_COMP_CRV&quot;},
+        {&quot;qltedge&quot;,  PRO_EDGE,       &quot;PRO_EDGE&quot;},
+        {&quot;qltface&quot;,  PRO_SURFACE,    &quot;PRO_SURFACE&quot;},
+        {&quot;sldedge&quot;,  PRO_EDGE,       &quot;PRO_EDGE&quot;},
+        {&quot;sldface&quot;,  PRO_SURFACE,    &quot;PRO_SURFACE&quot;},
+<a name="anchor-17"></a>        {&quot;gtol&quot;,     PRO_GTOL,       &quot;PRO_GTOL&quot;}, 
+        {&quot;NoEntry&quot;,  PRO_TYPE_UNUSED,&quot;PRO_TYPE_UNUSED&quot;}
+    };
+
+/*====================================================================*\
+<a name="anchor-18"></a>    FUNCTION :  OptionToType
+    PURPOSE  :  Return the ProType corresponding to an option
+\*====================================================================*/
+static ProType OptionToType(char *option)
+{
+<a name="anchor-19"></a>    int ntype = sizeof(selopt_table) / sizeof(struct sel_to_opt);
+    int i;
+
+    ProTKPrintf(&quot;option (%s)\n&quot;, option);
+    for( i = 0; i &lt; ntype; i++ )
+<a name="anchor-20"></a>    {
+        if(strcmp( option, selopt_table[i].option ) == 0)
+            return( selopt_table[i].sel_type );
+    }
+
+<a name="anchor-21"></a>    return( selopt_table[ntype - 1].sel_type );
+}
+
+/*====================================================================*\
+    FUNCTION :  TypeToTypeStr
+<a name="anchor-22"></a>    PURPOSE  :  Return the type string corresponding to a type
+\*====================================================================*/
+static char *TypeToTypeStr(ProType type)
+{
+    int ntype = sizeof(selopt_table) / sizeof(struct sel_to_opt);
+<a name="anchor-23"></a>    int i;
+
+    for( i = 0; i &lt; ntype; i++ )
+    {
+        if( type == selopt_table[i].sel_type )
+<a name="anchor-24"></a>            return( selopt_table[i].sel_str );
+    }
+
+    return( selopt_table[ntype - 1].sel_str );
+}
+<a name="anchor-25"></a>
+/*====================================================================*\
+    FUNCTION :  ProTestSelection()
+    PURPOSE  :  Create a menu for testing selection functions
+\*====================================================================*/
+<a name="anchor-26"></a>int ProTestSelection(char *a, int b)
+{
+    ProError		status;
+    int			menu_id;    /* The identifier of the created menu */
+    int			action;
+<a name="anchor-27"></a>
+    /*-----------------------------*\
+	Create new menu TkEntity
+    \*-----------------------------*/
+
+<a name="anchor-28"></a>    /* Load base menu from file */
+    status = ProMenuFileRegister( (char*)&quot;TkSelect&quot;, (char*)&quot;tkselect.mnu&quot;, 
+				    &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestSelection()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-29"></a>
+    /* Define menu buttons */
+    ProMenubuttonActionSet( (char*)&quot;TkSelect&quot;, (char*)&quot;Highlight&quot;, 
+	(ProMenubuttonAction)HighlightItem, NULL, 0 );
+    ProMenubuttonActionSet((char*) &quot;TkSelect&quot;, (char*)&quot;UnHighlight&quot;, 
+<a name="anchor-30"></a>	(ProMenubuttonAction)UnHighlightItem, NULL, 0 );
+    ProMenubuttonActionSet((char*) &quot;TkSelect&quot;,(char*) &quot;Display&quot;, 
+	(ProMenubuttonAction)DisplayItem, NULL, 0 );
+    ProMenubuttonActionSet( (char*)&quot;TkSelect&quot;,(char*) &quot;UnDisplay&quot;, 
+	(ProMenubuttonAction)UnDisplayItem, NULL, 0 );
+<a name="anchor-31"></a>    ProMenubuttonActionSet( (char*)&quot;TkSelect&quot;,(char*) &quot;OptInfo&quot;, 
+	(ProMenubuttonAction)ProTestOptionalInfo, NULL, 0 );
+    ProMenubuttonActionSet( (char*)&quot;TkSelect&quot;, (char*)&quot;SelParams&quot;, 
+	(ProMenubuttonAction)SelParams, NULL, 0 );
+    ProMenubuttonActionSet( (char*)&quot;TkSelect&quot;, (char*)&quot;TkSelect&quot;, 
+<a name="anchor-32"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+    /*-----------------------*\
+	Run menu TkSelect
+    \*-----------------------*/
+<a name="anchor-33"></a>    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkSelect&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestSelection()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-34"></a>	status = ProMenuProcess((char*) &quot;TkSelect&quot;, &amp;action );
+	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSelection()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+
+<a name="anchor-35"></a>
+    return(0);
+}
+
+/*====================================================================*\
+<a name="anchor-36"></a>    FUNCTION :  SelParams()
+    PURPOSE  :  Select a parameter and show info
+\*====================================================================*/
+int SelParams(char *a, int b)
+{
+<a name="anchor-37"></a>    ProSelection *p_sel_list;
+    int p_sel_num;
+    ProMdl p_handle;
+    ProError status;
+    ProType type[2];
+<a name="anchor-38"></a>    ProParameter param;
+    char fname[PRO_FILE_NAME_SIZE];
+    ProModelitem sel_obj;
+    FILE *fp;
+    char astr[80], option[40], output[80];
+<a name="anchor-39"></a>
+/*--------------------------------------------------------------------*\
+Get the current model and open an output file
+\*--------------------------------------------------------------------*/
+    status = ProMdlCurrentGet(&amp;p_handle);
+<a name="anchor-40"></a>    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;SelParams()&quot;, status,
+                    status != PRO_TK_NO_ERROR);
+    ProTestQcrName(&amp;p_handle, (char*)SELECTIONS, (char*)fname);
+    fp = PTApplsUnicodeFopen(fname, &quot;a&quot;);
+
+<a name="anchor-41"></a>    if( fp == NULL )
+    return(-1);
+
+    ProTKFprintf(fp, &quot;Filename: %s\n&quot;, fname);
+
+<a name="anchor-42"></a>    ProUtilstrcpy(option, &quot;prt_or_asm&quot;);
+        type[1] = OptionToType(option);
+    ProUtilstrcpy(option, &quot;part&quot;);
+        type[0] = OptionToType(option);
+
+<a name="anchor-43"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Make a selection&quot;);
+
+    ProUtilstrcpy(option, &quot;prt_or_asm,part&quot;);
+    status = ProSelect(option, 1, NULL,
+                           NULL, NULL, NULL, &amp;p_sel_list, &amp;p_sel_num);
+<a name="anchor-44"></a>    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;SelParams()&quot;,
+                      status, status == PRO_TK_COMM_ERROR);
+
+    if( status != PRO_TK_NO_ERROR )
+        return( -1 );
+<a name="anchor-45"></a>
+    ProUtilstrcpy(option, &quot;parameter&quot;);
+    type[0] = OptionToType(option);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-46"></a>Select a parameter from the selected model item
+\*--------------------------------------------------------------------*/
+
+    ProSelectionModelitemGet(p_sel_list[0], &amp;sel_obj);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;UnDisplayItem()&quot;,
+<a name="anchor-47"></a>                      status, status != PRO_TK_NO_ERROR);
+
+    status = ProParameterSelect(&amp;sel_obj, p_handle, PRO_PARAMSELECT_ANY, PRO_B_FALSE, NULL, &amp;param, NULL);
+    TEST_CALL_REPORT(&quot;ProParameterSelect()&quot;, &quot;SelParams()&quot;, status,
+                      status == PRO_TK_COMM_ERROR);
+<a name="anchor-48"></a>
+    ProWstringToString(astr, param.id);
+    ProTKSprintf(output, &quot;%-15s (%-15s):   %s&quot;, option, TypeToTypeStr(type[0]),astr);
+
+    ProTKFprintf(fp, &quot;%s\n&quot;, output);
+<a name="anchor-49"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, output);
+
+    ProTKSprintf(astr, &quot;Filename: %s&quot;, fname);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, astr);
+    fclose(fp);
+<a name="anchor-50"></a>
+    return(0);
+}
+
+/*====================================================================*\
+<a name="anchor-51"></a>    FUNCTION :  UnDisplayItem()
+    PURPOSE  :  UnDisplay different types of items and show info
+\*====================================================================*/
+int UnDisplayItem(char *a, int b)
+{
+<a name="anchor-52"></a>    ProSelection *p_sel_list;
+    ProSelection artifical_sel;
+    ProSelection copy_sel;
+    int p_sel_num;
+    ProMdl p_handle;
+<a name="anchor-53"></a>    ProError status;
+    ProType type;
+    char fname[PRO_FILE_NAME_SIZE];
+    ProAsmcomppath comp_path;
+    ProModelitem sel_obj;
+<a name="anchor-54"></a>    ProUvParam uv_point;
+    FILE *fp;
+    char astr[80], option[40], output[80];
+    wchar_t wstr1[40];
+    ProPoint3d point;
+<a name="anchor-55"></a>    ProView view;
+
+/*--------------------------------------------------------------------*\
+Get the current model and open an output file
+\*--------------------------------------------------------------------*/
+<a name="anchor-56"></a>    status = ProMdlCurrentGet(&amp;p_handle);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;UnDisplayItem()&quot;, status,
+                    status != PRO_TK_NO_ERROR);
+    ProTestQcrName(&amp;p_handle, (char*) SELECTIONS, (char*)fname);
+    fp = PTApplsUnicodeFopen(fname, &quot;a&quot;);
+<a name="anchor-57"></a>
+    if( fp == NULL )
+    return(-1);
+
+    ProTKFprintf(fp, &quot;Filename: %s\n&quot;, fname);
+<a name="anchor-58"></a>
+    while( 1 )
+    {
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the option mask: &quot;);
+    if( !ProUtilStringGet( wstr1, NULL, 40 ) )
+<a name="anchor-59"></a>        break;
+    ProWstringToString(option, wstr1);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, option);
+
+    type = OptionToType(option);
+<a name="anchor-60"></a>
+    status = PRO_TK_NO_ERROR;
+
+    while( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-61"></a>        status = ProSelect(option, 1, NULL, 
+                       NULL, NULL, NULL, &amp;p_sel_list, &amp;p_sel_num);
+        TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;UnDisplayItem()&quot;,
+                          status, status == PRO_TK_COMM_ERROR);
+	 
+<a name="anchor-62"></a>        if( status != PRO_TK_NO_ERROR || p_sel_num &lt;= 0 )
+           break; 
+
+
+	status = ProSelectionAsmcomppathGet(p_sel_list[0], &amp;comp_path);
+<a name="anchor-63"></a>	TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;UnDisplayItem()&quot;,
+			 status, status != PRO_TK_NO_ERROR);
+
+	status = ProSelectionModelitemGet(p_sel_list[0], &amp;sel_obj);
+	TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;UnDisplayItem()&quot;,
+<a name="anchor-64"></a>			 status, status != PRO_TK_NO_ERROR);
+
+	status = ProSelectionUvParamGet(p_sel_list[0], uv_point);
+	TEST_CALL_REPORT(&quot;ProSelectionUvParamGet()&quot;, &quot;UnDisplayItem()&quot;,
+			 status, status != PRO_TK_NO_ERROR);
+<a name="anchor-65"></a>                         
+        status = ProSelectionPoint3dGet (p_sel_list[0], point);
+	TEST_CALL_REPORT(&quot;ProSelectionPoint3dGet()&quot;, &quot;UnDisplayItem()&quot;,
+			 status, status != PRO_TK_NO_ERROR);
+        
+<a name="anchor-66"></a>        status = ProSelectionViewGet (p_sel_list[0], &amp;view);
+	TEST_CALL_REPORT(&quot;ProSelectionPointViewGet()&quot;, &quot;UnDisplayItem()&quot;,
+			 status, status != PRO_TK_NO_ERROR);
+
+	status = ProSelectionAlloc(&amp;comp_path, &amp;sel_obj, &amp;artifical_sel );
+<a name="anchor-67"></a>	TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;, &quot;UnDisplayItem()&quot;,
+			 status, status != PRO_TK_NO_ERROR);
+
+	status = ProSelectionUvParamSet( artifical_sel, uv_point);
+	TEST_CALL_REPORT(&quot;ProSelectionUvParamSet()&quot;, &quot;UnDisplayItem()&quot;,
+<a name="anchor-68"></a>			 status, status != PRO_TK_NO_ERROR);
+        
+        status = ProSelectionViewSet (view, &amp;artifical_sel);
+	TEST_CALL_REPORT(&quot;ProSelectionViewSet()&quot;, &quot;UnDisplayItem()&quot;,
+			 status, status != PRO_TK_NO_ERROR);
+<a name="anchor-69"></a>        
+        status = ProSelectionPoint3dSet (point, &amp;artifical_sel);
+ 	TEST_CALL_REPORT(&quot;ProSelectionPoint3dSet()&quot;, &quot;UnDisplayItem()&quot;,
+			 status, status != PRO_TK_NO_ERROR);
+       
+<a name="anchor-70"></a>/*--------------------------------------------------------------------*\
+Check if the selection is valid (should be valid here)
+\*--------------------------------------------------------------------*/
+	status = ProSelectionVerify( artifical_sel );
+	TEST_CALL_REPORT(&quot;ProSelectionVerify()&quot;, &quot;UnDisplayItem()&quot;,
+<a name="anchor-71"></a>			 status, status == PRO_TK_COMM_ERROR);
+
+	if( status == PRO_TK_NO_ERROR )
+	{
+	    ProTKSprintf(output, &quot;%-15s (%-15s):   %d&quot;, option, 
+<a name="anchor-72"></a>		    TypeToTypeStr(type), sel_obj.id );
+
+	    ProTKFprintf(fp, &quot;%s\n&quot;, output);
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, output);
+
+<a name="anchor-73"></a>	    ProSelectionUnhighlight(p_sel_list[0]);
+	    TEST_CALL_REPORT(&quot;ProSelectionUnhighlight()&quot;, &quot;UnHighlightItem()&quot;,
+			      status, status != PRO_TK_NO_ERROR);
+	}
+
+<a name="anchor-74"></a>	/* Copy created selection and check the copy */
+        status = ProSelectionCopy( artifical_sel, &amp;copy_sel );
+        TEST_CALL_REPORT( &quot;ProSelectionCopy()&quot;, &quot;UnDisplayItem()&quot;,
+			    status, status != PRO_TK_NO_ERROR);
+	status = ProSelectionVerify( copy_sel );
+<a name="anchor-75"></a>	TEST_CALL_REPORT(&quot;ProSelectionVerify()&quot;, &quot;UnDisplayItem()&quot;,
+			 status, status == PRO_TK_COMM_ERROR);
+
+/*--------------------------------------------------------------------*\
+Free the created selection
+<a name="anchor-76"></a>\*--------------------------------------------------------------------*/
+        status = ProSelectionFree( &amp;artifical_sel );
+        TEST_CALL_REPORT( &quot;ProSelectionFree()&quot;, &quot;UnDisplayItem()&quot;,
+			    status, status != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-77"></a>    }
+
+    ProTKSprintf(astr, &quot;Filename: %s&quot;, fname);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, astr);
+    fclose(fp);
+<a name="anchor-78"></a>
+    return( 0 );
+}
+
+/*====================================================================*\
+<a name="anchor-79"></a>    FUNCTION :  DisplayItem()
+    PURPOSE  :  Display different types of items and show info
+\*====================================================================*/
+int DisplayItem(char *a, int b)
+{
+<a name="anchor-80"></a>    ProSelection *p_sel_list;
+    int p_sel_num;
+    ProMdl p_handle;
+    ProError status;
+    ProType type;
+<a name="anchor-81"></a>    char fname[PRO_FILE_NAME_SIZE];
+    FILE *fp;
+    char astr[80], option[40], output[80];
+    wchar_t wstr1[40];
+    ProModelitem sel_obj;
+<a name="anchor-82"></a>
+
+/*--------------------------------------------------------------------*\
+Get the current model and open an output file
+\*--------------------------------------------------------------------*/
+<a name="anchor-83"></a>    status = ProMdlCurrentGet(&amp;p_handle);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;DisplayItem()&quot;, status,
+                    status != PRO_TK_NO_ERROR);
+    ProTestQcrName(&amp;p_handle, (char*)SELECTIONS, (char*)fname);
+    fp = PTApplsUnicodeFopen(fname, &quot;a&quot;);
+<a name="anchor-84"></a>
+    if( fp == NULL )
+        return(-1);
+
+    ProTKFprintf(fp, &quot;Filename: %s\n&quot;, fname);
+<a name="anchor-85"></a>
+    while( 1 )
+    {
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the option mask: &quot;);
+    if( !ProUtilStringGet( wstr1, NULL, 40 ) )
+<a name="anchor-86"></a>        break;
+
+    ProWstringToString(option, wstr1);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, option);
+
+<a name="anchor-87"></a>/*--------------------------------------------------------------------*\
+Set the type of selection required
+\*--------------------------------------------------------------------*/
+    type = OptionToType(option);
+
+<a name="anchor-88"></a>    status = PRO_TK_NO_ERROR;
+
+    while( status == PRO_TK_NO_ERROR )
+    {
+        status = ProSelect(option, 1, NULL,
+<a name="anchor-89"></a>                        NULL, NULL, NULL, &amp;p_sel_list, &amp;p_sel_num);
+        TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;UnDisplayItem()&quot;,
+                          status, status == PRO_TK_COMM_ERROR);
+
+ 
+<a name="anchor-90"></a>        if( status == PRO_TK_NO_ERROR &amp;&amp; p_sel_num > 0 )
+        {
+            ProSelectionModelitemGet(p_sel_list[0], &amp;sel_obj);
+            TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;UnDisplayItem()&quot;,
+                              status, status != PRO_TK_NO_ERROR);
+<a name="anchor-91"></a>
+            ProTKSprintf(output, &quot;%-15s (%-15s):   %d&quot;, option, 
+                    TypeToTypeStr(type), sel_obj.id );
+
+            ProTKFprintf(fp, &quot;%s\n&quot;, output);
+<a name="anchor-92"></a>            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, output);
+
+            ProSelectionDisplay(p_sel_list[0]);
+
+            TEST_CALL_REPORT(&quot;ProSelectionDisplay()&quot;, &quot;DisplayItem()&quot;,
+<a name="anchor-93"></a>                    status, status != PRO_TK_NO_ERROR);
+        }
+        else
+           break;
+
+<a name="anchor-94"></a>       }
+    }
+
+    ProTKSprintf(astr, &quot;Filename: %s&quot;, fname);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, astr);
+<a name="anchor-95"></a>    fclose(fp);
+
+    return( 0 );
+}
+
+<a name="anchor-96"></a>/*====================================================================*\
+    FUNCTION :  UnHighlightItem()
+    PURPOSE  :  Unhighlight different types of items and show info
+\*====================================================================*/
+int UnHighlightItem(char *a, int b)
+<a name="anchor-97"></a>{
+    ProSelection *p_sel_list;
+    int p_sel_num;
+    ProMdl p_handle;
+    ProError status;
+<a name="anchor-98"></a>    ProType type;
+    char fname[PRO_FILE_NAME_SIZE];
+    FILE *fp;
+    ProModelitem sel_obj;
+    char astr[80], option[40], output[80];
+<a name="anchor-99"></a>    wchar_t wstr1[40];
+
+
+/*--------------------------------------------------------------------*\
+Get the current model and open an output file
+<a name="anchor-100"></a>\*--------------------------------------------------------------------*/
+    status = ProMdlCurrentGet(&amp;p_handle);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;UnHighlightItem()&quot;, status,
+                    status != PRO_TK_NO_ERROR);
+    ProTestQcrName(&amp;p_handle, (char*)SELECTIONS, (char*)fname);
+<a name="anchor-101"></a>    fp = PTApplsUnicodeFopen(fname, &quot;a&quot;);
+
+    if( fp == NULL )
+    return(-1);
+
+<a name="anchor-102"></a>    ProTKFprintf(fp, &quot;Filename: %s\n&quot;, fname);
+
+    while( 1 )
+    {
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the option mask: &quot;);
+<a name="anchor-103"></a>    if( !ProUtilStringGet( wstr1, NULL, 40 ) )
+        break;
+
+    ProWstringToString(option, wstr1);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, option);
+<a name="anchor-104"></a>
+/*--------------------------------------------------------------------*\
+Set the type of selection required
+\*--------------------------------------------------------------------*/
+    type = OptionToType(option);
+<a name="anchor-105"></a>
+    status = PRO_TK_NO_ERROR;
+
+    while( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-106"></a>        status = ProSelect(option, 1, NULL,
+                                  NULL, NULL, NULL, &amp;p_sel_list, &amp;p_sel_num);
+        TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;UnHighlightItem()&quot;,
+                          status, status == PRO_TK_COMM_ERROR);
+
+<a name="anchor-107"></a>        if( status == PRO_TK_NO_ERROR &amp;&amp; p_sel_num > 0 )
+        {
+            if (type != PRO_TYPE_UNUSED)
+            {
+                ProSelectionModelitemGet(p_sel_list[0], &amp;sel_obj);
+<a name="anchor-108"></a>                TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+                    &quot;UnHighlightItem()&quot;, status, status != PRO_TK_NO_ERROR);
+
+                ProTKSprintf(output, &quot;%-15s (%-15s):   %d&quot;, option,
+                    TypeToTypeStr(type), sel_obj.id );
+<a name="anchor-109"></a>            }
+            else
+                ProTKSprintf(output, &quot;%-15s (%-15s)&quot;, option, TypeToTypeStr(type));
+
+            ProTKFprintf(fp, &quot;%s\n&quot;, output);
+<a name="anchor-110"></a>            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, output);
+
+            status = ProSelectionUnhighlight(p_sel_list[0]);
+            TEST_CALL_REPORT(&quot;ProSelectionUnhighlight()&quot;, &quot;UnHighlightItem()&quot;,
+                              status, status != PRO_TK_NO_ERROR);
+<a name="anchor-111"></a>            
+        }
+        else
+           break;
+    }
+<a name="anchor-112"></a>    }
+
+    ProTKSprintf(astr, &quot;Filename: %s&quot;, fname);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, astr);
+    fclose(fp);
+<a name="anchor-113"></a>
+    return( 0 );
+}
+
+/*====================================================================*\
+<a name="anchor-114"></a>    FUNCTION :  HighlightItem()
+    PURPOSE  :  Highlight different types of items and show info
+\*====================================================================*/
+int HighlightItem(char *a, int b)
+{
+<a name="anchor-115"></a>    ProSelection *p_sel_list;
+    int p_sel_num;
+    wchar_t wstr1[40];
+    char option[40], output[80], astr[80];
+    ProType type;
+<a name="anchor-116"></a>    ProMdl p_handle;
+    char fname[PRO_FILE_NAME_SIZE];
+    FILE *fp;
+    ProError status;
+    ProModelitem sel_obj;
+<a name="anchor-117"></a>
+
+/*--------------------------------------------------------------------*\
+Get the current model and open an output file
+\*--------------------------------------------------------------------*/
+<a name="anchor-118"></a>    status = ProMdlCurrentGet(&amp;p_handle);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;SelectDemo()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+    ProTestQcrName(&amp;p_handle, (char*)SELECTIONS,(char*) fname);
+    fp = PTApplsUnicodeFopen(fname, &quot;a&quot;);
+<a name="anchor-119"></a>
+    if( fp == NULL )
+    return(-1);
+
+    ProTKFprintf(fp, &quot;Filename: %s\n&quot;, fname);
+<a name="anchor-120"></a>
+    while( 1 )
+    {
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the option mask: &quot;);
+    if( !ProUtilStringGet( wstr1, NULL, 40 ) )
+<a name="anchor-121"></a>        break;
+
+    ProWstringToString(option, wstr1);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, option);
+
+<a name="anchor-122"></a>/*--------------------------------------------------------------------*\
+Set the type of selection required
+\*--------------------------------------------------------------------*/
+    type = OptionToType(option);
+
+<a name="anchor-123"></a>    status = PRO_TK_NO_ERROR;
+
+    while( status == PRO_TK_NO_ERROR )
+    {
+        status = ProSelect(option, 1, NULL, 
+<a name="anchor-124"></a>            NULL, NULL, NULL, &amp;p_sel_list, &amp;p_sel_num);
+        TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;HighlightItem()&quot;,
+                              status, status == PRO_TK_COMM_ERROR);
+
+        if( status == PRO_TK_NO_ERROR &amp;&amp; p_sel_num > 0)
+<a name="anchor-125"></a>        {
+            if ( type !=  PRO_TYPE_UNUSED)
+            {
+               status = ProSelectionModelitemGet(p_sel_list[0], &amp;sel_obj);
+               TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;HighlightItem()&quot;,
+<a name="anchor-126"></a>                                 status, status != PRO_TK_NO_ERROR);
+
+               ProTKSprintf(output, &quot;%-15s (%-15s):   %d&quot;, option,
+                       TypeToTypeStr(type), sel_obj.id );
+
+<a name="anchor-127"></a>               ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, output);
+            }
+            else
+                ProTKSprintf(output, &quot;%-15s (%-15s)&quot;, option, TypeToTypeStr(type));
+                
+<a name="anchor-128"></a>               ProTKFprintf(fp, &quot;%s\n&quot;, output);
+
+                status = ProSelectionHighlight(p_sel_list[0], PRO_COLOR_ERROR);
+                TEST_CALL_REPORT(&quot;ProSelectionHighlight()&quot;, &quot;HighlightItem()&quot;,
+                       status, status == PRO_TK_COMM_ERROR);
+<a name="anchor-129"></a>        }
+        else
+            break;
+    }
+    }
+<a name="anchor-130"></a>    
+    ProTKSprintf(astr, &quot;Filename: %s&quot;, fname);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, astr);
+    fclose(fp);
+
+<a name="anchor-131"></a>    return( 0 );
+}
+
+
+
+<a name="anchor-132"></a>int ProTestOptionalInfo( void* p_dummy, int int_dummy )
+{
+    ProError		    status;
+    ProSelection*	    p_sel_list;
+    ProModelitem	    sel_obj, sel_obj2;
+<a name="anchor-133"></a>    wchar_t		    wstr1[PRO_MDLNAME_SIZE];
+    char		    option[PRO_MDLNAME_SIZE], output[80];
+    int			    p_sel_num;
+    ProType		    type;
+    ProMdl		    p_handle;
+<a name="anchor-134"></a>    ProAsmcomppath	    comp_path, comp_path2;
+    FILE*		    fp;
+    char		    fname[PRO_FILE_NAME_SIZE];
+    ProSelectionEnvOption   env_options[ 3 ] = { 
+				    {PRO_SELECT_DONE_REQUIRED, 0},
+<a name="anchor-135"></a>				    {PRO_SELECT_BY_MENU_ALLOWED, 1},
+				    {PRO_SELECT_BY_BOX_ALLOWED, 1} };
+    ProSelectionEnv	    sel_env;
+    ProPoint3d		    point;
+    double		    depth;
+<a name="anchor-136"></a>    ProView		    view;
+    int 		    i, win_id;
+    char   	        name[PRO_MDLNAME_SIZE];
+
+
+<a name="anchor-137"></a>    status = ProMdlCurrentGet( &amp;p_handle );
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestOptionalInfo()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+    ProTestQcrName(&amp;p_handle, (char*)SELECTIONS, (char*)fname);
+<a name="anchor-138"></a>    if( (fp = PTApplsUnicodeFopen( fname, &quot;a&quot; )) == NULL )
+	return -1;
+    ProTKFprintf(fp, &quot;Filename: %s\n&quot;, fname);
+
+    /* Get selection mask */
+<a name="anchor-139"></a>    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the option mask: &quot; );
+    if( !ProUtilStringGet( wstr1, NULL, PRO_MDLNAME_SIZE ) )
+        return -1;
+    ProWstringToString( option, wstr1 );
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, option );
+<a name="anchor-140"></a>
+    type = OptionToType(option);
+
+    /* Allocate selection env */
+    status = ProSelectionEnvAlloc( env_options, 3, &amp;sel_env );
+<a name="anchor-141"></a>    TEST_CALL_REPORT(&quot;ProSelectionEnvAlloc()&quot;, &quot;ProTestOptionalInfo()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+    
+    status = PRO_TK_NO_ERROR;
+    while( status == PRO_TK_NO_ERROR )
+<a name="anchor-142"></a>    {
+	/* Select an item */
+        status = ProSelect( option, -1, NULL,
+	    NULL, sel_env, NULL, &amp;p_sel_list, &amp;p_sel_num );
+        TEST_CALL_REPORT( &quot;ProSelect()&quot;, &quot;ProTestOptionalInfo()&quot;,
+<a name="anchor-143"></a>			    status, status == PRO_TK_COMM_ERROR );
+
+	if( status == PRO_TK_NO_ERROR)
+	for (i=0; i&lt; p_sel_num; i++ )
+        {
+<a name="anchor-144"></a>	    /* Get selected item id */
+            ProSelectionModelitemGet( p_sel_list[i], &amp;sel_obj );
+            TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, 
+				&quot;ProTestOptionalInfo()&quot;,
+				status, status != PRO_TK_NO_ERROR );
+<a name="anchor-145"></a>
+	    /* Get component path */
+	    status = ProSelectionAsmcomppathGet( p_sel_list[i], &amp;comp_path );
+	    TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, 
+				&quot;ProTestOptionalInfo()&quot;,
+<a name="anchor-146"></a>				status, status != PRO_TK_NO_ERROR);
+
+	    /* Print out selected item id */
+            ProTKSprintf( output, &quot;%-15s (%-15s):   %d&quot;, option,
+                    TypeToTypeStr(type), sel_obj.id );
+<a name="anchor-147"></a>            ProTKFprintf( fp, &quot;%s\n&quot;, output );
+            ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, output );
+
+	    /* Get selected point */
+	    status = ProSelectionPoint3dGet( p_sel_list[i], point );
+<a name="anchor-148"></a>            TEST_CALL_REPORT( &quot;ProSelectionPoint3dGet()&quot;,
+		&quot;ProTestOptionalInfo()&quot;, status, status != PRO_TK_NO_ERROR );
+
+	    /* Print out the selected point coords */
+            ProTKSprintf( output, &quot;%-15s (%-15s):   %2.4f %2.4f %2.4f&quot;, 
+<a name="anchor-149"></a>		&quot;Sel coords&quot;, TypeToTypeStr(type), 
+		point[0], point[1], point[2] );
+            ProTKFprintf( fp, &quot;%s\n&quot;, output );
+            ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, output );
+
+<a name="anchor-150"></a>	    /* Get the normal to a ray */
+	    status = ProSelectionDepthGet( p_sel_list[i], &amp;depth );
+            TEST_CALL_REPORT( &quot;ProSelectionDepthGet()&quot;, &quot;ProTestOptionalInfo()&quot;,
+                              status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-151"></a>	    /* Print out the normal to a ray */
+            ProTKSprintf( output, &quot;%-15s (%-15s):   %2.4f&quot;, 
+		&quot;Depth&quot;, TypeToTypeStr(type), depth );
+	    ProTKFprintf( fp, &quot;%s\n&quot;, output );
+	    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, output );
+<a name="anchor-152"></a>
+            /* Get the view from a selection object */
+	    status = ProSelectionViewGet( p_sel_list[i], &amp;view );
+            TEST_CALL_REPORT( &quot;ProSelectionViewGet()&quot;, &quot;ProTestOptionalInfo()&quot;,
+                              status, status != PRO_TK_NO_ERROR );
+<a name="anchor-153"></a>
+#ifndef PT_PRODUCTS_BUILD
+	    status = ProSelectionWindowIdGet( p_sel_list[i], &amp;win_id);
+            TEST_CALL_REPORT( &quot;ProSelectionWindowIdGet()&quot;, 
+		&quot;ProTestOptionalInfo()&quot;, status, status != PRO_TK_NO_ERROR );
+<a name="anchor-154"></a>
+	    status = ProWindowMdlGet( win_id, &amp;p_handle); 
+            TEST_CALL_REPORT( &quot;ProWindowMdlGet()&quot;, 
+		&quot;ProTestOptionalInfo()&quot;, status, status != PRO_TK_NO_ERROR );
+	    
+<a name="anchor-155"></a>	    ProMdlMdlnameGet(p_handle,  wstr1);
+	    ProWstringToString(name,  wstr1);
+
+	    /* Print the model name */
+	    ProTKSprintf( output, &quot;Selected in the window of model %s&quot;, name);
+<a name="anchor-156"></a>	    ProTKFprintf( fp, &quot;%s\n&quot;, output );	    
+#endif
+
+	    /* Call ProSelectionSet() only to test it  */
+	    status = ProSelectionSet( p_sel_list[i], &amp;comp_path, &amp;sel_obj );
+<a name="anchor-157"></a>            TEST_CALL_REPORT( &quot;ProSelectionSet()&quot;, &quot;ProTestOptionalInfo()&quot;,
+                              status, status != PRO_TK_NO_ERROR );
+
+	    ProSelectionModelitemGet( p_sel_list[i], &amp;sel_obj2 );
+	    ProSelectionAsmcomppathGet( p_sel_list[i], &amp;comp_path2 );
+<a name="anchor-158"></a>	    if (sel_obj.id != sel_obj2.id || sel_obj.type != sel_obj2.type ||
+		comp_path.table_num != comp_path2.table_num)
+	    {
+		ProTKFprintf(stderr, &quot;ProSelectionSet() error !\n&quot;);
+	    }
+<a name="anchor-159"></a>	}
+        else
+           break;
+    }
+
+<a name="anchor-160"></a>     /* Free allocated selection env */
+    status = ProSelectionEnvFree( sel_env );
+    TEST_CALL_REPORT(&quot;ProSelectionEnvFree()&quot;, &quot;ProTestOptionalInfo()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-161"></a>    fclose(fp);
+
+    return 0;
+}
+
+<a name="anchor-162"></a>/*=============================================================*\
+Function: 	UtilSelectionFromSurfaceId
+Purpose:  	Get the selection from surface id
+Return :    PRO_TK_NO_ERROR if successful
+Free memory outside the function
+<a name="anchor-163"></a>\*=============================================================*/
+ProError UtilSelectionFromSurfaceId(
+                                       ProMdl model,	/* In : model */
+                                       int surf_id,	/* In : surface id */
+                                       ProSelection *sel)	
+<a name="anchor-164"></a>{
+    ProError status;
+    ProModelitem model_item;
+
+    status = ProModelitemInit (model, surf_id, PRO_SURFACE, &amp;model_item);
+<a name="anchor-165"></a>    if (status!=PRO_TK_NO_ERROR) 
+      return (status);
+    status = ProSelectionAlloc(NULL, &amp;model_item, sel);
+    TEST_CALL_REPORT(&quot;ProSelectionAlloc&quot;, &quot;UtilSelectionFromSurfaceId&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+<a name="anchor-166"></a>    return status;
+}
+
+/*=============================================================*\
+Function: 	UtilSelectionFromSurface
+<a name="anchor-167"></a>Purpose:  	Get the selection from surface 
+Return :    PRO_TK_NO_ERROR if successful
+Free memory outside the function
+\*=============================================================*/
+ProError UtilSelectionFromSurface(
+<a name="anchor-168"></a>                                     ProSolid solid,	/* In : model */
+                                     ProSurface surf,	/* In : surface */
+                                     ProSelection *sel)
+{
+    ProError status;
+<a name="anchor-169"></a>    ProModelitem modelitem;
+
+    status = ProSurfaceToGeomitem(solid, surf, (ProGeomitem*)&amp;modelitem);
+    if(status != PRO_TK_NO_ERROR)
+      return status;
+<a name="anchor-170"></a>    status = ProSelectionAlloc(NULL, &amp;modelitem, sel);
+    status = ProSelectionSet(*sel, NULL, &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProSelectionSet&quot;, &quot;UtilSelectionFromSurface&quot;, 
+			    status, status != PRO_TK_NO_ERROR );                        
+    return status;
+<a name="anchor-171"></a>}
+
+/*=============================================================*\
+Function: 	UtilSelectionFromEdge
+Purpose:  	Get the selection from edge 
+<a name="anchor-172"></a>Return :    PRO_TK_NO_ERROR if successful
+Free memory outside the function
+\*=============================================================*/
+ProError UtilSelectionFromEdge(
+                                     ProSolid solid,	/* In : model */
+<a name="anchor-173"></a>                                     ProEdge edge,	/* In : edge id */
+                                     ProSelection *sel)
+{
+    ProError status;
+    ProModelitem modelitem;
+<a name="anchor-174"></a>
+    status = ProEdgeToGeomitem(solid, edge, (ProGeomitem*)&amp;modelitem);
+    if(status != PRO_TK_NO_ERROR)
+      return status;
+    status = ProSelectionAlloc(NULL, &amp;modelitem, sel);
+<a name="anchor-175"></a>    status = ProSelectionSet(*sel, NULL, &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProSelectionSet&quot;, &quot;UtilSelectionFromSurface&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+    return status;
+}
+<a name="anchor-176"></a>
+/*=============================================================*\
+Function: 	UtilSelectionFromEdgeId
+Purpose:  	Get the selection from edge id
+Return :    PRO_TK_NO_ERROR if successful
+<a name="anchor-177"></a>Free memory outside the function
+\*=============================================================*/
+ProError UtilSelectionFromEdgeId(
+                                    ProMdl model,	/* In : model */
+                                    int edge_id,	/* In : edge id */
+<a name="anchor-178"></a>                                    ProSelection *sel)/* Out: selection*/
+{
+    ProError status;
+    ProModelitem model_item;
+
+<a name="anchor-179"></a>    status = ProModelitemInit (model, edge_id, PRO_EDGE, &amp;model_item);
+    if (status!=PRO_TK_NO_ERROR) 
+      return (status);
+    status = ProSelectionAlloc(NULL, &amp;model_item, sel);
+    TEST_CALL_REPORT(&quot;ProSelectionAlloc&quot;, &quot;UtilSelectionFromEdgeId&quot;,  
+<a name="anchor-180"></a>			    status, status != PRO_TK_NO_ERROR );                         
+    return status;
+}
+
+/*===============================================================*\
+<a name="anchor-181"></a>FUNCTION : ProUtilCopySelectionSurf
+PURPOSE  : Make a selection copy for a surface entity
+\*===============================================================*/
+ProError ProUtilCopySelectionSurf(ProMdl solid, ProSurface surf,
+                           ProSelection *p_copy_sel)
+<a name="anchor-182"></a>{
+    ProSelection p_sel = NULL;
+    ProError status;
+    ProModelitem item;
+    status = UtilSelectionFromSurface((ProSolid)solid, surf, &amp;p_sel);
+<a name="anchor-183"></a>    if(status != PRO_TK_NO_ERROR)
+      return status;
+
+    status = ProSelectionModelitemGet (p_sel, &amp;item);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;, &quot;ProUtilCopySelectionSurf&quot;,  
+<a name="anchor-184"></a>			    status, status != PRO_TK_NO_ERROR );                            
+    status = ProSelectionSet(p_sel, NULL, &amp;item);
+    TEST_CALL_REPORT(&quot;ProSelectionSet&quot;, &quot;ProUtilCopySelectionSurf&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                          
+    status = ProSelectionDisplay(p_sel);
+<a name="anchor-185"></a>    status = ProSelectionCopy( p_sel, p_copy_sel );
+    TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;, &quot;ProUtilCopySelectionSurf&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                               
+    status = ProSelectionFree(&amp;p_sel);
+    TEST_CALL_REPORT(&quot;ProSelectionFree&quot;, &quot;ProUtilCopySelectionSurf&quot;,  
+<a name="anchor-186"></a>			    status, status != PRO_TK_NO_ERROR );                               
+    return status;
+}
+
+</pre>
+</body>
+</html>

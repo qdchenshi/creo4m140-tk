@@ -1,0 +1,970 @@
+<html>
+<head>
+<title>TestGenedata.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/DEVELOP includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-2"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+<a name="anchor-3"></a>#include &quot;ProArray.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProMessage.h&quot;
+
+#include &quot;ProTKRunTime.h&quot;
+<a name="anchor-4"></a>#include &quot;TestGenedata.h&quot;
+#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilString.h&quot;
+#include &lt;ProUtil.h>
+
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+#include &quot;math.h&quot;
+#include &quot;ctype.h&quot;
+<a name="anchor-6"></a>/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+#define  MAX_SLOT_CLASS_NUM  	2000
+
+<a name="anchor-7"></a>/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+
+
+<a name="anchor-8"></a>/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+
+
+<a name="anchor-9"></a>/*--------------------------------------------------------------------*\
+Application static data/function
+\*--------------------------------------------------------------------*/
+static int ProTestSelectSlot(
+        ProExtdataClass *data_class,
+<a name="anchor-10"></a>        int             *keyby,
+        ProExtdataSlot  *data_slot);
+
+static int ProTestSelectClass(
+        ProMdl p_model,
+<a name="anchor-11"></a>        ProExtdataClass *p_class);
+
+static int ProTestUserAction(
+        char *dummy,
+        int action);
+<a name="anchor-12"></a>
+static int ProTestGetDataType(
+	);
+
+static unsigned char ProTestHexToByte(
+<a name="anchor-13"></a>	char *str);
+
+
+/*====================================================================*\
+  Function : ProTestProAppdataErr
+<a name="anchor-14"></a>  Purpose  : Display error message
+\*====================================================================*/
+char *ProTestProAppdataErr(
+	ProExtdataErr err)
+{
+<a name="anchor-15"></a>     switch(err)
+     {
+         case PROEXTDATA_TK_NO_ERROR			:
+ 	    return((char*)&quot;No error&quot;);
+	 case PROEXTDATA_TK_INVALID_OBJ_OR_CLASS	:
+<a name="anchor-16"></a>            return((char*)&quot;Invalid object or class&quot;);
+	 case PROEXTDATA_TK_CLASS_OR_SLOT_EXISTS	:
+            return((char*)&quot;Class or slot exists&quot;);
+	 case PROEXTDATA_TK_NAMES_TOO_LONG		:
+            return((char*)&quot;Names too long&quot;);
+<a name="anchor-17"></a>	 case PROEXTDATA_TK_SLOT_NOT_FOUND	  	:
+	    return((char*)&quot;Slot not found&quot;);
+         case PROEXTDATA_TK_BAD_KEY_BY_FLAG		:
+            return((char*)&quot;Bay KEY_BY flag&quot;);
+         case PROEXTDATA_TK_INVALID_OBJ_TYPE		:
+<a name="anchor-18"></a>            return((char*)&quot;Invalid object type&quot;);
+	 case PROEXTDATA_TK_EMPTY_SLOT			:
+            return((char*)&quot;Empty slot&quot;);
+         case PROEXTDATA_TK_BAD_DATA_ARGS		:
+            return((char*)&quot;Bad data arguments&quot;);
+<a name="anchor-19"></a>	 case PROEXTDATA_TK_STREAM_TOO_LARGE	 	:
+            return((char*)&quot;Stream too large&quot;);
+         case PROEXTDATA_TK_INVALID_SLOT_NAME	  	:
+            return((char*)&quot;Invalid slot name&quot;);
+	 case PROEXTDATA_TK_ERROR			:
+<a name="anchor-20"></a>            return((char*)&quot;General error&quot;);
+         default :
+            return((char*)&quot;**UNKNOWN STATUS**&quot;);
+     }
+}
+<a name="anchor-21"></a>
+
+/*====================================================================*\
+  Function : ProTestGeneData
+  Purpose  : Display the generic data menu
+<a name="anchor-22"></a>\*====================================================================*/
+int ProTestGeneData()
+{
+  ProMdl  model;
+  ProError status;
+<a name="anchor-23"></a>  ProExtdataErr err;
+  int id;
+
+  status = ProMdlCurrentGet(&amp;model);
+  TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestGeneData( )&quot;,
+<a name="anchor-24"></a>                                status, status != PRO_TK_NO_ERROR);
+
+  err = ProExtdataInit(model);
+  TEST_CALL_REPORT(&quot;ProExtdataInit()&quot;, &quot;ProTestGeneData()&quot;, 
+ 		(ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+<a name="anchor-25"></a>
+  status = ProMenuFileRegister((char*)&quot;TkGenData&quot;, (char*)&quot;tkgendata.mnu&quot;, &amp;id);
+  TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, &quot;ProTestGeneData()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+  status = ProMenubuttonActionSet((char*)&quot;TkGenData&quot;,(char*)&quot;-Register Class&quot;, 
+<a name="anchor-26"></a>      (ProMenubuttonAction)ProTestRegClass, model, 0);
+  TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeneData()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+  status = ProMenubuttonActionSet((char*)&quot;TkGenData&quot;,(char*)&quot;-Create Slot&quot;, 
+      (ProMenubuttonAction)ProTestCreateSlot ,model, 0);
+<a name="anchor-27"></a>  TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeneData()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+  status = ProMenubuttonActionSet((char*)&quot;TkGenData&quot;,(char*)&quot;-Write/Read Check&quot;, 
+      (ProMenubuttonAction)ProTestWrCheck, model, 0);
+  TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeneData()&quot;, 
+<a name="anchor-28"></a>				status, status != PRO_TK_NO_ERROR);
+  status = ProMenubuttonActionSet((char*)&quot;TkGenData&quot;,(char*)&quot;-Delete class&quot;, 
+      (ProMenubuttonAction)ProTestDeleteC, model, 0);
+  TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeneData()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+<a name="anchor-29"></a>  status = ProMenubuttonActionSet((char*)&quot;TkGenData&quot;,(char*)&quot;-Delete slot&quot;, 
+      (ProMenubuttonAction)ProTestDelete, model, 0);
+  TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeneData()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+  status = ProMenubuttonActionSet((char*)&quot;TkGenData&quot;,(char*)&quot;-Dump&quot;, 
+<a name="anchor-30"></a>      (ProMenubuttonAction)ProTestDump, model, 0);
+  TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeneData()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+  status = ProMenubuttonActionSet((char*)&quot;TkGenData&quot;,(char*)&quot;-Random&quot;, 
+      (ProMenubuttonAction)ProTestRandom, model, 0);
+<a name="anchor-31"></a>  TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeneData()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+  status = ProMenubuttonActionSet((char*)&quot;TkGenData&quot;,(char*)&quot;-Refresh data&quot;,
+      (ProMenubuttonAction)ProTestRefresh, model, 0);
+  TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeneData()&quot;, 
+<a name="anchor-32"></a>				status, status != PRO_TK_NO_ERROR);
+  status = ProMenubuttonActionSet((char*)&quot;TkGenData&quot;,(char*)&quot;TkGenData&quot;, 
+      (ProMenubuttonAction)ProMenuDelete, model, 0);
+  TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeneData()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+<a name="anchor-33"></a> 
+  status = ProMenuCreate(PROMENUTYPE_MAIN,(char*)&quot;TkGenData&quot;, &amp;id);
+  TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;, &quot;ProTestGeneData()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+  status = ProMenuProcess((char*)&quot;TkGenData&quot;, &amp;id);
+<a name="anchor-34"></a>  TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;, &quot;ProTestGeneData()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+
+  return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-35"></a>
+/*====================================================================*\
+  Function : ProTestRegClass
+  Purpose  : Register class
+\*====================================================================*/
+<a name="anchor-36"></a>int ProTestRegClass(
+	ProMdl p_model)
+{
+    ProExtdataErr    err;
+    ProExtdataClass  data_class;
+<a name="anchor-37"></a>    ProName 	     class_name;
+
+/*-------------------------------------------------------------*\
+     Get the class name.
+\*-------------------------------------------------------------*/
+<a name="anchor-38"></a>    ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Enter class name [QUIT] : &quot;);
+    if(ProMessageStringRead(PRO_NAME_SIZE, class_name))
+    {
+        return(PRO_TK_BAD_INPUTS);
+    }
+<a name="anchor-39"></a>
+/*-------------------------------------------------------------*\   
+     Register the class.
+\*-------------------------------------------------------------*/
+
+<a name="anchor-40"></a>    err = ProExtdataClassRegister(p_model, class_name, &amp;data_class);
+    TEST_CALL_REPORT(&quot;ProExtdataClassRegister()&quot;, &quot;ProTestRegClass()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+
+    if(err != PROEXTDATA_TK_NO_ERROR)
+<a name="anchor-41"></a>    {
+	ProUtilMsgPrint(&quot;gendata&quot;, &quot;TEST ProExtdataClassRegister() status: %0s&quot;, 
+			ProTestProAppdataErr(err));
+        return(PRO_TK_GENERAL_ERROR);
+    }
+<a name="anchor-42"></a>
+    ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Class %0ws registered successfully&quot;, class_name);
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-43"></a>/*====================================================================*\
+  Function : ProTestSelectSlot
+  Purpose  : Select a slot 
+\*====================================================================*/
+static int ProTestSelectSlot(
+<a name="anchor-44"></a>	ProExtdataClass *data_class,
+	int 		*keyby,
+	ProExtdataSlot  *data_slot)
+{
+    ProExtdataErr 	err;
+<a name="anchor-45"></a>    int			num_of_slots, i, n_sel;
+    ProExtdataNamesList slot_name_list;
+    ProExtdataIdsList	slot_id_list;
+    wchar_t 		**selected, wtitle[10];
+    char		tmp_str[PRO_NAME_SIZE];
+<a name="anchor-46"></a>    wchar_t             *list[MAX_SLOT_CLASS_NUM];
+    wchar_t             empty_buff[2];
+    ProError		status;
+
+/*-------------------------------------------------------------*\
+<a name="anchor-47"></a>       get the name list.
+\*-------------------------------------------------------------*/
+    err = ProExtdataSlotNamesList(data_class, &amp;num_of_slots,
+        &amp;slot_name_list);
+
+<a name="anchor-48"></a>    TEST_CALL_REPORT(&quot;ProExtdataSlotNamesList()&quot;, &quot;ProTestSelectSlot()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+
+    if( err != PROEXTDATA_TK_NO_ERROR)
+    {
+<a name="anchor-49"></a>        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataSlotNamesList() status : %0s&quot;,
+				ProTestProAppdataErr(err));
+        return(0);
+    }
+
+<a name="anchor-50"></a>/*-------------------------------------------------------------*\
+       get the id list.
+\*-------------------------------------------------------------*/
+    err = ProExtdataSlotIdsList(data_class, &amp;num_of_slots, &amp;slot_id_list);
+
+<a name="anchor-51"></a>    TEST_CALL_REPORT(&quot;ProExtdataSlotIdsList()&quot;, &quot;ProTestSelectSlot()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+
+    if( err != PROEXTDATA_TK_NO_ERROR )
+    {
+<a name="anchor-52"></a>        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataSlotIdsList() status : %0s&quot;,
+				ProTestProAppdataErr(err));
+        return(0);
+    }
+
+<a name="anchor-53"></a>    if(num_of_slots &lt; 1)
+    {
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST There are no slots in class %0ws&quot;,
+						data_class->class_name);
+        return(0);
+<a name="anchor-54"></a>    }
+
+    ProStringToWstring(empty_buff, (char*)&quot;&quot;);
+    ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Select slot&quot;);
+    ProStringToWstring(wtitle,(char*)&quot;Slots&quot;);
+<a name="anchor-55"></a>    for(i = 0;i &lt; num_of_slots; i ++)
+    {
+        list[i] = (wchar_t *)slot_name_list[i];
+    }
+    list[i] = empty_buff;
+<a name="anchor-56"></a>
+    status = ProMenuStringsSelect(wtitle,list,1,NULL,&amp;selected, &amp;n_sel);
+    TEST_CALL_REPORT (&quot;ProMenuStringSelect&quot;, &quot;ProTestSelectSlot&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-57"></a>    data_slot->p_class = data_class;
+    ProUtilWstrcpy(data_slot->slot_name, (wchar_t *)selected[0]);
+    for(i = 0;i &lt; num_of_slots;i ++)
+    {
+       if(ProUtilWstrCmp(slot_name_list[i], data_slot->slot_name) == 0)
+<a name="anchor-58"></a>       {
+           data_slot->slot_id = slot_id_list[i];
+           break;
+       }
+    }
+<a name="anchor-59"></a>    ProArrayFree((ProArray *)&amp;slot_name_list);
+    ProArrayFree((ProArray *)&amp;slot_id_list);
+     
+    ProWstringToString(tmp_str, data_slot->slot_name);
+    if(isdigit(tmp_str[0]))
+<a name="anchor-60"></a>    {
+        *keyby = KEY_BY_ID;
+        ProStringToWstring(data_slot->slot_name, (char*)&quot; &quot;);
+    }
+    else
+<a name="anchor-61"></a>    {
+        *keyby = KEY_BY_NAME;
+    }
+    return(1);   
+}
+<a name="anchor-62"></a>
+/*====================================================================*\
+  Function : ProTestSelectClass
+  Purpose  : Select a class
+\*====================================================================*/    
+<a name="anchor-63"></a>static int ProTestSelectClass(
+	ProMdl p_model, 
+	ProExtdataClass *p_class)
+{
+    ProExtdataErr    	err;
+<a name="anchor-64"></a>    ProName	        *class_name_list;
+    int			num_of_class, n_sel, i;
+    wchar_t		wtitle[10];
+    wchar_t		**selected;
+    wchar_t             *list[MAX_SLOT_CLASS_NUM];
+<a name="anchor-65"></a>    wchar_t             empty_buff[2];		
+    ProError		status;
+
+/*-------------------------------------------------------------*\
+     Get the class list
+<a name="anchor-66"></a>\*-------------------------------------------------------------*/
+    err=ProExtdataClassNamesList(p_model, &amp;num_of_class, &amp;class_name_list);
+
+    TEST_CALL_REPORT(&quot;ProExtdataClassNamesList()&quot;, &quot;ProTestSelectClass()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+<a name="anchor-67"></a>
+    if( err != PROEXTDATA_TK_NO_ERROR )
+    {
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataClassNamesList() status : %0s&quot;,
+                                		ProTestProAppdataErr(err));				
+<a name="anchor-68"></a>        return(0);
+    }
+    
+    if(num_of_class &lt; 1)
+    {
+<a name="anchor-69"></a>	ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST There are no classes defined&quot;);
+        return(0);
+    }
+    
+    ProStringToWstring(empty_buff, (char*)&quot;&quot;); 
+<a name="anchor-70"></a>    ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Select class&quot;);
+    ProStringToWstring(wtitle,(char*)&quot;Classes&quot;);
+
+    for(i = 0;i &lt; num_of_class; i ++)
+    {
+<a name="anchor-71"></a>        list[i] = (wchar_t *)class_name_list[i];
+    }
+    list[i] = empty_buff;
+
+    status = ProMenuStringsSelect(wtitle, list, 1, NULL, &amp;selected, &amp;n_sel);
+<a name="anchor-72"></a>
+    ProArrayFree((ProArray *)&amp;class_name_list);
+    if(status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+    {
+        return(0);
+<a name="anchor-73"></a>    }
+  
+    p_class->p_model = p_model;
+    ProUtilWstrcpy(p_class->class_name, selected[0]);
+    return(1);
+<a name="anchor-74"></a>}
+
+/*====================================================================*\
+  Function : ProTestCreateSlot
+  Purpose  : Create the slot
+<a name="anchor-75"></a>\*====================================================================*/
+int ProTestCreateSlot(
+	ProMdl p_model)
+{
+    ProExtdataClass  data_class;
+<a name="anchor-76"></a>    ProName	     slot_name;
+    ProExtdataSlot   data_slot;
+    ProExtdataErr    err;
+ 
+/*-------------------------------------------------------------*\
+<a name="anchor-77"></a>    Select a class name for the slot to belong to
+\*-------------------------------------------------------------*/
+    if(ProTestSelectClass(p_model, &amp;data_class) == 0)
+        return(PRO_TK_BAD_INPUTS);
+ 
+<a name="anchor-78"></a>/*-------------------------------------------------------------*\
+    Get the slot name
+\*-------------------------------------------------------------*/
+    ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Enter slot name [NONE] : &quot;);
+ 
+<a name="anchor-79"></a>/*-------------------------------------------------------------*\
+    If no slot name was given, then create one with no name
+    (i.e. we will KEY_BY_ID)
+    else use the name.
+\*-------------------------------------------------------------*/
+<a name="anchor-80"></a>    if(!ProMessageStringRead(PRO_NAME_SIZE, slot_name))
+    {
+        err = ProExtdataSlotCreate(&amp;data_class, slot_name, &amp;data_slot);
+    }
+    else
+<a name="anchor-81"></a>    {
+        err = ProExtdataSlotCreate(&amp;data_class, NULL, &amp;data_slot);
+    }
+
+    TEST_CALL_REPORT(&quot;ProExtdataSlotCreate()&quot;, &quot;ProTestCreateSlot()&quot;,
+<a name="anchor-82"></a>                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+
+    if(err == PROEXTDATA_TK_NO_ERROR)
+    { 
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Created slot with id %0d&quot;, &amp;data_slot.slot_id);
+<a name="anchor-83"></a>        return(PRO_TK_NO_ERROR);
+    }
+    ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataSlotCreate() status : %0s&quot;,
+                        ProTestProAppdataErr(err));
+ 
+<a name="anchor-84"></a>    return(PRO_TK_GENERAL_ERROR);
+}
+
+/*====================================================================*\
+  Function : ProTestUserAction
+<a name="anchor-85"></a>  Purpose  : exit the data type menu 
+\*====================================================================*/
+static int ProTestUserAction(
+	char *dummy,
+	int action)
+<a name="anchor-86"></a>{
+    ProError err;
+    err = ProMenuDeleteWithStatus(action);
+    TEST_CALL_REPORT (&quot;ProMenuDeleteWithStatus&quot;,&quot;ProTestUserAction&quot;, err,
+        err != PRO_TK_NO_ERROR);
+<a name="anchor-87"></a>
+    return 0;
+}
+
+/*====================================================================*\
+<a name="anchor-88"></a>  Function : ProTestGetDataType
+  Purpose  : Create the data type menu
+\*====================================================================*/
+static int ProTestGetDataType()
+{
+<a name="anchor-89"></a>    ProError	status;
+    int id;
+
+    status = ProMenuFileRegister((char*)&quot;TkGenType&quot;,(char*)&quot;tkgentype.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestGetDataType&quot;, status,
+<a name="anchor-90"></a>        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkGenType&quot;,(char*)&quot;-Integer&quot;,
+        (ProMenubuttonAction)ProTestUserAction, NULL,PRO_INTEGER_TYPE);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGetDataType()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+<a name="anchor-91"></a>    status = ProMenubuttonActionSet((char*)&quot;TkGenType&quot;,(char*)&quot;-Double&quot;,
+        (ProMenubuttonAction)ProTestUserAction, NULL,PRO_DOUBLE_TYPE);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGetDataType()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkGenType&quot;,(char*)&quot;-Wide Str&quot;,
+<a name="anchor-92"></a>        (ProMenubuttonAction)ProTestUserAction,	NULL,PRO_WIDE_STRING_TYPE);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGetDataType()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkGenType&quot;,(char*)&quot;-Stream&quot;,
+        (ProMenubuttonAction)ProTestUserAction, NULL,PRO_STREAM_TYPE);
+<a name="anchor-93"></a>    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGetDataType()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkGenType&quot;,(char*)&quot;TkGenType&quot;,
+        (ProMenubuttonAction)ProTestUserAction,NULL,-1);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGetDataType()&quot;, 
+<a name="anchor-94"></a>				status, status != PRO_TK_NO_ERROR);  
+    ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Select data type&quot;);
+
+    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*)&quot;TkGenType&quot;, &amp;id);
+    TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;, &quot;ProTestGetDataType()&quot;, 
+<a name="anchor-95"></a>				status, status != PRO_TK_NO_ERROR);
+
+    status = ProMenuProcess((char*)&quot;TkGenType&quot;, &amp;id);
+    if (status == PRO_TK_NO_ERROR)
+	return (id);
+<a name="anchor-96"></a>    else
+    	return(-1);
+}
+
+/*====================================================================*\
+<a name="anchor-97"></a>  Function : ProTestHexToByte
+  Purpose  : Convert hex to str
+\*====================================================================*/
+static unsigned char ProTestHexToByte(
+	char *str)
+<a name="anchor-98"></a>{
+    int i;
+    char h;
+    unsigned char b;
+ 
+<a name="anchor-99"></a>    b=0;
+    for(i=0;i&lt;2;i++)
+    {
+        h = (char)toupper(str[i]);
+        if(isdigit(h))
+<a name="anchor-100"></a>            b = (unsigned char)(b*16 + (int)(h - '0'));
+        else
+            b = (unsigned char)(b*16 + (int)(h - 'A') + 10);
+    }
+    return(b);
+<a name="anchor-101"></a>}
+
+/*====================================================================*\
+  Function : ProTestWrCheck
+  Purpose  : Check the data slot write and read back functions
+<a name="anchor-102"></a>\*====================================================================*/
+int ProTestWrCheck(
+	ProMdl p_model)
+{
+   ProExtdataErr  	err;
+<a name="anchor-103"></a>   int 			data_type, keyby, i, i_read, b, differ, data_size;
+   ProExtdataClass 	data_class;
+   ProExtdataSlot  	data_slot;
+   unsigned char 	*stream,*s_read;	
+   double 		d,d_read;
+<a name="anchor-104"></a>   void 		*data;
+   char 		str[PRO_LINE_SIZE];
+   wchar_t 		wstr[PRO_LINE_SIZE];
+   int			cont = 1;
+
+<a name="anchor-105"></a>/*-------------------------------------------------------------*\
+    Get the type of slot (integer, double etc.)
+\*-------------------------------------------------------------*/
+    data_type = ProTestGetDataType();
+    if(data_type &lt; 0)
+<a name="anchor-106"></a>    {
+        return(PRO_TK_BAD_INPUTS);
+    }
+
+/*-------------------------------------------------------------*\
+<a name="anchor-107"></a>    Get the class
+\*-------------------------------------------------------------*/
+   if(!ProTestSelectClass(p_model, &amp;data_class))
+   {
+       return(PRO_TK_BAD_INPUTS);
+<a name="anchor-108"></a>   }
+
+/*-------------------------------------------------------------*\
+    Get the slot
+\*-------------------------------------------------------------*/
+<a name="anchor-109"></a>   if(!ProTestSelectSlot(&amp;data_class, &amp;keyby, &amp;data_slot))
+   {
+      return(PRO_TK_BAD_INPUTS);
+   }
+
+<a name="anchor-110"></a>ProTKPrintf(&quot;%d\n&quot;, data_type);
+/*-------------------------------------------------------------*\
+    Depending upon the type of data, get the user to type the
+    data, and then save it to the slot.
+\*-------------------------------------------------------------*/
+<a name="anchor-111"></a>    switch(data_type)
+    {
+    case PRO_INTEGER_TYPE :
+
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Enter integer [QUIT] : &quot;);
+<a name="anchor-112"></a>        if(ProMessageIntegerRead(NULL, &amp;i))
+            return(PRO_TK_BAD_INPUTS);
+        err = ProExtdataSlotWrite(&amp;data_slot, keyby, PRO_INTEGER_TYPE, 0, &amp;i);
+        break;
+    case PRO_DOUBLE_TYPE :
+<a name="anchor-113"></a>        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Enter double [QUIT] : &quot;);
+        if(ProMessageDoubleRead(NULL, &amp;d))
+            return(PRO_TK_BAD_INPUTS);
+        err = ProExtdataSlotWrite(&amp;data_slot, keyby, PRO_DOUBLE_TYPE, 0, &amp;d);
+        break;
+<a name="anchor-114"></a>    case PRO_WIDE_STRING_TYPE :
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Enter string [QUIT] : &quot;);
+        if(ProMessageStringRead(PRO_LINE_SIZE, wstr))
+            return(PRO_TK_BAD_INPUTS);
+        err = ProExtdataSlotWrite(&amp;data_slot, keyby, PRO_WIDE_STRING_TYPE, 
+<a name="anchor-115"></a>								0, wstr);
+        break;
+    case PRO_STREAM_TYPE :
+        b=0;
+        do 
+<a name="anchor-116"></a>        {
+            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Enter bytes in hexadecimal [QUIT] : &quot;);
+            if(ProMessageStringRead(PRO_LINE_SIZE, wstr))
+                break;
+            ProWstringToString(str,wstr);
+<a name="anchor-117"></a>            if(strlen(str)%2)
+                str[strlen(str)-1] = '\0';
+            if(b==0)
+                stream = (unsigned char*)calloc(strlen(str)/2,1);
+            else
+<a name="anchor-118"></a>                stream = (unsigned char*)realloc(stream, b + strlen(str)/2);
+            for(i=0;i&lt;(int)strlen(str);i+=2)
+                stream[b++] = ProTestHexToByte(&amp;str[i]);
+        } while (cont);
+        err = ProExtdataSlotWrite(&amp;data_slot, keyby, PRO_STREAM_TYPE, b,stream);
+<a name="anchor-119"></a>        break;
+    }
+    
+    TEST_CALL_REPORT(&quot;ProExtdataSlotWrite()&quot;, &quot;ProTestWrCheck()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+<a name="anchor-120"></a>
+    if(err)
+    {
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataSlotWrite() status : %0s&quot;,
+                        ProTestProAppdataErr(err));
+<a name="anchor-121"></a>        return(PRO_TK_GENERAL_ERROR);
+    }
+
+/*-------------------------------------------------------------*\
+    Read back the data, and compare its value
+<a name="anchor-122"></a>\*-------------------------------------------------------------*/
+    err = ProExtdataSlotRead(&amp;data_slot, keyby, &amp;data_type, &amp;data_size, &amp;data);
+ 
+    TEST_CALL_REPORT(&quot;ProExtdataSlotRead()&quot;, &quot;ProTestWrCheck()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+<a name="anchor-123"></a>
+    if(err)
+    {
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataSlotRead() status : %0s&quot;,
+                        ProTestProAppdataErr(err));
+<a name="anchor-124"></a>        return(0);
+    }
+    switch(data_type)
+    {
+    case PRO_INTEGER_TYPE :
+<a name="anchor-125"></a>        i_read = *(int*)data;
+        if(i_read != i)
+            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST INCORRECT value read back = %0d&quot;,
+                                                                    &amp;i_read);
+        else
+<a name="anchor-126"></a>            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Value read back = %0d&quot;,&amp;i_read);
+        break;
+    case PRO_DOUBLE_TYPE :
+        d_read = *(double*)data;
+        if(fabs(d_read - d) > 0.0000001)
+<a name="anchor-127"></a>            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST INCORRECT value read back = %0f&quot;,
+                                                                &amp;d_read);
+        else
+            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Value read back = %0f&quot;,&amp;d_read);
+        break;
+<a name="anchor-128"></a>    case PRO_WIDE_STRING_TYPE :
+        if(ProUtilWstrCmp((wchar_t*)data, wstr))
+            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST INCORRECT value read back = %0w&quot;,
+                                                            (wchar_t*)data);
+        else
+<a name="anchor-129"></a>            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Value read back = %0w&quot;,(wchar_t*)data);
+        break;
+    case PRO_STREAM_TYPE :
+        s_read = (unsigned char*)data;
+        differ=0;
+<a name="anchor-130"></a>        for(b=0;b&lt;data_size;b++)
+            if(s_read[b] != stream[b])
+            {
+                differ=1;
+                break;
+<a name="anchor-131"></a>            }
+        if(differ)
+            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST INCORRECT value read back&quot;);
+        else
+            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Correct value read back&quot;);
+<a name="anchor-132"></a>        break;
+    }
+    err = ProExtdataFree(&amp;data);
+    TEST_CALL_REPORT(&quot;ProExtdataFree()&quot;, &quot;ProTestWrCheck()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+<a name="anchor-133"></a>
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-134"></a>  Function : ProTestRandom
+  Purpose  : Random data access to data slots
+\*====================================================================*/
+int ProTestRandom(
+	ProMdl p_model)
+<a name="anchor-135"></a>{
+    ProName          class_name;
+    ProExtdataErr    err;
+    ProExtdataClass  data_class;
+    int              data_size;
+<a name="anchor-136"></a>
+/*-------------------------------------------------------------*\
+    Get the new class name
+\*-------------------------------------------------------------*/
+    ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Enter class name [QUIT] : &quot;);
+<a name="anchor-137"></a>    if(ProMessageStringRead(PRO_NAME_SIZE, class_name))
+        return(PRO_TK_BAD_INPUTS);
+ 
+/*-------------------------------------------------------------*\
+    Register it
+<a name="anchor-138"></a>\*-------------------------------------------------------------*/
+    err = ProExtdataClassRegister(p_model, class_name, &amp;data_class);
+    
+    TEST_CALL_REPORT(&quot;ProExtdataClassRegister()&quot;, &quot;ProTestRandom( )&quot;,
+                                (ProError)err, (ProError)err != PRO_TK_NO_ERROR);
+<a name="anchor-139"></a>
+    if(err != PROEXTDATA_TK_NO_ERROR)
+    {
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataClassRegister() %0s&quot;,
+                                        ProTestProAppdataErr(err));
+<a name="anchor-140"></a>        return(PRO_TK_GENERAL_ERROR);
+    }
+ 
+/*-------------------------------------------------------------*\
+    Get how many bytes of data to generate
+<a name="anchor-141"></a>\*-------------------------------------------------------------*/
+    ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Enter number of bytes to save [QUIT] : &quot;);
+    if(ProMessageIntegerRead(NULL, &amp;data_size))
+        return(PRO_TK_BAD_INPUTS);
+ 
+<a name="anchor-142"></a>/*-------------------------------------------------------------*\
+    Generate and save the data
+\*-------------------------------------------------------------*/
+    /* create func to replace user_save_random_data() .*/
+
+<a name="anchor-143"></a>    ProTestSvRdmData(&amp;data_class, data_size); 
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-144"></a>  Function : ProTestDump
+  Purpose  : Dump all the generic data to a file
+\*====================================================================*/
+int ProTestDump(
+	ProMdl p_model)
+<a name="anchor-145"></a>{
+    FILE 		*fp;
+    char 		fname[40], tmp_str[PRO_NAME_SIZE];
+    wchar_t 		w_fname[40];
+    ProExtdataNamesList	class_name_list;
+<a name="anchor-146"></a>    ProExtdataNamesList	slot_name_list;
+    ProExtdataIdsList	slot_id_list;
+    ProExtdataErr	err;
+    int			num_of_class, num_of_slots, c, s, b, keyby;
+    int			data_type, data_size;
+<a name="anchor-147"></a>    void 		*data;
+    char 		str[256];
+    ProExtdataClass	data_class;
+    ProExtdataSlot	data_slot;
+    unsigned char 	*stream;
+<a name="anchor-148"></a>
+    fp = ProUtilGenFilePtr(p_model, (char*)GENERIC, (char*)fname, (char*)&quot;w&quot;);
+
+
+    err=ProExtdataClassNamesList(p_model, &amp;num_of_class, &amp;class_name_list);
+<a name="anchor-149"></a> 
+    TEST_CALL_REPORT(&quot;ProExtdataClassNamesList()&quot;, &quot;ProTestDump()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+
+    if (err != PROEXTDATA_TK_NO_ERROR )
+<a name="anchor-150"></a>    {
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataClassNamesList() status : %0s&quot;,
+                                                ProTestProAppdataErr(err));
+ 
+        return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-151"></a>    } 
+
+    if(num_of_class &lt; 1)
+    {
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST No generic data present&quot;);
+<a name="anchor-152"></a>        return(PRO_TK_GENERAL_ERROR);
+    }
+    data_class.p_model = p_model;
+    for(c=0;c&lt;num_of_class;c++)
+    {
+<a name="anchor-153"></a>        ProWstringToString(tmp_str, class_name_list[c]);
+        ProTKFprintf(fp,&quot;CLASS %s\n&quot;, tmp_str);
+        ProUtilWstrcpy(data_class.class_name, class_name_list[c]);
+
+        err = ProExtdataSlotNamesList(&amp;data_class, &amp;num_of_slots, 
+<a name="anchor-154"></a>						&amp;slot_name_list);
+ 
+        TEST_CALL_REPORT(&quot;ProExtdataSlotNamesList()&quot;, &quot;ProTestDump()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+
+<a name="anchor-155"></a>        if(num_of_slots &lt;1)
+        {
+           ProTKFprintf(fp,&quot;    (NO SLOTS)\n&quot;);
+            continue;
+        }
+<a name="anchor-156"></a>
+        err = ProExtdataSlotIdsList(&amp;data_class, &amp;num_of_slots, &amp;slot_id_list);
+        
+        TEST_CALL_REPORT(&quot;ProExtdataSlotIdsList()&quot;, &quot;ProTestDump()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+<a name="anchor-157"></a>
+        data_slot.p_class = &amp;data_class;
+        
+        ProTKFprintf(fp,&quot;    SLOTS..\n&quot;);
+        for(s=0;s&lt;num_of_slots;s++)
+<a name="anchor-158"></a>        {
+            ProTKFprintf(fp,&quot;    %d :\n&quot;,slot_id_list[s]);
+            data_slot.slot_id = slot_id_list[s];
+  	    ProUtilWstrcpy(data_slot.slot_name, slot_name_list[s]);
+
+<a name="anchor-159"></a>            keyby = KEY_BY_NAME;
+            ProWstringToString(tmp_str, slot_name_list[s]);
+            if(strlen(tmp_str) == 0 ||
+               isdigit(tmp_str[0]))
+                keyby = KEY_BY_ID;
+<a name="anchor-160"></a> 
+            err = ProExtdataSlotRead(&amp;data_slot, keyby, &amp;data_type, 
+						&amp;data_size, &amp;data);
+
+            TEST_CALL_REPORT(&quot;ProExtdataSlotRead()&quot;, &quot;ProTestDump()&quot;,
+<a name="anchor-161"></a>                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+
+            if(err != PROEXTDATA_TK_NO_ERROR)
+            {
+                ProTKFprintf(fp,&quot;        NO VALUE READ\n&quot;);
+<a name="anchor-162"></a>                continue;
+            }
+
+            switch(data_type)
+            {
+<a name="anchor-163"></a>            case PRO_INTEGER_TYPE :
+                ProTKFprintf(fp,&quot;        INTEGER = %d\n&quot;,*(int*)data);
+                break;
+            case PRO_DOUBLE_TYPE :
+                ProTKFprintf(fp,&quot;        DOUBLE  = %f\n&quot;,*(double*)data);
+<a name="anchor-164"></a>                break;
+            case PRO_WIDE_STRING_TYPE :
+                ProTKFprintf(fp,&quot;        STRING  = %s\n&quot;,
+                        ProWstringToString(str,(wchar_t*)data));
+                break;
+<a name="anchor-165"></a>            case PRO_STREAM_TYPE :
+                stream = (unsigned char *)data;
+                ProTKFprintf(fp,&quot;        STREAM  = &quot;);
+                for(b=0;b&lt;data_size;b++)
+                {
+<a name="anchor-166"></a>                    ProTKFprintf(fp,&quot;%02x&quot;,stream[b]);
+                    if((b+1)%100 == 0)
+                        ProTKFprintf(fp,&quot;\n             &quot;);
+                }
+                ProTKFprintf(fp,&quot;\n&quot;);
+<a name="anchor-167"></a>                break;
+            }
+    	    err = ProExtdataFree(&amp;data);
+    	    TEST_CALL_REPORT(&quot;ProExtdataFree()&quot;, &quot;ProTestDump()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+<a name="anchor-168"></a>
+        }
+    }
+    fclose(fp);
+
+<a name="anchor-169"></a>    ProArrayFree((ProArray *)&amp;class_name_list);
+    ProArrayFree((ProArray *)&amp;slot_name_list);
+    ProArrayFree((ProArray *)&amp;slot_id_list);
+    
+    ProStringToWstring(w_fname, fname);
+<a name="anchor-170"></a>    ProInfoWindowDisplay(w_fname, NULL, NULL);
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-171"></a>  Function : ProTestDeleteC
+  Purpose  : Delete the selected class
+\*====================================================================*/
+int ProTestDeleteC(
+	ProMdl p_model)
+<a name="anchor-172"></a>{
+    ProExtdataClass     data_class;
+    ProExtdataErr       err;
+
+    if(!ProTestSelectClass(p_model, &amp;data_class))
+<a name="anchor-173"></a>        return(PRO_TK_BAD_INPUTS);
+
+    err = ProExtdataClassUnregister(&amp;data_class);
+    TEST_CALL_REPORT(&quot;ProExtdataClassUnregister()&quot;, &quot;ProTestDeleteC()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+<a name="anchor-174"></a>
+    if(err != PROEXTDATA_TK_NO_ERROR)
+    {
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataClassUnregister() status : %0s&quot;,
+                                        ProTestProAppdataErr(err));
+<a name="anchor-175"></a>        return(PRO_TK_GENERAL_ERROR);
+    }
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-176"></a>
+
+/*====================================================================*\
+  Function : ProTestDelete
+  Purpose  : Delete the selected slot
+<a name="anchor-177"></a>\*====================================================================*/
+int ProTestDelete(
+        ProMdl p_model)
+{
+    ProExtdataClass     data_class;
+<a name="anchor-178"></a>    ProExtdataSlot      data_slot;
+    int			keyby;
+    ProExtdataErr       err;
+
+    if(!ProTestSelectClass(p_model, &amp;data_class))
+<a name="anchor-179"></a>        return(PRO_TK_BAD_INPUTS);
+ 
+    if(!ProTestSelectSlot(&amp;data_class, &amp;keyby, &amp;data_slot))
+        return(PRO_TK_BAD_INPUTS);
+ 
+<a name="anchor-180"></a>    err = ProExtdataSlotDelete(&amp;data_slot, keyby);
+
+    TEST_CALL_REPORT(&quot;ProExtdataSlotDelete()&quot;, &quot;ProTestDelete()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+
+<a name="anchor-181"></a>    if(err != PROEXTDATA_TK_NO_ERROR)
+    {
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataSlotDelete() status : %0s&quot;,
+                                        ProTestProAppdataErr(err));
+        return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-182"></a>    }
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-183"></a>/*====================================================================*\
+  Function : ProTestRefresh
+  Purpose  : Reload the generic data from the file.
+\*====================================================================*/
+int ProTestRefresh(
+<a name="anchor-184"></a> 	ProMdl p_model)	
+{
+    ProExtdataErr err;
+
+    err = ProExtdataTerm(p_model);
+<a name="anchor-185"></a>
+    TEST_CALL_REPORT(&quot;ProExtdataTerm()&quot;, &quot;ProTestRefresh()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+    
+    if(err != PROEXTDATA_TK_NO_ERROR)
+<a name="anchor-186"></a>    {
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataTerm() status : %0s&quot;,
+                                        ProTestProAppdataErr(err));
+        return(PRO_TK_GENERAL_ERROR);
+    }
+<a name="anchor-187"></a>   
+    err = ProExtdataInit(p_model);
+
+    TEST_CALL_REPORT(&quot;ProExtdataInit()&quot;, &quot;ProTestRefresh()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+<a name="anchor-188"></a>
+    if(err != PROEXTDATA_TK_NO_ERROR)
+    {
+        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataInit() status : %0s&quot;,
+                                        ProTestProAppdataErr(err));
+<a name="anchor-189"></a>        return(PRO_TK_GENERAL_ERROR);
+    }
+
+    err = ProExtdataLoadAll(p_model);
+
+<a name="anchor-190"></a>    TEST_CALL_REPORT(&quot;ProExtdataLoadAll()&quot;, &quot;ProTestRefresh()&quot;,
+                                (ProError)err, err != PROEXTDATA_TK_NO_ERROR);
+ 
+    if(err != PROEXTDATA_TK_NO_ERROR)
+    {
+<a name="anchor-191"></a>        ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataLoadAll() status : %0s&quot;,
+                                        ProTestProAppdataErr(err));
+        return(PRO_TK_GENERAL_ERROR);
+    }
+
+<a name="anchor-192"></a>    return(PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

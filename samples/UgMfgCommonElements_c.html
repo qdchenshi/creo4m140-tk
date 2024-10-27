@@ -1,0 +1,490 @@
+<html>
+<head>
+<title>UgMfgCommonElements.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkitErrors.h>
+#include &lt;ProSelection.h>
+#include &lt;ProElement.h>
+#include &lt;ProMfg.h>
+<a name="anchor-2"></a>#include &lt;ProMfgOptions.h>
+#include &lt;ProUtil.h>
+#include &lt;ProTKRunTime.h>
+
+#include &lt;TestError.h>
+<a name="anchor-3"></a>#include &lt;UtilString.h>
+#include &lt;TestConsts.h>
+#include &lt;UgMfg.h>
+
+
+<a name="anchor-4"></a>
+/*====================================================================*\
+FUNCTION : UserMfgParamSet
+PURPOSE  : Set mfg parameter element 
+\*====================================================================*/
+<a name="anchor-5"></a>ProError UserMfgParamSet( 
+/*--------------------------------------------------------------------*/
+char			*param_name,
+ProValueDataType	data_type,
+ProValueData		*in_value_data,
+<a name="anchor-6"></a>ProMfgParamAttr		param_attr,
+ProElement		param_elem
+
+)
+/*--------------------------------------------------------------------*/
+<a name="anchor-7"></a>{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+ ProValue		value;
+<a name="anchor-8"></a> int			ii = 0, table_size = 0;
+ ProName		wparam_name;
+ static ElemTable	elem_table[] = 
+ {
+   { PRO_E_MFG_PRM_NAME,     PRO_VALUE_TYPE_WSTRING },
+<a name="anchor-9"></a>   { PRO_E_MFG_PRM_ATTR,     PRO_VALUE_TYPE_INT     },
+   { PRO_E_MFG_PRM_VAL_DBL,  PRO_VALUE_TYPE_DOUBLE  },
+   { PRO_E_MFG_PRM_VAL_STR,  PRO_VALUE_TYPE_WSTRING }
+ };
+
+<a name="anchor-10"></a> table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+ if ( data_type != PRO_VALUE_TYPE_DOUBLE &amp;&amp;
+      data_type != PRO_VALUE_TYPE_WSTRING )
+ {
+<a name="anchor-11"></a>   return ( PRO_TK_BAD_INPUTS );
+ }
+
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+<a name="anchor-12"></a>   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserMfgParamSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( elem_table[ii].elem_type )
+   {
+<a name="anchor-13"></a>     case PRO_E_MFG_PRM_NAME:
+        ProStringToWstring( wparam_name, param_name );
+
+		err = ProElementWstringSet(element, wparam_name);
+			  ERROR_CHECK( &quot;UserMfgParamSet&quot;, &quot;ProElementWstringSet()&quot;, err );
+<a name="anchor-14"></a>        break;
+
+     case PRO_E_MFG_PRM_ATTR:
+		err = ProElementIntegerSet (element, param_attr);
+		ERROR_CHECK( &quot;UserWorkcellCreate&quot;,&quot;ProElementIntegerSet()&quot;, err );
+<a name="anchor-15"></a>        break;
+
+     case PRO_E_MFG_PRM_VAL_DBL:
+        if ( data_type == PRO_VALUE_TYPE_DOUBLE )
+		{
+<a name="anchor-16"></a>			err = ProElementDoubleSet (element, in_value_data->v.d);
+			ERROR_CHECK( &quot;UserWorkcellCreate&quot;,&quot;ProElementDoubleSet()&quot;, err );
+		}
+
+        else
+<a name="anchor-17"></a>		{
+		  	err = ProElementDoubleSet (element, (double) 0.0);
+			ERROR_CHECK( &quot;UserWorkcellCreate&quot;,&quot;ProElementDoubleSet()&quot;, err );
+		}
+        break;
+<a name="anchor-18"></a>
+     case PRO_E_MFG_PRM_VAL_STR:
+          if ( data_type == PRO_VALUE_TYPE_WSTRING )
+          {
+            if ( in_value_data->v.w != NULL )
+<a name="anchor-19"></a>            {
+			  err = ProElementWstringSet(element, in_value_data->v.w);
+			  ERROR_CHECK( &quot;UserMfgParamSet&quot;, &quot;ProElementWstringSet()&quot;, err );
+            }
+          }		  
+<a name="anchor-20"></a>        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+<a name="anchor-21"></a>        ERROR_CHECK( &quot;UserMfgParamSet&quot;,&quot;UserMfgParamSet()&quot;, err );
+        break;
+   }
+
+   err = ProElemtreeElementAdd( param_elem, NULL, element );
+<a name="anchor-22"></a>   ERROR_CHECK( &quot;UserMfgParamSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+ return ( err );
+}
+<a name="anchor-23"></a>
+/*====================================================================*\
+FUNCTION : UserMfgParamArrSet
+PURPOSE  : Set parameter array element
+\*====================================================================*/
+<a name="anchor-24"></a>ProError UserMfgParamArrSet( 
+/*--------------------------------------------------------------------*/
+MfgPrmDblValue	dbl_params[],
+int		n_dbl_params,
+MfgPrmStrValue	str_params[],
+<a name="anchor-25"></a>int		n_str_params,
+ProElement	params_elem
+
+)
+/*--------------------------------------------------------------------*/
+<a name="anchor-26"></a>{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+ ProValue		value;
+<a name="anchor-27"></a> int			ii = 0;
+
+ /**********************************/
+ /* PARAMETERS WITH DOUBLE VALUES  */
+ /**********************************/
+<a name="anchor-28"></a> for ( ii = 0; ii &lt; n_dbl_params; ii++ )
+ {
+   err = ProElementAlloc( PRO_E_MFG_PARAM_COMPOUND, &amp;element );
+   ERROR_CHECK( &quot;UserMfgParamArrSet&quot;, &quot;ProElementAlloc&quot;, err );
+
+<a name="anchor-29"></a>   value_data.v.d = dbl_params[ii].dbl_val;
+
+   err = UserMfgParamSet( dbl_params[ii].param_name, 
+                          PRO_VALUE_TYPE_DOUBLE,
+                          &amp;value_data, 
+<a name="anchor-30"></a>                          PRO_MFG_PRM_ATTR_MODIFIED,
+                          element );
+
+   ERROR_CHECK( &quot;UserMfgParamArrSet&quot;,&quot;UserMfgParamSet&quot;, err );
+
+<a name="anchor-31"></a>   err = ProElemtreeElementAdd( params_elem, NULL, element );
+   ERROR_CHECK( &quot;UserMfgParamArrSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+ /**********************************/
+<a name="anchor-32"></a> /* PARAMETERS WITH STRING VALUES  */
+ /**********************************/
+ value_data.v.w = (wchar_t*) malloc( sizeof(ProLine) );
+
+ for ( ii = 0; ii &lt; n_str_params; ii++ )
+<a name="anchor-33"></a> {
+   err = ProElementAlloc( PRO_E_MFG_PARAM_COMPOUND, &amp;element );
+   ERROR_CHECK( &quot;UserMfgParamArrSet&quot;, &quot;ProElementAlloc&quot;, err );
+
+   if ( value_data.v.w != NULL )
+<a name="anchor-34"></a>   {
+     err = ProWstringCopy( str_params[ii].str_val, value_data.v.w,
+                           PRO_VALUE_UNUSED );
+     ERROR_CHECK( &quot;UserMfgParamArrSet&quot;,&quot;ProWstringCopy()&quot;, err );
+   }
+<a name="anchor-35"></a>
+   err = UserMfgParamSet( str_params[ii].param_name, 
+                          PRO_VALUE_TYPE_WSTRING,
+                          &amp;value_data, 
+                          PRO_MFG_PRM_ATTR_MODIFIED,
+<a name="anchor-36"></a>                          element );
+
+   ERROR_CHECK( &quot;UserMfgParamArrSet&quot;,&quot;UserMfgParamSet&quot;, err );
+
+   err = ProElemtreeElementAdd( params_elem, NULL, element );
+<a name="anchor-37"></a>   ERROR_CHECK( &quot;UserMfgParamArrSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+ free( value_data.v.w );
+
+<a name="anchor-38"></a> return ( err );
+}
+
+/*====================================================================*\
+FUNCTION : UserToolCompoundSet
+<a name="anchor-39"></a>PURPOSE  : Set tool reference element
+\*====================================================================*/
+ProError UserToolCompoundSet( 
+/*--------------------------------------------------------------------*/
+int		head_number,
+<a name="anchor-40"></a>int		pocket_number,
+wchar_t		*tool_name,
+ProElement	tool_ref_elem
+
+)
+<a name="anchor-41"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+<a name="anchor-42"></a> ProValue		value;
+ int			ii = 0, table_size = 0;
+ static ElemTable	elem_table[] = 
+ {
+   { PRO_E_MFG_TOOL_REF_HEAD_NUM, PRO_VALUE_TYPE_INT     },
+<a name="anchor-43"></a>   { PRO_E_MFG_TOOL_REF_POCKET,   PRO_VALUE_TYPE_INT     },
+   { PRO_E_MFG_TOOL_REF_ID,       PRO_VALUE_TYPE_WSTRING }
+ };
+
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+<a name="anchor-44"></a>
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserToolCompoundSet&quot;,&quot;ProElementAlloc()&quot;, err );
+<a name="anchor-45"></a>
+   switch ( elem_table[ii].elem_type )
+   {
+     case PRO_E_MFG_TOOL_REF_HEAD_NUM:
+		err = ProElementIntegerSet(element, head_number);
+<a name="anchor-46"></a>		ERROR_CHECK( &quot;UserToolCompoundSet&quot;, &quot;ProElementIntegerSet()&quot;, err );
+        break;
+
+     case PRO_E_MFG_TOOL_REF_POCKET:
+		err = ProElementIntegerSet(element, pocket_number);
+<a name="anchor-47"></a>		ERROR_CHECK( &quot;UserToolCompoundSet&quot;, &quot;ProElementIntegerSet()&quot;, err );
+        break;
+
+     case PRO_E_MFG_TOOL_REF_ID:
+		err = ProElementWstringSet(element, tool_name);
+<a name="anchor-48"></a>		ERROR_CHECK( &quot;UserToolCompoundSet&quot;, &quot;ProElementWstringSet()&quot;, err );
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-49"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserToolCompoundSet&quot;,&quot;UserToolCompoundSet()&quot;, err );
+        break;
+   }
+
+<a name="anchor-50"></a>   err = ProElemtreeElementAdd( tool_ref_elem, NULL, element );
+   ERROR_CHECK( &quot;UserToolCompoundSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+ return ( err );
+<a name="anchor-51"></a>}
+
+/*====================================================================*\
+FUNCTION : UserPlaneRetractSet
+PURPOSE  : Set retract element for plane retract
+<a name="anchor-52"></a>\*====================================================================*/
+ProError UserPlaneRetractSet( 
+/*--------------------------------------------------------------------*/
+ProSelection	retract_plane,
+ProElement	retract_elem
+<a name="anchor-53"></a>
+)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+<a name="anchor-54"></a> ProElement		element;
+ ProValueData		value_data;
+ ProValue		value;
+ ProSelection		selection;
+ ProReference		reference;
+<a name="anchor-55"></a> int			ii = 0, table_size = 0;
+ static ElemTable	retract_elem_table[] = 
+ {
+   { PRO_E_RETR_SURF_TYPE,     PRO_VALUE_TYPE_INT       },
+   { PRO_E_RETR_SURF_REF,      PRO_VALUE_TYPE_SELECTION }
+<a name="anchor-56"></a> };
+
+ table_size = sizeof( retract_elem_table ) / sizeof( ElemTable );
+
+ for ( ii = 0; ii &lt; table_size; ii++ )
+<a name="anchor-57"></a> {
+   err = ProElementAlloc( retract_elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserPlaneRetractSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( retract_elem_table[ii].elem_type )
+<a name="anchor-58"></a>   {
+     case PRO_E_RETR_SURF_TYPE:
+        break;
+
+     case PRO_E_RETR_SURF_REF:
+<a name="anchor-59"></a>        selection = retract_plane;
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-60"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserPlaneRetractSet&quot;,&quot;UserPlaneRetractSet()&quot;, err );
+        break;
+   }
+
+<a name="anchor-61"></a>   if ( retract_elem_table[ii].val_type != PRO_VALUE_TYPE_SELECTION )
+   {
+
+
+
+<a name="anchor-62"></a>     err = ProElementIntegerSet(element,PRO_RETR_SURF_PLANE);
+     ERROR_CHECK( &quot;UserPlaneRetractSet&quot;, &quot;ProElementIntegerSet()&quot;, err );
+   }
+   else if ( retract_elem_table[ii].val_type == PRO_VALUE_TYPE_SELECTION )
+   {
+<a name="anchor-63"></a>     err = ProSelectionToReference( selection, &amp;reference );
+     ERROR_CHECK( &quot;UserPlaneRetractSet()&quot;, &quot;ProSelectionToReference&quot;, err );
+
+     err = ProElementReferenceSet( element, reference );
+     ERROR_CHECK( &quot;UserPlaneRetractSet()&quot;, &quot;ProElementReferenceSet&quot;, err );
+<a name="anchor-64"></a>   }
+
+   err = ProElemtreeElementAdd( retract_elem, NULL, element );
+   ERROR_CHECK( &quot;UserPlaneRetractSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+<a name="anchor-65"></a>
+ return ( err );
+}
+
+/*====================================================================*\
+<a name="anchor-66"></a>Function : UserNcSeqTreeCommonElementsAdd
+Purpose  : Add commont nc sequence elements to element tree
+             - feature type;
+             - sequence type;
+             - feature name;
+<a name="anchor-67"></a>             - sequence type;
+             - operation reference;
+             - csys reference;
+             - tool reference;  
+             - mfg parameters;
+<a name="anchor-68"></a>\*====================================================================*/
+ProError UserNcSeqTreeCommonElementsAdd (
+/*--------------------------------------------------------------------*/
+ProMfg		   mfg_model,
+int		   feat_type,
+<a name="anchor-69"></a>ProNcseqType	   ncseq_type,
+ProName		   feat_name,
+ProSelection	   operation,
+ProSelection	   retract_plane, /* can be NULL for turning sequences */
+ProSelection	   seq_csys,
+<a name="anchor-70"></a>ProMfgToolHeadType head_num,
+int		   pocket_num,
+wchar_t		   *tool_name,
+MfgPrmDblValue     dbl_params[],
+int		   n_dbl_params,
+<a name="anchor-71"></a>MfgPrmStrValue     str_params[],
+int		   n_str_params,
+ProElement	   elem_tree
+
+)
+<a name="anchor-72"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element;
+ ProValueData		value_data;
+<a name="anchor-73"></a> ProValue		value = NULL;
+ ProSelection		selection;
+ ProReference		reference = NULL;
+ int            	ii = 0, size = 0;
+ static ElemTable	common_elements[] =  
+<a name="anchor-74"></a> {
+   { PRO_E_FEATURE_TYPE,          PRO_VALUE_TYPE_INT       },
+   { PRO_E_STD_FEATURE_NAME,      PRO_VALUE_TYPE_WSTRING   },
+   { PRO_E_NCSEQ_TYPE,            PRO_VALUE_TYPE_INT       },
+   { PRO_E_MFG_OPER_REF,          PRO_VALUE_TYPE_SELECTION },
+<a name="anchor-75"></a>   { PRO_E_NCSEQ_CSYS,            PRO_VALUE_TYPE_SELECTION },
+   { PRO_E_RETR_SURF,             COMPOUND                 },
+   { PRO_E_MFG_TOOL_REF_COMPOUND, COMPOUND                 },
+   { PRO_E_MFG_PARAM_ARR,         ARRAY                    }
+ };
+<a name="anchor-76"></a>		
+ size = sizeof( common_elements ) / sizeof( ElemTable );
+
+ for ( ii = 0 ; ii &lt; size; ii++ )
+ {
+<a name="anchor-77"></a>   err = ProElementAlloc( common_elements[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserNcSeqTreeCommonElementsAdd&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( common_elements[ii].elem_type )
+   {
+<a name="anchor-78"></a>     case PRO_E_FEATURE_TYPE :
+		err = ProElementIntegerSet( element, feat_type );
+		ERROR_CHECK( &quot;UserNcSeqTreeCommonElementsAdd()&quot;, 
+					&quot;ProElementIntegerSet&quot;, err );
+        break;
+<a name="anchor-79"></a>
+     case PRO_E_STD_FEATURE_NAME:
+		err = ProElementWstringSet( element, feat_name );
+		ERROR_CHECK( &quot;UserNcSeqTreeCommonElementsAdd()&quot;, 
+					&quot;ProElementWstringSet&quot;, err );
+<a name="anchor-80"></a>        break;
+
+     case PRO_E_NCSEQ_TYPE :
+		err = ProElementIntegerSet( element, ncseq_type );
+		ERROR_CHECK( &quot;UserNcSeqTreeCommonElementsAdd()&quot;, 
+<a name="anchor-81"></a>					&quot;ProElementIntegerSet&quot;, err );
+        break;
+
+     case PRO_E_MFG_OPER_REF :
+        selection = operation;
+<a name="anchor-82"></a>        break;
+
+     case PRO_E_NCSEQ_CSYS:
+        selection = seq_csys;
+        break;
+<a name="anchor-83"></a>
+     case PRO_E_RETR_SURF :
+        if ( retract_plane == NULL )  /* allowed for turning sequences */
+        {
+          err = ProElementFree( &amp;element );
+<a name="anchor-84"></a>          continue;
+        }
+        else
+        {
+          err = UserPlaneRetractSet( retract_plane, element );
+<a name="anchor-85"></a>          ERROR_CHECK( &quot;UserNcSeqTreeCommonElementsAdd&quot;, 
+                       &quot;UserPlaneRetractSet()&quot;, err );
+        }
+        break;
+
+<a name="anchor-86"></a>     case PRO_E_MFG_TOOL_REF_COMPOUND:
+        if ( tool_name == NULL )  /* allowed for manual cycle sequence */
+        {
+          err = ProElementFree( &amp;element );
+          continue;
+<a name="anchor-87"></a>        }
+        else
+        {
+          err = UserToolCompoundSet( head_num, pocket_num, tool_name, 
+                                     element );
+<a name="anchor-88"></a>          ERROR_CHECK( &quot;UserNcSeqTreeCommonElementsAdd&quot;, 
+                       &quot;UserToolCompoundSet()&quot;, err );
+        }
+        break;
+
+<a name="anchor-89"></a>     case PRO_E_MFG_PARAM_ARR:
+        err = UserMfgParamArrSet( dbl_params, n_dbl_params,
+                                  str_params, n_str_params,
+                                  element );
+        ERROR_CHECK( &quot;UserNcSeqTreeCommonElementsAdd&quot;, &quot;UserMfgParamArrSet()&quot;, 
+<a name="anchor-90"></a>                     err );
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-91"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserNcSeqTreeCommonElementsAdd&quot;,
+                     &quot;UserNcSeqTreeCommonElementsAdd()&quot;, err );
+        break;
+   }
+<a name="anchor-92"></a>	
+   if ( common_elements[ii].val_type == PRO_VALUE_TYPE_SELECTION )
+   {
+     err = ProSelectionToReference( selection, &amp;reference );
+     ERROR_CHECK( &quot;UserNcSeqTreeCommonElementsAdd()&quot;, 
+<a name="anchor-93"></a>                  &quot;ProSelectionToReference&quot;, err );
+
+     err = ProElementReferenceSet( element, reference );
+     ERROR_CHECK( &quot;UserNcSeqTreeCommonElementsAdd()&quot;, 
+                  &quot;ProElementReferenceSet&quot;, err );
+<a name="anchor-94"></a>   }
+
+   /*--------------------------------------------------------------------*\
+        Add the element to elem tree
+   \*--------------------------------------------------------------------*/
+<a name="anchor-95"></a>   err = ProElemtreeElementAdd( elem_tree, NULL, element );
+   ERROR_CHECK( &quot;UserNcSeqTreeCommonElementsAdd&quot;, &quot;ProElemtreeElementAdd()&quot;, 
+                err );
+ }
+
+<a name="anchor-96"></a> return ( (int)err );
+}
+</pre>
+</body>
+</html>

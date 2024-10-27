@@ -1,0 +1,273 @@
+<html>
+<head>
+<title>UgDtlsymdefExamples.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProDtlsymdef.h>
+
+int UsrSymdefLineAdd();
+int UsrSymdefNoteAdd();
+<a name="anchor-2"></a> 
+/*====================================================================*\ 
+FUNCTION : UsrBoxSymdefCreate()
+ PURPOSE  : To create a symbol definition with the specified name,
+             containing a box and a note with the specified text 
+<a name="anchor-3"></a>\*====================================================================*/ 
+int UsrBoxSymdefCreate(
+     ProDrawing drawing,
+     ProCharName name,
+     ProCharLine text)
+<a name="anchor-4"></a> {
+     ProDtlsymdefdata sdata;
+     ProPath path;
+     ProVector origin, e1, e2;
+     ProDtlsymdefattach attach;
+<a name="anchor-5"></a>     ProDtlsymdef symdef;
+     double defheight;
+     ProName w_size;
+     ProMatrix matrix;
+     int 	cur_sheet;
+<a name="anchor-6"></a>     ProError err;
+
+/*--------------------------------------------------------------------*\ 
+    Allocate symbol definition description data 
+\*--------------------------------------------------------------------*/     
+<a name="anchor-7"></a>     ProDtlsymdefdataAlloc(drawing, &amp;sdata);
+
+/*--------------------------------------------------------------------*\ 
+    Set the name of the symbol 
+\*--------------------------------------------------------------------*/     
+<a name="anchor-8"></a>     ProStringToWstring(path, name);
+     ProDtlsymdefdataPathSet(sdata, path);
+
+/*--------------------------------------------------------------------*\ 
+    Set the height type 
+<a name="anchor-9"></a>\*--------------------------------------------------------------------*/     
+     ProDtlsymdefdataHeighttypeSet(sdata, PRODTLSYMDEFHGHTTYPE_FIXED);
+
+/*--------------------------------------------------------------------*\ 
+    Set a FREE attachment at the origin of the symbol 
+<a name="anchor-10"></a>\*--------------------------------------------------------------------*/     
+     memset(origin, '\0', sizeof(ProVector));
+     ProDtlsymdefattachAlloc(PROSYMDEFATTACHTYPE_FREE, 0, 0.0,
+                 origin, &amp;attach);
+
+<a name="anchor-11"></a>     ProDtlsymdefdataAttachAdd(sdata, attach);
+     ProDtlsymdefattachFree(attach);
+
+/*--------------------------------------------------------------------*\ 
+    Create the empty symbol, and free the description 
+<a name="anchor-12"></a>\*--------------------------------------------------------------------*/     
+     if(ProDtlsymdefCreate(drawing, sdata, &amp;symdef) != PRO_TK_NO_ERROR)
+         return(0);
+
+     ProDtlsymdefdataFree(sdata);
+<a name="anchor-13"></a>
+/*--------------------------------------------------------------------*\ 
+    Calculate the default text height for the drawing 
+\*--------------------------------------------------------------------*/     
+     err = ProSolidDefaulttextheightGet ((ProSolid)drawing, &amp;defheight);
+<a name="anchor-14"></a>     err = ProDrawingCurrentSheetGet(drawing, &amp;cur_sheet);
+     err = ProDrawingSheetTrfGet(drawing, cur_sheet, w_size, matrix);
+     defheight /= matrix[0][0];
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-15"></a>    Create four lines to form a box, twice the default text height,
+     around the origin 
+\*--------------------------------------------------------------------*/ 
+     e1[0] = -defheight;
+     e1[1] = -defheight;
+<a name="anchor-16"></a>     e1[2] =   0.0;
+     e2[0] =  defheight;
+     e2[1] = -defheight;
+     e2[2] =   0.0;
+
+<a name="anchor-17"></a>     UsrSymdefLineAdd(&amp;symdef, e1, e2, PRO_COLOR_ERROR);
+     memcpy(e1, e2, sizeof(ProVector));
+     e2[1]=defheight;
+ 
+     UsrSymdefLineAdd(&amp;symdef, e1, e2, PRO_COLOR_ERROR);
+<a name="anchor-18"></a>     memcpy(e1, e2, sizeof(ProVector));
+     e2[0]=-defheight;
+
+     UsrSymdefLineAdd(&amp;symdef, e1, e2, PRO_COLOR_ERROR);
+     memcpy(e1, e2, sizeof(ProVector));
+<a name="anchor-19"></a>     e2[1]=-defheight;
+
+     UsrSymdefLineAdd(&amp;symdef, e1, e2, PRO_COLOR_ERROR);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-20"></a>    Add a note with the specified text at the origin 
+\*--------------------------------------------------------------------*/ 
+     origin[1] -=  defheight / 2.0;
+     UsrSymdefNoteAdd(&amp;symdef, text, origin);
+     
+<a name="anchor-21"></a>     return(1);
+ }
+
+/*====================================================================*\ 
+FUNCTION : UsrSymdefNoteAdd() PURPOSE  : To add a note with the specified
+<a name="anchor-22"></a> text and location to a symbol definition. 
+\*====================================================================*/ 
+int UsrSymdefNoteAdd (
+     ProDtlsymdef *symdef,
+     ProCharLine ntext,
+<a name="anchor-23"></a>     ProVector pos)
+ {
+     ProDtlnotetext text;
+     ProName font;
+     ProDtlnoteline line;
+<a name="anchor-24"></a>     ProModelitem modelitem;
+     ProName wname;
+     ProCharName name;
+     ProLine wstr;
+     ProCharLine str;
+<a name="anchor-25"></a>     ProDtlnotedata ndata;
+     ProView view;
+     ProDtlattach attach, leader;
+     ProDtlnote note;
+
+<a name="anchor-26"></a>/*--------------------------------------------------------------------*\ 
+    Allocate a text item, and set its properties 
+\*--------------------------------------------------------------------*/     
+     ProDtlnotetextAlloc(&amp;text);
+     ProDtlnotetextHeightSet(text, -1.0);
+<a name="anchor-27"></a>     ProDtlnotetextWidthSet(text, -1.0);
+     ProDtlnotetextSlantSet(text, 0.0);
+     ProDtlnotetextThicknessSet(text, 0.0);
+     
+     ProStringToWstring(font, &quot;font&quot;);
+<a name="anchor-28"></a>     ProDtlnotetextFontSet(text, font);
+     
+     ProStringToWstring(wstr, ntext);
+     ProDtlnotetextStringSet(text, wstr);
+
+<a name="anchor-29"></a>/*--------------------------------------------------------------------*\ 
+    Allocate a new text line, and add the text item to it 
+\*--------------------------------------------------------------------*/     
+     ProDtlnotelineAlloc(&amp;line);
+     ProDtlnotelineTextAdd(line, text);
+<a name="anchor-30"></a>
+/*--------------------------------------------------------------------*\ 
+    Allocate a note description, and add the line to it 
+\*--------------------------------------------------------------------*/     
+     ProDtlnotedataAlloc(symdef->owner, &amp;ndata);
+<a name="anchor-31"></a>     ProDtlnotedataLineAdd(ndata, line);
+     ProDtlnotedataJustifSet(ndata, PRO_HORZJUST_CENTER,
+                              PRO_VERTJUST_MIDDLE);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-32"></a>    Set the attachment of the note itself 
+\*--------------------------------------------------------------------*/     
+     ProDtlattachAlloc(PRO_DTLATTACHTYPE_FREE, NULL, pos, NULL, &amp;attach);
+     ProDtlnotedataAttachmentSet(ndata, attach);
+
+<a name="anchor-33"></a>/*--------------------------------------------------------------------*\ 
+    Create the note 
+\*--------------------------------------------------------------------*/     
+     ProDtlnoteCreate(symdef->owner, symdef, ndata, &amp;note);
+
+<a name="anchor-34"></a>/*--------------------------------------------------------------------*\ 
+    Free the memory for the note description 
+\*--------------------------------------------------------------------*/     
+     ProDtlnotedataFree(ndata);
+    
+<a name="anchor-35"></a>     return(1);
+ }
+
+/*====================================================================*\ 
+FUNCTION : UsrSymdefLineAdd() 
+<a name="anchor-36"></a>PURPOSE  : Utility to add a line entity to a symbol definition 
+\*====================================================================*/ 
+int UsrSymdefLineAdd(
+     ProDtlsymdef *symdef,
+     ProVector start,
+<a name="anchor-37"></a>     ProVector end,
+     ProColortype color)
+ {
+     ProDtlentity entity;
+     ProDtlentitydata edata;
+<a name="anchor-38"></a>     ProCurvedata *curve;
+     ProColor entity_color;
+
+/*--------------------------------------------------------------------*\ 
+    Allocate data for the draft entity 
+<a name="anchor-39"></a>\*--------------------------------------------------------------------*/     
+     ProDtlentitydataAlloc(symdef->owner, &amp;edata);
+
+/*--------------------------------------------------------------------*\ 
+    Allocate and initialize a curve description 
+<a name="anchor-40"></a>\*--------------------------------------------------------------------*/     
+     ProCurvedataAlloc(&amp;curve);
+     ProLinedataInit(start, end, curve);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-41"></a>    Use the curve description to set the entity data curve 
+\*--------------------------------------------------------------------*/     
+     ProDtlentitydataCurveSet(edata, curve);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-42"></a>    Set the color to the specified Pro/ENGINEER predefined color 
+\*--------------------------------------------------------------------*/     
+     entity_color.method = PRO_COLOR_METHOD_TYPE;     
+     entity_color.value.type = color;
+     ProDtlentitydataColorSet(edata, &amp;entity_color);
+<a name="anchor-43"></a>
+/*--------------------------------------------------------------------*\ 
+    Create the entity 
+\*--------------------------------------------------------------------*/     
+     ProDtlentityCreate(symdef->owner, symdef, edata, &amp;entity);
+<a name="anchor-44"></a>
+/*--------------------------------------------------------------------*\ 
+    Release the entity data memory 
+\*--------------------------------------------------------------------*/     
+     ProDtlentitydataFree(edata);
+<a name="anchor-45"></a>
+     return(1);
+ }
+
+int UsrBoxSymdefCreateWrapper ()
+<a name="anchor-46"></a>{
+  ProError err;
+  ProName input_name;
+  ProCharName name;
+  ProLine input_line;
+<a name="anchor-47"></a>  ProCharLine line;
+  ProDrawing drawing;
+  ProMdlType mdl_type;
+  ProFileName msgfil;
+
+<a name="anchor-48"></a>  ProStringToWstring (msgfil, &quot;msg_ugdrawing.txt&quot;);
+
+  err = ProMdlCurrentGet ((ProMdl*)&amp;drawing);
+  if (err != PRO_TK_NO_ERROR)
+    return (err);
+<a name="anchor-49"></a>  err = ProMdlTypeGet ((ProMdl)drawing, &amp;mdl_type);
+  if (mdl_type != PRO_MDL_DRAWING)
+    return (PRO_TK_INVALID_TYPE);
+
+  ProMessageDisplay (msgfil, &quot;USER Enter symbol definition name&quot;);
+<a name="anchor-50"></a>  err = ProMessageStringRead (PRO_NAME_SIZE, input_name);
+  if (err != PRO_TK_NO_ERROR)
+    return (err);
+  
+  ProWstringToString (name, input_name);
+<a name="anchor-51"></a>  
+  ProMessageDisplay (msgfil, &quot;USER Enter symbol definition text line&quot;);
+  err = ProMessageStringRead (PRO_LINE_SIZE, input_line);
+  if (err != PRO_TK_NO_ERROR)
+    return (err);
+<a name="anchor-52"></a>
+  ProWstringToString (line, input_line);
+  
+  return (UsrBoxSymdefCreate (drawing, name, line));
+}
+</pre>
+</body>
+</html>

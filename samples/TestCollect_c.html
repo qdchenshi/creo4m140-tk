@@ -1,0 +1,2092 @@
+<html>
+<head>
+<title>TestCollect.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------------------------------------------------------------*\
+    Headers
+\*---------------------------------------------------------------------------*/
+<a name="anchor-2"></a>#include &quot;ProToolkit.h&quot;
+#include &quot;ProEdge.h&quot;
+#include &quot;ProTool.h&quot;
+
+#include &lt;stdio.h>
+<a name="anchor-3"></a>#include &lt;string.h>
+#include &lt;math.h>
+
+#include &quot;ProMenu.h&quot;
+#include &quot;TestError.h&quot;
+<a name="anchor-4"></a>#include &quot;ProMessage.h&quot;
+#include &quot;ProUtil.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;TestCollect.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+<a name="anchor-5"></a>
+
+/*---------------------------------------------------------------------------*\
+    Macros
+\*---------------------------------------------------------------------------*/
+<a name="anchor-6"></a>
+
+/*---------------------------------------------------------------------------*\
+    Data types
+\*---------------------------------------------------------------------------*/
+<a name="anchor-7"></a>
+
+/*---------------------------------------------------------------------------*\
+    Global variables
+\*---------------------------------------------------------------------------*/
+<a name="anchor-8"></a>static wchar_t		w_msg_file[ PRO_PATH_SIZE ];
+static FILE		*fp_out = NULL;
+static struct object_type_name
+    { char *p_name; /*ProType*/int type; } object_type_name[] = 
+{
+<a name="anchor-9"></a>    { (char *)&quot;PRO_TYPE_UNUSED&quot;, 	 PRO_TYPE_UNUSED     },
+    { (char *)&quot;PRO_ASSEMBLY&quot;, 		 PRO_ASSEMBLY	     },
+    { (char *)&quot;PRO_PART&quot;, 		 PRO_PART            },
+    { (char *)&quot;PRO_FEATURE&quot;, 		 PRO_FEATURE         },
+    { (char *)&quot;PRO_DRAWING&quot;, 		 PRO_DRAWING         },
+<a name="anchor-10"></a>    { (char *)&quot;PRO_SURFACE&quot;, 		 PRO_SURFACE         },
+    { (char *)&quot;PRO_EDGE&quot;, 		 PRO_EDGE            },
+    { (char *)&quot;PRO_3DSECTION&quot;, 		 PRO_3DSECTION       },
+    { (char *)&quot;PRO_DIMENSION&quot;, 		 PRO_DIMENSION       },
+    { (char *)&quot;PRO_2DSECTION&quot;, 		 PRO_2DSECTION       },
+<a name="anchor-11"></a>    { (char *)&quot;PRO_LAYOUT&quot;, 		 PRO_LAYOUT          },
+    { (char *)&quot;PRO_AXIS&quot;,		 PRO_AXIS            },
+    { (char *)&quot;PRO_CSYS&quot;, 		 PRO_CSYS            },
+    { (char *)&quot;PRO_REF_DIMENSION&quot;, 	 PRO_REF_DIMENSION   },
+    { (char *)&quot;PRO_GTOL&quot;, 		 PRO_GTOL            },
+<a name="anchor-12"></a>    { (char *)&quot;PRO_DWGFORM&quot;, 		 PRO_DWGFORM         },
+    { (char *)&quot;PRO_SUB_ASSEMBLY&quot;, 	 PRO_SUB_ASSEMBLY    },
+    { (char *)&quot;PRO_MFG&quot;, 		 PRO_MFG             },
+    { (char *)&quot;PRO_QUILT&quot;, 		 PRO_QUILT           },
+    { (char *)&quot;PRO_CURVE&quot;, 		 PRO_CURVE	     },
+<a name="anchor-13"></a>    { (char *)&quot;PRO_POINT&quot;, 		 PRO_POINT	     },
+    { (char *)&quot;PRO_NOTE&quot;, 		 PRO_NOTE	     },
+    { (char *)&quot;PRO_IPAR_NOTE&quot;, 		 PRO_IPAR_NOTE       },
+    { (char *)&quot;PRO_EDGE_START&quot;, 	 PRO_EDGE_START      },
+    { (char *)&quot;PRO_EDGE_END&quot;, 		 PRO_EDGE_END        },
+<a name="anchor-14"></a>    { (char *)&quot;PRO_CRV_START&quot;, 		 PRO_CRV_START       },
+    { (char *)&quot;PRO_CRV_END&quot;, 		 PRO_CRV_END         },
+    { (char *)&quot;PRO_SYMBOL_INSTANCE&quot;,	PRO_SYMBOL_INSTANCE  },
+    { (char *)&quot;PRO_DRAFT_ENTITY&quot;, 	 PRO_DRAFT_ENTITY    },
+    { (char *)&quot;PRO_REPORT&quot;, 		 PRO_REPORT          },
+<a name="anchor-15"></a>    { (char *)&quot;PRO_MARKUP&quot;, 		 PRO_MARKUP          },
+    { (char *)&quot;PRO_SKETCH_ENTITY&quot;, 	 PRO_SKETCH_ENTITY   },
+    { (char *)&quot;PRO_COMP_CRV&quot;, 		 PRO_COMP_CRV        },
+    { (char *)&quot;PRO_PARAMETER&quot;, 		 PRO_PARAMETER       },
+    { (char *)&quot;PRO_DIAGRAM_WIRE&quot;, 	 PRO_DIAGRAM_WIRE    },
+<a name="anchor-16"></a>    { (char *)&quot;PRO_SIMP_REP&quot;, 		 PRO_SIMP_REP        },
+    { (char *)&quot;PRO_EXTOBJ&quot;, 		 PRO_EXTOBJ          },
+    { (char *)&quot;PRO_CONTOUR&quot;, 		 PRO_CONTOUR	     },
+    { (char *)&quot;PRO_GROUP&quot;,		 PRO_GROUP	     },
+    { (char *)&quot;PRO_FAMILY_TABLE&quot;, 	 PRO_FAMILY_TABLE    },
+<a name="anchor-17"></a>    { NULL,			 0		     }
+};
+
+
+static struct surface_type_name
+<a name="anchor-18"></a>    { char *p_name; /*ProSrftype*/int type; } surface_type_name[] = 
+{
+    { (char *)&quot;PRO_SRF_NONE&quot;,	PRO_SRF_NONE  	},
+    { (char *)&quot;PRO_SRF_PLANE&quot;,	PRO_SRF_PLANE 	},
+    { (char *)&quot;PRO_SRF_CYL&quot;,	PRO_SRF_CYL   	},
+<a name="anchor-19"></a>    { (char *)&quot;PRO_SRF_CONE&quot;,	PRO_SRF_CONE  	},
+    { (char *)&quot;PRO_SRF_TORUS&quot;,	PRO_SRF_TORUS 	},
+    { (char *)&quot;PRO_SRF_COONS&quot;,	PRO_SRF_COONS 	},
+    { (char *)&quot;PRO_SRF_SPL&quot;,	PRO_SRF_SPL   	},
+    { (char *)&quot;PRO_SRF_FIL&quot;,	PRO_SRF_FIL   	},
+<a name="anchor-20"></a>    { (char *)&quot;PRO_SRF_RUL&quot;,	PRO_SRF_RUL   	},
+    { (char *)&quot;PRO_SRF_REV&quot;,	PRO_SRF_REV   	},
+    { (char *)&quot;PRO_SRF_TABCYL&quot;,	PRO_SRF_TABCYL 	},
+    { (char *)&quot;PRO_SRF_B_SPL&quot;,	PRO_SRF_B_SPL 	},
+    { (char *)&quot;PRO_SRF_FOREIGN&quot;,PRO_SRF_FOREIGN },
+<a name="anchor-21"></a>    { (char *)&quot;PRO_SRF_CYL_SPL&quot;,PRO_SRF_CYL_SPL	},
+    { NULL,		0		}
+};
+
+
+<a name="anchor-22"></a>static struct feature_status_name
+    { char *p_name; /*ProFeatStatus*/int type; } feature_status_name[] = 
+{
+    { (char *)&quot;PRO_FEAT_INVALID&quot;,	      PRO_FEAT_INVALID	           },
+    { (char *)&quot;PRO_FEAT_ACTIVE&quot;,	      PRO_FEAT_ACTIVE              },
+<a name="anchor-23"></a>    { (char *)&quot;PRO_FEAT_INACTIVE&quot;,	      PRO_FEAT_INACTIVE            },
+    { (char *)&quot;PRO_FEAT_FAMTAB_SUPPRESSED&quot;,   PRO_FEAT_FAMTAB_SUPPRESSED   },
+    { (char *)&quot;PRO_FEAT_SIMP_REP_SUPPRESSED&quot;, PRO_FEAT_SIMP_REP_SUPPRESSED },
+    { (char *)&quot;PRO_FEAT_PROG_SUPPRESSED&quot;,     PRO_FEAT_PROG_SUPPRESSED     },
+    { (char *)&quot;PRO_FEAT_SUPPRESSED&quot;,	      PRO_FEAT_SUPPRESSED          },
+<a name="anchor-24"></a>    { (char *)&quot;PRO_FEAT_UNREGENERATED&quot;,	      PRO_FEAT_UNREGENERATED       },
+    { NULL,			      0			           }
+};
+
+
+<a name="anchor-25"></a>static struct edge_type_name
+    { char *p_name; /*ProEnttype*/int type; } edge_type_name[] = 
+{
+    { (char *)&quot;PRO_ENT_NONE&quot;,	  PRO_ENT_NONE	   },
+    { (char *)&quot;PRO_ENT_POINT&quot;,	  PRO_ENT_POINT	   },
+<a name="anchor-26"></a>    { (char *)&quot;PRO_ENT_LINE&quot;,	  PRO_ENT_LINE	   },
+    { (char *)&quot;PRO_ENT_ARC&quot;,	  PRO_ENT_ARC	   },
+    { (char *)&quot;PRO_ENT_TXT&quot;,	  PRO_ENT_TXT      },
+    { (char *)&quot;PRO_ENT_ARROW&quot;,	  PRO_ENT_ARROW    },
+    { (char *)&quot;PRO_ENT_CIRCLE&quot;,	  PRO_ENT_CIRCLE   },
+<a name="anchor-27"></a>    { (char *)&quot;PRO_ENT_SPLINE&quot;,	  PRO_ENT_SPLINE   },
+    { (char *)&quot;PRO_ENT_B_SPLINE&quot;, PRO_ENT_B_SPLINE },
+    { (char *)&quot;PRO_ENT_ELLIPSE&quot;,  PRO_ENT_ELLIPSE  },
+    { (char *)&quot;PRO_ENT_POLYGON&quot;,  PRO_ENT_POLYGON  },
+    { (char *)&quot;PRO_ENT_CMP_CRV&quot;,  PRO_ENT_CMP_CRV  },
+<a name="anchor-28"></a>    { NULL,		  0		   }
+};
+
+
+static struct tool_type_name
+<a name="anchor-29"></a>    { char *p_name; /*ProToolType*/int type; } tool_type_name[] = 
+{
+    { (char *)&quot;PRO_TOOL_NONE&quot; , PRO_TOOL_NONE },
+    { (char *)&quot;PRO_TOOL_DRILL&quot;,  PRO_TOOL_DRILL },
+    { (char *)&quot;PRO_TOOL_TURN&quot;, PRO_TOOL_TURN },
+<a name="anchor-30"></a>    { (char *)&quot;PRO_TOOL_SAW&quot; , PRO_TOOL_SAW },
+    { (char *)&quot;PRO_TOOL_MILL&quot; , PRO_TOOL_MILL },
+    { (char *)&quot;PRO_TOOL_GROOVE&quot; , PRO_TOOL_GROOVE },
+    { (char *)&quot;PRO_TOOL_NIBBLE&quot; , PRO_TOOL_NIBBLE },
+    { (char *)&quot;PRO_TOOL_PUNCH&quot;, PRO_TOOL_PUNCH },
+<a name="anchor-31"></a>    { (char *)&quot;PRO_TOOL_AUXILIARY&quot; , PRO_TOOL_AUXILIARY },
+    { (char *)&quot;PRO_TOOL_FORM&quot; , PRO_TOOL_FORM },
+    { (char *)&quot;PRO_TOOL_PUNPNT&quot; , PRO_TOOL_PUNPNT },
+    { (char *)&quot;PRO_TOOL_AREA_NIB&quot;  , PRO_TOOL_AREA_NIB },
+    { (char *)&quot;PRO_TOOL_MFG_REFINE&quot; , PRO_TOOL_MFG_REFINE },
+<a name="anchor-32"></a>    { (char *)&quot;PRO_TOOL_BORE&quot; , PRO_TOOL_BORE },
+    { (char *)&quot;PRO_TOOL_TAP&quot; , PRO_TOOL_TAP },
+    { (char *)&quot;PRO_TOOL_CSINK&quot; , PRO_TOOL_CSINK },
+    { (char *)&quot;PRO_TOOL_REAM&quot;, PRO_TOOL_REAM },
+    { (char *)&quot;PRO_TOOL_CENTER_DRL&quot; , PRO_TOOL_CENTER_DRL },
+<a name="anchor-33"></a>    { (char *)&quot;PRO_TOOL_TURN_GRV&quot; , PRO_TOOL_TURN_GRV },
+    { (char *)&quot;PRO_TOOL_MILL_THREAD&quot;, PRO_TOOL_MILL_THREAD },
+    { (char *)&quot;PRO_TOOL_TURN_THREAD&quot; , PRO_TOOL_TURN_THREAD },
+    { (char *)&quot;PRO_TOOL_SHEAR&quot; , PRO_TOOL_SHEAR },
+    { (char *)&quot;PRO_TOOL_SIDE_MILL&quot; , PRO_TOOL_SIDE_MILL },
+<a name="anchor-34"></a>    { (char *)&quot;PRO_TOOL_CMM_FIXED&quot; , PRO_TOOL_CMM_FIXED },
+    { (char *)&quot;PRO_TOOL_CMM_ROTATED&quot; , PRO_TOOL_CMM_ROTATED  },
+    { (char *)&quot;PRO_TOOL_BACK&quot;, PRO_TOOL_BACK },
+    { NULL,	0 }
+};
+<a name="anchor-35"></a>
+static struct dim_type_name
+    { char *p_name; /*ProDimensiontype*/int type; } dim_type_name[] = 
+{
+    { (char *)&quot;PRO_DIM_LIN&quot; , PRODIMTYPE_LINEAR },
+<a name="anchor-36"></a>    { (char *)&quot;PRO_DIM_RAD&quot; , PRODIMTYPE_RADIUS },
+    { (char *)&quot;PRO_DIM_DIA&quot; , PRODIMTYPE_DIAMETER },
+    { (char *)&quot;PRO_DIM_ANG&quot; , PRODIMTYPE_ANGLE },
+    { NULL,	PRODIMTYPE_UNKNOWN }
+};
+<a name="anchor-37"></a>
+/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProTestCollection()
+    Purpose:    On button function. 
+<a name="anchor-38"></a>    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+int ProTestCollection( 
+    ProAppData p_appdata,
+    int int_dummy)
+<a name="anchor-39"></a>{
+    ProError	status;
+    int		dummy;
+
+
+<a name="anchor-40"></a>    ProStringToWstring( w_msg_file, (char *)&quot;gen_msg.txt&quot; );
+
+    fp_out = PTApplsUnicodeFopen( DAT_FILE_NAME, &quot;a&quot; );
+    if( fp_out == NULL )
+    	fp_out = stderr;
+<a name="anchor-41"></a>
+    status = ProMenuFileRegister( (char *)&quot;COLLECTION&quot;, (char *)&quot;collection.mnu&quot;, &amp;dummy );
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+
+<a name="anchor-42"></a>    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Animation&quot;, 
+	(ProMenubuttonAction)ProTestCollectAnimation, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Solid Csys&quot;, 
+	(ProMenubuttonAction)ProTestCollectSolidCsys, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Solid Axis&quot;, 
+<a name="anchor-43"></a>	(ProMenubuttonAction)ProTestCollectSolidAxis, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Solid Quilts&quot;, 
+	(ProMenubuttonAction)ProTestCollectSolidQuilts, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Solid Surfaces&quot;, 
+	(ProMenubuttonAction)ProTestCollectSolidSurfaces, p_appdata, 0 );
+<a name="anchor-44"></a>    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Simp Reps&quot;, 
+	(ProMenubuttonAction)ProTestCollectSolidSimpreps, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Solid Features&quot;, 
+	(ProMenubuttonAction)ProTestCollectSolidFeatures, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Model Notes&quot;, 
+<a name="anchor-45"></a>	(ProMenubuttonAction)ProTestCollectModelNotes, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Mfg Tools&quot;, 
+	(ProMenubuttonAction)ProTestCollectMfgTools, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Feature Geomitems&quot;, 
+	(ProMenubuttonAction)ProTestCollectFeatureGeomitems, p_appdata, 0 );
+<a name="anchor-46"></a>    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Elements&quot;, 
+	(ProMenubuttonAction)ProTestCollectElemtreeElements, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Curve Comps&quot;, 
+	(ProMenubuttonAction)ProTestCollectCurveComponents, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Contours&quot;, 
+<a name="anchor-47"></a>	(ProMenubuttonAction)ProTestCollectContours, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Extobj&quot;, 
+	(ProMenubuttonAction)ProTestCollectExtobj, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Find By Name&quot;, 
+	(ProMenubuttonAction)ProTestFindByName, p_appdata, 0 );
+<a name="anchor-48"></a>    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Axis By Plane&quot;, 
+	(ProMenubuttonAction)ProTestCollectSolidAxisByPlane, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Dimensions&quot;, 
+	(ProMenubuttonAction)ProTestCollectDimensions, p_appdata, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;Done Collect&quot;, 
+<a name="anchor-49"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+    ProMenubuttonActionSet( (char *)&quot;COLLECTION&quot;, (char *)&quot;COLLECTION&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+    ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;COLLECTION&quot;, &amp;dummy );
+<a name="anchor-50"></a>    ProMenuProcess( (char *)&quot;COLLECTION&quot;, &amp;dummy );
+
+    fclose( fp_out );
+
+    return (0);
+<a name="anchor-51"></a>}
+
+
+
+/*=========================================================================*\
+<a name="anchor-52"></a>    File:	TestCollect.c
+    Function:   ProTestCollectAnimation()
+    Purpose:    On button function. 
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+<a name="anchor-53"></a>int ProTestCollectAnimation( 
+    ProAppData p_appdata,
+    int int_dummy )
+{
+    ProError	    status;
+<a name="anchor-54"></a>    ProMatrix	    m_frame_view;
+    ProMatrix	    m_transform;
+    ProAnimFrame	anim_frame;
+    ProAnimObj	anim_object;
+    ProSelection   *p_selection;
+<a name="anchor-55"></a>    int		n_selected = 0;
+    ProMdl	model;
+    ProModelitem	model_item;
+    int		i_frame;
+    int		i_obj;
+<a name="anchor-56"></a>    double	add_angle, angle;
+    ProAnimMovie	animation_movie;
+    ProAnimFrame	*p_frames;
+    int		n_frames;
+    ProAnimObj	*p_objs;
+<a name="anchor-57"></a>    int		n_objs;
+    int i, j;
+
+    for (i = 0; i &lt; 4; i++)
+    {
+<a name="anchor-58"></a>        for (j = 0; j &lt; 4; j++)
+        {
+            if (i == j)
+            {
+                m_frame_view[i][j] = 1.0;
+<a name="anchor-59"></a>                m_transform[i][j] = 1.0;
+            }
+            else
+            {
+                m_frame_view[i][j] = 0.0;
+<a name="anchor-60"></a>                m_transform[i][j] = 0.0;
+            }
+        }
+    }
+    /* Print the header */
+<a name="anchor-61"></a>    ProTKFprintf( fp_out, &quot;\n# Animation frames &amp; objects\n&quot; );
+
+    /* Select objects to animate */
+    ProMessageDisplay( w_msg_file, (char *)&quot;TEST %0s&quot;, (char *)&quot;Select objects to animate&quot; );
+    status = ProSelect( (char *)&quot;part&quot;, -1, NULL, NULL, NULL, NULL, 
+<a name="anchor-62"></a>	&amp;p_selection, &amp;n_selected );
+    if( (status != PRO_TK_NO_ERROR) || (n_selected &lt; 1) )
+	return -1;
+
+    /* Get the model item from a selection object. */
+<a name="anchor-63"></a>    status = ProSelectionModelitemGet( p_selection[0], &amp;model_item );
+    TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, &quot;ProTestCollectAnimation()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-64"></a>	/* Retrieve the model the owns the specified item. */
+	status = ProModelitemMdlGet( &amp;model_item, &amp;model );
+	TEST_CALL_REPORT( &quot;ProModelitemMdlGet()&quot;, &quot;ProTestCollectAnimation()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-65"></a>
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+
+    /* Create the anim movie */
+<a name="anchor-66"></a>    status = ProAnimmovieCreate( model, &amp;animation_movie );
+    TEST_CALL_REPORT( &quot;ProAnimmovieCreate()&quot;, &quot;ProTestCollectAnimation()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+<a name="anchor-67"></a>
+    /* Init rotate angle */
+    angle = 0.0;
+    add_angle = 360.0;
+    add_angle /= (double)FRAME_NUM;
+<a name="anchor-68"></a>
+    /* Create animation objects and add it to the frames, add frames to movie*/
+    for( i_frame=0; i_frame&lt;FRAME_NUM; i_frame++ )
+    {
+	/* Create an animation frame */
+<a name="anchor-69"></a>	status = ProAnimframeCreate( m_frame_view, &amp;anim_frame );
+    	TEST_CALL_REPORT( &quot;ProAnimframeCreate()&quot;, &quot;ProTestCollectAnimation()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+	if( status != PRO_TK_NO_ERROR )
+	    break;
+<a name="anchor-70"></a>
+	/* Add rotation to the transformation matrix */
+	angle += add_angle;
+	ProUtilXRot( angle, m_transform );
+
+<a name="anchor-71"></a>	for( i_obj=0; i_obj&lt;n_selected; i_obj++ )
+	{
+	    /* Create an animation object... */
+	    status = ProAnimobjectCreate( p_selection[i_obj], m_transform, 
+		&amp;anim_object );
+<a name="anchor-72"></a>    	    TEST_CALL_REPORT( &quot;ProAnimobjectCreate()&quot;, 
+		&quot;ProTestCollectAnimation()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-73"></a>	    {
+		/* ...and add it to the frame */
+		status = ProAnimframeObjAdd( anim_frame, anim_object );
+    	    	TEST_CALL_REPORT( &quot;ProAnimframeObjAdd()&quot;, 
+			&quot;ProTestCollectAnimation()&quot;,
+<a name="anchor-74"></a>			status, status != PRO_TK_NO_ERROR);
+	    }
+	}
+
+	status = ProAnimmovieFrameAdd( animation_movie, anim_frame );
+<a name="anchor-75"></a>	TEST_CALL_REPORT( &quot;ProAnimmovieFrameAdd()&quot;, &quot;ProTestCollectAnimation()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+    }
+
+    /* Start a batch animation process */
+<a name="anchor-76"></a>    status = ProBatchAnimationStart( animation_movie, NULL, NULL );
+    TEST_CALL_REPORT( &quot;ProBatchAnimationStart()&quot;, &quot;ProTestCollectAnimation()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+
+
+<a name="anchor-77"></a>    n_frames = 0;
+    p_frames = NULL;
+    status = ProUtilCollectAnimFrames( animation_movie, &amp;p_frames );
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-78"></a>	status = ProArraySizeGet( p_frames, &amp;n_frames );
+    	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectAnimation()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-79"></a>    ProTKFprintf( fp_out, &quot;Number of anim frames: %d\n&quot;, n_frames );
+    ProTKFprintf( fp_out, &quot;Frame #\tNumber of objs in frame\n&quot; );
+
+    /* Delete frames */
+    for( i_frame=0; i_frame&lt;n_frames; i_frame++ )
+<a name="anchor-80"></a>    {
+	n_objs = 0;
+	p_objs = NULL;
+	status = ProUtilCollectAnimObjects( p_frames[i_frame], &amp;p_objs );
+	if( status == PRO_TK_NO_ERROR )
+<a name="anchor-81"></a>	{
+	    status = ProArraySizeGet( p_objs, &amp;n_objs );
+    	    TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectAnimation()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+	}
+<a name="anchor-82"></a>	
+	/* Print the num of objs per frame */
+	ProTKFprintf( fp_out, &quot;%d\t%d\n&quot;, i_frame, n_objs );
+
+	for( i_obj=0; i_obj&lt;n_objs; i_obj++ )
+<a name="anchor-83"></a>	{
+	    status = ProAnimframeObjRemove( p_frames[i_frame], p_objs[i_obj] );
+    	    TEST_CALL_REPORT( &quot;ProAnimframeObjRemove()&quot;, 
+		&quot;ProTestCollectAnimation()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-84"></a>
+	    status = ProAnimobjectDelete( p_objs[i_obj] );
+    	    TEST_CALL_REPORT( &quot;ProAnimobjectDelete()&quot;, 
+		&quot;ProTestCollectAnimation()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-85"></a>	}
+	if( p_objs != NULL )
+	{
+	    status = ProArrayFree( (ProArray*)&amp;p_objs );
+    	    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectAnimation()&quot;,
+<a name="anchor-86"></a>		status, status != PRO_TK_NO_ERROR);
+	}
+	
+	/* Remove frame from the movie */
+	status = ProAnimmovieFrameRemove( animation_movie, p_frames[i_frame] );
+<a name="anchor-87"></a>	TEST_CALL_REPORT( &quot;ProAnimmovieFrameRemove()&quot;, 
+		&quot;ProTestCollectAnimation()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	/* Delete frame */
+<a name="anchor-88"></a>	status = ProAnimframeDelete( p_frames[i_frame] );
+	TEST_CALL_REPORT( &quot;ProAnimframeDelete()&quot;, &quot;ProTestCollectAnimation()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-89"></a>    /* Delete movie */
+    status = ProAnimmovieDelete( animation_movie );
+    TEST_CALL_REPORT( &quot;ProAnimmovieDelete()&quot;, &quot;ProTestCollectAnimation()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-90"></a>    if( p_frames != NULL )
+    {
+	status = ProArrayFree( (ProArray*)&amp;p_frames );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectAnimation()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-91"></a>    }
+
+
+    return (0);
+}
+<a name="anchor-92"></a>
+
+
+/*=========================================================================*\
+    Function:	ProUtilSelectedSurfaceGet()
+<a name="anchor-93"></a>    Purpose:	Retrieves a handle of the selected surface from 
+		the selection object.
+    Returns:	PRO_TK_NO_ERROR - The function successfully get 
+				    the surface.
+		PRO_TK_GENERAL_ERROR - Error.
+<a name="anchor-94"></a>    Note:	
+\*=========================================================================*/
+ProError ProUtilSelectedSurfaceGet( 
+    ProSelection    selection,	    /* In:  Selection object */
+    ProSurface	    *p_surface )    /* In:  Selected surface */
+<a name="anchor-95"></a>{
+    ProModelitem    model_item;
+    ProError	    status;
+
+
+<a name="anchor-96"></a>    /* Check out the input parameters */
+    if( p_surface == NULL )
+	return PRO_TK_GENERAL_ERROR;
+
+    /* Get the model item from a selection object. */
+<a name="anchor-97"></a>    status = ProSelectionModelitemGet( selection, &amp;model_item );
+    TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, 
+	&quot;ProUtilSelectedSurfaceGet()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-98"></a>    {
+	if( model_item.type == PRO_SURFACE )
+	{
+	    /* Retrieve the surface. */
+	    status = ProGeomitemToSurface( &amp;model_item, p_surface );
+<a name="anchor-99"></a>	    TEST_CALL_REPORT( &quot;ProGeomitemToSurface()&quot;, 
+	    	&quot;ProUtilSelectedSurfaceGeton()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+	    if( status == PRO_TK_NO_ERROR )
+		return PRO_TK_NO_ERROR;
+<a name="anchor-100"></a>	}
+    }
+
+
+    return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-101"></a>}
+
+
+
+/*=========================================================================*\
+<a name="anchor-102"></a>    Function:	ProUtilSelectedCurveGet()
+    Purpose:	Retrieves a handle of the selected surface from 
+		the selection object.
+    Returns:	PRO_TK_NO_ERROR - The function successfully get 
+				    the surface.
+<a name="anchor-103"></a>		PRO_TK_GENERAL_ERROR - Error.
+    Note:	
+\*=========================================================================*/
+ProError ProUtilSelectedCurveGet( 
+    ProSelection    selection,	    /* In:  Selection object */
+<a name="anchor-104"></a>    ProCurve	    *p_curve	    /* In:  Selected surface */
+)
+{
+    ProModelitem    model_item;
+    ProError	    status;
+<a name="anchor-105"></a>
+
+    /* Check out the input parameters */
+    if( p_curve == NULL )
+	return PRO_TK_GENERAL_ERROR;
+<a name="anchor-106"></a>
+    /* Get the model item from a selection object. */
+    status = ProSelectionModelitemGet( selection, &amp;model_item );
+    TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, &quot;ProUtilSelectedCurveGet()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+<a name="anchor-107"></a>    if( status == PRO_TK_NO_ERROR )
+    {
+	if( model_item.type == PRO_CURVE )
+	{
+	    /* Retrieve the curve. */
+<a name="anchor-108"></a>	    status = ProGeomitemToCurve( &amp;model_item, p_curve );
+	    TEST_CALL_REPORT( &quot;ProGeomitemToCurve()&quot;, 
+	    	&quot;ProUtilSelectedCurveGet()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+	    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-109"></a>		return PRO_TK_NO_ERROR;
+	}
+    }
+
+
+<a name="anchor-110"></a>    return (PRO_TK_GENERAL_ERROR);
+}
+
+
+/*=========================================================================*\
+<a name="anchor-111"></a>    Function:	ProUtilXRot()
+    Purpose:	Add x rotation values to the transformation matrix.
+    Returns:	None
+    Note:	Only the rotation components of the matrix are modified.
+\*=========================================================================*/
+<a name="anchor-112"></a>void ProUtilXRot( 
+    double angle,	/* (In)	    The rotation angle */
+    ProMatrix mx )	/* (Out)    The transformation matrix */
+{
+    mx[0][0] = 1.0;
+<a name="anchor-113"></a>    mx[0][1] = mx[0][2] = mx[1][0] = mx[2][0] = 0.0;
+    mx[1][1] = mx[2][2] = cos( angle * PI / 180.0);
+    mx[1][2] = sin( angle * PI / 180.0);
+    mx[2][1] = - mx[1][2];
+}
+<a name="anchor-114"></a>
+
+
+/*~~=========================================================================*\
+    File:	TestCollect.c
+<a name="anchor-115"></a>    Function:   ProTestCollectSolidCsys()
+    Purpose:    On button function. Test csys collection.
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+int ProTestCollectSolidCsys( 
+<a name="anchor-116"></a>    ProAppData p_appdata,
+    int int_dummy )
+{
+    ProError	    status;
+    ProMdl	    p_model;
+<a name="anchor-117"></a>    ProCsys	    *p_csys;
+    ProGeomitem	    geom_item;
+    ProName	    w_name;
+    ProCharName	    name;
+    int		    n;
+<a name="anchor-118"></a>    int		    i;
+
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Solid CSYS\n&quot; );
+<a name="anchor-119"></a>
+    p_model = *((ProMdl*)p_appdata);
+
+    /* Get solid csys */
+    status = ProUtilCollectSolidCsys( (ProSolid)p_model, &amp;p_csys );
+<a name="anchor-120"></a>
+    /* Print out obtained csys */
+    if( status == PRO_TK_NO_ERROR )
+    {
+	/* Get the array size */
+<a name="anchor-121"></a>	n = 0;
+	status = ProArraySizeGet( p_csys, &amp;n );
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectSolidCsys()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-122"></a>	/* Print out the csys array */
+	ProTKFprintf( fp_out, &quot;Number of solid csys:\t%d\n&quot;, n );
+	for( i=0; i&lt;n; i++ )
+	{
+	    /* Get the csys name */
+<a name="anchor-123"></a>	    status = ProCsysToGeomitem( (ProSolid)p_model, p_csys[i], &amp;geom_item );
+	    TEST_CALL_REPORT( &quot;ProCsysToGeomitem()&quot;, 
+		&quot;ProTestCollectSolidCsys()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-124"></a>	    status = ProModelitemNameGet( &amp;geom_item, w_name );
+	    TEST_CALL_REPORT( &quot;ProModelitemNameGet()&quot;, 
+		&quot;ProTestCollectSolidCsys()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-125"></a>	    ProWstringToString( name, w_name );
+
+	    ProTKFprintf( fp_out, &quot;%s\n&quot;, name );
+	}
+
+<a name="anchor-126"></a>	status = ProArrayFree( (ProArray*)&amp;p_csys );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectSolidCsys()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-127"></a>
+    return status;
+}
+
+
+<a name="anchor-128"></a>
+/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProTestCollectSolidAxis()
+    Purpose:    On button function. Test axis collection.
+<a name="anchor-129"></a>    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+int ProTestCollectSolidAxis( 
+    ProAppData p_appdata,
+    int int_dummy )
+<a name="anchor-130"></a>{
+    ProError	    status;
+    ProMdl	    p_model;
+    ProAxis	    *p_axis;
+    ProGeomitem	    geom_item;
+<a name="anchor-131"></a>    ProName	    w_name;
+    ProCharName	    name;
+    int		    n;
+    int		    i;
+
+<a name="anchor-132"></a>
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Solid axis\n&quot; );
+
+    p_model = *((ProMdl*)p_appdata);
+<a name="anchor-133"></a>
+    /* Get solid axis */
+    status = ProUtilCollectSolidAxis( (ProSolid)p_model, &amp;p_axis );
+
+    /* Print out obtained axis */
+<a name="anchor-134"></a>    if( status == PRO_TK_NO_ERROR )
+    {
+	/* Get the array size */
+	n = 0;
+	status = ProArraySizeGet( p_axis, &amp;n );
+<a name="anchor-135"></a>	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectSolidAxis()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	/* Print out the axis array */
+	ProTKFprintf( fp_out, &quot;Number of solid axis:\t%d\n&quot;, n );
+<a name="anchor-136"></a>	for( i=0; i&lt;n; i++ )
+	{
+	    /* Get the axis name */
+	    ProAxisToGeomitem( (ProSolid)p_model, p_axis[i], &amp;geom_item );
+	    ProModelitemNameGet( &amp;geom_item, w_name );
+<a name="anchor-137"></a>	    ProWstringToString( name, w_name );
+
+	    ProTKFprintf( fp_out, &quot;%s\n&quot;, name );
+	}
+
+<a name="anchor-138"></a>	status = ProArrayFree( (ProArray*)&amp;p_axis );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectSolidAxis()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-139"></a>
+    return status;
+}
+
+
+<a name="anchor-140"></a>
+/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProTestCollectSolidQuilts()
+    Purpose:    On button function. Test axis collection.
+<a name="anchor-141"></a>    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+int ProTestCollectSolidQuilts( 
+    ProAppData p_appdata,
+    int int_dummy )
+<a name="anchor-142"></a>{
+#ifndef PT_PRODUCTS_BUILD
+    ProError	    status;
+    ProMdl	    p_model;
+    ProQuilt	    *p_quilts;
+<a name="anchor-143"></a>    ProGeomitem	    geom_item;
+    ProName	    w_name;
+    ProCharName	    name;
+    int		    n;
+    int		    i;
+<a name="anchor-144"></a>
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Solid quilts\n&quot; );
+
+<a name="anchor-145"></a>    p_model = *((ProMdl*)p_appdata);
+
+    /* Get solid quilts */
+    status = ProUtilCollectSolidQuilts( (ProSolid)p_model, &amp;p_quilts );
+
+<a name="anchor-146"></a>    /* Print out obtained quilts */
+    if( status == PRO_TK_NO_ERROR )
+    {
+	/* Get the array size */
+	n = 0;
+<a name="anchor-147"></a>	status = ProArraySizeGet( p_quilts, &amp;n );
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectSolidQuilts()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	/* Print out the quilts array */
+<a name="anchor-148"></a>	ProTKFprintf( fp_out, &quot;Number of solid quilts:\t%d\n&quot;, n );
+	for( i=0; i&lt;n; i++ )
+	{
+	    /* Get the quilt name */
+	    status = ProQuiltToGeomitem( (ProSolid)p_model, p_quilts[i], &amp;geom_item );
+<a name="anchor-149"></a>	    TEST_CALL_REPORT( &quot;ProQuiltToGeomitem()&quot;, 
+		&quot;ProTestCollectSolidQuilts()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	    status = ProModelitemNameGet( &amp;geom_item, w_name );
+<a name="anchor-150"></a>	    TEST_CALL_REPORT( &quot;ProModelitemNameGet()&quot;, 
+		&quot;ProTestCollectSolidQuilts()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	    ProWstringToString( name, w_name );
+<a name="anchor-151"></a>
+	    ProTKFprintf( fp_out, &quot;%s\n&quot;, name );
+	}
+
+	status = ProArrayFree( (ProArray*)&amp;p_quilts );
+<a name="anchor-152"></a>	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectSolidQuilts()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+    }
+
+
+<a name="anchor-153"></a>    return status;
+#else
+    return PRO_TK_E_NOT_FOUND;
+#endif
+}
+<a name="anchor-154"></a>
+
+
+/*=========================================================================*\
+    File:	TestCollect.c
+<a name="anchor-155"></a>    Function:   ProTestCollectSolidSurfaces()
+    Purpose:    On button function. Test surfaces collection.
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+int ProTestCollectSolidSurfaces( 
+<a name="anchor-156"></a>    ProAppData p_appdata,
+    int int_dummy )
+{
+    ProError	    status;
+    ProMdl	    p_model;
+<a name="anchor-157"></a>    ProSurface	    *p_surfaces;
+    int		    n;
+    int		    i;
+    ProSrftype	    surf_type;
+    int		    surf_id;
+<a name="anchor-158"></a>
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Solid surfaces\n&quot; );
+
+<a name="anchor-159"></a>    p_model = *((ProMdl*)p_appdata);
+
+    /* Get solid surfaces */
+    status = ProUtilCollectSolidSurfaces( (ProSolid)p_model, &amp;p_surfaces );
+
+<a name="anchor-160"></a>    /* Print out obtained surfaces */
+    if( status == PRO_TK_NO_ERROR )
+    {
+	/* Get the array size */
+	n = 0;
+<a name="anchor-161"></a>	status = ProArraySizeGet( p_surfaces, &amp;n );
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectSolidSurfaces()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	/* Print out the surface array */
+<a name="anchor-162"></a>	ProTKFprintf( fp_out, &quot;Number of solid surfaces:\t%d\n&quot;, n );
+	for( i=0; i&lt;n; i++ )
+	{
+	    /* Get the surface ID */
+	    surf_id = -1;
+<a name="anchor-163"></a>	    status = ProSurfaceIdGet( p_surfaces[i], &amp;surf_id );
+	    TEST_CALL_REPORT( &quot;ProSurfaceIdGet()&quot;, 
+		&quot;ProTestCollectSolidSurfaces()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-164"></a>	    /* Print out surf ID */
+	    ProTKFprintf( fp_out, &quot;ID %d:\t&quot;, surf_id );
+
+	    /* Get the surface type */
+	    status = ProSurfaceTypeGet( p_surfaces[i], &amp;surf_type );
+<a name="anchor-165"></a>	    TEST_CALL_REPORT( &quot;ProSurfaceTypeGet()&quot;, 
+		&quot;ProTestCollectSolidSurfaces()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	    /* Print out surf type */
+<a name="anchor-166"></a>	    ProTKFprintf( fp_out, &quot;%s\n&quot;, ProUtilSurfaceTypeToString( surf_type ) );
+	}
+
+	status = ProArrayFree( (ProArray*)&amp;p_surfaces );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectSolidSurfaces()&quot;,
+<a name="anchor-167"></a>		status, status != PRO_TK_NO_ERROR);
+    }
+
+
+    return status;
+<a name="anchor-168"></a>}
+
+
+
+/*=========================================================================*\
+<a name="anchor-169"></a>    File:	TestCollect.c
+    Function:   ProUtilSurfaceTypeToString()
+    Purpose:    Return the string with surface type
+    Returns:	Surface type name
+\*=========================================================================*/
+<a name="anchor-170"></a>char *ProUtilSurfaceTypeToString( 
+    ProSrftype surf_type    /* In:  Surface type to convert to string */
+)
+{
+    int		i;
+<a name="anchor-171"></a>
+
+    for( i=0; surface_type_name[i].p_name != NULL; i++ )
+	if( surface_type_name[i].type == surf_type )
+	    return surface_type_name[i].p_name;
+<a name="anchor-172"></a>
+
+    return ((char *)&quot;unknown&quot;);
+}
+
+<a name="anchor-173"></a>
+
+/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProTestCollectSolidSimpreps()
+<a name="anchor-174"></a>    Purpose:    On button function. Test simpreps collection.
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+int ProTestCollectSolidSimpreps( 
+    ProAppData p_appdata,
+<a name="anchor-175"></a>    int int_dummy )
+{
+#ifndef PT_PRODUCTS_BUILD
+    ProError	    status;
+    ProMdl	    p_model;
+<a name="anchor-176"></a>    ProSimprep	    *p_simpreps;
+    ProName	    w_name;
+    ProCharName	    name;
+    ProSimprepdata  *p_simprep_data;
+    int		    n;
+<a name="anchor-177"></a>    int		    i;
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Solid simprep\n&quot; );
+
+<a name="anchor-178"></a>    p_model = *((ProMdl*)p_appdata);
+
+    /* Get solid simp reps */
+    status = ProUtilCollectSolidSimpreps( (ProSolid)p_model, &amp;p_simpreps );
+
+<a name="anchor-179"></a>    /* Print out obtained simp reps */
+    if( status == PRO_TK_NO_ERROR )
+    {
+	/* Get the array size */
+	n = 0;
+<a name="anchor-180"></a>	status = ProArraySizeGet( p_simpreps, &amp;n );
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectSolidSimpreps()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	/* Print out the simp reps array */
+<a name="anchor-181"></a>	ProTKFprintf( fp_out, &quot;Number of simp reps:\t%d\n&quot;, n );
+	for( i=0; i&lt;n; i++ )
+	{
+	    /* Get the simp rep name */
+	    status = ProSimprepdataGet( p_simpreps+i, &amp;p_simprep_data );
+<a name="anchor-182"></a>	    TEST_CALL_REPORT( &quot;ProSimprepdataGet()&quot;, 
+		&quot;ProTestCollectSolidSimpreps()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	    status = ProSimprepdataNameGet( p_simprep_data, w_name );
+<a name="anchor-183"></a>	    TEST_CALL_REPORT( &quot;ProSimprepdataNameGet()&quot;, 
+		&quot;ProTestCollectSolidSimpreps()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	    ProWstringToString( name, w_name );
+<a name="anchor-184"></a>
+	    /* Print the simp rep name */
+	    ProTKFprintf( fp_out, &quot;%s\n&quot;, name );
+
+	    /* Free the memory allocated by ProSimprepdataGet() */
+<a name="anchor-185"></a>	    status = ProSimprepdataFree( &amp;p_simprep_data );
+	    TEST_CALL_REPORT( &quot;ProSimprepdataFree()&quot;, 
+		&quot;ProTestCollectSolidSimpreps()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+	}
+<a name="anchor-186"></a>
+	status = ProArrayFree( (ProArray*)&amp;p_simpreps );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectSolidSimpreps()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-187"></a>
+    return status;
+#else
+    return (PRO_TK_E_NOT_FOUND);
+#endif
+<a name="anchor-188"></a>}
+
+
+/*=========================================================================*\
+    File:	TestCollect.c
+<a name="anchor-189"></a>    Function:   ProTestFeatureArrayPrint
+    Purpose:    write feature information to a file 
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+int ProTestFeatureArrayPrint(
+<a name="anchor-190"></a>    ProFeature *p_features,	    /* In : list of features, allocated by 
+					    ProArrayAlloc */
+    FILE *fp)			    /* In : file to output */
+{
+    ProError	status;
+<a name="anchor-191"></a>    int		i, n;
+    ProFeattype	feat_type;
+    ProFeatStatus	feat_status;
+
+
+<a name="anchor-192"></a>    /* Get the array size */
+    n = 0;
+    status = ProArraySizeGet( p_features, &amp;n );
+    TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestFeatureArrayPrint()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+<a name="anchor-193"></a>
+    /* Print out the features array */
+    ProTKFprintf( fp, &quot;Number of features:\t%d\n&quot;, n );
+    for( i=0; i&lt;n; i++ )
+    {
+<a name="anchor-194"></a>	status = ProFeatureTypeGet( p_features + i, &amp;feat_type );
+	TEST_CALL_REPORT( &quot;ProFeatureTypeGet()&quot;, &quot;ProTestFeatureArrayPrint()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	status = ProFeatureStatusGet( p_features + i, &amp;feat_status );
+<a name="anchor-195"></a>	TEST_CALL_REPORT( &quot;ProFeatureStatusGet()&quot;, &quot;ProTestFeatureArrayPrint()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	ProTKFprintf( fp, &quot;Id %d,\ttype %d,\tstatus: %s\n&quot;, 
+	    p_features[i].id,
+<a name="anchor-196"></a>	    feat_type,
+	    ProUtilFeatureStatusToString( feat_status ) );
+    }
+    return (0);
+}
+<a name="anchor-197"></a>
+/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProTestCollectSolidFeatures()
+    Purpose:    On button function. Test solid features collection. Test
+<a name="anchor-198"></a>		visible features collection. Test asm comps collection.
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+int ProTestCollectSolidFeatures( 
+    ProAppData p_appdata,
+<a name="anchor-199"></a>    int int_dummy )
+{
+    ProError	    status;
+    ProMdl	    p_model;
+    ProMdlType	    mdltype;
+<a name="anchor-200"></a>    ProFeature	    *p_features;
+
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Solid features\n&quot; );
+<a name="anchor-201"></a>
+    p_model = *((ProMdl*)p_appdata);
+
+    /* Get solid features */
+    status = ProUtilCollectSolidFeatures( (ProSolid)p_model, &amp;p_features );
+<a name="anchor-202"></a>
+    /* Print out obtained features */
+    if( status == PRO_TK_NO_ERROR )
+    {
+	ProTestFeatureArrayPrint(p_features, fp_out);
+<a name="anchor-203"></a>	status = ProArrayFree( (ProArray*)&amp;p_features );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectSolidFeatures()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-204"></a>    /* Get visible features */
+    status = ProUtilCollectSolidFeatvis( (ProSolid)p_model, &amp;p_features );
+
+    /* Print out obtained features */
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-205"></a>    {
+	ProTestFeatureArrayPrint(p_features, fp_out);
+	status = ProArrayFree( (ProArray*)&amp;p_features );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectSolidFeatures()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-206"></a>    }
+
+    status = ProMdlTypeGet(p_model, &amp;mdltype);
+    if (mdltype == PRO_MDL_ASSEMBLY)
+    {
+<a name="anchor-207"></a>	/* Get asm comp features */
+	status = ProUtilCollectAsmcomp((ProAssembly) p_model,
+	    (ProAsmcomp**)&amp;p_features );
+
+	/* Print out obtained features */
+<a name="anchor-208"></a>	if( status == PRO_TK_NO_ERROR )
+	{
+	    ProTestFeatureArrayPrint(p_features, fp_out);
+	    status = ProArrayFree( (ProArray*)&amp;p_features );
+	    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectSolidFeatures()&quot;,
+<a name="anchor-209"></a>		status, status != PRO_TK_NO_ERROR);
+	}
+    }
+
+
+<a name="anchor-210"></a>    return status;
+}
+
+
+
+<a name="anchor-211"></a>/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProUtilFeatureStatusToString()
+    Purpose:    Return the string with feature status
+    Returns:	Surface type name
+<a name="anchor-212"></a>\*=========================================================================*/
+char *ProUtilFeatureStatusToString( 
+    ProFeatStatus feat_status    /* In:  Surface type to convert to string */
+)
+{
+<a name="anchor-213"></a>    int		i;
+
+    for( i=0; feature_status_name[i].p_name != NULL; i++ )
+	if( feature_status_name[i].type == feat_status )
+	    return feature_status_name[i].p_name;
+<a name="anchor-214"></a>
+
+    return ((char *)&quot;unknown&quot;);
+}
+
+<a name="anchor-215"></a>
+
+/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProTestCollectModelNotes()
+<a name="anchor-216"></a>    Purpose:    On button function. Test solid notes collection.
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+int ProTestCollectModelNotes( 
+    ProAppData p_appdata,
+<a name="anchor-217"></a>    int int_dummy )
+{
+    ProError	    status;
+    ProMdl	    p_model;
+    ProModelitem    *p_notes;
+<a name="anchor-218"></a>    ProName	    w_name;
+    ProCharName	    name;
+    int		    n;
+    int		    i;
+
+<a name="anchor-219"></a>
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Model notes\n&quot; );
+
+    p_model = *((ProMdl*)p_appdata);
+<a name="anchor-220"></a>    if( p_model == NULL )
+    	return -1;
+    	
+    /* Get solid notes */
+    status = ProUtilCollectModelNotes( p_model, &amp;p_notes );
+<a name="anchor-221"></a>
+    /* Print out obtained notes */
+    if( status == PRO_TK_NO_ERROR )
+    {
+	/* Get the array size */
+<a name="anchor-222"></a>	n = 0;
+	status = ProArraySizeGet( p_notes, &amp;n );
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectModelNotes()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-223"></a>	/* Print out the notes array */
+	ProTKFprintf( fp_out, &quot;Number of notes:\t%d\n&quot;, n );
+	for( i=0; i&lt;n; i++ )
+	{
+	    status = ProModelitemNameGet( p_notes+i, w_name );
+<a name="anchor-224"></a>	    TEST_CALL_REPORT( &quot;ProModelitemNameGet()&quot;, 
+	    	&quot;ProTestCollectModelNotes()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+	    ProWstringToString( name, w_name );
+
+<a name="anchor-225"></a>	    ProTKFprintf( fp_out, &quot;%s\n&quot;, name );
+	}
+
+	status = ProArrayFree( (ProArray*)&amp;p_notes );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectModelNotes()&quot;,
+<a name="anchor-226"></a>		status, status != PRO_TK_NO_ERROR);
+    }
+
+
+    return status;
+<a name="anchor-227"></a>}
+
+
+
+/*=========================================================================*\
+<a name="anchor-228"></a>    File:	TestCollect.c
+    Function:   ProTestCollectMfgTools()
+    Purpose:    On button function. Test manufacturing tools collection.
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+<a name="anchor-229"></a>int ProTestCollectMfgTools( 
+    ProAppData p_appdata,
+    int int_dummy )
+{
+    ProError	    status = PRO_TK_NO_ERROR;
+<a name="anchor-230"></a>    ProMdl	    p_model;
+    ProTool	    *p_tools;
+    ProToolType	    tool_type;
+    int		    n;
+    int		    i;
+<a name="anchor-231"></a>
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Manufacturing tools\n&quot; );
+
+<a name="anchor-232"></a>    p_model = *((ProMdl*)p_appdata);
+    if( p_model == NULL )
+    	return -1;
+
+    /* Get solid tools */
+<a name="anchor-233"></a>    /*status =*/ ProUtilCollectMfgTools( (ProMfg)p_model, &amp;p_tools );
+
+    /* Print out obtained tools */
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-234"></a>	/* Get the array size */
+	n = 0;
+	status = ProArraySizeGet( p_tools, &amp;n );
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectMfgTools()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-235"></a>
+	/* Print out the tools array */
+	ProTKFprintf( fp_out, &quot;Number of mfg tools:\t%d\n&quot;, n );
+	for( i=0; i&lt;n; i++ )
+	{
+<a name="anchor-236"></a>	    /* Get the tool type */
+	    tool_type = PRO_TOOL_NONE;
+	    status = ProToolTypeGet( p_tools+i, &amp;tool_type );
+	    TEST_CALL_REPORT( &quot;ProToolTypeGet()&quot;, &quot;ProTestCollectMfgTools()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-237"></a>
+	    ProTKFprintf( fp_out, &quot;%s\n&quot;, ProUtilToolTypeToString( tool_type ) );
+	}
+
+	status = ProArrayFree( (ProArray*)&amp;p_tools );
+<a name="anchor-238"></a>	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectMfgTools()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+    }
+
+
+<a name="anchor-239"></a>    return status;
+}
+
+
+
+<a name="anchor-240"></a>/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProUtilToolTypeToString()
+    Purpose:    Return the string with feature status
+    Returns:	Surface type name
+<a name="anchor-241"></a>\*=========================================================================*/
+char *ProUtilToolTypeToString( 
+    ProToolType	tool_type		/* In:  Tool type */
+)
+{
+<a name="anchor-242"></a>    int		i;
+
+
+    for( i=0; tool_type_name[i].p_name != NULL; i++ )
+	if( tool_type_name[i].type == tool_type )
+<a name="anchor-243"></a>	    return tool_type_name[i].p_name;
+
+
+    return ((char *)&quot;unknown&quot;);
+}
+<a name="anchor-244"></a>
+
+/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProUtilDimTypeToString()
+<a name="anchor-245"></a>    Purpose:    Return the string with feature status
+    Returns:	Surface type name
+\*=========================================================================*/
+char *ProUtilDimTypeToString( 
+    ProDimensiontype	dim_type		/* In:  Dimension type */
+<a name="anchor-246"></a>)
+{
+    int		i;
+
+
+<a name="anchor-247"></a>    for( i=0; dim_type_name[i].p_name != NULL; i++ )
+	if( dim_type_name[i].type == dim_type )
+	    return dim_type_name[i].p_name;
+
+
+<a name="anchor-248"></a>    return ((char *)&quot;unknown&quot;);
+}
+
+
+/*=========================================================================*\
+<a name="anchor-249"></a>    File:	TestCollect.c
+    Function:   ProTestCollectFeatureGeomitems()
+    Purpose:    On button function. Test feature geometry items collection.
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+<a name="anchor-250"></a>int ProTestCollectFeatureGeomitems( 
+    ProAppData p_appdata,
+    int int_dummy )
+{
+    ProError	    status;
+<a name="anchor-251"></a>    ProSelection    *p_selection;
+    int		    n_selected = 0;
+    ProFeature	    feature;
+    ProGeomitem	    *p_geomitems;
+    ProGeomitemdata *p_geomitem_data;
+<a name="anchor-252"></a>    ProName	    w_name;
+    ProCharName	    name;
+    int		    n;
+    int		    i;
+
+<a name="anchor-253"></a>
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Feature geomitems\n&quot; );
+
+    /* Select model */
+<a name="anchor-254"></a>    ProMessageDisplay( w_msg_file, (char *)&quot;TEST %0s&quot;, (char *)&quot;Select the feature&quot; );
+    status = ProSelect( (char *)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, 
+	&amp;p_selection, &amp;n_selected );
+    TEST_CALL_REPORT( &quot;ProSelect()&quot;, &quot;ProTestCollectFeatureGeomitems()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+<a name="anchor-255"></a>    if( (status != PRO_TK_NO_ERROR) || (n_selected != 1) )
+	return -1;
+
+    /* Get selected feature */
+    if( ProSelectionModelitemGet( p_selection[0], &amp;feature ) != 
+<a name="anchor-256"></a>	PRO_TK_NO_ERROR )
+	return -1;
+
+    /* Get solid geomitems */
+    status = ProUtilCollectFeatureGeomitems( &amp;feature, PRO_TYPE_UNUSED, 
+<a name="anchor-257"></a>	&amp;p_geomitems );
+
+    /* Print out obtained geomitems */
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-258"></a>	/* Get the array size */
+	n = 0;
+	status = ProArraySizeGet( p_geomitems, &amp;n );
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, 
+		&quot;ProTestCollectFeatureGeomitems()&quot;,
+<a name="anchor-259"></a>		status, status != PRO_TK_NO_ERROR);
+
+	/* Print out the geomitems array */
+	ProTKFprintf( fp_out, &quot;Number of geomitems:\t%d\n&quot;, n );
+	for( i=0; i&lt;n; i++ )
+<a name="anchor-260"></a>	{
+	    status = ProGeomitemdataGet( p_geomitems+i, &amp;p_geomitem_data );
+	    TEST_CALL_REPORT( &quot;ProGeomitemdataGet()&quot;, 
+	    	&quot;ProTestCollectFeatureGeomitems()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-261"></a>
+	    status = ProModelitemNameGet( p_geomitems+i, w_name );
+	    TEST_CALL_REPORT( &quot;ProModelitemNameGet()&quot;, 
+	    	&quot;ProTestCollectFeatureGeomitems()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-262"></a>
+	    ProWstringToString( name, w_name );
+
+	    ProTKFprintf( fp_out, &quot;%s\t%s\n&quot;, name, 
+		ProUtilGeomitemTypeToString( p_geomitem_data->obj_type ) );
+<a name="anchor-263"></a>
+	    status = ProGeomitemdataFree( &amp;p_geomitem_data );
+	    TEST_CALL_REPORT( &quot;ProGeomitemdataFree()&quot;, 
+	    	&quot;ProTestCollectFeatureGeomitems()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-264"></a>	}
+
+	status = ProArrayFree( (ProArray*)&amp;p_geomitems );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, 
+		&quot;ProTestCollectFeatureGeomitems()&quot;, 
+<a name="anchor-265"></a>		status, status != PRO_TK_NO_ERROR);
+    }
+
+
+    return status;
+<a name="anchor-266"></a>}
+
+
+
+/*=========================================================================*\
+<a name="anchor-267"></a>    File:	TestCollect.c
+    Function:   ProUtilGeomitemTypeToString()
+    Purpose:    Return the string with geometry item type
+    Returns:	Geometry item type name
+\*=========================================================================*/
+<a name="anchor-268"></a>char *ProUtilGeomitemTypeToString( ProType item_type )
+{
+    int		i;
+
+
+<a name="anchor-269"></a>    for( i=0; object_type_name[i].p_name != NULL; i++ )
+	if( object_type_name[i].type == item_type )
+	    return object_type_name[i].p_name;
+
+
+<a name="anchor-270"></a>    return ((char *)&quot;unknown&quot;);
+}
+
+
+
+<a name="anchor-271"></a>/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProTestCollectElemtreeElements()
+    Purpose:    On button function. Test element tree elements 
+		collection.
+<a name="anchor-272"></a>    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+int ProTestCollectElemtreeElements( 
+    ProAppData p_appdata,
+    int int_dummy )
+<a name="anchor-273"></a>{
+    ProError	    status;
+    ProSelection    *p_selection;
+    int		    n_selected = 0;
+    ProFeature	    feature;
+<a name="anchor-274"></a>    ProElement	    p_elem_tree;
+    ElemtreeElement *p_elements;
+    ProElemId	    element_id;
+    ProValue        p_value;
+    int		    n;
+<a name="anchor-275"></a>    int		    i;
+
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Elements\n&quot; );
+<a name="anchor-276"></a>
+    /* Select model */
+    ProMessageDisplay( w_msg_file, (char *)&quot;TEST %0s&quot;, (char *)&quot;Select the feature&quot; );
+    status = ProSelect( (char *)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, 
+	&amp;p_selection, &amp;n_selected );
+<a name="anchor-277"></a>    TEST_CALL_REPORT( &quot;ProSelect()&quot;, &quot;ProTestCollectElemtreeElements()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+    if( (status != PRO_TK_NO_ERROR) || (n_selected != 1) )
+	return -1;
+
+<a name="anchor-278"></a>    /* Get selected feature */
+    if( ProSelectionModelitemGet( p_selection[0], &amp;feature ) != 
+	PRO_TK_NO_ERROR )
+	return -1;
+
+<a name="anchor-279"></a>    status = ProFeatureElemtreeExtract( &amp;feature, NULL, PRO_FEAT_EXTRACT_NO_OPTS, &amp;p_elem_tree );
+    TEST_CALL_REPORT( &quot;ProFeatureElemtreeExtract()&quot;, 
+    	&quot;ProTestCollectElemtreeElements()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-280"></a>	/* Get feature elements */
+	status = ProUtilCollectElemtreeElements( p_elem_tree, NULL, 
+	    &amp;p_elements );
+
+    /* Print out obtained elements */
+<a name="anchor-281"></a>    if( status == PRO_TK_NO_ERROR )
+    {
+	/* Get the array size */
+	n = 0;
+	status = ProArraySizeGet( p_elements, &amp;n );
+<a name="anchor-282"></a>	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, 
+		&quot;ProTestCollectElemtreeElements()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	/* Print out the elements array */
+<a name="anchor-283"></a>	ProTKFprintf( fp_out, &quot;Number of elements:\t%d\n&quot;, n );
+	for( i=0; i&lt;n; i++ )
+	{
+	    /* Get element ID */
+	    status = ProElementIdGet( p_elements[i].p_element, &amp;element_id );
+<a name="anchor-284"></a>	    TEST_CALL_REPORT( &quot;ProElementIdGet()&quot;, 
+		&quot;ProTestCollectElemtreeElements()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	    /* Print out element ID and value */
+<a name="anchor-285"></a>	    ProTKFprintf( fp_out, &quot;ID: %d\t- %s\n&quot;, element_id, 
+		ProUtilValueToString( p_elements[i].p_element ) );
+	}
+
+	status = ProUtilElemtreeElementArrayFree( &amp;p_elements );
+<a name="anchor-286"></a>    }
+
+
+    return status;
+}
+<a name="anchor-287"></a>
+
+
+/*=========================================================================*\
+    File:	TestCollect.c
+<a name="anchor-288"></a>    Function:   ProUtilValueToString()
+    Purpose:    Convert ProValue to string
+    Returns:	String with value. It is redefined on subsequent 
+		calls to this function.
+\*=========================================================================*/
+<a name="anchor-289"></a>char *ProUtilValueToString( ProElement element )
+{
+    ProError		status;
+    ProValueDataType	value_type;
+    static ProCharName	value_data_str;
+<a name="anchor-290"></a>
+
+    status = ProElementValuetypeGet( element, &amp;value_type );
+    TEST_CALL_REPORT( &quot;ProElementValuetypeGet)&quot;, &quot;ProUtilValueToString()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+<a name="anchor-291"></a>
+    switch( value_type )
+    {
+      case PRO_VALUE_TYPE_INT:
+      {
+<a name="anchor-292"></a>        int value;
+        status = ProElementIntegerGet(element, NULL, &amp;value);
+	ProTKSprintf( value_data_str, &quot;%d&quot;, value );
+	break;
+      }
+<a name="anchor-293"></a>      case PRO_VALUE_TYPE_DOUBLE:
+      {
+        double value;
+        status = ProElementDoubleGet(element, NULL, &amp;value);
+	ProTKSprintf( value_data_str, &quot;%f&quot;, value );
+<a name="anchor-294"></a>	break;
+      }
+      case PRO_VALUE_TYPE_POINTER:
+      {
+        ProAppData value;
+<a name="anchor-295"></a>        status = ProElementSpecialvalueGet(element, NULL, &amp;value);
+	ProTKSprintf( value_data_str, &quot;pointer&quot; );
+	break;
+      }
+      case PRO_VALUE_TYPE_STRING:
+<a name="anchor-296"></a>      {
+        char *value;
+        status = ProElementStringGet(element, NULL, &amp;value);
+	ProTKSprintf( value_data_str, &quot;%s&quot;, value );
+        status = ProStringFree( value );
+<a name="anchor-297"></a>	break;
+      }
+      case PRO_VALUE_TYPE_WSTRING:
+      {
+        wchar_t *value;
+<a name="anchor-298"></a>        status = ProElementWstringGet(element, NULL, &amp;value);
+	ProWstringToString( value_data_str, value );
+        status = ProWstringFree( value );
+	break;
+      }
+<a name="anchor-299"></a>      case PRO_VALUE_TYPE_SELECTION:
+      {
+        ProReference value;
+        status = ProElementReferenceGet(element, NULL, &amp;value);
+	ProTKSprintf( value_data_str, &quot;Selection&quot; );
+<a name="anchor-300"></a>	status = ProReferenceFree( value );
+	break;
+      }
+      default:
+	ProTKSprintf( value_data_str, &quot;unknown&quot; );
+<a name="anchor-301"></a>    }
+
+
+    return (value_data_str);
+}
+<a name="anchor-302"></a>
+
+
+/*=========================================================================*\
+    File:	TestCollect.c
+<a name="anchor-303"></a>    Function:   ProTestCollectCurveComponents()
+    Purpose:    On button function. Test curve components collection.
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+int ProTestCollectCurveComponents( 
+<a name="anchor-304"></a>    ProAppData p_appdata,
+    int int_dummy )
+{
+    ProError	    status;
+    ProSelection    *p_selection;
+<a name="anchor-305"></a>    int		    n_selected = 0;
+    ProCurve	    p_curve;
+    ProEnttype	    curve_type;
+    CurveComponent  *p_components;
+    int		    n;
+<a name="anchor-306"></a>    int		    i;
+
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Curve components\n&quot; );
+<a name="anchor-307"></a>
+    /* Select model */
+    ProMessageDisplay( w_msg_file, (char *)&quot;TEST %0s&quot;, (char *)&quot;Select the composite curve&quot; );
+    status = ProSelect( (char *)&quot;curve&quot;, 1, NULL, NULL, NULL, NULL, 
+	&amp;p_selection, &amp;n_selected );
+<a name="anchor-308"></a>    TEST_CALL_REPORT( &quot;ProSelect()&quot;, &quot;ProTestCollectCurveComponents()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+    if( (status != PRO_TK_NO_ERROR) || (n_selected != 1) )
+	return -1;
+
+<a name="anchor-309"></a>    /* Get selected model */
+    if( ProUtilSelectedCurveGet( p_selection[0], &amp;p_curve ) != PRO_TK_NO_ERROR )
+	return -1;
+
+    /* Selected curve must be composite */
+<a name="anchor-310"></a>    curve_type = (ProEnttype)-1;
+    status = ProCurveTypeGet( p_curve, &amp;curve_type );
+    TEST_CALL_REPORT( &quot;ProCurveTypeGet()&quot;, &quot;ProTestCollectCurveComponents()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+    if( curve_type != PRO_ENT_CMP_CRV )
+<a name="anchor-311"></a>	return -1;
+
+    /* Get curve components */
+    status = ProUtilCollectCurveComponents( p_curve, &amp;p_components );
+
+<a name="anchor-312"></a>    /* Print out obtained components */
+    if( status == PRO_TK_NO_ERROR )
+    {
+	/* Get the array size */
+	n = 0;
+<a name="anchor-313"></a>	status = ProArraySizeGet( p_components, &amp;n );
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectCurveComponents()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	/* Print out the components array */
+<a name="anchor-314"></a>	ProTKFprintf( fp_out, &quot;Number of curve components:\t%d\n&quot;, n );
+	for( i=0; i&lt;n; i++ )
+	{
+	    ProTKFprintf( fp_out, &quot;Index %d%s\n&quot;, 
+		p_components[i].index, 
+<a name="anchor-315"></a>		(p_components[i].flip == PRO_B_TRUE ? &quot;, flipped&quot; : &quot;&quot;) );
+	}
+
+	status = ProArrayFree( (ProArray*)&amp;p_components );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectCurveComponents()&quot;,
+<a name="anchor-316"></a>		status, status != PRO_TK_NO_ERROR);
+    }
+
+
+    return status;
+<a name="anchor-317"></a>}
+
+
+
+/*=========================================================================*\
+<a name="anchor-318"></a>    File:	TestCollect.c
+    Function:   ProTestCollectContours()
+    Purpose:    On button function. Test surface contours collection
+		and contour edges collection
+    Returns:	0 if successful, non-zero otherwise.
+<a name="anchor-319"></a>\*=========================================================================*/
+int ProTestCollectContours( 
+    ProAppData p_appdata,
+    int int_dummy )
+{
+<a name="anchor-320"></a>    ProError	    status;
+    ProSelection    *p_selection;
+    int		    n_selected = 0;
+    ProSurface	    p_surface;
+    ProContour	    *p_contours;
+<a name="anchor-321"></a>    ProEdge	    *p_edges;
+    char	    *p_trav_str;
+    ProContourTraversal	traversal;
+    int		    edge_id;
+    double	    edge_len;
+<a name="anchor-322"></a>    ProEnttype	    edge_type;
+    int		    n_contours;
+    int		    n_edges;
+    int		    i;
+    int		    j;
+<a name="anchor-323"></a>
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Contours\n&quot; );
+
+<a name="anchor-324"></a>    /* Select model */
+    ProMessageDisplay( w_msg_file, (char *)&quot;TEST %0s&quot;, (char *)&quot;Select the surface&quot; );
+    status = ProSelect( (char *)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, 
+	&amp;p_selection, &amp;n_selected );
+    TEST_CALL_REPORT( &quot;ProSelect()&quot;, &quot;ProTestCollectContours()&quot;,
+<a name="anchor-325"></a>	status, status != PRO_TK_NO_ERROR);
+    if( (status != PRO_TK_NO_ERROR) || (n_selected != 1) )
+	return -1;
+
+    /* Get selected model */
+<a name="anchor-326"></a>    if( ProUtilSelectedSurfaceGet( p_selection[0], &amp;p_surface ) 
+	!= PRO_TK_NO_ERROR )
+	return -1;
+
+    /* Get surface contours */
+<a name="anchor-327"></a>    status = ProUtilCollectSurfaceContours( p_surface, &amp;p_contours );
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+
+    /* Print out contours */
+<a name="anchor-328"></a>    if( status == PRO_TK_NO_ERROR )
+    {
+	/* Get the contours array size */
+	n_contours = 0;
+	status = ProArraySizeGet( p_contours, &amp;n_contours );
+<a name="anchor-329"></a>	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, 
+		&quot;ProTestCollectContours()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+	/* Print out the contours array */
+<a name="anchor-330"></a>	ProTKFprintf( fp_out, &quot;Number of contours:\t%d\n&quot;, n_contours );
+	for( i=0; i&lt;n_contours; i++ )
+	{
+	    /* Internal or external contour */
+	    status = ProContourTraversalGet( p_contours[i], &amp;traversal );
+<a name="anchor-331"></a>	    TEST_CALL_REPORT( &quot;ProContourTraversalGet()&quot;, 
+		&quot;ProTestCollectContours()&quot;,
+		status, status != PRO_TK_NO_ERROR);
+	    switch( traversal )
+	    {
+<a name="anchor-332"></a>	      case PRO_CONTOUR_TRAV_INTERNAL: 
+		p_trav_str = (char *)&quot;Internal&quot;; 
+		break;
+
+	      case PRO_CONTOUR_TRAV_NONE: 
+<a name="anchor-333"></a>		p_trav_str = (char *)&quot;Erroneous&quot;; 
+		break;
+
+	      case PRO_CONTOUR_TRAV_EXTERNAL: 
+		p_trav_str = (char *)&quot;External&quot;; 
+<a name="anchor-334"></a>		break;
+
+	      default: 
+		p_trav_str = (char *)&quot;Undefined&quot;; 
+		break;
+<a name="anchor-335"></a>	    }
+
+	    /* Print out contour data */
+	    ProTKFprintf( fp_out, &quot;Contour: %s\n&quot;, p_trav_str );
+
+<a name="anchor-336"></a>	    /* Get the contour edges */
+	    status = ProUtilCollectContourEdges( p_surface, p_contours[i], 
+		&amp;p_edges );
+
+	    /* Print out obtained edges */
+<a name="anchor-337"></a>	    if( status == PRO_TK_NO_ERROR )
+	    {
+		/* Get the edges array size */
+		n_edges = 0;
+		status = ProArraySizeGet( p_edges, &amp;n_edges );
+<a name="anchor-338"></a>		TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, 
+			&quot;ProTestCollectContours()&quot;,
+			status, status != PRO_TK_NO_ERROR);
+
+		/* Print out the edges array */
+<a name="anchor-339"></a>		ProTKFprintf( fp_out, &quot;\t%d edges: \n&quot;, n_edges );
+		for( j=0; j&lt;n_edges; j++ )
+		{
+		    /* Get edge ID */
+		    edge_id = -1;
+<a name="anchor-340"></a>		    ProEdgeIdGet( p_edges[j], &amp;edge_id );
+
+		    /* Get edge length */
+		    edge_len = 0.0;
+		    status = ProEdgeLengthEval( p_edges[j], &amp;edge_len );
+<a name="anchor-341"></a>		    TEST_CALL_REPORT( &quot;ProEdgeLengthEval()&quot;, 
+			&quot;ProTestCollectContours()&quot;,
+			status, status != PRO_TK_NO_ERROR);
+
+		    /* Get edge type */
+<a name="anchor-342"></a>		    edge_type = (ProEnttype)-1;
+		    status = ProEdgeTypeGet( p_edges[j], &amp;edge_type );
+		    TEST_CALL_REPORT( &quot;ProEdgeTypeGet()&quot;, 
+			&quot;ProTestCollectContours()&quot;,
+			status, status != PRO_TK_NO_ERROR);
+<a name="anchor-343"></a>
+		    /* Print out edge data */
+		    ProTKFprintf( fp_out, &quot;\tID: %d,\tType: %s, \tLen: %f\n&quot;, 
+			edge_id, 
+			ProUtilEdgeTypeToString( edge_type ),
+<a name="anchor-344"></a>			edge_len );
+		}
+
+		status = ProArrayFree( (ProArray*)&amp;p_edges );
+		TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, 
+<a name="anchor-345"></a>			&quot;ProTestCollectContours()&quot;,
+			status, status != PRO_TK_NO_ERROR);
+	    }
+	}
+
+<a name="anchor-346"></a>	status = ProArrayFree( (ProArray*)&amp;p_contours );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, 
+		&quot;ProTestCollectContours()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-347"></a>
+
+    return status;
+}
+
+<a name="anchor-348"></a>
+
+/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProUtilEdgeTypeToString()
+<a name="anchor-349"></a>    Purpose:    Return the string with edge type
+    Returns:	Edge type name
+\*=========================================================================*/
+char *ProUtilEdgeTypeToString( 
+    ProEnttype edge_type    /* In:  Edge type to convert to string */
+<a name="anchor-350"></a>)
+{
+    int		i;
+
+
+<a name="anchor-351"></a>    for( i=0; edge_type_name[i].p_name != NULL; i++ )
+	if( edge_type_name[i].type == edge_type )
+	    return edge_type_name[i].p_name;
+
+
+<a name="anchor-352"></a>    return ((char *)&quot;unknown&quot;);
+}
+
+
+
+<a name="anchor-353"></a>/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProTestCollectExtobj()
+    Purpose:    On button function. Test extobj collection.
+    Returns:	0 if successful, non-zero otherwise.
+<a name="anchor-354"></a>\*=========================================================================*/
+int ProTestCollectExtobj( 
+    ProAppData p_appdata,
+    int int_dummy )
+{
+<a name="anchor-355"></a>    ProError	    status;
+    ProMdl	    p_model;
+    ProExtobj	    *p_extobjs;
+    ExtobjReference *p_extobj_refs;
+    ProExtobjClass  extobj_class;
+<a name="anchor-356"></a>    int		    extobj_ref_type;
+    int		    n_extobjs;
+    int		    n_extobj_refs;
+    int		    i;
+    int		    j;
+<a name="anchor-357"></a>
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# External objects\n&quot; );
+
+<a name="anchor-358"></a>    p_model = *((ProMdl*)p_appdata);
+    if( p_model == NULL )
+    	return -1;
+
+    /* Init external object class */
+<a name="anchor-359"></a>    ProStringToWstring( extobj_class.name, (char *)&quot;Mechanica&quot; );
+    extobj_class.type = 0;
+
+    /* Get extobj */
+    status = ProUtilCollectExtobj( p_model, &amp;extobj_class,  &amp;p_extobjs );
+<a name="anchor-360"></a>
+    /* Print out obtained extobjs */
+    if( status == PRO_TK_NO_ERROR )
+    {
+	/* Get the array size */
+<a name="anchor-361"></a>	n_extobjs = 0;
+	status = ProArraySizeGet( p_extobjs, &amp;n_extobjs );
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, 
+		&quot;ProTestCollectExtobj()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-362"></a>
+	/* Print out the extobj array */
+	ProTKFprintf( fp_out, &quot;Number of external objects:\t%d\n&quot;, n_extobjs );
+	for( i=0; i&lt;n_extobjs; i++ )
+	{
+<a name="anchor-363"></a>	    status = ProUtilCollectExtobjReferences( p_extobjs+i, 
+		&amp;p_extobj_refs );
+	    if( status == PRO_TK_NO_ERROR )
+	    {
+		/* Get the array size */
+<a name="anchor-364"></a>		n_extobj_refs = 0;
+		status = ProArraySizeGet( p_extobj_refs, &amp;n_extobj_refs );
+		TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, 
+			&quot;ProTestCollectExtobj()&quot;, 
+			status, status != PRO_TK_NO_ERROR);
+<a name="anchor-365"></a>
+		/* Print out the extobj refs array */
+		ProTKFprintf( fp_out, &quot;\t%d external object references:\n&quot;, 
+		    n_extobj_refs );
+		for( j=0; j&lt;n_extobj_refs; j++ )
+<a name="anchor-366"></a>		{
+		    if( ProExtobjReftypeGet( p_extobj_refs[j].p_extobj_ref,
+			&amp;extobj_ref_type ) == PRO_TK_NO_ERROR )
+		    ProTKFprintf( fp_out, &quot;\tref type: %d\n&quot;, extobj_ref_type );
+		}
+<a name="anchor-367"></a>
+		status = ProArrayFree( (ProArray*)&amp;p_extobj_refs );
+		TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, 
+			&quot;ProTestCollectExtobj()&quot;, 
+			status, status != PRO_TK_NO_ERROR);
+<a name="anchor-368"></a>	    }
+	}
+
+	status = ProArrayFree( (ProArray*)&amp;p_extobjs );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, 
+<a name="anchor-369"></a>		&quot;ProTestCollectExtobj()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+    }
+
+
+<a name="anchor-370"></a>    return status;
+}
+
+
+/*=========================================================================*\
+<a name="anchor-371"></a>    File:	TestCollect.c
+    Function:   ProTestFindByName()
+    Purpose:    On button function. Test extobj collection.
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+<a name="anchor-372"></a>int ProTestFindByName( 
+    ProAppData p_appdata,
+    int int_dummy )
+{
+    ProError	    status;
+<a name="anchor-373"></a>    ProSelection    *p_selection;
+    int		    n_selected = 0;
+    ProMdl	    p_model;
+    ProName	    name;
+    ProModelitem    feature, geomitem;
+<a name="anchor-374"></a>    char	    c_name[PRO_NAME_SIZE];
+
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Features by name\n&quot; );
+<a name="anchor-375"></a>
+    p_model = *((ProMdl*)p_appdata);
+    if( p_model == NULL )
+    	return -1;
+
+<a name="anchor-376"></a>    ProMessageDisplay( w_msg_file, (char *)&quot;TEST %0s&quot;, (char *)&quot;Enter feature name&quot; );
+    if (ProMessageStringRead(PRO_NAME_SIZE, name)!= PRO_TK_NO_ERROR)
+	return (-1);
+
+    /* Find the feature */
+<a name="anchor-377"></a>    status = ProUtilFindFeatvisByName((ProSolid)p_model, name, &amp;feature);
+
+    if (status == PRO_TK_NO_ERROR)
+    {
+	status = ProModelitemNameGet(&amp;feature, name);
+<a name="anchor-378"></a>	TEST_CALL_REPORT( &quot;ProModelitemNameGet()&quot;, 
+		&quot;ProTestFindByName()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+	ProWstringToString(c_name, name);
+	ProTKFprintf(fp_out, &quot;Visible feature found:\t%s\n&quot;, c_name);
+<a name="anchor-379"></a>    }
+    else 
+        ProTKFprintf(fp_out, &quot;Feature is not found\n&quot;);
+    
+    /* Select model */
+<a name="anchor-380"></a>    ProMessageDisplay( w_msg_file, (char *)&quot;TEST %0s&quot;, (char *)&quot;Select the feature&quot; );
+    status = ProSelect( (char *)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, 
+	&amp;p_selection, &amp;n_selected );
+    TEST_CALL_REPORT( &quot;ProSelect()&quot;, 
+	&quot;ProTestFindByName()&quot;, 
+<a name="anchor-381"></a>	status, status != PRO_TK_NO_ERROR);
+    if( (status != PRO_TK_NO_ERROR) || (n_selected != 1) )
+	return -1;
+
+    ProMessageDisplay( w_msg_file, (char *)&quot;TEST %0s&quot;, (char *)&quot;Enter edge name&quot; );
+<a name="anchor-382"></a>    if (ProMessageStringRead(PRO_NAME_SIZE, name)!= PRO_TK_NO_ERROR)
+	return (-1);
+
+    /* Get selected feature */
+    status = ProSelectionModelitemGet(p_selection[0], &amp;feature);
+<a name="anchor-383"></a>    TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, 
+	&quot;ProTestFindByName()&quot;, 
+	status, status != PRO_TK_NO_ERROR);
+
+    /* Find the edge */
+<a name="anchor-384"></a>    status = ProUtilFindFeatureGeomitemByName(&amp;feature,PRO_EDGE,name,&amp;geomitem);
+
+    if (status == PRO_TK_NO_ERROR)
+    {
+	status = ProModelitemNameGet(&amp;geomitem, name);
+<a name="anchor-385"></a>	TEST_CALL_REPORT( &quot;ProModelitemNameGet()&quot;, 
+		&quot;ProTestFindByName()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+	ProWstringToString(c_name, name);
+	ProTKFprintf(fp_out, &quot;Edge found:\t%s\n&quot;, c_name);
+<a name="anchor-386"></a>    }
+    else 
+        ProTKFprintf(fp_out, &quot;Edge is not found\n&quot;);
+
+
+<a name="anchor-387"></a>    return status;
+}
+
+
+/*=========================================================================*\
+<a name="anchor-388"></a>    File:	TestCollect.c
+    Function:   ProTestCollectDimensions()
+    Purpose:    On button function. Test extobj collection.
+    Returns:	0 if successful, non-zero otherwise.
+\*=========================================================================*/
+<a name="anchor-389"></a>int ProTestCollectDimensions( 
+    ProAppData p_appdata,
+    int int_dummy )
+{
+    ProError	    status;
+<a name="anchor-390"></a>    ProMdl	    p_model;
+    ProDimension    *p_dims;
+    int             n_dims=0;
+    int		    i;
+
+<a name="anchor-391"></a>    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Dimensions\n&quot; );
+
+    p_model = *((ProMdl*)p_appdata);
+    if( p_model == NULL )
+<a name="anchor-392"></a>    	return -1;
+    
+    /* arg PRO_B_FALSE indicates that we collect standard dimensions */
+    status = ProUtilCollectDimension(p_model, PRO_B_FALSE, &amp;p_dims);
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-393"></a>    {
+	/* Get the array size */
+	status = ProArraySizeGet( p_dims, &amp;n_dims );
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCollectDimensions()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-394"></a>
+	/* Print out the dimension array */
+	ProTKFprintf( fp_out, &quot;Number of dimensions:\t%d\n&quot;, n_dims );
+	for( i=0; i&lt;n_dims; i++ )
+	{
+<a name="anchor-395"></a>          ProName  name;
+          ProDimensiontype type;
+          double dim_value;
+
+	  status = ProDimensionSymbolGet(&amp;p_dims[i], name);
+<a name="anchor-396"></a>          TEST_CALL_REPORT( &quot;ProDimensionSymbolGet()&quot;, &quot;ProTestCollectDimensions()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+          status = ProDimensionTypeGet(&amp;p_dims[i], &amp;type);
+          TEST_CALL_REPORT( &quot;ProDimensionTypeGet()&quot;, &quot;ProTestCollectDimensions()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-397"></a>          status = ProDimensionValueGet(&amp;p_dims[i], &amp;dim_value);
+          TEST_CALL_REPORT( &quot;ProDimensionValueGet()&quot;, &quot;ProTestCollectDimensions()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+
+	  ProTKFprintf(fp_out, &quot;Dim %10s %20s %8.2f\n&quot;, name, ProUtilDimTypeToString(type), 
+<a name="anchor-398"></a>                       dim_value);
+	}
+
+	status = ProArrayFree( (ProArray*)&amp;p_dims );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCollectDimensions()&quot;, 
+<a name="anchor-399"></a>		status, status != PRO_TK_NO_ERROR);
+    }
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-400"></a>/*=========================================================================*\
+    File:	TestCollect.c
+    Function:   ProTestCollectSolidAxisByPlane()
+    Purpose:    On button function. Test axis collection.
+    Returns:	0 if successful, non-zero otherwise.
+<a name="anchor-401"></a>\*=========================================================================*/
+int ProTestCollectSolidAxisByPlane( 
+    ProAppData p_appdata,
+    int int_dummy )
+{
+<a name="anchor-402"></a>    ProError	    status;
+    ProSelection    *p_selection;
+    int		    n_selected = 0;
+    ProAxis	    *p_axis;
+    ProSolid	    p_model;
+<a name="anchor-403"></a>    ProSurface	    surface;
+    ProGeomitem	    geom_item, modelitem;
+    ProName	    w_name;
+    ProCharName	    name;
+    int		    n;
+<a name="anchor-404"></a>    int		    i;
+
+
+    /* Print the header */
+    ProTKFprintf( fp_out, &quot;\n# Solid axis by plane\n&quot; );
+<a name="anchor-405"></a>
+    /* Select model */
+    ProMessageDisplay( w_msg_file, (char *)&quot;TEST %0s&quot;, (char *)&quot;Select the plane&quot; );
+    status = ProSelect( (char *)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, 
+	&amp;p_selection, &amp;n_selected );
+<a name="anchor-406"></a>    TEST_CALL_REPORT( &quot;ProSelect()&quot;, &quot;ProTestCollectSolidAxisByPlane()&quot;, 
+	status, status != PRO_TK_NO_ERROR);
+    if( (status != PRO_TK_NO_ERROR) || (n_selected != 1) )
+	return -1;
+
+<a name="anchor-407"></a>    /* Get selected surface */
+    status = ProSelectionModelitemGet(p_selection[0], &amp;modelitem);
+    TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, 
+    	&quot;ProTestCollectSolidAxisByPlane()&quot;, 
+	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-408"></a>
+    status = ProGeomitemToSurface(&amp;modelitem, &amp;surface);
+    TEST_CALL_REPORT( &quot;ProGeomitemToSurface()&quot;, 
+    	&quot;ProTestCollectSolidAxisByPlane()&quot;, 
+	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-409"></a>
+
+    /* Get solid axis */
+    p_model = (ProSolid)modelitem.owner;
+    status = ProUtilCollectSolidAxisByPlane(p_model, surface, 
+<a name="anchor-410"></a>	USER_PARALLEL,  &amp;p_axis);
+
+    /* Print out obtained axis */
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-411"></a>	/* Get the array size */
+	n = 0;
+	status = ProArraySizeGet( p_axis, &amp;n );
+	TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, 
+    		&quot;ProTestCollectSolidAxisByPlane()&quot;, 
+<a name="anchor-412"></a>		status, status != PRO_TK_NO_ERROR );
+
+	/* Print out the axis array */
+	ProTKFprintf( fp_out, &quot;Number solid axis parallel to selected plane:\t%d\n&quot;, 
+		n );
+<a name="anchor-413"></a>	for( i=0; i&lt;n; i++ )
+	{
+	    /* Get the axis name */
+	    ProAxisToGeomitem( p_model, p_axis[i], &amp;geom_item );
+	    ProModelitemNameGet( &amp;geom_item, w_name );
+<a name="anchor-414"></a>	    ProWstringToString( name, w_name );
+
+	    ProTKFprintf( fp_out, &quot;%s\n&quot;, name );
+	}
+
+<a name="anchor-415"></a>	status = ProArrayFree( (ProArray*)&amp;p_axis );
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, 
+    		&quot;ProTestCollectSolidAxisByPlane()&quot;, 
+		status, status != PRO_TK_NO_ERROR );
+    }
+<a name="anchor-416"></a>
+
+    return status;
+}
+</pre>
+</body>
+</html>

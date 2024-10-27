@@ -1,0 +1,540 @@
+<html>
+<head>
+<title>UgPopupmenus.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProNotify.h>
+#include &lt;ProPopupmenu.h>
+#include &lt;ProSelbuffer.h>
+<a name="anchor-2"></a>#include &lt;ProMenuBar.h>
+#include &lt;ProUtil.h>
+#include &lt;ProMessage.h>
+
+/*---------------------- Application Includes ------------------------*/
+<a name="anchor-3"></a>#include &lt;TestError.h>
+
+
+/*---------------------- Function Prototypes -------------------------*/
+ProError UserPopupmenuNotification( const char*);
+<a name="anchor-4"></a>
+/*------------------------- External Data ----------------------------*/
+int UserAsmcompConstraintsHighlight_OA();
+uiCmdAccessState UserAsmcompConstraintsHighlight_TestMdlTree(uiCmdAccessMode);
+uiCmdAccessState UserAsmcompConstraintsHighlight_TestPM(uiCmdCmdId,
+<a name="anchor-5"></a>                                                        ProAppData,
+							ProSelection*);
+
+int UserFeatXMLWrite_OA();
+uiCmdAccessState UserFeatXMLWrite_TestMdlTree (uiCmdAccessMode mode);
+<a name="anchor-6"></a>uiCmdAccessState UserFeatXMLWrite_TestPM (uiCmdCmdId id,
+					  ProAppData data,
+					  ProSelection* sels);
+
+int UserPartInfoMass_OA();
+<a name="anchor-7"></a>uiCmdAccessState UserPartInfoMass_TestMdlTree (uiCmdAccessMode mode);
+uiCmdAccessState UserPartInfoMass_TestPM (uiCmdCmdId id,
+					  ProAppData data,
+					  ProSelection* sels);
+
+<a name="anchor-8"></a>int UserApplyMaterial_OA();
+uiCmdAccessState UserApplyMaterial_TestMdlTree (uiCmdAccessMode mode);
+uiCmdAccessState UserApplyMaterial_TestPM (uiCmdCmdId id,
+					  ProAppData data,
+					  ProSelection* sels);
+<a name="anchor-9"></a>
+int UserSmtFlgWallCreate_OA_CreateISec();
+int UserSmtFlgWallCreate_OA_CreateUserDefSec();
+uiCmdAccessState UserSmtFlgWallCreate_TestMdlTree (uiCmdAccessMode mode);
+uiCmdAccessState UserSmtFlgWallCreate_TestPM (uiCmdCmdId id,
+<a name="anchor-10"></a>					  ProAppData data,
+					  ProSelection* sels);
+
+int UserSmtFlatWallCreate_OA_CreateRectSec();
+int UserSmtFlatWallCreate_OA_CreateUserDefSec();
+<a name="anchor-11"></a>uiCmdAccessState UserSmtFlatWallCreate_TestMdlTree (uiCmdAccessMode mode);
+uiCmdAccessState UserSmtFlatWallCreate_TestPM (uiCmdCmdId id,
+					  ProAppData data,
+					  ProSelection* sels);
+
+<a name="anchor-12"></a>int UserSmtExtendWallCreate_OA_Thickness ();
+uiCmdAccessState UserSmtExtendWallCreate_TestMdlTree (uiCmdAccessMode mode);
+uiCmdAccessState UserSmtExtendWallCreate_TestPM (uiCmdCmdId id,
+				      ProAppData data,
+				      ProSelection* sels);
+<a name="anchor-13"></a>
+
+
+static int UserAdditionalPopupmenusSetup();
+static ProError UserAdditionalPopupmenuNotification (const char* name);
+<a name="anchor-14"></a>
+#define OA_MSGFILE &quot;pt_ug_oa.txt&quot;
+
+#define MDLTREE_MENU &quot;ActionMenu&quot;
+
+<a name="anchor-15"></a>#define CMD_UGASMCOMPCONSTRSHIGHLIGHT &quot;UGAsmcompConstrsHighlight&quot;
+#define CMD_UGFEATXMLWRITE &quot;UGFeatXMLWrite&quot;
+#define CMD_UGPARTINFOMASS &quot;UGPartInfoMass&quot;
+#define CMD_UGSMTFLGCREATE_ISEC &quot;UGSmtFlgWallCreate_ISec&quot;
+#define CMD_UGSMTFLGCREATE_USERDEFSEC &quot;UGSmtFlgWallCreate_UserDefSec&quot;
+<a name="anchor-16"></a>#define CMD_UGSMTFLATCREATE_RECTSEC &quot;UGSmtFlatWallCreate_RectSec&quot;
+#define CMD_UGSMTFLATCREATE_USERDEFSEC &quot;UGSmtFlatWallCreate_UserDefSec&quot;
+#define CMD_UGSMTEXTENDWALLCREATE &quot;UGSmtExtendWallCreate&quot;
+
+#define CMD_UGAPPLYMATERIAL &quot;UGApplyMaterial&quot;
+<a name="anchor-17"></a>
+/*====================================================================*\
+Function : UserPopupmenusSetup
+Purpose  : Setup popup menus for selected examples
+\*====================================================================*/
+<a name="anchor-18"></a>int UserPopupmenusSetup()
+{
+  ProError status;
+  uiCmdCmdId cmd_id;
+  ProFileName oa_msgfile;
+<a name="anchor-19"></a>
+  ProStringToWstring (oa_msgfile, OA_MSGFILE);
+  
+/*--------------------------------------------------------------------*\
+    Create commands for Object/Action wrappers around old-style examples 
+<a name="anchor-20"></a>    that aren't setup for Object/Action
+\*--------------------------------------------------------------------*/
+  status = ProCmdActionAdd (CMD_UGASMCOMPCONSTRSHIGHLIGHT,
+			    (uiCmdCmdActFn)UserAsmcompConstraintsHighlight_OA,
+			    uiProe2ndImmediate, 
+<a name="anchor-21"></a>			    UserAsmcompConstraintsHighlight_TestMdlTree,
+			    PRO_B_FALSE, PRO_B_FALSE, &amp;cmd_id);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProCmdActionAdd()&quot;, status);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-22"></a>    Add Object/Action commands to the model tree popup menu
+\*--------------------------------------------------------------------*/
+  status = ProMenubarmenuPushbuttonAdd (MDLTREE_MENU,
+					&quot;UGMdlTree.ConstrsHighlight&quot;,
+					&quot;UGAsmcompConstrsHighlightLabel&quot;,
+<a name="anchor-23"></a>					&quot;UGAsmcompConstrsHighlightHelp&quot;,
+					NULL, PRO_B_TRUE, cmd_id, oa_msgfile);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProMenubarmenuPushbuttonAdd()&quot;, status);
+
+  UserAdditionalPopupmenusSetup();
+<a name="anchor-24"></a>
+/*--------------------------------------------------------------------*\
+    Add the popup menu notification to the session
+\*--------------------------------------------------------------------*/
+  status = ProNotificationSet (PRO_POPUPMENU_CREATE_POST,
+<a name="anchor-25"></a>			       (ProFunction)UserPopupmenuNotification);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProNotificationSet()&quot;, status);
+
+  return(0);
+}
+<a name="anchor-26"></a>
+/*====================================================================*\
+Function : UserPopupmenuNotification
+Purpose  : Add buttons to popup menus when they are created.
+\*====================================================================*/
+<a name="anchor-27"></a>ProError UserPopupmenuNotification (const char* name)
+{
+  ProPopupMenuId menu_id;
+  uiCmdCmdId cmd_id;
+  ProError status;
+<a name="anchor-28"></a>  ProLine label;
+  ProLine help;
+  ProFileName oa_msgfile;
+
+  ProStringToWstring (oa_msgfile, OA_MSGFILE);
+<a name="anchor-29"></a>
+/*--------------------------------------------------------------------*\
+    Check if the menu being created matches the menu name we want.
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-30"></a>  if (strcmp (name, &quot;Sel Obj Menu&quot;) == 0)
+    {
+      status = ProCmdCmdIdFind (CMD_UGASMCOMPCONSTRSHIGHLIGHT, &amp;cmd_id);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-31"></a>    Extract the button label and helptext from a message file.
+\*--------------------------------------------------------------------*/
+      status = ProMessageToBuffer (label, oa_msgfile,
+				   &quot;UGAsmcompConstrsHighlightLabel&quot;);
+      status = ProMessageToBuffer (help, oa_msgfile,
+<a name="anchor-32"></a>				   &quot;UGAsmcompConstrsHighlightHelp&quot;);
+
+/*--------------------------------------------------------------------*\
+    Add the button to the end of the popup menu.
+\*--------------------------------------------------------------------*/
+<a name="anchor-33"></a>   
+     status = ProPopupmenuIdGet (name, &amp;menu_id); 
+
+     status = ProPopupmenuButtonAdd (menu_id, PRO_VALUE_UNUSED,
+				     &quot;UGPM.ConstrsHighlight&quot;,
+<a name="anchor-34"></a>				      label, help,
+				      cmd_id,
+				      UserAsmcompConstraintsHighlight_TestPM,
+				      NULL);
+      ERROR_CHECK (&quot;UserPopupmenuNotification&quot;,
+<a name="anchor-35"></a>		   &quot;ProPopupmenuButtonAdd()&quot;, status);
+
+    }
+
+  UserAdditionalPopupmenuNotification(name);
+<a name="anchor-36"></a>
+  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+<a name="anchor-37"></a>Function : UserAdditionalPopupmenusSetup
+Purpose  : Setup popup menus for selected examples
+           (Split from UserPopupmenusSetup so that the latter can be
+	   extracted as an example to paste into the User Guide).
+\*====================================================================*/
+<a name="anchor-38"></a>static int UserAdditionalPopupmenusSetup()
+{
+  ProError status;
+  uiCmdCmdId cmd_id;
+  ProFileName oa_msgfile;
+<a name="anchor-39"></a>
+  ProStringToWstring (oa_msgfile, OA_MSGFILE);
+
+  
+/*--------------------------------------------------------------------*\
+<a name="anchor-40"></a>    Create commands for Object/Action wrappers around old-style examples 
+    that aren't setup for Object/Action
+\*--------------------------------------------------------------------*/
+  status = ProCmdActionAdd (CMD_UGFEATXMLWRITE,
+			    (uiCmdCmdActFn)UserFeatXMLWrite_OA,
+<a name="anchor-41"></a>			    uiProe2ndImmediate, 
+			    UserFeatXMLWrite_TestMdlTree,
+			    PRO_B_FALSE, PRO_B_FALSE, &amp;cmd_id);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProCmdActionAdd()&quot;, status);
+
+<a name="anchor-42"></a>/*--------------------------------------------------------------------*\
+    Add Object/Action commands to the model tree popup menu
+\*--------------------------------------------------------------------*/
+  status = ProMenubarmenuPushbuttonAdd (MDLTREE_MENU,
+					&quot;UGMdlTree.FeatXMLWrite&quot;,
+<a name="anchor-43"></a>					&quot;UGFeatXMLWriteLabel&quot;,
+					&quot;UGFeatXMLWriteHelp&quot;,
+					NULL, PRO_B_TRUE, cmd_id, oa_msgfile);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProMenubarmenuPushbuttonAdd()&quot;, status);
+  
+<a name="anchor-44"></a>/*--------------------------------------------------------------------*\
+    Create commands for Object/Action wrappers around old-style examples 
+    that aren't setup for Object/Action
+\*--------------------------------------------------------------------*/
+  status = ProCmdActionAdd (CMD_UGPARTINFOMASS,
+<a name="anchor-45"></a>			    (uiCmdCmdActFn)UserPartInfoMass_OA,
+			    uiProe2ndImmediate, 
+			    UserPartInfoMass_TestMdlTree,
+			    PRO_B_FALSE, PRO_B_FALSE, &amp;cmd_id);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProCmdActionAdd()&quot;, status);
+<a name="anchor-46"></a>
+/*--------------------------------------------------------------------*\
+    Add Object/Action commands to the model tree popup menu
+\*--------------------------------------------------------------------*/
+  status = ProMenubarmenuPushbuttonAdd (MDLTREE_MENU,
+<a name="anchor-47"></a>					&quot;UGMdlTree.PartInfoMass&quot;,
+					&quot;UGPartInfoMassLabel&quot;,
+					&quot;UGPartInfoMassHelp&quot;,
+					NULL, PRO_B_TRUE, cmd_id, oa_msgfile);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProMenubarmenuPushbuttonAdd()&quot;, status);
+<a name="anchor-48"></a>
+  /*--------------------------------------------------------------------*\
+    Create command for Object/Action Apply Material action
+\*--------------------------------------------------------------------*/
+  status = ProCmdActionAdd (CMD_UGAPPLYMATERIAL,
+<a name="anchor-49"></a>			    (uiCmdCmdActFn)UserApplyMaterial_OA,
+			    uiProe2ndImmediate, 
+			    UserApplyMaterial_TestMdlTree,
+			    PRO_B_FALSE, PRO_B_FALSE, &amp;cmd_id);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProCmdActionAdd()&quot;, status);
+<a name="anchor-50"></a>
+/*--------------------------------------------------------------------*\
+    Add Object/Action commands to the model tree popup menu
+\*--------------------------------------------------------------------*/
+  status = ProMenubarmenuPushbuttonAdd (MDLTREE_MENU,
+<a name="anchor-51"></a>					&quot;UGMdlTree.ApplyMaterial&quot;,
+					&quot;UGApplyMaterialLabel&quot;,
+					&quot;UGApplyMaterialHelp&quot;,
+					NULL, PRO_B_TRUE, cmd_id, oa_msgfile);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProMenubarmenuPushbuttonAdd()&quot;, status);
+<a name="anchor-52"></a>
+/*--------------------------------------------------------------------*\
+    Create commands for sheetmetal flange wall creation.
+    This command requires selected
+    geometry and so is not added to the model tree.
+<a name="anchor-53"></a>\*--------------------------------------------------------------------*/
+  status = ProCmdActionAdd (CMD_UGSMTFLGCREATE_ISEC,
+			    (uiCmdCmdActFn)UserSmtFlgWallCreate_OA_CreateISec,
+			    uiProe2ndImmediate, 
+			    UserSmtFlgWallCreate_TestMdlTree,
+<a name="anchor-54"></a>			    PRO_B_FALSE, PRO_B_FALSE, &amp;cmd_id);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProCmdActionAdd()&quot;, status);
+ 
+  status = ProCmdActionAdd (CMD_UGSMTFLGCREATE_USERDEFSEC,
+			    (uiCmdCmdActFn)UserSmtFlgWallCreate_OA_CreateUserDefSec,
+<a name="anchor-55"></a>			    uiProe2ndImmediate, 
+			    UserSmtFlgWallCreate_TestMdlTree,
+			    PRO_B_FALSE, PRO_B_FALSE, &amp;cmd_id);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProCmdActionAdd()&quot;, status);
+
+<a name="anchor-56"></a>/*--------------------------------------------------------------------*\
+  Create commands for sheetmetal flat wall creation.  
+  This command requires selected
+  geometry and so is not added to the model tree.
+\*--------------------------------------------------------------------*/
+<a name="anchor-57"></a>  status = ProCmdActionAdd (CMD_UGSMTFLATCREATE_RECTSEC,
+			    (uiCmdCmdActFn)UserSmtFlatWallCreate_OA_CreateRectSec,
+			    uiProe2ndImmediate, 
+			    UserSmtFlatWallCreate_TestMdlTree,
+			    PRO_B_FALSE, PRO_B_FALSE, &amp;cmd_id);
+<a name="anchor-58"></a>  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProCmdActionAdd()&quot;, status);
+
+  status = ProCmdActionAdd (CMD_UGSMTFLATCREATE_USERDEFSEC,
+			    (uiCmdCmdActFn)UserSmtFlatWallCreate_OA_CreateUserDefSec,
+			    uiProe2ndImmediate, 
+<a name="anchor-59"></a>			    UserSmtFlatWallCreate_TestMdlTree,
+			    PRO_B_FALSE, PRO_B_FALSE, &amp;cmd_id);
+  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProCmdActionAdd()&quot;, status);
+
+
+<a name="anchor-60"></a>/*--------------------------------------------------------------------*\
+  Create command for sheetmetal extend wall creation.  
+  This command requires selected
+  geometry and so is not added to the model tree.
+\*--------------------------------------------------------------------*/
+<a name="anchor-61"></a>  status = ProCmdActionAdd (CMD_UGSMTEXTENDWALLCREATE,
+			    (uiCmdCmdActFn)UserSmtExtendWallCreate_OA_Thickness,
+			    uiProe2ndImmediate, 
+			    UserSmtExtendWallCreate_TestMdlTree,
+			    PRO_B_FALSE, PRO_B_FALSE, &amp;cmd_id);
+<a name="anchor-62"></a>  ERROR_CHECK (&quot;UserPopupmenusSetup&quot;, &quot;ProCmdActionAdd()&quot;, status);
+
+
+
+
+<a name="anchor-63"></a>  
+  return (0);
+}
+
+
+<a name="anchor-64"></a>/*====================================================================*\
+Function : UserAdditionalPopupmenuNotification
+Purpose  : Add buttons to popup menus when they are created.
+           (Split from UserPopupmenuNotification so that the latter can be
+	   extracted as an example to paste into the User Guide).
+<a name="anchor-65"></a>\*====================================================================*/
+static ProError UserAdditionalPopupmenuNotification (const char* name)
+{
+  ProPopupMenuId menu_id;
+  uiCmdCmdId cmd_id;
+<a name="anchor-66"></a>  ProError status;
+  ProLine label;
+  ProLine help;
+  ProFileName oa_msgfile;
+
+<a name="anchor-67"></a>  ProStringToWstring (oa_msgfile, OA_MSGFILE);
+
+/*--------------------------------------------------------------------*\
+    Check if the menu being created matches the menu name we want.
+\*--------------------------------------------------------------------*/
+<a name="anchor-68"></a>
+  if (strcmp (name, &quot;Sel Obj Menu&quot;) == 0)
+    {
+      status = ProCmdCmdIdFind (CMD_UGFEATXMLWRITE, &amp;cmd_id);
+
+<a name="anchor-69"></a>/*--------------------------------------------------------------------*\
+    Extract the button label and helptext from a message file.
+\*--------------------------------------------------------------------*/
+      status = ProMessageToBuffer (label, oa_msgfile,
+				   &quot;UGFeatXMLWriteLabel&quot;);
+<a name="anchor-70"></a>      status = ProMessageToBuffer (help, oa_msgfile,
+				   &quot;UGFeatXMLWriteHelp&quot;);
+
+/*--------------------------------------------------------------------*\
+    Add the button to the end of the popup menu.
+<a name="anchor-71"></a>\*--------------------------------------------------------------------*/
+      status = ProPopupmenuIdGet (name, &amp;menu_id);
+
+      status = ProPopupmenuButtonAdd (menu_id, PRO_VALUE_UNUSED,
+				     &quot;UGPM.FeatXMLWrite&quot;,
+<a name="anchor-72"></a>				      label, help,
+				      cmd_id,
+				      UserFeatXMLWrite_TestPM,
+				      NULL);
+      ERROR_CHECK (&quot;UserPopupmenuNotification&quot;,
+<a name="anchor-73"></a>		   &quot;ProPopupmenuButtonAdd()&quot;, status);
+
+
+      status = ProCmdCmdIdFind (CMD_UGPARTINFOMASS, &amp;cmd_id);
+
+<a name="anchor-74"></a>/*--------------------------------------------------------------------*\
+    Extract the button label and helptext from a message file.
+\*--------------------------------------------------------------------*/
+      status = ProMessageToBuffer (label, oa_msgfile,
+				   &quot;UGPartInfoMassLabel&quot;);
+<a name="anchor-75"></a>      status = ProMessageToBuffer (help, oa_msgfile,
+				   &quot;UGPartInfoMassHelp&quot;);
+
+/*--------------------------------------------------------------------*\
+    Add the button to the end of the popup menu.
+<a name="anchor-76"></a>\*--------------------------------------------------------------------*/
+      status = ProPopupmenuButtonAdd (menu_id, PRO_VALUE_UNUSED,
+				     &quot;UGPM.PartInfoMass&quot;,
+				      label, help,
+				      cmd_id,
+<a name="anchor-77"></a>				      UserPartInfoMass_TestPM,
+				      NULL);
+      ERROR_CHECK (&quot;UserPopupmenuNotification&quot;,
+		   &quot;ProPopupmenuButtonAdd()&quot;, status);
+
+<a name="anchor-78"></a>	  
+      status = ProCmdCmdIdFind (CMD_UGAPPLYMATERIAL, &amp;cmd_id);
+
+/*--------------------------------------------------------------------*\
+    Extract the button label and helptext from a message file.
+<a name="anchor-79"></a>\*--------------------------------------------------------------------*/
+      status = ProMessageToBuffer (label, oa_msgfile,
+				   &quot;UGApplyMaterialLabel&quot;);
+      status = ProMessageToBuffer (help, oa_msgfile,
+				   &quot;UGApplyMaterialHelp&quot;);
+<a name="anchor-80"></a>
+/*--------------------------------------------------------------------*\
+    Add the button to the end of the popup menu.
+\*--------------------------------------------------------------------*/
+      status = ProPopupmenuButtonAdd (menu_id, PRO_VALUE_UNUSED,
+<a name="anchor-81"></a>				     &quot;UGPM.ApplyMaterial&quot;,
+				      label, help,
+				      cmd_id,
+				      UserApplyMaterial_TestPM,
+				      NULL);
+<a name="anchor-82"></a>      ERROR_CHECK (&quot;UserPopupmenuNotification&quot;,
+		   &quot;ProPopupmenuButtonAdd()&quot;, status);
+
+    status = ProCmdCmdIdFind (CMD_UGSMTFLGCREATE_ISEC, &amp;cmd_id);
+
+<a name="anchor-83"></a>/*--------------------------------------------------------------------*\
+    Extract the button label and helptext from a message file.
+\*--------------------------------------------------------------------*/
+      status = ProMessageToBuffer (label, oa_msgfile,
+				   &quot;UGSmtFlgWall_ISecLabel&quot;);
+<a name="anchor-84"></a>      status = ProMessageToBuffer (help, oa_msgfile,
+				   &quot;UGSmtFlgWall_ISecHelp&quot;);
+
+/*--------------------------------------------------------------------*\
+    Add the button to the end of the popup menu.
+<a name="anchor-85"></a>\*--------------------------------------------------------------------*/
+      status = ProPopupmenuButtonAdd (menu_id, PRO_VALUE_UNUSED,
+				     &quot;UGPM.ISecSmtFlgWall&quot;,
+				      label, help,
+				      cmd_id,
+<a name="anchor-86"></a>				      UserSmtFlgWallCreate_TestPM,
+				      NULL);
+      ERROR_CHECK (&quot;UserPopupmenuNotification&quot;,
+		   &quot;ProPopupmenuButtonAdd()&quot;, status);
+
+<a name="anchor-87"></a>
+    status = ProCmdCmdIdFind (CMD_UGSMTFLGCREATE_USERDEFSEC, &amp;cmd_id);
+
+/*--------------------------------------------------------------------*\
+    Extract the button label and helptext from a message file.
+<a name="anchor-88"></a>\*--------------------------------------------------------------------*/
+      status = ProMessageToBuffer (label, oa_msgfile,
+				   &quot;UGSmtFlgWall_UserSecLabel&quot;);
+      status = ProMessageToBuffer (help, oa_msgfile,
+				   &quot;UGSmtFlgWall_UserSecHelp&quot;);
+<a name="anchor-89"></a>
+/*--------------------------------------------------------------------*\
+    Add the button to the end of the popup menu.
+\*--------------------------------------------------------------------*/
+      status = ProPopupmenuButtonAdd (menu_id, PRO_VALUE_UNUSED,
+<a name="anchor-90"></a>				     &quot;UGPM.UserSecSmtFlgWall&quot;,
+				      label, help,
+				      cmd_id,
+				      UserSmtFlgWallCreate_TestPM,
+				      NULL);
+<a name="anchor-91"></a>      ERROR_CHECK (&quot;UserPopupmenuNotification&quot;,
+		   &quot;ProPopupmenuButtonAdd()&quot;, status);
+
+   status = ProCmdCmdIdFind (CMD_UGSMTFLATCREATE_RECTSEC, &amp;cmd_id);
+
+<a name="anchor-92"></a>/*--------------------------------------------------------------------*\
+    Extract the button label and helptext from a message file.
+\*--------------------------------------------------------------------*/
+      status = ProMessageToBuffer (label, oa_msgfile,
+				   &quot;UGSmtFlatWall_RectSecLabel&quot;);
+<a name="anchor-93"></a>      status = ProMessageToBuffer (help, oa_msgfile,
+				   &quot;UGSmtFlatWall_RectSecHelp&quot;);
+
+/*--------------------------------------------------------------------*\
+    Add the button to the end of the popup menu.
+<a name="anchor-94"></a>\*--------------------------------------------------------------------*/
+      status = ProPopupmenuButtonAdd (menu_id, PRO_VALUE_UNUSED,
+				     &quot;UGPM.RectSecSmtFlatWall&quot;,
+				      label, help,
+				      cmd_id,
+<a name="anchor-95"></a>				      UserSmtFlatWallCreate_TestPM,
+				      NULL);
+      ERROR_CHECK (&quot;UserPopupmenuNotification&quot;,
+		   &quot;ProPopupmenuButtonAdd()&quot;, status);
+
+<a name="anchor-96"></a>      status = ProCmdCmdIdFind (CMD_UGSMTFLATCREATE_USERDEFSEC, &amp;cmd_id);
+
+/*--------------------------------------------------------------------*\
+    Extract the button label and helptext from a message file.
+\*--------------------------------------------------------------------*/
+<a name="anchor-97"></a>      status = ProMessageToBuffer (label, oa_msgfile,
+				   &quot;UGSmtFlatWall_UserSecLabel&quot;);
+      status = ProMessageToBuffer (help, oa_msgfile,
+				   &quot;UGSmtFlatWall_UserSecHelp&quot;);
+
+<a name="anchor-98"></a>/*--------------------------------------------------------------------*\
+    Add the button to the end of the popup menu.
+\*--------------------------------------------------------------------*/
+      status = ProPopupmenuButtonAdd (menu_id, PRO_VALUE_UNUSED,
+				     &quot;UGPM.UserSecSmtFlatWall&quot;,
+<a name="anchor-99"></a>				      label, help,
+				      cmd_id,
+				      UserSmtFlatWallCreate_TestPM,
+				      NULL);
+      ERROR_CHECK (&quot;UserPopupmenuNotification&quot;,
+<a name="anchor-100"></a>		   &quot;ProPopupmenuButtonAdd()&quot;, status);
+
+    }
+
+
+<a name="anchor-101"></a>    status = ProCmdCmdIdFind ( CMD_UGSMTEXTENDWALLCREATE, &amp;cmd_id);
+
+/*--------------------------------------------------------------------*\
+    Extract the button label and helptext from a message file.
+\*--------------------------------------------------------------------*/
+<a name="anchor-102"></a>      status = ProMessageToBuffer (label, oa_msgfile,
+				   &quot;UGSmtExtendWallLabel&quot;);
+      status = ProMessageToBuffer (help, oa_msgfile,
+				   &quot;UGSmtExtendWallHelp&quot;);
+
+<a name="anchor-103"></a>/*--------------------------------------------------------------------*\
+    Add the button to the end of the popup menu.
+\*--------------------------------------------------------------------*/
+      status = ProPopupmenuIdGet (name, &amp;menu_id);
+
+<a name="anchor-104"></a>      status = ProPopupmenuButtonAdd (menu_id, PRO_VALUE_UNUSED,
+				     &quot;UGPM.UserSmtExtendWall&quot;,
+				      label, help,
+				      cmd_id,
+				      UserSmtExtendWallCreate_TestPM,
+<a name="anchor-105"></a>				      NULL);
+      ERROR_CHECK (&quot;UserPopupmenuNotification&quot;,
+		   &quot;ProPopupmenuButtonAdd()&quot;, status);
+
+
+<a name="anchor-106"></a>  return PRO_TK_NO_ERROR;
+}
+</pre>
+</body>
+</html>

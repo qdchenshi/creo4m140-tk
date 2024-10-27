@@ -1,0 +1,1780 @@
+<html>
+<head>
+<title>TestFeats.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProFeature.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProGeomitem.h>
+#include &lt;ProGroup.h>
+#include &lt;ProSelection.h>
+<a name="anchor-3"></a>#include &lt;ProSolid.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMessage.h>
+#include &lt;ProSection.h>
+<a name="anchor-4"></a>#include &lt;ProUtil.h>
+#include &lt;ProPattern.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-5"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilColor.h&quot;
+#include &quot;UtilFiles.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilFeats.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilTypes.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;UtilVisit.h&quot;
+<a name="anchor-7"></a>#include &quot;TestFeattree.h&quot;
+#include &quot;TestSect.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &quot;UtilTree.h&quot;
+#include &lt;PTApplsUnicodeUtils.h> 
+<a name="anchor-8"></a>#include &quot;TestFeat.h&quot;
+#include &quot;TestFeattype.h&quot;
+#include &quot;UtilTypes.h&quot;
+/*--------------------------------------------------------------------*\
+Application macros
+<a name="anchor-9"></a>\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+<a name="anchor-10"></a>#define FEAT_LIST	1
+#define FEAT_INFO	2
+#define MODEL_INFO	3
+#define	DELETE		1
+#define SUPPRESS	2
+<a name="anchor-11"></a>#define RESUME		3
+
+#define USER_SELECT	0
+#define USER_FEAT_NUM	1
+#define USER_ALL_FEAT   2
+<a name="anchor-12"></a>#define USER_CLEAN	3
+
+#define USER_ACTIVATE   0
+#define USER_CANCEL	1
+
+<a name="anchor-13"></a>#define USER_BEFORE	0
+#define USER_AFTER	1
+
+typedef struct testfeatdata
+{
+<a name="anchor-14"></a>    unsigned int action; /* Bit map of FEAT_... */
+    void *data;
+} ProTestFeatData;
+/*--------------------------------------------------------------------*\
+Application global/external data
+<a name="anchor-15"></a>\*--------------------------------------------------------------------*/
+static int feature_number = 0;
+
+/*====================================================================*\
+    FUNCTION :	ProTestFailedFeatList()
+<a name="anchor-16"></a>    PURPOSE  :	Action for failed feat list
+\*====================================================================*/
+ProError ProTestFailedFeatList ()
+{
+    ProError status;
+<a name="anchor-17"></a>    ProMdl model;
+    int *failed_feats, i, failed_feats_num;
+    FILE *fp;
+    char fname[PRO_NAME_SIZE] = &quot;failed_feats.txt&quot;;
+    ProPath w_fname;
+<a name="anchor-18"></a>    ProMdlType type;
+    ProSelection *sel;
+    ProModelitem model_item;
+    int n_sel;
+    
+<a name="anchor-19"></a>    status = ProMdlCurrentGet (&amp;model);
+    TEST_CALL_REPORT( &quot;ProModelCurrentGet()&quot;, &quot;ProTestFailedFeatList()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+        
+    status = ProMdlTypeGet (model, &amp;type);
+<a name="anchor-20"></a>    TEST_CALL_REPORT( &quot;ProMdlTypeGet()&quot;, &quot;ProTestFailedFeatList()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+        
+    if (type == PRO_MDL_ASSEMBLY)
+    {
+<a name="anchor-21"></a>        ProUtilMsgPrint(&quot;feat&quot;,&quot;TEST Select solid&quot;);
+	
+        status = ProSelect((char*)&quot;feature&quot;, 1, NULL,
+            NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+        TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestFailedFeatList()&quot;, status,
+<a name="anchor-22"></a>            status != PRO_TK_NO_ERROR);
+        if (status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+            return PRO_TK_NO_ERROR;
+        
+        status = ProSelectionModelitemGet (sel[0], &amp;model_item);
+<a name="anchor-23"></a>        TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestFailedFeatList()&quot;, status,
+            status != PRO_TK_NO_ERROR);
+            
+        model = model_item.owner;
+    }
+<a name="anchor-24"></a>    
+    status = ProArrayAlloc (0, sizeof (int), 1, (ProArray*)&amp;failed_feats);
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestFailedFeatList()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    status = ProSolidFailedFeatsList ((ProSolid)model, &amp;failed_feats);
+<a name="anchor-25"></a>    TEST_CALL_REPORT( &quot;ProSolidFailedFeatsList()&quot;, &quot;ProTestFailedFeatList()&quot;, 
+        status, status != PRO_TK_NO_ERROR &amp;&amp;
+        status != PRO_TK_E_NOT_FOUND);
+        
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-26"></a>    {
+        fp = PTApplsUnicodeFopen (fname, &quot;w&quot;);
+        
+        if (fp != NULL)
+        {
+<a name="anchor-27"></a>            ProTKFprintf (fp, &quot;Failed features was found\n&quot;);
+            ProTKFprintf (fp, &quot;Num\t\tID\n&quot;);
+        }
+            
+        status = ProArraySizeGet (failed_feats, &amp;failed_feats_num);
+<a name="anchor-28"></a>        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestFailedFeatList()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; failed_feats_num; i++)
+        {
+            if (fp != NULL)
+<a name="anchor-29"></a>                ProTKFprintf (fp, &quot;%d\t\t%d\n&quot;, i, failed_feats[i]);
+        }
+        status = ProArrayFree ((ProArray*)&amp;failed_feats);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFailedFeatList()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-30"></a>            
+        if (fp != NULL)
+            fclose (fp);
+    }
+    
+<a name="anchor-31"></a>    ProStringToWstring (w_fname, fname);
+    ProInfoWindowDisplay (w_fname, NULL, NULL);
+    
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-32"></a>
+/*====================================================================*\
+    FUNCTION :	ProUtilResolveFeatMenu()
+    PURPOSE  :	Add button to resolve feat menu
+\*====================================================================*/
+<a name="anchor-33"></a>ProError ProUtilResolveFeatMenu ()
+{
+    int menu_id;
+    ProError err;
+    
+<a name="anchor-34"></a>    err = ProMenuFileRegister((char*)&quot;RESOLVE FEAT&quot;,(char*)&quot;reslvft.mnu&quot;, &amp;menu_id);
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProUtilResolveFeatMenu()&quot;, 
+        err, err != PRO_TK_NO_ERROR );
+    err = ProMenuAuxfileRegister((char*)&quot;RESOLVE FEAT&quot;,(char*)&quot;reslvft.aux&quot;, &amp;menu_id);
+    TEST_CALL_REPORT( &quot;ProMenuAuxfileRegister()&quot;, &quot;ProUtilResolveFeatMenu()&quot;, 
+<a name="anchor-35"></a>        err, err != PRO_TK_NO_ERROR );
+    err = ProMenubuttonActionSet((char*)&quot;RESOLVE FEAT&quot;,(char*)&quot;-FailedFeatsList&quot;,
+        (ProMenubuttonAction)ProTestFailedFeatList, NULL, 0);
+    TEST_CALL_REPORT( &quot;ProMenubuttonActionSet()&quot;, &quot;ProUtilResolveFeatMenu()&quot;, 
+        err, err != PRO_TK_NO_ERROR );
+<a name="anchor-36"></a>        
+    return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+<a name="anchor-37"></a>    FUNCTION :	ProTestGeomitemAct()
+    PURPOSE  :	Action function for visiting geometry items
+\*====================================================================*/
+ProError ProTestGeomitemAct(
+    ProGeomitem *item,
+<a name="anchor-38"></a>    ProError instatus,
+    ProAppData appdata)
+{
+    FILE *fp;
+    char item_type[PRO_NAME_SIZE];
+<a name="anchor-39"></a>
+    fp = (FILE*)((ProTestFeatData*)appdata)->data;
+
+/*--------------------------------------------------------------------*\
+    Report the type and id
+<a name="anchor-40"></a>\*--------------------------------------------------------------------*/
+    ProUtilObjtypeStr(item->type, item_type);
+    ProTKFprintf(fp,&quot;    %-15s %2d\n&quot;, item_type, item->id);
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-41"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestFeatureGeom()
+    PURPOSE  :	Function for reporting feature geometry items
+<a name="anchor-42"></a>\*====================================================================*/
+int ProTestFeatureGeom(
+    ProModelitem *feature,
+    FILE *fp)
+{
+<a name="anchor-43"></a>    ProError status;
+    ProTestFeatData appdata;
+    ProGeomitem	    *geomitems;
+    int geomitems_num, i;
+
+<a name="anchor-44"></a>    appdata.data = fp;
+
+    ProTKFprintf(fp, &quot;Geometry items..\n&quot;);
+    
+    status = ProUtilCollectFeatureGeomitems (feature, PRO_TYPE_UNUSED, &amp;geomitems);
+<a name="anchor-45"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)geomitems, &amp;geomitems_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestFeatureGeom()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-46"></a>        for (i = 0; i &lt; geomitems_num; i++)
+        {
+            status = ProTestGeomitemAct (&amp;geomitems[i],
+	        PRO_TK_NO_ERROR, (ProAppData)&amp;appdata);
+        }
+<a name="anchor-47"></a>        status = ProArrayFree ((ProArray*)&amp;geomitems);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFeatureGeom()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+    }
+    return (0);
+<a name="anchor-48"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestFeatureAct()
+    PURPOSE  :	Generalized action function for visiting features
+<a name="anchor-49"></a>\*====================================================================*/
+ProError ProTestFeatureAct(
+    ProModelitem *feature,
+    ProError instatus,
+    ProAppData appdata)
+<a name="anchor-50"></a>{
+    int action;
+    FILE *fp;
+    ProFeattype ftype;
+    char ftype_str[PRO_NAME_SIZE];
+<a name="anchor-51"></a>    ProError status;
+    ProBoolean visible, geomchk, read_on;
+    ProFeatStatus stat;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-52"></a>    Get the action type and file pointer.
+\*--------------------------------------------------------------------*/
+    action = ((ProTestFeatData*)appdata)->action;
+    fp = (FILE*)((ProTestFeatData*)appdata)->data;
+
+<a name="anchor-53"></a>    feature_number++;
+
+/*--------------------------------------------------------------------*\
+    Get the feature type
+\*--------------------------------------------------------------------*/
+<a name="anchor-54"></a>    status = ProFeatureTypeGet(feature, &amp;ftype);
+    TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;, &quot;ProTestFeatureAct()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+    ProUtilFeattypeStr(ftype, ftype_str);
+
+<a name="anchor-55"></a>/*--------------------------------------------------------------------*\
+    Get the feature visibility
+\*--------------------------------------------------------------------*/
+    status = ProFeatureVisibilityGet(feature, &amp;visible);
+    TEST_CALL_REPORT(&quot;ProFeatureVisibilityGet()&quot;, &quot;ProTestFeatureAct()&quot;,
+<a name="anchor-56"></a>					status, status != PRO_TK_NO_ERROR);
+
+    status = ProFeatureHasGeomchks(feature, &amp;geomchk);
+    TEST_CALL_REPORT(&quot;ProFeatureHasGeomchks()&quot;, &quot;ProTestFeatureAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-57"></a>
+    status = ProFeatureIsReadonly(feature, &amp;read_on);
+    TEST_CALL_REPORT(&quot;ProFeatureIsReadonly()&quot;, &quot;ProTestFeatureAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-58"></a>    if(action == FEAT_LIST)
+    {
+/*--------------------------------------------------------------------*\
+	Report the feature id, type and visibility as a list entry
+\*--------------------------------------------------------------------*/
+<a name="anchor-59"></a>	ProTKFprintf(fp, &quot;%-6d%-6d%-20s%-10s%-15s%-10s\n&quot;,
+			feature_number, feature->id, ftype_str,
+			visible == PRO_B_TRUE ? &quot;&quot; : &quot;INTERNAL&quot;,
+			geomchk == PRO_B_TRUE ? &quot;Has geom cheks&quot; : &quot;&quot;,
+			read_on == PRO_B_TRUE ? &quot;Yes&quot; : &quot;&quot;
+<a name="anchor-60"></a>			);
+	return(PRO_TK_NO_ERROR);
+    }
+    else
+    {
+<a name="anchor-61"></a>/*--------------------------------------------------------------------*\
+	Report the feature id and type as a header 
+\*--------------------------------------------------------------------*/
+	ProTKFprintf(fp,&quot;--------------------------------------\n&quot;);
+	if(visible == PRO_B_TRUE)
+<a name="anchor-62"></a>	    ProTKFprintf(fp,&quot;USER FEATURE         %-d\n&quot;, feature_number);
+	else
+	    ProTKFprintf(fp,&quot;INTERNAL FEATURE     %-d\n&quot;, feature_number);
+	ProTKFprintf(fp,&quot;INTERNAL ID          %-d\n&quot;, feature->id);
+	ProTKFprintf(fp,&quot;TYPE                 %s\n&quot;,  ftype_str);
+<a name="anchor-63"></a>
+/*--------------------------------------------------------------------*\
+	Report everything else we know about the feature
+\*--------------------------------------------------------------------*/
+	ProUtilFeatureDump(feature, fp);
+<a name="anchor-64"></a>
+/*--------------------------------------------------------------------*\
+	Report feature geometry
+\*--------------------------------------------------------------------*/
+        status = ProFeatureStatusGet(feature, &amp;stat);
+<a name="anchor-65"></a>        TEST_CALL_REPORT(&quot;ProFeatureStatusGet()&quot;, &quot;ProTestFeatureAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+	if ((ftype!=PRO_FEAT_COMPONENT)&amp;&amp;
+            ((stat==PRO_FEAT_ACTIVE)||
+<a name="anchor-66"></a>             (stat==PRO_FEAT_UNREGENERATED)||
+             (stat==PRO_FEAT_INACTIVE))) 
+                ProTestFeatureGeom(feature, fp);
+    }
+
+<a name="anchor-67"></a>    return(PRO_TK_NO_ERROR);
+}
+
+
+/*====================================================================*\
+<a name="anchor-68"></a>    FUNCTION : ProTestFeatCreate
+    PURPOSE  : Top-level function for creating specific feature types
+\*====================================================================*/
+int ProTestFeatCreate(
+    ProMdl		model,
+<a name="anchor-69"></a>    int			dummy )
+{
+    ProError		status;
+    int			menu_id;
+    int			action;
+<a name="anchor-70"></a>    ProFeattype		feat_type;
+
+    ProError ProTestDtmpln();
+    ProError SketchFeatureCreate();
+    
+<a name="anchor-71"></a>
+    ProMenuFileRegister( (char*)&quot;FEAT TYPE&quot;, (char*)&quot;tkfeattype.mnu&quot;, &amp;menu_id );
+    status = ProMenubuttonActionSet((char*)&quot;FEAT TYPE&quot;,(char*)&quot;-Dtm Plane&quot;,
+	(ProMenubuttonAction)ProUtilAssign,
+	(ProAppData)&amp;feat_type, PRO_FEAT_DATUM );
+<a name="anchor-72"></a>	
+    status = ProMenubuttonActionSet( (char*)&quot;FEAT TYPE&quot;, (char*)&quot;-Protrusion&quot;,
+	(ProMenubuttonAction)ProUtilAssign,
+	(ProAppData)&amp;feat_type, PRO_FEAT_PROTRUSION );
+	
+<a name="anchor-73"></a>    status = ProMenubuttonActionSet( (char*)&quot;FEAT TYPE&quot;, (char*)&quot;-3D Section&quot;,
+	(ProMenubuttonAction)ProUtilAssign,
+	(ProAppData)&amp;feat_type, PRO_3DSECTION );	
+	
+    status = ProMenubuttonActionSet( (char*)&quot;FEAT TYPE&quot;, (char*)&quot;FEAT TYPE&quot;,
+<a name="anchor-74"></a>	(ProMenubuttonAction)ProMenuHold, NULL, 0 );
+
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;FEAT TYPE&quot;, &amp;menu_id );
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-75"></a>        ProMenuProcess( (char*)&quot;FEATURE CREATION&quot;, &amp;action );
+    }
+
+    /* Call to specific feature creation function */
+    switch( feat_type )
+<a name="anchor-76"></a>    {
+	case PRO_FEAT_DATUM:
+	    ProTestDtmpln();
+	    break;
+
+<a name="anchor-77"></a>	case PRO_FEAT_PROTRUSION:
+	    ProTestFeatureExtrudeCreate(NULL);
+	    break;
+
+	case PRO_3DSECTION:
+<a name="anchor-78"></a>	    SketchFeatureCreate();
+	    break;
+    }
+	
+
+<a name="anchor-79"></a>    return 0;
+}
+
+ProError ProTestPatternCreate()
+{
+<a name="anchor-80"></a>  int menu_id, action;
+  ProError status;
+
+  status = ProMenuFileRegister((char*)&quot;PATTERN CREATE&quot;,(char*)&quot;tkpatterncreate.mnu&quot;,  &amp;menu_id);
+  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenuFileRegister&quot;, status, status != PRO_TK_NO_ERROR );
+<a name="anchor-81"></a> 
+  status = ProMenubuttonActionSet((char*)&quot;PATTERN CREATE&quot;,(char*)&quot;-Axis Pattern&quot;,
+     (ProMenubuttonAction)ProTestAxisPattern, NULL, 0);
+  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenubuttonActionSet&quot;, status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-82"></a>  status = ProMenubuttonActionSet((char*)&quot;PATTERN CREATE&quot;,(char*)&quot;-Curve Pattern&quot;,
+     (ProMenubuttonAction)ProTestCurvePattern, NULL, 0);
+  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenubuttonActionSet&quot;, status, status != PRO_TK_NO_ERROR );
+  
+  status = ProMenubuttonActionSet((char*)&quot;PATTERN CREATE&quot;,(char*)&quot;-General Pattern&quot;,
+<a name="anchor-83"></a>     (ProMenubuttonAction)ProTestGeneralPattern, NULL, 0);
+  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenubuttonActionSet&quot;, status, status != PRO_TK_NO_ERROR );
+  
+  status = ProMenubuttonActionSet((char*)&quot;PATTERN CREATE&quot;,(char*)&quot;-Direction Pattern&quot;,
+     (ProMenubuttonAction)ProTestDirectionPattern, NULL, 0);
+<a name="anchor-84"></a>  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenubuttonActionSet&quot;, status, status != PRO_TK_NO_ERROR );
+  
+  status = ProMenubuttonActionSet((char*)&quot;PATTERN CREATE&quot;,(char*)&quot;-Fill Pattern&quot;,
+     (ProMenubuttonAction)ProTestFillPattern, NULL, 0);
+  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenubuttonActionSet&quot;, status, status != PRO_TK_NO_ERROR );
+<a name="anchor-85"></a>  
+  status = ProMenubuttonActionSet((char*)&quot;PATTERN CREATE&quot;,(char*)&quot;-Point Pattern&quot;,
+     (ProMenubuttonAction)ProTestPointPattern, NULL, 0);
+  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenubuttonActionSet&quot;, status, status != PRO_TK_NO_ERROR );
+  
+<a name="anchor-86"></a>  status = ProMenubuttonActionSet((char*)&quot;PATTERN CREATE&quot;,(char*)&quot;-Table Pattern&quot;,
+     (ProMenubuttonAction)ProTestTablePattern, NULL, 0);
+  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenubuttonActionSet&quot;, status, status != PRO_TK_NO_ERROR );
+  
+             
+<a name="anchor-87"></a>  status = ProMenubuttonActionSet((char*)&quot;PATTERN CREATE&quot;,(char*)&quot;-Done Return&quot;,
+     (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenubuttonActionSet&quot;, status, status != PRO_TK_NO_ERROR );
+  
+  status = ProMenubuttonActionSet((char*)&quot;PATTERN CREATE&quot;,(char*)&quot;PATTERN CREATE&quot;,
+<a name="anchor-88"></a>                   (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenubuttonActionSet&quot;, status, status != PRO_TK_NO_ERROR );
+
+  status = ProMenuPush();
+  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenuPush&quot;, status, status != PRO_TK_NO_ERROR );
+<a name="anchor-89"></a>
+  status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;PATTERN CREATE&quot;, &amp;menu_id);
+  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenuCreate&quot;, status, status != PRO_TK_NO_ERROR );
+
+  status = ProMenuProcess((char*)&quot;PATTERN CREATE&quot;, &amp;action);
+<a name="anchor-90"></a>  TEST_CALL_REPORT( &quot;ProTestPatternCreate&quot;, &quot;ProMenuProcess&quot;, status, status != PRO_TK_NO_ERROR );
+ 
+  return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-91"></a>/*====================================================================*\
+    FUNCTION :	ProTestFeatureInfo()
+    PURPOSE  :	List features in current model.
+\*====================================================================*/
+int ProTestFeatureInfo(
+<a name="anchor-92"></a>    ProMdl *p_model,
+    int action)
+{
+    ProError status;
+    ProTestFeatData appdata;
+<a name="anchor-93"></a>    ProSelection *sel;
+    int n_sel, cont=1;
+    char fname[PRO_NAME_SIZE];
+    wchar_t w_fname[PRO_NAME_SIZE];
+    FILE *fp;
+<a name="anchor-94"></a>    ProFeature feature;
+    ProInfoWindowLocation   win_location = { 0.0, 0.0 };
+    ProInfoWindowSize	    win_size = { 25, 70 };
+    ProFeature *features;
+    int features_num, i;
+<a name="anchor-95"></a>    int *failed_feats, failed_feats_num;
+    
+
+/*--------------------------------------------------------------------*\
+    Get the name of the output file
+<a name="anchor-96"></a>\*--------------------------------------------------------------------*/
+    ProTestQcrName(p_model, (char*)FEATURES, fname);
+
+    appdata.action = action;
+
+<a name="anchor-97"></a>    feature_number = 0;
+
+    if(action == FEAT_INFO)
+    {
+/*--------------------------------------------------------------------*\
+<a name="anchor-98"></a>	Visit selected features
+\*--------------------------------------------------------------------*/
+	ProUtilMsgPrint(&quot;feat&quot;,&quot;TEST Select feature&quot;);
+	while(cont)
+	{
+<a name="anchor-99"></a>	    fp = PTApplsUnicodeFopen(fname, &quot;w&quot;);
+	    appdata.data = fp;
+
+/*--------------------------------------------------------------------*\
+	    Select a feature
+<a name="anchor-100"></a>\*--------------------------------------------------------------------*/
+	    status = ProSelect((char*)&quot;feature&quot;, 1, NULL,
+				NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+	    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestFeatureInfo()&quot;, status,
+					    status != PRO_TK_NO_ERROR);
+<a name="anchor-101"></a>	    if(status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+		break;
+
+/*--------------------------------------------------------------------*\
+	    Get the information
+<a name="anchor-102"></a>\*--------------------------------------------------------------------*/
+	    status = ProSelectionModelitemGet(sel[0], (ProFeature *)&amp;feature);
+	    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+			    &quot;ProTestFeatureInfo()&quot;,
+			    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-103"></a>
+	    ProTestFeatureAct(&amp;feature, PRO_TK_NO_ERROR, &amp;appdata);
+
+	    fclose(fp);
+
+<a name="anchor-104"></a>	    status = ProInfoWindowDisplay( ProStringToWstring(w_fname, fname),
+					    &amp;win_location, &amp;win_size );
+	    TEST_CALL_REPORT( &quot;ProInfoWindowDisplay()&quot;, &quot;ProTestFeatureInfo()&quot;,
+				status, status != PRO_TK_NO_ERROR );
+	}
+<a name="anchor-105"></a>    }
+    else
+    {
+	fp = PTApplsUnicodeFopen(fname, &quot;w&quot;);
+	appdata.data = fp;
+<a name="anchor-106"></a>
+	if(action == FEAT_LIST)
+	    ProTKFprintf(fp,&quot;Num   ID    Type\n\n&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-107"></a>	Visit all the features
+\*--------------------------------------------------------------------*/
+	status = ProArrayAlloc (0, sizeof (int), 1, (ProArray*)&amp;failed_feats);
+	TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestFeatureInfo()&quot;,
+			  status, status != PRO_TK_NO_ERROR );
+<a name="anchor-108"></a>	status = ProSolidFailedFeatsList ((ProSolid)(*p_model), &amp;failed_feats);
+	TEST_CALL_REPORT( &quot;ProSolidFailedFeatsList()&quot;, &quot;ProTestFeatureInfo()&quot;, 
+                status, status != PRO_TK_NO_ERROR &amp;&amp;
+                status != PRO_TK_E_NOT_FOUND);
+	if (status == PRO_TK_NO_ERROR)
+<a name="anchor-109"></a>	{
+	    ProTKFprintf (fp, &quot;Failed features was found\n&quot;);
+	    status = ProArraySizeGet (failed_feats, &amp;failed_feats_num);
+	    TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestFeatureInfo()&quot;, 
+                status, status != PRO_TK_NO_ERROR );
+<a name="anchor-110"></a>	    for (i = 0; i &lt; failed_feats_num; i++)
+ 	    {
+	        ProTKFprintf (fp,&quot;%d     %d\n&quot;, i, failed_feats[i]);
+	    }
+	    status = ProArrayFree ((ProArray*)&amp;failed_feats);
+<a name="anchor-111"></a>	    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFeatureInfo()&quot;, 
+			      status, status != PRO_TK_NO_ERROR );
+	}
+	
+	status = ProUtilCollectSolidFeatures ((ProSolid)*p_model, &amp;features);
+<a name="anchor-112"></a>        if (status == PRO_TK_NO_ERROR)
+        {
+            status = ProArraySizeGet ((ProArray)features, &amp;features_num);
+            TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestFeatureInfo()&quot;, 
+                status, status != PRO_TK_NO_ERROR );
+<a name="anchor-113"></a>            for (i = 0; i &lt; features_num; i++)
+            {
+                status = ProTestFeatureAct (&amp;features[i],
+                    PRO_TK_NO_ERROR, (ProAppData)&amp;appdata);
+            }
+<a name="anchor-114"></a>            status = ProArrayFree ((ProArray*)&amp;features);
+            TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFeatureInfo()&quot;, 
+                status, status != PRO_TK_NO_ERROR );
+        }
+					
+<a name="anchor-115"></a>	fclose(fp);
+
+	status = ProInfoWindowDisplay( ProStringToWstring(w_fname, fname),
+					&amp;win_location, &amp;win_size );
+	TEST_CALL_REPORT( &quot;ProInfoWindowDisplay()&quot;, &quot;ProTestFeatureInfo()&quot;,
+<a name="anchor-116"></a>			    status, status != PRO_TK_NO_ERROR );
+    }
+
+
+    return(0);
+<a name="anchor-117"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestFeatureSectionInfo()
+    PURPOSE  :	Info about feature sections
+<a name="anchor-118"></a>\*====================================================================*/
+int ProTestFeatureSectionInfo()
+{
+    FILE *fp;
+    ProSection section;
+<a name="anchor-119"></a>    ProError err;
+    ProPath w_path;
+
+    err = ProUtilSectionFromFeatGet(&amp;section);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-120"></a>	return(-1);
+    TEST_CALL_REPORT(&quot;ProUtilSectionFromFeatGet()&quot;,
+		    &quot;ProTestFeatSectionInfo()&quot;, err, err != PRO_TK_NO_ERROR );
+
+    fp = PTApplsUnicodeFopen(&quot;section.inf&quot;, &quot;w&quot;);
+<a name="anchor-121"></a>    ProStringToWstring(w_path, (char*)&quot;section.inf&quot;);
+
+    err = ProUtilSectionInfoGet(fp, section);
+    TEST_CALL_REPORT(&quot;ProUtilSectionInfoGet()&quot;,
+		    &quot;ProTestFeatSectionInfo()&quot;, err, err != PRO_TK_NO_ERROR );
+<a name="anchor-122"></a>
+    err = ProSectionFree(&amp;section);
+    TEST_CALL_REPORT(&quot;ProSectionFree()&quot;,
+		    &quot;ProTestFeatSectionInfo()&quot;, err, err != PRO_TK_NO_ERROR );
+
+<a name="anchor-123"></a>    fclose(fp);
+
+    err = ProInfoWindowDisplay(w_path, NULL, NULL);
+    TEST_CALL_REPORT( &quot;ProInfoWindowDisplay()&quot;, 
+		    &quot;ProTestFeatSectionInfo()&quot;, err, err != PRO_TK_NO_ERROR );
+<a name="anchor-124"></a>
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-125"></a>    FUNCTION :	ProTestFeatureKill()
+    PURPOSE  :	Commands &quot;Feature Delete&quot; and &quot;Suppress&quot;
+\*====================================================================*/
+int ProTestFeatureKill(
+    ProMdl *model,
+<a name="anchor-126"></a>    int action)
+{
+    ProError status;
+    int n_sel, n_children, c;
+    ProFeatureDeleteOptions *delete_opts = 0;
+<a name="anchor-127"></a>    int *feat_ids = NULL;
+    ProSelection *sel;
+    ProPatternStatus pstatus;
+    ProFeature children;
+    int *children_ids, cont=1;
+<a name="anchor-128"></a>    ProSelection show;
+    ProFeature feature;
+    ProAsmcomppath comp_path;
+    int flag_yesorno;
+
+<a name="anchor-129"></a>/*--------------------------------------------------------------------*\
+    Ask the user to select features
+\*--------------------------------------------------------------------*/
+    ProUtilMsgPrint(&quot;feat&quot;,&quot;TEST Select feature&quot;);
+    while(cont)
+<a name="anchor-130"></a>    {
+	status = ProSelect((char*)&quot;feature&quot;, 1, NULL,
+			    NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+	TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestFeatureKill()&quot;, status,
+					status != PRO_TK_NO_ERROR);
+<a name="anchor-131"></a>	if(status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+	    break;
+
+/*--------------------------------------------------------------------*\
+	Check that the selected feature is not a pattern member
+<a name="anchor-132"></a>\*--------------------------------------------------------------------*/
+	status = ProSelectionModelitemGet(sel[0], (ProFeature *)&amp;feature);
+	TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestFeatureKill()&quot;,
+			status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-133"></a>	status = ProFeatureParamsDisplay( sel[0], PRO_ALL_PARAMS );
+	TEST_CALL_REPORT(&quot;ProFeatureParamsDisplay()&quot;, &quot;ProTestFeatureKill()&quot;,
+	    status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+
+	status = ProFeaturePatternStatusGet(&amp;feature, &amp;pstatus);
+<a name="anchor-134"></a>	TEST_CALL_REPORT(&quot;ProFeaturePatternStatusGet()&quot;,
+	    &quot;ProTestFeatureKill()&quot;, status, status != PRO_TK_NO_ERROR);
+	if (pstatus != PRO_PATTERN_NONE)
+	{
+	    ProUtilMsgPrint(&quot;feat&quot;,
+<a name="anchor-135"></a>		&quot;TEST That feature belongs to a pattern&quot;);
+	    continue;
+	}
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-136"></a>	Get the list of children of the selected feature
+\*--------------------------------------------------------------------*/
+	status = ProFeatureChildrenGet(&amp;feature, &amp;children_ids, &amp;n_children);
+	TEST_CALL_REPORT(&quot;ProFeatureChildrenGet()&quot;, &quot;ProTestFeatureKill()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-137"></a>
+/*--------------------------------------------------------------------*\
+	Highlight them in blue
+\*--------------------------------------------------------------------*/
+	status = ProSelectionAsmcomppathGet(sel[0], &amp;comp_path);
+<a name="anchor-138"></a>	TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProTestFeatureKill()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	for(c=0; c&lt;n_children; c++)
+	{
+	    status = ProFeatureInit((ProSolid)feature.owner, children_ids[c], &amp;children);
+<a name="anchor-139"></a>            TEST_CALL_REPORT(&quot;ProFeatureInit()&quot;, &quot;ProTestFeatureKill()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+	    status = ProSelectionAlloc(&amp;comp_path, &amp;children, &amp;show);
+	    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;, &quot;ProTestFeatureKill()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+<a name="anchor-140"></a>
+	    status = ProSelectionHighlight(show, MEDIUM_BLUE);
+	    TEST_CALL_REPORT(&quot;ProSelectionHighlight()&quot;, &quot;ProTestFeatureKill()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	}
+<a name="anchor-141"></a>
+/*--------------------------------------------------------------------*\
+	Ask for confirmation to delete/suppress the children
+\*--------------------------------------------------------------------*/
+  status = ProArrayAlloc(1,sizeof(ProFeatureDeleteOptions),
+<a name="anchor-142"></a>      1, (ProArray*)&amp;delete_opts);
+
+  delete_opts[0] = PRO_FEAT_DELETE_CLIP;
+
+  status = ProArrayAlloc(1,sizeof(int),
+<a name="anchor-143"></a>      1, (ProArray*)&amp;feat_ids);
+
+  feat_ids[0] = feature.id;
+
+	if(n_children > 0)
+<a name="anchor-144"></a>	{
+	    ProUtilMsgPrint(&quot;feat&quot;,
+			&quot;TEST Do you want to %0s the features in blue too? [yes] : &quot;,
+			action == DELETE ? &quot;delete&quot; : &quot;suppress&quot;);
+	    flag_yesorno = ProUtilYesnoGet((char*)&quot;yes&quot;);
+<a name="anchor-145"></a>	    
+	    if(flag_yesorno != 1)
+	    {
+	    	delete_opts[0] = PRO_FEAT_DELETE_NO_OPTS;
+	    }
+<a name="anchor-146"></a>	    	
+	}
+
+	if(action == DELETE)
+	{
+<a name="anchor-147"></a>
+	    status = ProFeatureWithoptionsDelete((ProSolid)feature.owner, feat_ids,
+					delete_opts, PRO_REGEN_NO_FLAGS);
+	    TEST_CALL_REPORT(&quot;ProFeatureWithoptionsDelete()&quot;, &quot;ProTestFeatureKill()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-148"></a>	    status = ProWindowRepaint(-1);
+	    TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;, &quot;ProTestFeatureKill()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	}
+	else
+<a name="anchor-149"></a>	{
+	    status = ProFeatureWithoptionsSuppress((ProSolid)feature.owner, feat_ids,
+					delete_opts, PRO_REGEN_NO_FLAGS);
+	    TEST_CALL_REPORT(&quot;ProFeatureWithoptionsSuppress()&quot;, &quot;ProTestFeatureKill()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-150"></a>	    status = ProWindowRepaint(-1);
+	    TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;, &quot;ProTestFeatureKill()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	}
+     status = ProArrayFree((ProArray*)&amp;delete_opts);
+<a name="anchor-151"></a>     status = ProArrayFree((ProArray*)&amp;feat_ids);
+    }
+
+    status = ProTreetoolRefresh(*model);
+    TEST_CALL_REPORT(&quot;ProTreetoolRefresh()&quot;,
+<a name="anchor-152"></a>		    &quot;ProTestFeatureKill()&quot;, status, status != PRO_TK_NO_ERROR);
+    return(0);
+}
+
+
+<a name="anchor-153"></a>
+/*====================================================================*\
+    FUNCTION :	proTestFeatureResume()
+    PURPOSE  :	Command &quot;Resume&quot;
+\*====================================================================*/
+<a name="anchor-154"></a>int ProTestFeatureResume( ProSolid* p_solid)
+{
+    ProError	    status;
+    int*	    p_feat_id_array;
+    ProFeatStatus*  p_status_array;
+<a name="anchor-155"></a>    int		    n_features;
+    int		    n_suppressed;
+    int		    i;
+    ProFeature	    feature;
+    ProBoolean	    is_incomplete;
+<a name="anchor-156"></a>    ProFeatureResumeOptions *resume_options = 0;
+
+
+    /* Allocate ID and status arrays */
+    status = ProArrayAlloc( 0, sizeof(int), 1, (ProArray *)&amp;p_feat_id_array );
+<a name="anchor-157"></a>    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestFeatureResume()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+    status = ProArrayAlloc( 0, sizeof(ProFeatStatus), 1, (ProArray *)&amp;p_status_array );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestFeatureResume()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-158"></a>    if( status != PRO_TK_NO_ERROR )
+	return -1;
+
+    /* Get a list of features of the specified solid and their statuses */
+    status = ProSolidFeatstatusGet( *p_solid, &amp;p_feat_id_array, &amp;p_status_array, 
+<a name="anchor-159"></a>	&amp;n_features );
+    TEST_CALL_REPORT( &quot;ProSolidFeatstatusGet()&quot;, &quot;ProTestFeatureResume()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+<a name="anchor-160"></a>
+    for( i=n_features-1, n_suppressed=0; i>=0; i-- )
+    {
+	/* Get a handle to the feature */
+	status = ProFeatureInit( *p_solid, p_feat_id_array[i], &amp;feature );
+<a name="anchor-161"></a>	TEST_CALL_REPORT( &quot;ProFeatureInit()&quot;, &quot;ProTestFeatureResume()&quot;,
+			    status, status != PRO_TK_NO_ERROR );
+
+	/* Is feature complete? */
+	is_incomplete = PRO_B_FALSE;
+<a name="anchor-162"></a>	status = ProFeatureIsIncomplete( &amp;feature, &amp;is_incomplete );
+	TEST_CALL_REPORT( &quot;ProFeatureIsIncomplete()&quot;, &quot;ProTestFeatureResume()&quot;,
+			    status, status != PRO_TK_NO_ERROR );
+
+	/* Remove incomplete feature from the array */
+<a name="anchor-163"></a>	if( is_incomplete == PRO_B_TRUE || 
+	    p_status_array[i] != PRO_FEAT_SUPPRESSED)
+	{
+	    status = ProArrayObjectRemove( (ProArray *)&amp;p_feat_id_array, i, 1 );
+	    TEST_CALL_REPORT( &quot;ProArrayObjectRemove()&quot;, 
+<a name="anchor-164"></a>				&quot;ProTestFeatureResume()&quot;,
+				status, status != PRO_TK_NO_ERROR );
+	}
+	else
+	    n_suppressed++;
+<a name="anchor-165"></a>    }
+
+    /* Resume suppressed features */
+    status = ProArrayAlloc(1,sizeof(ProFeatureResumeOptions),
+        1, (ProArray*)&amp;resume_options);
+<a name="anchor-166"></a>
+    resume_options[0] = PRO_FEAT_RESUME_INCLUDE_PARENTS;
+
+    status = ProFeatureWithoptionsResume( *p_solid, p_feat_id_array, 
+				resume_options, PRO_REGEN_NO_FLAGS);
+<a name="anchor-167"></a>    TEST_CALL_REPORT( &quot;ProFeatureWithoptionsResume()&quot;, &quot;ProTestFeatureResume()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+
+    /* Refresh win */
+    status = ProWindowRepaint(-1);
+<a name="anchor-168"></a>    TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;, &quot;ProTestFeatureResume()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+
+    status = ProTreetoolRefresh((ProMdl)*p_solid);
+    TEST_CALL_REPORT(&quot;ProTreetoolRefresh()&quot;,
+<a name="anchor-169"></a>		&quot;ProTestFeatureResume()&quot;, status, status != PRO_TK_NO_ERROR);
+
+    /* Free pre-allocated */
+    status = ProArrayFree((ProArray*)&amp;resume_options);
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFeatureResume()&quot;,
+<a name="anchor-170"></a>			status, status != PRO_TK_NO_ERROR );
+
+    status = ProArrayFree( (ProArray *)&amp;p_feat_id_array );
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFeatureResume()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-171"></a>    status = ProArrayFree( (ProArray *)&amp;p_status_array );
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestFeatureResume()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+<a name="anchor-172"></a>
+
+    return 0;
+}
+
+<a name="anchor-173"></a>/*====================================================================*\
+    FUNCTION :	ProUtilFeatByNumberInit()
+    PURPOSE  :	Set Read Only status for feature
+\*====================================================================*/
+ProError ProUtilFeatByNumberInit(
+<a name="anchor-174"></a>    ProSolid solid,
+    int feature_num,
+    ProFeature *p_feature)
+{
+    ProError err, status = PRO_TK_GENERAL_ERROR;
+<a name="anchor-175"></a>    int *p_feat_id_array, n_features;
+    ProFeatStatus *p_status_array;
+    int feature_count; 
+    int actual_feat_number = 0; 
+    ProBoolean feature_found = PRO_B_FALSE;
+<a name="anchor-176"></a>
+
+    /* Allocate ID and err arrays */
+    err = ProArrayAlloc( 0, sizeof(int), 1, (ProArray *)&amp;p_feat_id_array );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProUtilFeatByNumberInit()&quot;,
+<a name="anchor-177"></a>					    err, err != PRO_TK_NO_ERROR);
+    if( err != PRO_TK_NO_ERROR )
+	return (PRO_TK_GENERAL_ERROR);
+
+    err = ProArrayAlloc( 0, sizeof(ProFeatStatus), 1, 
+<a name="anchor-178"></a>	(ProArray *)&amp;p_status_array );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProUtilFeatByNumberInit()&quot;,
+					    err, err != PRO_TK_NO_ERROR);
+    if( err != PRO_TK_NO_ERROR )
+	return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-179"></a>
+    /* Get a list of features of the specified solid and their erres */
+    err = ProSolidFeatstatusGet(solid, &amp;p_feat_id_array, &amp;p_status_array,
+	&amp;n_features );
+    TEST_CALL_REPORT( &quot;ProSolidFeatstatusGet()&quot;, &quot;ProUtilFeatByNumberInit()&quot;,
+<a name="anchor-180"></a>			err, err != PRO_TK_NO_ERROR );
+
+    /* feature_num--; */ 
+
+    if (err == PRO_TK_NO_ERROR &amp;&amp; ( n_features > (feature_num-1) ) )
+<a name="anchor-181"></a>    {
+	for ( feature_count = 0;  feature_count &lt; n_features;  feature_count++ ) 
+    	{ 
+    	if ( p_status_array[feature_count] == PRO_FEAT_ACTIVE ) actual_feat_number++; 
+    	if ( actual_feat_number == feature_num ) 
+<a name="anchor-182"></a>         { 
+         feature_found = PRO_B_TRUE; 
+         break; 
+         } 
+    	} 
+<a name="anchor-183"></a>
+    if ( feature_found ) 
+        { 
+        status = ProFeatureInit(solid, p_feat_id_array[feature_count],p_feature); 
+
+<a name="anchor-184"></a>        err = ProArrayFree((ProArray*)&amp;p_feat_id_array );
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProUtilFeatByNumberInit()&quot;,
+					    err, err != PRO_TK_NO_ERROR);
+
+        err = ProArrayFree((ProArray*)&amp;p_status_array );
+<a name="anchor-185"></a>        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProUtilFeatByNumberInit()&quot;,
+					    err, err != PRO_TK_NO_ERROR);
+	return ( status ); 
+	/* Returns for a successful call from here */ 
+        } 
+<a name="anchor-186"></a>        else 
+        { 
+        return PRO_TK_E_NOT_FOUND; 
+
+		/* Includes the cases for 
+<a name="anchor-187"></a>  		1.The input value of the feature_number being greater than the number of
+     		ACTIVE features available in the model , but less than the max id 
+		*/ 
+        } 
+    } 
+<a name="anchor-188"></a>    else 
+    { 
+    return PRO_TK_BAD_CONTEXT; 
+		/* Includes the cases for 
+  		1.Non-successful call to ProSolidFeatstatusGet and 
+<a name="anchor-189"></a>  		2.The input value of the feature number being greater than the number of id's collected 
+		*/ 
+    }
+
+
+<a name="anchor-190"></a>}
+
+
+/*====================================================================*\
+    FUNCTION :	ProUtilSolidLastFeatGet()
+<a name="anchor-191"></a>    PURPOSE  :	Set Read Only status for feature
+\*====================================================================*/
+ProError ProUtilSolidLastFeatGet(
+    ProSolid solid,
+    int *last_feature)
+<a name="anchor-192"></a>{
+    ProError err, status;
+    int *p_feat_id_array, n_features;
+    ProFeatStatus *p_status_array;
+
+<a name="anchor-193"></a>    /* Allocate ID and err arrays */
+    err = ProArrayAlloc( 0, sizeof(int), 1, (ProArray *)&amp;p_feat_id_array );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProUtilSolidLastFeatGet()&quot;,
+					    err, err != PRO_TK_NO_ERROR);
+    if( err != PRO_TK_NO_ERROR )
+<a name="anchor-194"></a>	return (PRO_TK_GENERAL_ERROR);
+
+    err = ProArrayAlloc( 0, sizeof(ProFeatStatus), 1, 
+	(ProArray *)&amp;p_status_array );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProUtilSolidLastFeatGet()&quot;,
+<a name="anchor-195"></a>					    err, err != PRO_TK_NO_ERROR);
+    if( err != PRO_TK_NO_ERROR )
+	return (PRO_TK_GENERAL_ERROR);
+
+    /* Get a list of features of the specified solid and their erres */
+<a name="anchor-196"></a>    err = ProSolidFeatstatusGet(solid, &amp;p_feat_id_array, &amp;p_status_array,
+	&amp;n_features );
+    TEST_CALL_REPORT( &quot;ProSolidFeatstatusGet()&quot;, &quot;ProUtilSolidLastFeatGet()&quot;,
+			err, err != PRO_TK_NO_ERROR );
+
+<a name="anchor-197"></a>    status = err;
+
+    err = ProArrayFree((ProArray*)&amp;p_feat_id_array );
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProUtilSolidLastFeatGet()&quot;,
+					    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-198"></a>    err = ProArrayFree((ProArray*)&amp;p_status_array );
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProUtilSolidLastFeatGet()&quot;,
+					    err, err != PRO_TK_NO_ERROR);
+
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-199"></a>	last_feature[0] = n_features;
+    else
+	last_feature[0] = 0;
+
+    return(status);
+<a name="anchor-200"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestFeatureReadOnlySet()
+    PURPOSE  :	Set Read Only status for feature
+<a name="anchor-201"></a>\*====================================================================*/
+int ProTestFeatureReadOnlySet(
+    ProSolid *p_solid,
+    int option)
+{
+<a name="anchor-202"></a>    ProError err;
+    ProSelection *sel;
+    int n_sel, max_feat, irange[2], i, ok=0;
+    ProFeature feature;
+
+<a name="anchor-203"></a>    switch(option)
+    {
+	case USER_SELECT:
+	    ProUtilMsgPrint(&quot;feat&quot;,&quot;TEST Select feature&quot;);
+	    err = ProSelect((char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+<a name="anchor-204"></a>	    if (err != PRO_TK_NO_ERROR || n_sel != 1)
+		break;
+
+	    err = ProSelectionModelitemGet(sel[0], (ProFeature *)&amp;feature);
+	    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+<a name="anchor-205"></a>		&quot;ProTestFeatureReadOnlySet()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    ok = 1;
+	    break;
+	case USER_FEAT_NUM:
+<a name="anchor-206"></a>	    err = ProUtilSolidLastFeatGet(p_solid[0], &amp;max_feat);
+	    if (err != PRO_TK_NO_ERROR || max_feat &lt;=0)
+		break;
+
+	    ProUtilMsgPrint(&quot;feat&quot;,
+<a name="anchor-207"></a>		&quot;TEST Enter feature regeneration number (1 - %0d) [QUIT]:&quot;,
+		&amp;max_feat);
+	    irange[0] = 1;
+	    irange[1] = max_feat;
+	    err = ProMessageIntegerRead(irange, &amp;i);
+<a name="anchor-208"></a>	    if (err != PRO_TK_NO_ERROR)
+		break;
+
+	    err = ProUtilFeatByNumberInit(p_solid[0], i, &amp;feature);
+	    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-209"></a>		break;
+
+	    ok = 1;
+	    break;
+	case USER_ALL_FEAT:
+<a name="anchor-210"></a>	    err = ProUtilSolidLastFeatGet(p_solid[0], &amp;max_feat);
+	    if (err != PRO_TK_NO_ERROR || max_feat &lt;=0)
+		break;
+
+	    err = ProUtilFeatByNumberInit(p_solid[0], max_feat, &amp;feature);
+<a name="anchor-211"></a>	    if (err != PRO_TK_NO_ERROR)
+		break;
+
+	    ok = 1;
+	    break;
+<a name="anchor-212"></a>	case USER_CLEAN:
+	    err = ProFeatureReadonlyUnset(p_solid[0]);
+	    TEST_CALL_REPORT(&quot;ProFeatureReadonlyUnset()&quot;,
+		&quot;ProTestFeatureReadOnlySet()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-213"></a>	    ProUtilMsgPrint(&quot;feat&quot;, &quot;TEST Read-only setting has been cleaned.&quot;);
+	    ok = 2;
+	    break;
+	default:
+	    ProTKPrintf(&quot;Error: ProTestFeatureReadOnlySet unknown action\n&quot;);
+<a name="anchor-214"></a>	    break;
+    }
+
+    if (ok == 1)
+    {
+<a name="anchor-215"></a>	err = ProFeatureReadonlySet(&amp;feature);
+	TEST_CALL_REPORT(&quot;ProFeatureReadonlySet()&quot;,
+		&quot;ProTestFeatureReadOnlySet()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	ProUtilMsgPrint(&quot;feat&quot;, 
+<a name="anchor-216"></a>	    &quot;TEST Features up to and feat ID %0d are now read only.&quot;, 
+	    &amp;feature.id);
+    }
+
+    if (ok > 0)
+<a name="anchor-217"></a>    {
+	err = ProMenuDelete();
+	TEST_CALL_REPORT(&quot;ProMenuDelete()&quot;,
+		    &quot;ProTestFeatureReadOnlySet()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-218"></a>    return(0);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestFeatureReadOnly()
+<a name="anchor-219"></a>    PURPOSE  :	Show tkR-only feat menu 
+\*====================================================================*/
+int ProTestFeatureReadOnly(ProSolid *p_solid)
+{
+    ProError status;
+<a name="anchor-220"></a>    int menu_id, action;
+
+    status = ProMenuFileRegister((char*)&quot;tkR-only feat&quot;, (char*)&quot;tkronlyfeat.mnu&quot;, &amp;menu_id);
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestFeatureReadOnly()&quot;, 
+				    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-221"></a>
+    ProMenubuttonActionSet((char*)&quot;tkR-only feat&quot;, (char*)&quot;Select&quot;, 
+	(ProMenubuttonAction)ProTestFeatureReadOnlySet, 
+	p_solid, USER_SELECT);
+    ProMenubuttonActionSet((char*)&quot;tkR-only feat&quot;, (char*)&quot;Feat Num&quot;, 
+<a name="anchor-222"></a>	(ProMenubuttonAction)ProTestFeatureReadOnlySet, 
+	p_solid, USER_FEAT_NUM);
+    ProMenubuttonActionSet((char*)&quot;tkR-only feat&quot;, (char*)&quot;All Feat&quot;, 
+	(ProMenubuttonAction)ProTestFeatureReadOnlySet, 
+	p_solid, USER_ALL_FEAT);
+<a name="anchor-223"></a>    ProMenubuttonActionSet((char*)&quot;tkR-only feat&quot;, (char*)&quot;Clean&quot;, 
+	(ProMenubuttonAction)ProTestFeatureReadOnlySet, 
+	p_solid, USER_CLEAN);
+    ProMenubuttonActionSet((char*)&quot;tkR-only feat&quot;, (char*)&quot;Done/Return&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0); 
+<a name="anchor-224"></a>    ProMenubuttonActionSet((char*)&quot;tkR-only feat&quot;, (char*)&quot;tkR-only feat&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0); 
+
+    ProMenuPush();
+    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;tkR-only feat&quot;, &amp;menu_id);
+<a name="anchor-225"></a>    status = ProMenuCommandPush((char*)&quot;Select&quot;);
+    TEST_CALL_REPORT( &quot;ProMenuCommandPush()&quot;, &quot;ProTestFeatureReadOnly()&quot;, 
+				    status, status != PRO_TK_NO_ERROR );
+    ProMenuProcess((char*)&quot;tkR-only feat&quot;, &amp;action);
+    ProMenuPop();
+<a name="anchor-226"></a>
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-227"></a>    FUNCTION :	ProTestFeatureInsertModeSet
+    PURPOSE  :	Set/Cancel Insert mode
+\*====================================================================*/
+int ProTestFeatureInsertModeSet(
+    ProSolid *p_solid,
+<a name="anchor-228"></a>    int option)
+{
+    ProError err;
+    ProSelection *sel;
+    int n_sel, max_feat, feat_num, ok = 0;
+<a name="anchor-229"></a>    ProBoolean resume;
+    ProFeature feature;
+
+    switch (option)
+    {
+<a name="anchor-230"></a>	case USER_ACTIVATE:
+	    do
+	    {
+	    ProUtilMsgPrint(&quot;feat&quot;, &quot;Test Select a feature to insert after.&quot;);
+	    err = ProSelect((char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+<a name="anchor-231"></a>	    if (err != PRO_TK_NO_ERROR || n_sel != 1)
+		break;
+
+	    err = ProSelectionModelitemGet(sel[0], (ProFeature *)&amp;feature);
+	    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+<a name="anchor-232"></a>		&quot;ProTestFeatureInsertModeSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	    
+	    err = ProUtilSolidLastFeatGet(p_solid[0], &amp;max_feat);
+	    if (err != PRO_TK_NO_ERROR || max_feat &lt;=0)
+		break;
+<a name="anchor-233"></a>
+	    err = ProFeatureNumberGet(&amp;feature, &amp;feat_num);
+	    TEST_CALL_REPORT(&quot;ProFeatureNumberGet()&quot;,
+		&quot;ProTestFeatureInsertModeSet()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-234"></a>	    if (err != PRO_TK_NO_ERROR)
+		break;
+
+	    if (feat_num == max_feat)
+	    {
+<a name="anchor-235"></a>		ProUtilMsgPrint(&quot;feat&quot;, &quot;Test Can not select last feature.&quot;);
+		continue;
+	    }
+
+	    err = ProFeatureInsertmodeWithoptionsActivate(&amp;feature,PRO_REGEN_NO_FLAGS);
+<a name="anchor-236"></a>	    TEST_CALL_REPORT(&quot;ProFeatureInsertmodeWithoptionsActivate()&quot;,
+		&quot;ProTestFeatureInsertModeSet()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    ok = 1;
+	    } while (ok ==0);
+<a name="anchor-237"></a>	    break;
+	case USER_CANCEL:
+	    ProUtilMsgPrint(&quot;feat&quot;, &quot;TEST Resume features that were &quot;
+		&quot;suppressed when activating insert mode? [Y]:&quot;);
+	    resume = (ProBoolean)ProUtilYesnoGet((char*)&quot;yes&quot;);
+<a name="anchor-238"></a>
+	    err = ProInsertmodeWithoptionsCancel(p_solid[0], resume,PRO_REGEN_NO_FLAGS);
+	    TEST_CALL_REPORT(&quot;ProInsertmodeWithoptionsCancel()&quot;,
+		&quot;ProTestFeatureInsertModeSet()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-239"></a>	    ProUtilMsgPrint(&quot;feat&quot;, &quot;TEST Insert mode has been canceled.&quot;);
+	    ok = 1;
+	    break;
+    }
+
+<a name="anchor-240"></a>    if (ok == 1)
+    {
+	err = ProTreetoolRefresh((ProMdl)*p_solid);
+	TEST_CALL_REPORT(&quot;ProTreetoolRefresh()&quot;,
+	    &quot;ProTestFeatureInsertModeSet()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-241"></a>
+	ProMenuDelete();
+    }
+    return (0);
+}
+<a name="anchor-242"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestFeatureInsertMode
+    PURPOSE  :	Show TkIns Mode Menu
+\*====================================================================*/
+<a name="anchor-243"></a>int ProTestFeatureInsertMode(
+    ProSolid *p_solid)
+{
+    ProError status;
+    int menu_id, action;
+<a name="anchor-244"></a>    ProBoolean bool_flag;
+
+    status = ProMenuFileRegister((char*)&quot;tkinsert mode&quot;, (char*)&quot;tkinsertmode.mnu&quot;, &amp;menu_id);
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestFeatureInsertMode()&quot;, 
+				    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-245"></a>
+    ProMenubuttonActionSet((char*)&quot;tkinsert mode&quot;, (char*)&quot;Activate&quot;, 
+	(ProMenubuttonAction)ProTestFeatureInsertModeSet, 
+	p_solid, USER_ACTIVATE);
+    ProMenubuttonActionSet((char*)&quot;tkinsert mode&quot;, (char*)&quot;Cancel&quot;, 
+<a name="anchor-246"></a>	(ProMenubuttonAction)ProTestFeatureInsertModeSet, 
+	p_solid, USER_CANCEL);
+    ProMenubuttonActionSet((char*)&quot;tkinsert mode&quot;, (char*)&quot;Return&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0); 
+    ProMenubuttonActionSet((char*)&quot;tkinsert mode&quot;, (char*)&quot;tkinsert mode&quot;, 
+<a name="anchor-247"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0); 
+
+    status = ProInsertModeIsActive(p_solid[0], &amp;bool_flag);
+    TEST_CALL_REPORT( &quot;ProInsertModeIsActive()&quot;, &quot;ProTestFeatureInsertMode()&quot;, 
+				    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-248"></a>
+    ProMenuPush();
+    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;tkinsert mode&quot;, &amp;menu_id);
+    if (bool_flag == PRO_B_FALSE)
+    {
+<a name="anchor-249"></a>	status = ProMenubuttonActivate((char*)&quot;tkinsert mode&quot;, (char*)&quot;Activate&quot;);
+	TEST_CALL_REPORT(&quot;ProMenubuttonActivate()&quot;,
+	    &quot;ProTestFeatureInsertMode()&quot;, status, status != PRO_TK_NO_ERROR );
+	status = ProMenubuttonDeactivate((char*)&quot;tkinsert mode&quot;, (char*)&quot;Cancel&quot;);
+	TEST_CALL_REPORT(&quot;ProMenubuttonDeactivate()&quot;,
+<a name="anchor-250"></a>	    &quot;ProTestFeatureInsertMode()&quot;, status, status != PRO_TK_NO_ERROR );
+    }
+    else
+    {
+	status = ProMenubuttonActivate((char*)&quot;tkinsert mode&quot;, (char*)&quot;Cancel&quot;);
+<a name="anchor-251"></a>	TEST_CALL_REPORT(&quot;ProMenubuttonActivate()&quot;,
+	    &quot;ProTestFeatureInsertMode()&quot;, status, status != PRO_TK_NO_ERROR );
+	status = ProMenubuttonDeactivate((char*)&quot;tkinsert mode&quot;, (char*)&quot;Activate&quot;);
+	TEST_CALL_REPORT(&quot;ProMenubuttonDeactivate()&quot;,
+	    &quot;ProTestFeatureInsertMode()&quot;, status, status != PRO_TK_NO_ERROR );
+<a name="anchor-252"></a>    }
+    ProMenuProcess((char*)&quot;tkinsert mode&quot;, &amp;action);
+    ProMenuPop();
+
+    return (0);
+<a name="anchor-253"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProUtilSortedIntArrayObjectAdd
+    PURPOSE  :	Add int value to sorted array of int
+<a name="anchor-254"></a>\*====================================================================*/
+ProError ProUtilSortedIntArrayObjectAdd(
+    int **p_array,
+    int new_value)
+{
+<a name="anchor-255"></a>    ProError err;
+    int i, size;
+
+    err = ProArraySizeGet((ProArray)p_array[0], &amp;size);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+<a name="anchor-256"></a>	    &quot;ProUtilSortedIntArrayObjectAdd()&quot;, err, err != PRO_TK_NO_ERROR );
+
+    for (i=0; i&lt;size &amp;&amp; new_value>p_array[0][i]; i++);
+    if (i>=size || new_value&lt;p_array[0][i])
+    {
+<a name="anchor-257"></a>	err = ProArrayObjectAdd((ProArray*)p_array, i, 1, &amp;new_value);
+	TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;,
+	    &quot;ProUtilSortedIntArrayObjectAdd()&quot;, err, err != PRO_TK_NO_ERROR );
+    }
+
+<a name="anchor-258"></a>    return (err);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProUtilReorderPreFilter
+<a name="anchor-259"></a>    PURPOSE  :	filter function to reorder feats
+\*====================================================================*/
+ProError ProUtilReorderPreFilter(
+    ProSelection sel,
+    Pro3dPnt	pnt,
+<a name="anchor-260"></a>    ProMatrix trans,
+    char *option,
+    int level,
+    ProAppData	appdata)
+{
+<a name="anchor-261"></a>    ProSolid *p_solid = (ProSolid*)appdata;
+    ProMdlName w_name;
+    ProError err;
+    ProModelitem modelitem;
+
+<a name="anchor-262"></a>    TEST_CALL_REPORT(&quot;ProSelectionPreFilter()&quot;, 
+					   &quot;ProUtilReorderPreFilter()&quot;, PRO_TK_NO_ERROR, 0);
+
+    err = ProSelectionModelitemGet(sel, &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+<a name="anchor-263"></a>		&quot;ProUtilReorderPreFilter()&quot;, err, err != PRO_TK_NO_ERROR );
+    if (modelitem.owner != (ProMdl)p_solid[0])
+    {
+	err = ProMdlMdlnameGet(modelitem.owner, w_name);
+	TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;,
+<a name="anchor-264"></a>		&quot;ProUtilReorderPreFilter()&quot;, err, err != PRO_TK_NO_ERROR );
+	ProUtilMsgPrint(&quot;feat&quot;, &quot;Test Select from %0w please.&quot;, w_name);
+	return (PRO_TK_CONTINUE);
+    }
+
+<a name="anchor-265"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestFeatureReorder
+<a name="anchor-266"></a>    PURPOSE  :	Reorder features
+\*====================================================================*/
+int ProTestFeatureReorder(
+    ProSolid *p_solid)
+{    
+<a name="anchor-267"></a>    ProError err;
+    int *feat_arr = NULL, n_sel, stop = 0, i, ok=0;
+    int feat_num, *p_feat_id_array = NULL;
+    ProSelection *sel;
+    ProModelitem modelitem;
+<a name="anchor-268"></a>    ProSelFunctions filter;
+    ProFeatStatus *p_status_array = NULL;
+
+    ProUtilMsgPrint(&quot;feat&quot;, &quot;Test Select features to reorder. Multiple features&quot;
+	&quot; must be in consecutive order.&quot;);
+<a name="anchor-269"></a>
+    memset(&amp;filter, '\0', sizeof(filter));
+    filter.pre_filter = (ProSelectionPreFilter)ProUtilReorderPreFilter;
+    filter.app_data = (ProAppData)p_solid;
+
+<a name="anchor-270"></a>    do
+    {
+
+    err = ProSelect((char*)&quot;feature&quot;, -1, NULL, &amp;filter, NULL, NULL, &amp;sel, &amp;n_sel);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-271"></a>	break;
+
+    /* Sort features array by number */
+    ProArrayAlloc(0, sizeof(int), 1, (ProArray*)&amp;feat_arr);
+    for (i=0; i&lt;n_sel; i++)
+<a name="anchor-272"></a>    {
+	err = ProSelectionModelitemGet(sel[i], &amp;modelitem);
+	TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+	    &quot;ProTestFeatureReorder()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-273"></a>	err = ProFeatureNumberGet((ProFeature*)&amp;modelitem, &amp;feat_num);
+	if (err != PRO_TK_NO_ERROR)
+	    continue;    
+
+	ProUtilSortedIntArrayObjectAdd(&amp;feat_arr, feat_num);
+<a name="anchor-274"></a>    }
+    
+    ProUtilMsgPrint(&quot;feat&quot;, &quot;Test Select a feature to insert after.&quot;);
+    err = ProSelect((char*)&quot;feature&quot;, 1, NULL, &amp;filter, NULL, NULL, &amp;sel, &amp;n_sel);
+    if (err != PRO_TK_NO_ERROR || n_sel != 1)
+<a name="anchor-275"></a>	break;
+
+    err = ProSelectionModelitemGet(sel[0], &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+		    &quot;ProTestFeatureReorder()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-276"></a>
+    err = ProFeatureNumberGet((ProFeature*)&amp;modelitem, &amp;feat_num);
+    if (err != PRO_TK_NO_ERROR)
+	break;    
+
+<a name="anchor-277"></a>    feat_num++;
+    ProArraySizeGet((ProArray)feat_arr, &amp;n_sel);
+
+    /* Show possibility to reorder features in two modes */
+    err = ProArrayAlloc( 0, sizeof(int), 1, (ProArray *)&amp;p_feat_id_array );
+<a name="anchor-278"></a>    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,
+		&quot;ProTestFeatureReorder()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+	break;
+
+<a name="anchor-279"></a>    for (i=0; i&lt;n_sel; i++)
+    {
+	err = ProUtilFeatByNumberInit(p_solid[0], feat_arr[i],
+	    (ProFeature*)&amp;modelitem);
+    	TEST_CALL_REPORT(&quot;ProUtilFeatByNumberInit()&quot;,
+<a name="anchor-280"></a>		&quot;ProTestFeatureReorder()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	ProArrayObjectAdd((ProArray*)&amp;p_feat_id_array, PRO_VALUE_UNUSED,
+	    1, &amp;modelitem.id);
+    }
+<a name="anchor-281"></a>
+    err = ProFeatureReorder(p_solid[0], p_feat_id_array, n_sel, feat_num);
+    TEST_CALL_REPORT(&quot;ProFeatureReorder()&quot;,
+		&quot;ProTestFeatureReorder()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-282"></a>    if (err != PRO_TK_NO_ERROR)
+	break;
+
+    ok =1;
+
+<a name="anchor-283"></a>    } while (stop);
+    
+    if (feat_arr != NULL)
+    {
+	err = ProArrayFree((ProArray*)&amp;feat_arr);
+<a name="anchor-284"></a>	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;,
+		    &quot;ProTestFeatureReorder()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    if (p_feat_id_array != NULL)
+    {
+<a name="anchor-285"></a>	err = ProArrayFree((ProArray*)&amp;p_feat_id_array);
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;,
+		    &quot;ProTestFeatureReorder()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    if (p_status_array != NULL)
+<a name="anchor-286"></a>    {
+	err = ProArrayFree((ProArray*)&amp;p_status_array);
+	TEST_CALL_REPORT( &quot;ProArrayFree()&quot;,
+		    &quot;ProTestFeatureReorder()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-287"></a>    if (ok == 1)
+    {
+	err = ProTreetoolRefresh((ProMdl)*p_solid);
+	TEST_CALL_REPORT(&quot;ProTreetoolRefresh()&quot;,
+		    &quot;ProTestFeatureReorder()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-288"></a>    }
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-289"></a>FUNCTION : ProTestFeatTreeInfoGet
+PURPOSE  : The main function for getting the feature tree definition
+\*====================================================================*/
+int ProTestFeatTreeInfoGet()
+{
+<a name="anchor-290"></a>    ProError err;
+    ProFeature feature;
+    ProElement elemtree;
+    ProSelection *p_sel;
+    int n_sel;
+<a name="anchor-291"></a>
+    ProUtilMsgPrint(&quot;feat&quot;, &quot;TEST Select feature&quot;);    
+    
+    err = ProSelect((char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-292"></a>	return (0);
+
+    err = ProSelectionModelitemGet(p_sel[0], (ProModelitem *)&amp;feature);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+		    &quot;ProTestFeatTreeInfoGet&quot;, err , err != PRO_TK_NO_ERROR);
+<a name="anchor-293"></a>
+    err = ProFeatureElemtreeExtract(&amp;feature, NULL,  PRO_FEAT_EXTRACT_NO_OPTS, &amp;elemtree );
+    TEST_CALL_REPORT(&quot;ProFeatureElemtreeExtract()&quot;,&quot;ProTestFeatTreeInfoGet&quot;,
+                            err , err != PRO_TK_NO_ERROR);
+
+<a name="anchor-294"></a>    if(err == PRO_TK_INVALID_TYPE)
+      ProUtilMsgPrint(&quot;gen&quot;,&quot;TEST %0s&quot;,
+			    &quot;Elem Tree isn't supported for this feature&quot;);
+    else if(err != PRO_TK_NO_ERROR)
+	    ProUtilMsgPrint(&quot;gen&quot;,&quot;TEST %0s&quot;,&quot;Error getting the elem tree&quot;);
+<a name="anchor-295"></a>      else
+         ProUtilShowTreeInInfo(elemtree);
+ 
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-296"></a>
+/*====================================================================*\
+FUNCTION : ProTestLocalGroupCreate
+PURPOSE  : Function to test local group
+\*====================================================================*/
+<a name="anchor-297"></a>int ProTestLocalGroupCreate(    
+    ProSolid *p_solid)
+{
+    ProError err;
+    ProName  w_name;
+<a name="anchor-298"></a>    int *feat_arr = NULL, n_sel, stop = 0, i, *p_feat_id_array, feat_num;
+    ProSelection *sel;
+    ProModelitem modelitem;
+    ProGroup group;
+
+<a name="anchor-299"></a>    ProUtilMsgPrint(&quot;feat&quot;, &quot;Test Enter group name [QUIT]:&quot;);
+    if (ProMessageStringRead(PRO_NAME_SIZE, w_name) != PRO_TK_NO_ERROR)
+	return (-1);
+
+    ProUtilMsgPrint(&quot;feat&quot;, &quot;Test Select features to form a group.&quot;);
+<a name="anchor-300"></a>
+    do
+    {
+
+    err = ProSelect((char*)&quot;feature&quot;, -1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+<a name="anchor-301"></a>    if (err != PRO_TK_NO_ERROR)
+	break;
+
+    /* Sort features array by number */
+    ProArrayAlloc(0, sizeof(int), 1, (ProArray*)&amp;feat_arr);
+<a name="anchor-302"></a>    for (i=0; i&lt;n_sel; i++)
+    {
+	err = ProSelectionModelitemGet(sel[i], &amp;modelitem);
+	TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+		    &quot;ProTestLocalGroupCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-303"></a>
+	err = ProFeatureNumberGet((ProFeature*)&amp;modelitem, &amp;feat_num);
+	if (err != PRO_TK_NO_ERROR)
+	    continue;    
+
+<a name="anchor-304"></a>	ProUtilSortedIntArrayObjectAdd(&amp;feat_arr, feat_num);
+    }
+
+    err = ProArraySizeGet((ProArray)feat_arr, &amp;n_sel);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+<a name="anchor-305"></a>		    &quot;ProTestLocalGroupCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProArrayAlloc( 0, sizeof(int), 1, (ProArray *)&amp;p_feat_id_array );
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,
+		    &quot;ProTestLocalGroupCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-306"></a>    if (err != PRO_TK_NO_ERROR)
+	break;
+
+    for (i=0; i&lt;n_sel; i++)
+    {
+<a name="anchor-307"></a>	err = ProUtilFeatByNumberInit(p_solid[0], feat_arr[i],
+	    (ProFeature*)&amp;modelitem);
+
+	ProArrayObjectAdd((ProArray*)&amp;p_feat_id_array, PRO_VALUE_UNUSED,
+	    1, &amp;modelitem.id);
+<a name="anchor-308"></a>    }
+
+    err = ProLocalGroupCreate((ProSolid)modelitem.owner, p_feat_id_array, n_sel, w_name,
+	&amp;group);
+    TEST_CALL_REPORT(&quot;ProLocalGroupCreate()&quot;,
+<a name="anchor-309"></a>		&quot;ProTestLocalGroupCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProArrayFree((ProArray*)&amp;feat_arr);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+		    &quot;ProTestLocalGroupCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-310"></a>
+    err = ProArrayFree((ProArray*)&amp;p_feat_id_array);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+		    &quot;ProTestLocalGroupCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-311"></a>    } while (stop);
+    
+    err = ProTreetoolRefresh(modelitem.owner);
+    TEST_CALL_REPORT(&quot;ProTreetoolRefresh()&quot;,
+		    &quot;ProTestLocalGroupCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-312"></a>    ProMenuDelete();
+    return (0);
+}
+
+
+<a name="anchor-313"></a>
+/*====================================================================*\
+FUNCTION : ProUtilFeatPatternClass
+PURPOSE  : Return the pattern class the feature belongs to
+\*====================================================================*/
+<a name="anchor-314"></a>ProError ProUtilFeatPatternClass(
+    ProFeature *feature,
+    ProPatternClass *pat_class)
+{
+    ProGrppatternStatus grpat_status;
+<a name="anchor-315"></a>    ProPatternStatus	pat_status;
+    ProError err;
+    
+    err = ProFeaturePatternStatusGet(feature, &amp;pat_status);
+    TEST_CALL_REPORT(&quot;ProFeaturePatternStatusGet()&quot;,
+<a name="anchor-316"></a>		&quot;ProUtilFeatPatternClass()&quot;, err , err != PRO_TK_NO_ERROR);
+
+    err = ProFeatureGrppatternStatusGet(feature, &amp;grpat_status);
+    TEST_CALL_REPORT(&quot;ProFeatureGrppatternStatusGet()&quot;,
+		&quot;ProUtilFeatPatternClass()&quot;, err , err != PRO_TK_NO_ERROR);
+<a name="anchor-317"></a>
+    if (pat_status == PRO_PATTERN_LEADER || pat_status == PRO_PATTERN_MEMBER)
+    {
+	if (grpat_status == PRO_GRP_PATTERN_LEADER || 
+	    grpat_status == PRO_GRP_PATTERN_MEMBER)
+<a name="anchor-318"></a>	{
+	    /* Both Patterns Possible */
+	    err = ProMenuFileRegister((char*)&quot;tkpat type&quot;, (char*)&quot;tkpattype.mnu&quot;, NULL);
+	    err = ProMenubuttonActionSet((char*)&quot;tkpat type&quot;, (char*)&quot;Pattern&quot;,
+		(ProMenubuttonAction)ProUtilMenubuttonDeleteWithStatus, NULL, PRO_FEAT_PATTERN);
+<a name="anchor-319"></a>	    err = ProMenubuttonActionSet((char*)&quot;tkpat type&quot;, (char*)&quot;Group Pattern&quot;,
+		(ProMenubuttonAction)ProUtilMenubuttonDeleteWithStatus, NULL, PRO_GROUP_PATTERN);
+	    err = ProMenubuttonActionSet((char*)&quot;tkpat type&quot;, (char*)&quot;tkpat type&quot;,
+		(ProMenubuttonAction)ProMenuHold, NULL, 0);
+
+<a name="anchor-320"></a>	    err = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;tkpattype&quot;, NULL);
+	    err = ProMenuProcess((char*)&quot;tkpattype&quot;, (int*)pat_class);
+	} 
+	else
+	    pat_class[0] = PRO_FEAT_PATTERN;  
+<a name="anchor-321"></a>    }
+    else
+    {
+	if (grpat_status == PRO_GRP_PATTERN_LEADER || 
+	    grpat_status == PRO_GRP_PATTERN_MEMBER)
+<a name="anchor-322"></a>	    pat_class[0] = PRO_GROUP_PATTERN;  
+	else
+	    return (PRO_TK_E_NOT_FOUND);
+    }
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-323"></a>}
+
+
+/*====================================================================*\
+FUNCTION : ProTestPattern
+<a name="anchor-324"></a>PURPOSE  : Function to test pattern functions
+\*====================================================================*/
+int ProTestPattern(    
+    ProSolid *p_solid)
+{
+<a name="anchor-325"></a>    ProError err;
+    ProFeature feature;
+    ProPatternClass pat_class;
+    ProPattern pattern;
+    ProElement elemtree;
+<a name="anchor-326"></a>    ProSelection *p_sel;
+    int n_sel;
+
+    ProUtilMsgPrint(&quot;feat&quot;, &quot;TEST Select feature&quot;);    
+    
+<a name="anchor-327"></a>    err = ProSelect((char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+    if (err != PRO_TK_NO_ERROR || n_sel != 1)
+	return (0);
+    err = ProSelectionModelitemGet(p_sel[0],
+                          (ProModelitem *)&amp;feature);
+<a name="anchor-328"></a>    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+		&quot;ProTestPatternTreeInfoGet&quot;, err , err != PRO_TK_NO_ERROR);
+
+
+    err = ProUtilFeatPatternClass(&amp;feature, &amp;pat_class);
+<a name="anchor-329"></a>    if (err != PRO_TK_NO_ERROR)
+    {
+	ProUtilMsgPrint(&quot;gen&quot;,&quot;TEST %0s&quot;,
+	    &quot;This feature does not belong to the pattern.&quot;);
+    }
+<a name="anchor-330"></a>    else
+    {
+        /* Get the leader feature */
+        err = ProFeaturePatternGet( &amp;feature, pat_class, &amp;pattern );
+        TEST_CALL_REPORT(&quot;ProFeaturePatternGet()&quot;,
+<a name="anchor-331"></a>                &quot;ProTestPattern&quot;, err , err != PRO_TK_NO_ERROR);
+        err = ProPatternLeaderGet( &amp;pattern, &amp;feature );
+        TEST_CALL_REPORT(&quot;ProPatternLeaderGet&quot;,
+                &quot;ProTestPattern&quot;, err , err != PRO_TK_NO_ERROR);
+
+<a name="anchor-332"></a>        err = ProPatternElemtreeCreate(&amp;feature, pat_class, &amp;elemtree );
+        TEST_CALL_REPORT(&quot;ProPatternElemtreeCreate()&quot;,
+                &quot;ProTestPattern&quot;, err , err != PRO_TK_NO_ERROR);
+	
+	switch (err)
+<a name="anchor-333"></a>	  {
+	  case PRO_TK_NOT_IMPLEMENTED:
+	    ProUtilMsgPrint (&quot;feat&quot;, &quot;TEST %0s&quot;, &quot;Selected pattern is a fill pattern.  Fill patterns are not currently supported via element trees.&quot;);
+	    break;
+	  case PRO_TK_NO_ERROR:
+<a name="anchor-334"></a>	      ProUtilShowTreeInInfo(elemtree);
+
+	      err = ProElementFree(&amp;elemtree);
+	      TEST_CALL_REPORT(&quot;ProElementFree()&quot;,
+			       &quot;ProTestPattern&quot;, err , err != PRO_TK_NO_ERROR);
+<a name="anchor-335"></a>	      break;
+	  default:
+	    ProUtilMsgPrint(&quot;feat&quot;, &quot;TEST %0s&quot;, &quot;Error getting the elem tree&quot;);
+	    break;
+	}
+<a name="anchor-336"></a>    }
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-337"></a>
+
+/*====================================================================*\
+    FUNCTION :	ProTestFeatures()
+    PURPOSE  :	Test code for features
+<a name="anchor-338"></a>\*====================================================================*/
+int ProTestFeatures(
+    ProMdl *model)
+{
+    ProError		status;
+<a name="anchor-339"></a>    int			menu_id;    /* The identifier of the created menu */
+    int			action;
+
+    /* Load menu from file */
+    status = ProMenuFileRegister( (char*)&quot;TkFeats&quot;, (char*)&quot;tkfeats.mnu&quot;, &amp;menu_id );
+<a name="anchor-340"></a>    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestFeatures()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Create&quot;,
+        (ProMenubuttonAction)ProTestFeatCreate, model, 0 );
+<a name="anchor-341"></a>    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Create Pattern&quot;,
+        (ProMenubuttonAction)ProTestPatternCreate, NULL, 0 );        
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Tree Info&quot;, 
+	(ProMenubuttonAction)ProTestFeatTreeInfoGet, model, 0 );
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Model Info&quot;, 
+<a name="anchor-342"></a>	(ProMenubuttonAction)ProTestFeatureInfo, model, MODEL_INFO );
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Feat Info&quot;, 
+	(ProMenubuttonAction)ProTestFeatureInfo, model, FEAT_INFO );
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Feat List&quot;, 
+	(ProMenubuttonAction)ProTestFeatureInfo, model, FEAT_LIST );
+<a name="anchor-343"></a>    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Sect Info&quot;,
+	(ProMenubuttonAction)ProTestFeatureSectionInfo, model, 0 );
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Delete&quot;, 
+	(ProMenubuttonAction)ProTestFeatureKill, model, DELETE );
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Pattern&quot;, 
+<a name="anchor-344"></a>	(ProMenubuttonAction)ProTestPattern, model, 0);
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Group&quot;, 
+	(ProMenubuttonAction)ProTestLocalGroupCreate, model, 0 );
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Suppress&quot;, 
+	(ProMenubuttonAction)ProTestFeatureKill, model, SUPPRESS );
+<a name="anchor-345"></a>    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Resume&quot;, 
+	(ProMenubuttonAction)ProTestFeatureResume, model, RESUME );
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Reorder&quot;, 
+	(ProMenubuttonAction)ProTestFeatureReorder, model, 0);
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Read Only&quot;, 
+<a name="anchor-346"></a>	(ProMenubuttonAction)ProTestFeatureReadOnly, model, 0);
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Insert mode&quot;, 
+	(ProMenubuttonAction)ProTestFeatureInsertMode, model, 0);
+    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;-Done TkFeats&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+<a name="anchor-347"></a>    ProMenubuttonActionSet( (char*)&quot;TkFeats&quot;, (char*)&quot;TkFeats&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+    /* Run menu TkFeats */
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkFeats&quot;, &amp;menu_id );
+<a name="anchor-348"></a>    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestFeatures()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+	status = ProMenuProcess( (char*)&quot;TkFeats&quot;, &amp;action );
+<a name="anchor-349"></a>	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestFeatures()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+
+    return(0);
+<a name="anchor-350"></a>}
+
+#undef FEAT_LIST
+#undef FEAT_INFO
+#undef MODEL_INFO
+<a name="anchor-351"></a>#undef	DELETE
+#undef SUPPRESS
+#undef RESUME
+
+#undef USER_SELECT
+<a name="anchor-352"></a>#undef USER_FEAT_NUM
+#undef USER_ALL_FEAT
+#undef USER_CLEAN
+
+#undef USER_ACTIVATE
+<a name="anchor-353"></a>#undef USER_CANCEL
+
+#undef USER_BEFORE
+#undef USER_AFTER
+
+<a name="anchor-354"></a>
+
+</pre>
+</body>
+</html>

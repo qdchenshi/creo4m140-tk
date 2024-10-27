@@ -1,0 +1,1042 @@
+<html>
+<head>
+<title>TestAnalysisSurface.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProAnalysis.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProMessage.h>
+#include &lt;ProArray.h>
+<a name="anchor-3"></a>#include &lt;ProPoint.h>
+#include &lt;ProDtmPnt.h>
+#include &lt;ProUtil.h>
+#include &lt;ProEdge.h>
+#include &lt;ProEdgedata.h>
+<a name="anchor-4"></a>
+#include &lt;TestAnalysis.h>
+
+#define UV_FREQ 1
+
+<a name="anchor-5"></a>typedef ProUvParam ProUvParam2[2];
+
+static ProFileName analysis_msgfile; 
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-6"></a>  Application includes
+\*--------------------------------------------------------------------*/
+
+static void XyzDataEval(Surfacedata_t *data, ProUvParam uv, ProVector xyz);
+
+<a name="anchor-7"></a>/*====================================================================*\
+  FUNCTION : ProTestSurfaceUiAction()
+  PURPOSE  : Callback for UI action of analysis feature
+\*====================================================================*/
+ProError ProTestSurfaceUiAction (
+<a name="anchor-8"></a>				 ProAnalysis analysis)
+{
+  Surfacedata_t *data;
+  ProError err = PRO_TK_NO_ERROR;
+  ProSelection *sel = NULL;
+<a name="anchor-9"></a>  int n_sel;
+  ProGeomitem feature;
+  ProSurface pln_surface;
+  ProSrftype surface_type;
+  FILE *fp;
+<a name="anchor-10"></a>
+  data = (Surfacedata_t *)calloc(1, sizeof(Surfacedata_t));
+  sel = (ProSelection *)calloc(1, sizeof(ProSelection));
+
+  TEST_CALL_REPORT (&quot;ProAnalysisUiAction()====&quot;, 
+<a name="anchor-11"></a>		    &quot;ProTestSurfaceUiAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  /*--------------------------------------------------------------------*\
+  Ask the user to select a surface. 
+  \*--------------------------------------------------------------------*/
+<a name="anchor-12"></a>
+  ProStringToWstring (analysis_msgfile, (char *)&quot;analysis_msg.txt&quot;);
+
+  ProMessageDisplay (analysis_msgfile, (char *)&quot;USER Select a surface feature&quot;);
+
+<a name="anchor-13"></a>  if (ProSelect ((char *)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel) 
+      != PRO_TK_NO_ERROR || n_sel &lt; 0)
+    return (PRO_TK_USER_ABORT);
+    
+
+<a name="anchor-14"></a>  err = ProSelectionModelitemGet(*sel, &amp;feature);
+  TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, 
+		    &quot;ProTestSurfaceUiAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+  if ( err != PRO_TK_NO_ERROR )
+<a name="anchor-15"></a>    return err; 
+    
+
+  err = ProGeomitemToSurface (&amp;feature, &amp;pln_surface);
+  TEST_CALL_REPORT (&quot;ProGeomitemToSurface()&quot;, 
+<a name="anchor-16"></a>		    &quot;ProTestSurfaceUiAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  /*--------------------------------------------------------------------*\
+  Verify the selection of a surface feature.
+  \*--------------------------------------------------------------------*/
+<a name="anchor-17"></a>  err = ProSurfaceTypeGet (pln_surface, &amp;surface_type);
+  TEST_CALL_REPORT (&quot;ProSurfaceTypeGet()&quot;, 
+		    &quot;ProTestSurfaceUiAction()&quot;, err, err != PRO_TK_NO_ERROR);   
+  /*--------------------------------------------------------------------*\
+  Get the pointer to the data stored for this analysis feature,
+<a name="anchor-18"></a>  and set the surface in it.
+  \*--------------------------------------------------------------------*/
+  err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+		    &quot;ProTestSurfaceUiAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-19"></a>  if (err != PRO_TK_NO_ERROR)
+    return(PRO_TK_USER_ABORT);
+
+  memcpy (&amp;data->surface, &amp;feature, sizeof (ProGeomitem));
+  
+<a name="anchor-20"></a>  err = ProAnalysisInfoSet(analysis, data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoSet()&quot;, 
+		    &quot;ProTestSurfaceInfoallocAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+  return(PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>
+    
+}
+
+/*====================================================================*\
+<a name="anchor-22"></a>FUNCTION : ProTestSurfaceDimsAction()
+PURPOSE  : Create dimentions
+\*====================================================================*/
+ProError ProTestSurfaceDimsAction(
+				  ProAnalysis analysis,
+<a name="anchor-23"></a>				  double **dims)
+{
+  Surfacedata_t *data;
+  ProError err = PRO_TK_NO_ERROR;
+  FILE *fp;
+<a name="anchor-24"></a>
+  TEST_CALL_REPORT (&quot;ProAnalysisDimsAction()====&quot;, 
+		    &quot;ProTestSurfaceDimsAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  /*---------------------------------------------------------*\
+<a name="anchor-25"></a>  Get the analysis data for this structure
+  \*---------------------------------------------------------*/
+  err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+		    &quot;ProTestSurfaceDimsAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-26"></a>  if (err != PRO_TK_NO_ERROR)
+    return(PRO_TK_USER_ABORT);
+    
+  return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-27"></a>
+/*====================================================================*\
+FUNCTION : ProTestSurfaceInfoallocAction()
+PURPOSE  : Callback to allocate application data needed to describe
+		the analysis feature
+<a name="anchor-28"></a>\*====================================================================*/
+ProError ProTestSurfaceInfoallocAction(
+				       ProAnalysis analysis)
+{
+  Surfacedata_t *data;
+<a name="anchor-29"></a>  ProError err = PRO_TK_NO_ERROR;
+
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoallocAction()====&quot;, 
+		    &quot;ProTestSurfaceInfoallocAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  /*--------------------------------------------------------------------*\
+<a name="anchor-30"></a>  Allocate a data structure
+  \*--------------------------------------------------------------------*/
+  data = (Surfacedata_t*)calloc(1, sizeof(Surfacedata_t));
+  if (data == NULL)
+    return PRO_TK_USER_ABORT;
+<a name="anchor-31"></a>
+  /*--------------------------------------------------------------------*\
+  Put the data pointer into the analysis
+  \*--------------------------------------------------------------------*/
+  err = ProAnalysisInfoSet(analysis, (ProAppData)data);
+<a name="anchor-32"></a>  TEST_CALL_REPORT (&quot;ProAnalysisInfoSet()&quot;, 
+		    &quot;ProTestSurfaceInfoallocAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-33"></a>
+/*====================================================================*\
+FUNCTION : ProTestSurfaceInfofreeAction()
+PURPOSE  : Callback to free the application data
+\*====================================================================*/
+<a name="anchor-34"></a>ProError ProTestSurfaceInfofreeAction(
+				      ProAnalysis analysis)
+{
+  Surfacedata_t *data;
+  ProError err = PRO_TK_NO_ERROR;
+<a name="anchor-35"></a>
+  TEST_CALL_REPORT (&quot;ProAnalysisInfofreeAction()====&quot;, 
+		    &quot;ProTestSurfaceInfofreeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  /*--------------------------------------------------------------------*\
+  Get the data pointer from the analysis
+<a name="anchor-36"></a>  \*--------------------------------------------------------------------*/
+  err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+		    &quot;ProTestSurfaceInfofreeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  if (err != PRO_TK_NO_ERROR)
+<a name="anchor-37"></a>    return(PRO_TK_GENERAL_ERROR);
+
+ /*--------------------------------------------------------------------*\
+  Free the data
+  \*--------------------------------------------------------------------*/
+<a name="anchor-38"></a>  free (data);
+
+  /*--------------------------------------------------------------------*\
+  Set the data pointer in the analysis to NULL
+  \*--------------------------------------------------------------------*/
+<a name="anchor-39"></a>  err = ProAnalysisInfoSet (analysis, NULL);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoSet()&quot;, 
+		    &quot;ProTestSurfaceInfofreeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  return(PRO_TK_NO_ERROR);
+<a name="anchor-40"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestSurfaceCompcheckAction()
+PURPOSE  : Callback to tell Pro/E whether computation can be performed
+<a name="anchor-41"></a>		in this analysis feature
+\*====================================================================*/
+ProError ProTestSurfaceCompcheckAction(
+				       ProAnalysis analysis)
+{
+<a name="anchor-42"></a>  ProError err = PRO_TK_NO_ERROR;
+
+  TEST_CALL_REPORT (&quot;ProAnalysisCompcheckAction()====&quot;, 
+		    &quot;ProTestSurfaceCompcheckAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+<a name="anchor-43"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION : ProTestSurfaceComputeAction()
+<a name="anchor-44"></a>PURPOSE  : Callback to perform the analysis feature computation
+\*====================================================================*/
+ProError ProTestSurfaceComputeAction(
+				     ProAnalysis analysis)
+{
+<a name="anchor-45"></a>  ProError err = PRO_TK_NO_ERROR;
+  double offset;
+  Surfacedata_t *s_data;
+  ProSurface *pln_surface = NULL;
+  ProGeomitemdata *surf_data = NULL;
+<a name="anchor-46"></a>  FILE *fp;
+
+  s_data = (Surfacedata_t *)calloc(1, sizeof(Surfacedata_t));
+  pln_surface = (ProSurface *)calloc(1, sizeof(ProSurface));
+
+<a name="anchor-47"></a>  surf_data = (ProGeomitemdata *)calloc(1, sizeof(ProGeomitemdata));
+
+  TEST_CALL_REPORT (&quot;ProAnalysisComputeAction====)&quot;, 
+		    &quot;ProTestSurfaceComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-48"></a>  /*--------------------------------------------------------------------*\
+  Get the application data from the analysis
+  \*--------------------------------------------------------------------*/
+  err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;s_data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+<a name="anchor-49"></a>		    &quot;ProTestSurfaceComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  if (err != PRO_TK_NO_ERROR)
+    return(PRO_TK_GENERAL_ERROR);
+
+  err = ProGeomitemToSurface (&amp;s_data->surface, pln_surface);
+<a name="anchor-50"></a>  TEST_CALL_REPORT (&quot;ProGeomitemToSurface()&quot;, 
+		    &quot;ProTestSurfaceComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+  err = ProSurfaceDataGet(*pln_surface, &amp;surf_data);
+  TEST_CALL_REPORT (&quot;ProSurfaceDataGet()&quot;, 
+<a name="anchor-51"></a>		    &quot;ProTestSurfaceComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  s_data->surf_data = *(surf_data->data.p_surface_data);
+
+  err = ProAnalysisInfoSet (analysis, s_data);
+<a name="anchor-52"></a>  TEST_CALL_REPORT (&quot;ProAnalysisInfoSet()&quot;, 
+		    &quot;ProTestSurfaceComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-53"></a>
+/*====================================================================*\
+FUNCTION : ProTestSurfaceDisplayAction()
+PURPOSE  : Callback to display the results of the analysis computation
+\*====================================================================*/
+<a name="anchor-54"></a>ProError ProTestSurfaceDisplayAction(
+				     ProAnalysis analysis)
+{
+  Surfacedata_t *data;
+  ProUvParam  min_uv, max_uv, uv;
+<a name="anchor-55"></a>  double u_incr, v_incr;
+  ProVector xyz;
+  ProPoint3d **pnt_arr, **pnt_arr1;
+  ProVector pos;
+  ProError err = PRO_TK_NO_ERROR;
+<a name="anchor-56"></a>  ProEnttype type;
+  int i, j, k, num, n_pnt;
+  FILE *fp;
+  
+
+<a name="anchor-57"></a>  TEST_CALL_REPORT (&quot;ProAnalysisDisplayAction()====&quot;, 
+		    &quot;ProTestSurfaceDisplayAction()&quot;, err, err != PRO_TK_NO_ERROR);
+ 
+  /*--------------------------------------------------------------------*\
+  Get the application data from the analysis
+<a name="anchor-58"></a>  \*--------------------------------------------------------------------*/
+  err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+		    &quot;ProTestSurfaceDisplayAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  if (err != PRO_TK_NO_ERROR)
+<a name="anchor-59"></a>    return(PRO_TK_GENERAL_ERROR);
+
+  return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-60"></a>/*====================================================================*\
+FUNCTION : ProTestSurfaceOutputAction()
+PURPOSE  : Callback to write textual information about the result of
+		the computation
+\*====================================================================*/
+<a name="anchor-61"></a>ProError ProTestSurfaceOutputAction(
+				    ProAnalysis analysis,
+				    ProLine **lines)
+{
+  Surfacedata_t *data;
+<a name="anchor-62"></a>  ProError err = PRO_TK_NO_ERROR;
+  ProCharLine buff;
+  ProLine line;
+  FILE *fp;
+
+<a name="anchor-63"></a>  TEST_CALL_REPORT (&quot;ProAnalysisOutputAction()====&quot;, 
+		    &quot;ProTestSurfaceOutputAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  /*--------------------------------------------------------------------*\
+  Get the application data from the analysis
+<a name="anchor-64"></a>  \*--------------------------------------------------------------------*/
+  err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+		    &quot;ProTestSurfaceOutputAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  if (err != PRO_TK_NO_ERROR)
+<a name="anchor-65"></a>    return(PRO_TK_GENERAL_ERROR);
+  
+  TEST_CALL_REPORT (&quot;ProAnalysisOutputAction()====&quot;, 
+		    &quot;ProTestSurfaceOutputAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-66"></a>  return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+FUNCTION : ProTestSurfaceSavecheckAction()
+<a name="anchor-67"></a>PURPOSE  : Callback to tell Pro/E whether the analysis application
+		data can be saved
+\*====================================================================*/
+ProError ProTestSurfaceSavecheckAction(
+    ProAnalysis analysis)
+<a name="anchor-68"></a>{
+  return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-69"></a>FUNCTION : ProTestSurfaceInfosaveAction()
+PURPOSE  : Callback to tell Pro/E what element references are required
+		by the analysis feature
+\*====================================================================*/
+ProError ProTestSurfaceInfosaveAction(
+<a name="anchor-70"></a>    ProAnalysis analysis,
+    ProFeature  *feature,
+    ProSelection **references)
+{
+  ProError err = PRO_TK_NO_ERROR;
+<a name="anchor-71"></a>  Surfacedata_t *data;
+  ProGeomitem surface;
+  ProSelection sel;
+  FILE *fp;
+  
+<a name="anchor-72"></a>  TEST_CALL_REPORT (&quot;ProAnalysisInfosaveAction()====&quot;, 
+        &quot;ProTestSurfaceInfoSaveAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  /*--------------------------------------------------------------------*\
+  Get the application data from the analysis
+<a name="anchor-73"></a>  \*--------------------------------------------------------------------*/
+  err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+		    &quot;ProTestSurfaceInfosaveAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+<a name="anchor-74"></a>  if (err != PRO_TK_NO_ERROR)
+    return(PRO_TK_GENERAL_ERROR);
+
+  /*--------------------------------------------------------------------*\
+  Output the reference to the surface
+<a name="anchor-75"></a>  \*--------------------------------------------------------------------*/
+  /*err = ProGeomitemFeatureGet(&amp;(data->surface), &amp;surface);*/
+  err = ProSelectionAlloc (NULL, &amp;data->surface, &amp;sel);
+  TEST_CALL_REPORT (&quot;ProSelectionAlloc()&quot;, 
+		    &quot;ProTestSurfaceInfosaveAction()&quot;, err, 
+<a name="anchor-76"></a>		    err != PRO_TK_NO_ERROR);
+  
+  err = ProArrayObjectAdd((ProArray*)references, -1, 1, &amp;sel);
+  TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;, 
+		    &quot;ProTestSurfaceInfosaveAction()&quot;, err, 
+<a name="anchor-77"></a>		    err != PRO_TK_NO_ERROR);
+  
+  return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-78"></a>/*====================================================================*\
+FUNCTION : ProTestSurfaceInforetrieveAction()
+PURPOSE  : Callback to get the references Pro/E has stored with the
+		analysis feature
+\*====================================================================*/
+<a name="anchor-79"></a>ProError ProTestSurfaceInforetrieveAction(
+    ProAnalysis analysis,
+    ProFeature *feature,
+    ProSelection *references)
+{
+<a name="anchor-80"></a>  Surfacedata_t *data;
+  ProSurface pln_surface = NULL;
+  ProGeomitemdata *surf_data = NULL;
+  ProError err = PRO_TK_NO_ERROR;
+  FILE *fp;
+<a name="anchor-81"></a>
+
+  TEST_CALL_REPORT (&quot;ProAnalysisInforetrieveAction()====&quot;, 
+		    &quot;ProTestSurfaceInforetrieveAction()&quot;, 
+		    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-82"></a>  
+  surf_data = (ProGeomitemdata *)calloc(1, sizeof(ProGeomitemdata));
+
+  err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+<a name="anchor-83"></a>		    &quot;ProTestSurfaceInforetrieveAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+  if (err != PRO_TK_NO_ERROR)
+    return(PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-84"></a>    
+  /*--------------------------------------------------------------------*\
+  Copy the first reference to the application as the surface data structure
+  \*--------------------------------------------------------------------*/
+  err = ProSelectionModelitemGet(references[0], &amp;data->surface);
+<a name="anchor-85"></a>  TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, 
+		    &quot;ProTestSurfaceInforetrieveAction()&quot;, 
+		    err, err != PRO_TK_NO_ERROR);
+  
+  err = ProGeomitemToSurface (&amp;data->surface, &amp;pln_surface);
+<a name="anchor-86"></a>  TEST_CALL_REPORT (&quot;ProGeomitemToSurface()&quot;, 
+		    &quot;ProTestSurfaceComputeAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+  
+  err = ProSurfaceDataGet(pln_surface, &amp;surf_data);
+<a name="anchor-87"></a>  TEST_CALL_REPORT (&quot;ProSurfaceDataGet()&quot;, 
+		    &quot;ProTestSurfaceComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  data->surf_data = *(surf_data->data.p_surface_data);
+
+<a name="anchor-88"></a>  err = ProAnalysisInfoSet (analysis, data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoSet()&quot;, 
+		    &quot;ProTestSurfaceComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+  err = ProTestSurfaceDisplayAction(analysis);
+<a name="anchor-89"></a>  TEST_CALL_REPORT (&quot;ProTestSurfaceDisplayAction()&quot;, 
+		    &quot;ProTestSurfaceComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  if (surf_data != NULL)
+  {
+<a name="anchor-90"></a>    err = ProGeomitemdataFree (&amp;surf_data);
+    TEST_CALL_REPORT (&quot;ProGeomitemdataFree()&quot;, 
+		    &quot;ProTestSurfaceComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  }
+
+<a name="anchor-91"></a>  return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+FUNCTION : ProTestSurfaceInfocopyAction()
+<a name="anchor-92"></a>PURPOSE  : 
+\*====================================================================*/
+ProError ProTestSurfaceInfocopyAction(
+    ProAnalysis from,
+    ProAnalysis to)
+<a name="anchor-93"></a>{
+    Surfacedata_t *fdata, *tdata;
+    ProError err = PRO_TK_NO_ERROR;
+
+    TEST_CALL_REPORT (&quot;ProAnalysisInfocopyAction()&quot;, 
+<a name="anchor-94"></a>        &quot;ProTestSurfaceInfocopyAction()&quot;, 
+        err, err != PRO_TK_NO_ERROR);
+   
+    err = ProAnalysisInfoGet (from, (ProAppData*)&amp;fdata);
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+<a name="anchor-95"></a>        &quot;ProTestSurfaceInfocopyAction()&quot;, 
+        err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+    err = ProAnalysisInfoGet (to  , (ProAppData*)&amp;tdata);
+<a name="anchor-96"></a>    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+        &quot;ProTestSurfaceInfocopyAction()&quot;, 
+        err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-97"></a>
+    memcpy(&amp;tdata->surface, &amp;fdata->surface, sizeof(ProGeomitem)); 
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-98"></a>
+/*====================================================================*\
+FUNCTION : ProTestSurfaceResultAction()
+PURPOSE  : Callback to give Pro/E the feature parameters and geometry
+		that the analysis feature must contain
+<a name="anchor-99"></a>\*====================================================================*/
+ProError ProTestSurfaceResultAction(
+				    ProAnalysis analysis,
+				    ProBoolean names_only,
+				    ProAnalysisParameter **parameters,
+<a name="anchor-100"></a>				    ProAnalysisGeomitem  **geometry)
+{
+  Surfacedata_t *data;
+  ProSrftype type;
+  ProVector xyz_min, xyz_max;
+<a name="anchor-101"></a>  ProUvParam min_uv, max_uv;
+  ProSurfaceOrient orient;
+  int *edge_ids, *surf_id;
+  ProEdgeDir *dir;
+  ProModelitem p_handle;
+<a name="anchor-102"></a>  ProEdge edge, *edge_neigh;
+  ProSurface *surf_neigh;
+  ProAnalysisGeomitem geomitem;
+  ProAnalysisParameter param;
+  ProUvParam uv[2], uvd1[2], uvd2[2], *uv_array;
+<a name="anchor-103"></a>  ProError err = PRO_TK_NO_ERROR;
+  int num, i, j, n, id;
+  double t;
+  FILE *fp;
+  ProSurfacedata  *temp_data;
+<a name="anchor-104"></a>  
+  TEST_CALL_REPORT (&quot;ProAnalysisResultAction====()&quot;, 
+		    &quot;ProTestSurfaceResultAction()&quot;, 
+		    err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-105"></a>  /*--------------------------------------------------------------------*\
+     Get the application data from the analysis
+  \*--------------------------------------------------------------------*/
+  err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;,
+<a name="anchor-106"></a>		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  if (err != PRO_TK_NO_ERROR)
+    return(PRO_TK_GENERAL_ERROR);
+
+  ProStringToWstring (param.name,(char *)&quot;SURFACE&quot;);
+<a name="anchor-107"></a>  param.create = PRO_B_TRUE;
+  ProStringToWstring (param.description,(char *)&quot;Wireframe of Cyl Surf&quot;);
+  param.values = NULL;
+
+  /*---------------------------------------------------------------------*\
+<a name="anchor-108"></a>     Copy values from the surface data structure to the analysis surface 
+     data structure
+  \*---------------------------------------------------------------------*/
+     
+  ProStringToWstring (geomitem.name,(char *)&quot;SURFACE&quot;);
+<a name="anchor-109"></a>  geomitem.create = PRO_B_TRUE;
+  geomitem.type = PRO_ANALYSIS_SURFACE;
+
+  err = ProArrayAlloc(1, sizeof(ProAnalysisEntity), 1, (ProArray *)&amp;geomitem.shapes);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+<a name="anchor-110"></a>		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+  err = ProAnalysissrfdataAlloc (&amp;(geomitem.shapes[0].surface));
+  TEST_CALL_REPORT (&quot;ProAnalysissrfdataAlloc()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-111"></a>
+  
+  err = ProArrayAlloc (1, sizeof(ProSurfacedata), 1, (ProArray *)&amp;geomitem.shapes[0].surface->pro_surface);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, 
+<a name="anchor-112"></a>		    err != PRO_TK_NO_ERROR);
+		    
+  err = ProSurfacedataAlloc (&amp;temp_data);
+  
+  err = ProSurfacedataInit(data->surf_data.type,
+<a name="anchor-113"></a>			   data->surf_data.uv_min,
+			   data->surf_data.uv_max,
+			   data->surf_data.orient,
+			   &amp;data->surf_data.srf_shape,
+			   data->surf_data.id,
+<a name="anchor-114"></a>			   temp_data);
+  TEST_CALL_REPORT (&quot;ProSurfacedataInit()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+  
+<a name="anchor-115"></a>  err = ProSurfacedataGet(&amp;data->surf_data, NULL, min_uv, max_uv, NULL, NULL, NULL);
+  TEST_CALL_REPORT (&quot;ProSurfacedataGet()&quot;, 
+		    &quot;ProTestSurfaceDisplayAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR); 
+
+<a name="anchor-116"></a>  XyzDataEval(data, min_uv, xyz_min);
+  XyzDataEval(data, max_uv, xyz_max);
+  for (i=0; i&lt;3; i++)
+    {
+      temp_data->xyz_min[i] = xyz_min[i];
+<a name="anchor-117"></a>      temp_data->xyz_max[i] = xyz_max[i];
+    }
+
+  
+  err = ProSurfacedataContourArraySet(temp_data, data->surf_data.contour_arr);
+<a name="anchor-118"></a>  TEST_CALL_REPORT (&quot;ProSurfacedataContourArraySet()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+  
+  memcpy (&amp;geomitem.shapes[0].surface->pro_surface[0], temp_data, 
+<a name="anchor-119"></a>	  sizeof(ProSurfacedata));
+  
+  /*-----------------------------------------------------------------*\
+     Provide the edge data to the analysis surface
+  \*-----------------------------------------------------------------*/
+<a name="anchor-120"></a>
+  err = ProArrayAlloc(2, sizeof(int), 2, (ProArray *)&amp;surf_id);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+<a name="anchor-121"></a>  err = ProArrayAlloc(2, sizeof(ProEdgeDir), 2, (ProArray *)&amp;dir);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+  err = ProArrayAlloc(2, sizeof(ProSurface), 2, (ProArray *)&amp;surf_neigh);
+<a name="anchor-122"></a>  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+  err = ProArrayAlloc(2, sizeof(ProEdge), 2, (ProArray *)&amp;edge_neigh);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+<a name="anchor-123"></a>		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+  err = ProContourdataEdgeIdArrayGet(data->surf_data.contour_arr, &amp;edge_ids);
+  TEST_CALL_REPORT (&quot;ProContourdataEdgeIdArrayGet()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-124"></a>    
+  err = ProArraySizeGet((ProArray)edge_ids, &amp;n);
+  TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+<a name="anchor-125"></a>  
+  fp = PTApplsUnicodeFopen(&quot;out.txt&quot;, &quot;w&quot;);
+  ProTKPrintf(&quot;ProSrftype Surface Type =  %d\n&quot;, data->surf_data.type );
+
+  ProTKFprintf(fp, &quot;Surface Type =  %d\n&quot;, data->surf_data.type );
+<a name="anchor-126"></a>  ProTKFprintf(fp, &quot;The array size is  %3d\n&quot;, n);
+  
+  err = ProArrayAlloc(n, sizeof(ProEdgedata), 1,
+		      (ProArray *)&amp;geomitem.shapes[0].surface->edge_data);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+<a name="anchor-127"></a>		    &quot;ProTestSurfaceResultAction()&quot;, 
+		    err, err != PRO_TK_NO_ERROR);
+ 
+  for (i=0; i&lt;n; i++)
+    { 
+<a name="anchor-128"></a>      err = ProModelitemInit(data->surface.owner, edge_ids[i], PRO_EDGE, &amp;p_handle);
+      TEST_CALL_REPORT (&quot;ProModelitemInit()&quot;,
+			&quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+	
+      err = ProGeomitemToEdge(&amp;p_handle, &amp;edge);
+<a name="anchor-129"></a>      TEST_CALL_REPORT (&quot;ProGeomitemToEdge()&quot;,
+			&quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+      err = ProEdgeNeighborsGet(edge, &amp;edge_neigh[0], &amp;edge_neigh[1], &amp;surf_neigh[0], &amp;surf_neigh[1]);
+      TEST_CALL_REPORT (&quot;ProEdgeNeighbourGet()&quot;,
+<a name="anchor-130"></a>			&quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+      ProTKFprintf ( fp, &quot;Edge ID under process = %d\n&quot;, edge_ids[i] ); 
+      {
+	ProError err_dir1, err_dir2, err_id1, err_id2; 
+<a name="anchor-131"></a>
+	if ( surf_neigh[0] != NULL )
+	  {
+	    err_dir1 = ProEdgeDirGet(edge, surf_neigh[0], (int *)&amp;dir[0]);
+	    err = err_dir1; 
+<a name="anchor-132"></a>	    TEST_CALL_REPORT (&quot;ProEdgeDirGet()&quot;,
+			      &quot;ProTestSurfaceResultAction()&quot;, err, 
+			      err != PRO_TK_NO_ERROR);
+	    
+	    err_id1 = ProSurfaceIdGet(surf_neigh[0], &amp;surf_id[0]);
+<a name="anchor-133"></a>	    err = err_id1; 
+	    TEST_CALL_REPORT (&quot;ProSurfaceIdGet()&quot;,
+			      &quot;ProTestSurfaceResultAction()&quot;, err, 
+			      err != PRO_TK_NO_ERROR);
+	  }
+<a name="anchor-134"></a>	else
+	  {
+	    ProTKFprintf ( fp, &quot; surf_neigh[0] == NULL\n&quot; ); 
+	    dir[0] 		= (ProEdgeDir)-1; 
+	    surf_id[0] 	= 0; 
+<a name="anchor-135"></a>	  }
+	
+	if ( surf_neigh[1] != NULL )
+	  {
+	    err_dir2 = ProEdgeDirGet(edge, surf_neigh[1], (int *)&amp;dir[1]);
+<a name="anchor-136"></a>	    err = err_dir2; 
+	    TEST_CALL_REPORT (&quot;ProEdgeDirGet()&quot;,
+			      &quot;ProTestSurfaceResultAction()&quot;, err, 
+			      err != PRO_TK_NO_ERROR);
+      
+<a name="anchor-137"></a>      
+	    err_id2 = ProSurfaceIdGet(surf_neigh[1], &amp;surf_id[1]);
+	    err = err_id2; 
+	    TEST_CALL_REPORT (&quot;ProSurfaceIdGet()&quot;,
+			      &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-138"></a>	  }
+	else
+	  {
+	    ProTKFprintf ( fp, &quot; surf_neigh[1] == NULL\n&quot; ); 
+	    dir[1] 		= (ProEdgeDir)-1; 
+<a name="anchor-139"></a>	    surf_id[1] 	= 0; 
+	  }
+      }
+      
+      for (j=0; j&lt;2; j++)
+<a name="anchor-140"></a>	{
+          ProTKFprintf ( fp, &quot; surf_id[%d] = %d\n&quot;, j, surf_id[j] ); 
+          ProTKFprintf ( fp, &quot; dir    [%d] = %d\n&quot;, j, dir[j] ); 
+
+	  geomitem.shapes[0].surface->edge_data[i].surf_ids[j] = surf_id[j];
+<a name="anchor-141"></a>	  geomitem.shapes[0].surface->edge_data[i].directions[j] = dir[j];
+	}
+
+      geomitem.shapes[0].surface->edge_data[i].id = edge_ids[i];
+      
+<a name="anchor-142"></a>      /*provide the uv values for the edges*/
+      
+      err = ProArrayAlloc(UV_FREQ+1, sizeof(ProUvParam2), 1, 
+	       (ProArray *)&amp;geomitem.shapes[0].surface->edge_data[i].uv_points);
+      TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+<a name="anchor-143"></a>			&quot;ProTestSurfaceResultAction()&quot;, err, 
+			err != PRO_TK_NO_ERROR);
+      
+      for (j=0; j&lt;=UV_FREQ; j++)
+	{
+<a name="anchor-144"></a>	  t = (double)(1.0/UV_FREQ) * (double)j;
+	  err = ProEdgeUvdataEval(edge, t, uv, uvd1, uvd2);
+	  TEST_CALL_REPORT (&quot;ProEdgeUvdataEval()&quot;,
+			    &quot;ProTestSurfaceResultAction()&quot;, 
+			    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-145"></a>	    
+	  geomitem.shapes[0].surface->edge_data[i].uv_points[j][0][0] = uv[0][0];
+	  geomitem.shapes[0].surface->edge_data[i].uv_points[j][0][1] = uv[0][1];
+	  geomitem.shapes[0].surface->edge_data[i].uv_points[j][1][0] = uv[1][0];
+	  geomitem.shapes[0].surface->edge_data[i].uv_points[j][1][1] = uv[1][1];
+<a name="anchor-146"></a>	}
+    } /* for i / numbers of edges */ 
+	
+  /* Passing back the vaues to Pro/E via geometry &amp; paramters array */ 
+
+<a name="anchor-147"></a>  ProArrayAlloc (0, sizeof(ProAnalysisGeomitem), 1, (ProArray*)geometry);
+  err = ProArrayObjectAdd((ProArray*)geometry, PRO_VALUE_UNUSED, 
+			    1, &amp;geomitem);
+  TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;,
+		      &quot;ProTestSurfaceResultAction()&quot;, err, 
+<a name="anchor-148"></a>		    err != PRO_TK_NO_ERROR);
+
+  ProArrayAlloc (0, sizeof(ProAnalysisParameter), 1, (ProArray*)parameters);
+  err = ProArrayObjectAdd((ProArray*)parameters, PRO_VALUE_UNUSED, 
+			    1, &amp;param);
+<a name="anchor-149"></a>  TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+      	    
+  fclose(fp);
+<a name="anchor-150"></a>
+  ProArrayFree ((ProArray *)&amp;surf_id); 
+  ProArrayFree ((ProArray *)&amp;dir);
+  ProArrayFree ((ProArray *)&amp;surf_neigh);
+  ProArrayFree ((ProArray *)&amp;edge_neigh);
+<a name="anchor-151"></a>
+  return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-152"></a>FUNCTION : ProTestNURBSSurfaceResultAction()
+PURPOSE  : Callback to give Pro/E the feature parameters and
+geometry that the analysis feature must contain
+\*====================================================================*/
+ProError ProTestNURBSSurfaceResultAction(
+<a name="anchor-153"></a>                                    ProAnalysis analysis,
+                                    ProBoolean names_only,
+                                    ProAnalysisParameter **parameters,
+                                    ProAnalysisGeomitem  **geometry)
+{
+<a name="anchor-154"></a>  Surfacedata_t *data;
+  ProSrftype type;
+  ProVector xyz_min, xyz_max;
+  ProUvParam min_uv, max_uv;
+  ProSurfaceOrient orient;
+<a name="anchor-155"></a>  int *edge_ids, *surf_id;
+  ProEdgeDir *dir;
+  ProModelitem p_handle;
+  ProEdge edge, *edge_neigh;
+  ProSurface *surf_neigh;
+<a name="anchor-156"></a>  ProAnalysisGeomitem geomitem;
+  ProAnalysisParameter param;
+  ProUvParam uv[2], uvd1[2], uvd2[2], *uv_array;
+  ProError err = PRO_TK_NO_ERROR;
+  int num, i, j, n, id;
+<a name="anchor-157"></a>  double t;
+  FILE *fp;
+  ProSurface nurb_surface; 
+  ProSurfacedata  *temp_data;
+  
+<a name="anchor-158"></a>  TEST_CALL_REPORT (&quot;ProAnalysisResultAction====()&quot;, 
+		    &quot;ProTestSurfaceResultAction()&quot;, 
+		    err, err != PRO_TK_NO_ERROR);
+
+  /*--------------------------------------------------------------------*\
+<a name="anchor-159"></a>     Get the application data from the analysis
+  \*--------------------------------------------------------------------*/
+  err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+  TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-160"></a>  if (err != PRO_TK_NO_ERROR)
+    return(PRO_TK_GENERAL_ERROR);
+
+  ProStringToWstring (param.name,(char *)&quot;SURFACE&quot;);
+  param.create = PRO_B_TRUE;
+<a name="anchor-161"></a>  ProStringToWstring (param.description,(char *)&quot;Wireframe of Cyl Surf&quot;);
+  param.values = NULL;
+
+  /*---------------------------------------------------------------------*\
+     Copy values from the surface data structure to the analysis surface 
+<a name="anchor-162"></a>     data structure
+  \*---------------------------------------------------------------------*/
+     
+  ProStringToWstring (geomitem.name,(char *)&quot;SURFACE&quot;);
+  geomitem.create = PRO_B_TRUE;
+<a name="anchor-163"></a>  geomitem.type = PRO_ANALYSIS_SURFACE;
+
+  err = ProArrayAlloc(1, sizeof(ProAnalysisEntity), 1, (ProArray *)&amp;geomitem.shapes);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-164"></a>  
+  err = ProAnalysissrfdataAlloc (&amp;(geomitem.shapes[0].surface));
+  TEST_CALL_REPORT (&quot;ProAnalysissrfdataAlloc()&quot;,
+		    &quot;ProTestNURBSSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+<a name="anchor-165"></a>  err = ProArrayAlloc (1, sizeof(ProSurfacedata), 1, (ProArray *)&amp;geomitem.shapes[0].surface->pro_surface);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+
+<a name="anchor-166"></a>  err = ProGeomitemToSurface ( &amp;data->surface, &amp;nurb_surface );
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProGeomitemToSurface()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+
+<a name="anchor-167"></a>  err = ProSurfaceToNURBS ( nurb_surface, &amp;temp_data );
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProSurfaceToNURBS()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+
+<a name="anchor-168"></a>
+  err = ProSurfacedataContourArraySet(temp_data, data->surf_data.contour_arr);
+  TEST_CALL_REPORT (&quot;ProSurfacedataContourArraySet()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+<a name="anchor-169"></a>
+  
+  memcpy (&amp;geomitem.shapes[0].surface->pro_surface[0], temp_data, 
+	  sizeof(ProSurfacedata));
+  
+<a name="anchor-170"></a>  /*-----------------------------------------------------------------*\
+     Provide the edge data to the analysis surface
+  \*-----------------------------------------------------------------*/
+
+  err = ProArrayAlloc(2, sizeof(int), 2, (ProArray *)&amp;surf_id);
+<a name="anchor-171"></a>  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+  err = ProArrayAlloc(2, sizeof(ProEdgeDir), 2, (ProArray *)&amp;dir);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+<a name="anchor-172"></a>		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+  
+  err = ProArrayAlloc(2, sizeof(ProSurface), 2, (ProArray *)&amp;surf_neigh);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-173"></a>  
+  err = ProArrayAlloc(2, sizeof(ProEdge), 2, (ProArray *)&amp;edge_neigh);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-174"></a>  err = ProContourdataEdgeIdArrayGet(data->surf_data.contour_arr, &amp;edge_ids);
+  TEST_CALL_REPORT (&quot;ProContourdataEdgeIdArrayGet()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+  err = ProArraySizeGet((ProArray)edge_ids, &amp;n);
+<a name="anchor-175"></a>  TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+  
+  fp = PTApplsUnicodeFopen(&quot;out.txt&quot;, &quot;w&quot;);
+<a name="anchor-176"></a>  ProTKPrintf(&quot;ProSrftype Surface Type =  %d\n&quot;, data->surf_data.type );
+ 
+  ProTKFprintf(fp, &quot;Surface Type =  %d\n&quot;, data->surf_data.type );
+  ProTKFprintf(fp, &quot;The array size is  %3d\n&quot;, n);
+  
+<a name="anchor-177"></a>  err = ProArrayAlloc(n, sizeof(ProEdgedata), 1,
+		      (ProArray *)&amp;geomitem.shapes[0].surface->edge_data);
+  TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, 
+		    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-178"></a> 
+  for (i=0; i&lt;n; i++)
+    { 
+      err = ProModelitemInit(data->surface.owner, edge_ids[i], PRO_EDGE, &amp;p_handle);
+      TEST_CALL_REPORT (&quot;ProModelitemInit()&quot;,
+<a name="anchor-179"></a>			&quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+	
+      err = ProGeomitemToEdge(&amp;p_handle, &amp;edge);
+      TEST_CALL_REPORT (&quot;ProGeomitemToEdge()&quot;,
+			&quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-180"></a>      
+      err = ProEdgeNeighborsGet(edge, &amp;edge_neigh[0], &amp;edge_neigh[1], &amp;surf_neigh[0], &amp;surf_neigh[1]);
+      TEST_CALL_REPORT (&quot;ProEdgeNeighbourGet()&quot;,
+			&quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+<a name="anchor-181"></a>      ProTKFprintf ( fp, &quot;Edge ID under process = %d\n&quot;, edge_ids[i] ); 
+      {
+	ProError err_dir1, err_dir2, err_id1, err_id2; 
+
+	if ( surf_neigh[0] != NULL )
+<a name="anchor-182"></a>	  {
+	    err_dir1 = ProEdgeDirGet(edge, surf_neigh[0], (int *)&amp;dir[0]);
+	    err = err_dir1; 
+	    TEST_CALL_REPORT (&quot;ProEdgeDirGet()&quot;,
+			      &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-183"></a>
+	    err_id1 = ProSurfaceIdGet(surf_neigh[0], &amp;surf_id[0]);
+	    err = err_id1; 
+	    TEST_CALL_REPORT (&quot;ProSurfaceIdGet()&quot;,
+			      &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-184"></a>	  }
+	else
+	  {
+	    ProTKFprintf ( fp, &quot; surf_neigh[0] == NULL\n&quot; ); 
+	    dir[0] 		= (ProEdgeDir)-1; 
+<a name="anchor-185"></a>	    surf_id[0] 	= 0; 
+	  }
+      
+	if ( surf_neigh[1] != NULL )
+	  {
+<a name="anchor-186"></a>	    err_dir2 = ProEdgeDirGet(edge, surf_neigh[1], (int *)&amp;dir[1]);
+	    err = err_dir2; 
+	    TEST_CALL_REPORT (&quot;ProEdgeDirGet()&quot;,
+			      &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+<a name="anchor-187"></a>      
+	    err_id2 = ProSurfaceIdGet(surf_neigh[1], &amp;surf_id[1]);
+	    err = err_id2; 
+	    TEST_CALL_REPORT (&quot;ProSurfaceIdGet()&quot;,
+			      &quot;ProTestSurfaceResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-188"></a>	  }
+	else
+	  {
+	    ProTKFprintf ( fp, &quot; surf_neigh[1] == NULL\n&quot; ); 
+	    dir[1] 		= (ProEdgeDir)-1; 
+<a name="anchor-189"></a>	    surf_id[1] 	= 0; 
+	  }
+      }
+      
+      for (j=0; j&lt;2; j++)
+<a name="anchor-190"></a>	{
+          ProTKFprintf ( fp, &quot; surf_id[%d] = %d\n&quot;, j, surf_id[j] ); 
+          ProTKFprintf ( fp, &quot; dir    [%d] = %d\n&quot;, j, dir[j] ); 
+
+	  geomitem.shapes[0].surface->edge_data[i].surf_ids[j] = surf_id[j];
+<a name="anchor-191"></a>	  geomitem.shapes[0].surface->edge_data[i].directions[j] = dir[j];
+	}
+
+      geomitem.shapes[0].surface->edge_data[i].id = edge_ids[i];
+      
+<a name="anchor-192"></a>      /*provide the uv values for the edges*/
+      
+      err = ProArrayAlloc(UV_FREQ+1, sizeof(ProUvParam2), 1, 
+	       (ProArray *)&amp;geomitem.shapes[0].surface->edge_data[i].uv_points);
+      TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;,
+<a name="anchor-193"></a>			&quot;ProTestSurfaceResultAction()&quot;, err, 
+			err != PRO_TK_NO_ERROR);
+      
+      for (j=0; j&lt;=UV_FREQ; j++)
+	{
+<a name="anchor-194"></a>	  t = (double)(1.0/UV_FREQ) * (double)j;
+	  err = ProEdgeUvdataEval(edge, t, uv, uvd1, uvd2);
+	  TEST_CALL_REPORT (&quot;ProEdgeUvdataEval()&quot;,
+			    &quot;ProTestSurfaceResultAction()&quot;, 
+			    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-195"></a>	    
+	  geomitem.shapes[0].surface->edge_data[i].uv_points[j][0][0] = uv[0][0];
+	  geomitem.shapes[0].surface->edge_data[i].uv_points[j][0][1] = uv[0][1];
+	  geomitem.shapes[0].surface->edge_data[i].uv_points[j][1][0] = uv[1][0];
+	  geomitem.shapes[0].surface->edge_data[i].uv_points[j][1][1] = uv[1][1];
+<a name="anchor-196"></a>	}
+      }
+	
+  /* Passing back the vaues to Pro/E via geometry &amp; paramters array */ 
+
+<a name="anchor-197"></a>  ProArrayAlloc (0, sizeof(ProAnalysisGeomitem), 1, (ProArray*)geometry);
+  err = ProArrayObjectAdd((ProArray*)geometry, PRO_VALUE_UNUSED, 
+			    1, &amp;geomitem);
+  TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;,
+		      &quot;ProTestSurfaceResultAction()&quot;, err, 
+<a name="anchor-198"></a>		    err != PRO_TK_NO_ERROR);
+
+  ProArrayAlloc (0, sizeof(ProAnalysisParameter), 1, (ProArray*)parameters);
+  err = ProArrayObjectAdd((ProArray*)parameters, PRO_VALUE_UNUSED, 
+			    1, &amp;param);
+<a name="anchor-199"></a>  TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;,
+		    &quot;ProTestSurfaceResultAction()&quot;, err, 
+		    err != PRO_TK_NO_ERROR);
+      	    
+  fclose(fp);
+<a name="anchor-200"></a>
+  ProArrayFree ((ProArray *)&amp;surf_id); 
+  ProArrayFree ((ProArray *)&amp;dir);
+  ProArrayFree ((ProArray *)&amp;surf_neigh);
+  ProArrayFree ((ProArray *)&amp;edge_neigh);
+<a name="anchor-201"></a>
+  return(PRO_TK_NO_ERROR);
+
+}
+
+<a name="anchor-202"></a>
+
+/*=====================================================================*\
+FUNCTION : XyzDataEval
+PURPOSE  : Subroutine to be used to calculate the xyz values of a surface 
+<a name="anchor-203"></a>           offset by the distance equal to the new radius increment
+\*=====================================================================*/
+void XyzDataEval(Surfacedata_t *data, ProUvParam uv, ProVector xyz)
+{
+  ProVector vec1, vec2, vec3;
+<a name="anchor-204"></a>  Pro3dPnt origin;
+  int i;
+  
+  for (i=0; i&lt;3; i++)
+    {
+<a name="anchor-205"></a>      vec1[i] = data->surf_data.srf_shape.plane.e1[i];
+      vec2[i] = data->surf_data.srf_shape.plane.e2[i];
+      vec3[i] = data->surf_data.srf_shape.plane.e3[i];
+      origin[i] = data->surf_data.srf_shape.plane.origin[i];
+      xyz[i] = uv[0]*vec1[i] + uv[1]*vec2[i] + origin[i];
+<a name="anchor-206"></a>		    
+    }
+}
+
+</pre>
+</body>
+</html>

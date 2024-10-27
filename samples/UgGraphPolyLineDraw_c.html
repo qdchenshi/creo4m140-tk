@@ -1,0 +1,119 @@
+<html>
+<head>
+<title>UgGraphPolyLineDraw.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProGraphic.h&quot;
+<a name="anchor-2"></a>#include &lt;PTApplsUnicodeUtils.h>
+/*---------------------- Application Includes ------------------------*/
+#include &quot;TestError.h&quot;
+
+/*---------------------- Function Prototypes -------------------------*/
+<a name="anchor-3"></a>int UserPolyline();
+ProError UserGetLine();
+
+
+int UserPolyline()
+<a name="anchor-4"></a>{
+    ProPoint3d p1, p2;
+    ProMouseButton button;
+    ProLine w_font;
+    ProError err;
+<a name="anchor-5"></a>    int font_id, np=1;
+    char text[80];
+    wchar_t w_text[80];
+    ProTextAttribute text_atts,old_atts;
+
+<a name="anchor-6"></a>/*---------------------------------------------------------------------*\
+    Get the id of the font called &quot;filled&quot;.
+\*---------------------------------------------------------------------*/
+    ProStringToWstring(w_font,&quot;filled.ndx&quot;);
+    err=ProTextFontNameToId(w_font,&amp;font_id);
+<a name="anchor-7"></a>    ERROR_CHECK(&quot;UserPolyline&quot;,&quot;ProTextFontNameToId&quot;,err);
+
+/*---------------------------------------------------------------------*\
+    Get the current text attributes and remember them
+\*---------------------------------------------------------------------*/
+<a name="anchor-8"></a>    ProTextAttributesCurrentGet(&amp;old_atts);
+    memcpy(&amp;text_atts,&amp;old_atts,sizeof(ProTextAttribute));
+
+/*---------------------------------------------------------------------*\
+    Modify the text attributes, font = 'filled',
+<a name="anchor-9"></a>    height = double the default, and slant = 10 degrees (italic)
+*---------------------------------------------------------------------*/
+    text_atts.font_id = font_id;
+    text_atts.height *= 2.0;
+    text_atts.slant_angle = 10.0;
+<a name="anchor-10"></a>    ProTextFontIdCurrentSet(font_id);
+    ProTextHeightCurrentSet(text_atts.height);
+    ProTextSlantAngleCurrentSet(text_atts.slant_angle);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-11"></a>    Get the first point from the user
+\*---------------------------------------------------------------------*/
+    err=ProMousePickGet(PRO_LEFT_BUTTON,&amp;button,p1);
+    ERROR_CHECK(&quot;UserPolyline&quot;,&quot;ProMousePickGet(p1)&quot;,err);
+
+<a name="anchor-12"></a>/*---------------------------------------------------------------------*\
+    Label it with some text
+\*---------------------------------------------------------------------*/
+    ProTKSprintf(text,&quot;Point %d&quot;,np++);
+    ProStringToWstring(w_text,text);
+<a name="anchor-13"></a>    ProGraphicsTextDisplay(p1,w_text);
+
+    while(1)
+    {
+/*---------------------------------------------------------------------*\
+<a name="anchor-14"></a>        Get a new point (using example 6.6)
+\*---------------------------------------------------------------------*/
+        button = UserGetLine(p1,p2);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-15"></a>        If the user hit the middle or right button, finish up.
+\*---------------------------------------------------------------------*/
+        if((button &amp; PRO_RIGHT_BUTTON) ||
+           (button &amp; PRO_MIDDLE_BUTTON))
+            break;
+<a name="anchor-16"></a>
+/*---------------------------------------------------------------------*\
+        Draw a line between the new point and the previous one
+\*---------------------------------------------------------------------*/
+        ProGraphicsPenPosition(p1);
+<a name="anchor-17"></a>        ProGraphicsLineDraw(p2);
+
+/*---------------------------------------------------------------------*\
+        Label the new point with some text
+\*---------------------------------------------------------------------*/
+<a name="anchor-18"></a>        ProTKSprintf(text,&quot;Point %d&quot;,np++);
+        ProStringToWstring(w_text,text);
+        ProGraphicsTextDisplay(p2,w_text);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-19"></a>        Remember the point
+\*---------------------------------------------------------------------*/
+        p1[0] = p2[0];
+        p1[1] = p2[1];
+        p1[2] = p2[2];
+<a name="anchor-20"></a>    }
+
+/*---------------------------------------------------------------------*\
+    Restore the original text attributes
+\*---------------------------------------------------------------------*/
+<a name="anchor-21"></a>   ProTextFontIdCurrentSet(old_atts.font_id);
+   ProTextHeightCurrentSet(old_atts.height);
+   ProTextWidthFactorCurrentSet(old_atts.width_factor);
+   ProTextRotationAngleCurrentSet(old_atts.rot_angle);
+   ProTextSlantAngleCurrentSet(old_atts.slant_angle);
+<a name="anchor-22"></a>}
+</pre>
+</body>
+</html>

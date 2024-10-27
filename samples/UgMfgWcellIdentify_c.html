@@ -1,0 +1,122 @@
+<html>
+<head>
+<title>UgMfgWcellIdentify.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMfg.h>
+#include &lt;ProSolid.h>
+#include &lt;ProAsmcomppath.h>
+#include &lt;ProFeatType.h>
+<a name="anchor-2"></a>#include &lt;ProUtil.h>
+
+#include &lt;TestError.h>
+
+ProLine  msg_fil17;
+<a name="anchor-3"></a>#define MSG_FIL ProStringToWstring(msg_fil17,&quot;msg_ugmfg.txt&quot;)
+
+/*+++++++++++++++++UG_ENTRY_STARTS_HERE++++++++++++++++++++++*/
+
+/*====================================================================*\
+<a name="anchor-4"></a>Function : UserMfgWcellCollect
+Purpose  : Add workcell feature pointer to array of workcells
+\*====================================================================*/
+ProError UserMfgWcellCollect (
+    ProFeature *wcell,
+<a name="anchor-5"></a>    ProError    err,
+    ProAppData  wcell_array )
+{
+    err = ProArrayObjectAdd((ProArray*)wcell_array, PRO_VALUE_UNUSED,
+						    1, (void*)wcell);
+<a name="anchor-6"></a>    ERROR_CHECK(&quot;UserMfgWcellCollect&quot;,&quot;ProArrayObjectAdd&quot;,err);
+    return err;
+}
+
+/*====================================================================*\
+<a name="anchor-7"></a>Function : UserFeatNonWcellFilter
+Purpose  : Filter out non workcell features
+\*====================================================================*/
+ProError  UserFeatNonWcellFilter (
+    ProFeature *feature,
+<a name="anchor-8"></a>    ProAppData  unused )
+{
+    ProError    status = PRO_TK_NO_ERROR;
+    ProFeattype feat_type;
+    
+<a name="anchor-9"></a>    status = ProFeatureTypeGet(feature, &amp;feat_type);
+    ERROR_CHECK(&quot;UserFeatNonWcellFilter&quot;,&quot;ProFeatureTypeGet&quot;,status);
+
+    if ( status != PRO_TK_NO_ERROR || feat_type != PRO_FEAT_WORKCELL)
+	return PRO_TK_CONTINUE;   /* Don't visit this item */
+<a name="anchor-10"></a>    else
+	return PRO_TK_NO_ERROR;   /* Do visit this one!    */
+}
+
+
+<a name="anchor-11"></a>/*====================================================================*\
+Function : UserMfgWcellList
+Purpose  : Collects an array of Workcells that belong to a manufacturing
+           model.
+\*====================================================================*/
+<a name="anchor-12"></a>int UserMfgWcellList ()
+{
+    ProError      err  = PRO_TK_NO_ERROR;
+    ProFeature   *wcell_array = (ProFeature*)NULL;
+    ProMdl	  mfg_model;
+<a name="anchor-13"></a>    ProSolid      mfg_solid;
+    int           num_wcells = -1;
+
+    err = ProMdlCurrentGet(&amp;mfg_model);
+    ERROR_CHECK(&quot;UserMfgWcellList&quot;,&quot;ProMdlCurrentGet&quot;,err);
+<a name="anchor-14"></a>
+    err = ProArrayAlloc(0, sizeof(ProFeature*), 1, (ProArray*)&amp;wcell_array); 
+    ERROR_CHECK(&quot;UserMfgWcellList&quot;,&quot;ProArrayAlloc&quot;,err);
+    
+    if (err == PRO_TK_NO_ERROR)
+<a name="anchor-15"></a>    {
+	err = ProMfgSolidGet ((ProMfg)mfg_model, &amp;mfg_solid);
+	ERROR_CHECK(&quot;UserMfgWcellList&quot;,&quot;ProMfgSolidGet&quot;,err);
+
+        err = ProSolidFeatVisit(mfg_solid, UserMfgWcellCollect, 
+<a name="anchor-16"></a>			UserFeatNonWcellFilter, (ProAppData)&amp;wcell_array ); 
+	ERROR_CHECK(&quot;UserMfgWcellList&quot;,&quot;ProSolidFeatVisit&quot;,err);
+
+	if (err == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-17"></a>	    err = ProArraySizeGet((ProArray)wcell_array, &amp;num_wcells);
+	    ERROR_CHECK(&quot;UserMfgWcellList&quot;,&quot;ProSolidFeatVisit&quot;,err);
+
+	    if (err == PRO_TK_NO_ERROR )
+	    {
+<a name="anchor-18"></a>		err = ProMessageDisplay(MSG_FIL, 
+    		&quot;USER There are %0d workcells in this model&quot;, &amp;num_wcells );
+		ERROR_CHECK(&quot;UserMfgWcellList&quot;,&quot;ProMessageDisplay&quot;,err);
+	    }
+	}
+<a name="anchor-19"></a>
+        err = ProArrayFree((ProArray*)&amp;wcell_array);
+	ERROR_CHECK(&quot;UserMfgWcellList&quot;,&quot;ProArrayFree&quot;,err);
+    }
+
+<a name="anchor-20"></a>    if ( num_wcells == -1 )
+    {
+	err = ProMessageDisplay(MSG_FIL,
+		&quot;USER Error determining the number of workcells&quot;);
+	ERROR_CHECK(&quot;UserMfgWcellList&quot;,&quot;ProMessageDisplay&quot;,err);
+<a name="anchor-21"></a>
+    }
+
+    return ((int)err);
+}
+<a name="anchor-22"></a>
+/*++++++++++++++++++++++++++++++++UG_ENTRY_ENDS_HERE++++++++++*/
+
+#undef MSG_FIL
+</pre>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<html>
+<head>
+<title>UgNotesColor.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*-------------------------- Pro/Toolkit includes ---------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProCsys.h>
+<a name="anchor-2"></a>#include &lt;ProDtlnote.h>
+
+/*-------------------------- Application includes ---------------------------*/
+#include &lt;TestError.h>
+
+<a name="anchor-3"></a>
+
+/*================================================================*\
+FUNCTION  : UserNotesColor
+PURPOSE   : Creates both general and projection type drawing views.
+<a name="anchor-4"></a>\*================================================================*/
+ProError UserNotesColor ()
+{
+    ProError  status;
+    ProColor  color;
+<a name="anchor-5"></a>    int       color_index;
+    ProDrawing    p_draw;
+    int           sheet, n_notes, n;
+    int		  i_range[2] = {0 , PRO_COLOR_MAX};
+    ProFileName WMSGFIL = {'m','s','g','_','u','g','d','w','g','.','t','x','t','\0'};
+<a name="anchor-6"></a>    ProDtlnote *notes;
+
+    /*------------------------------------------------------------*\
+    Ask the user the color of the notes
+    \*------------------------------------------------------------*/
+<a name="anchor-7"></a>    status = ProMessageDisplay(WMSGFIL, &quot;USER %0s&quot;, 
+				&quot;Enter the color index : &quot;);
+    ERROR_CHECK(&quot;UserNotesColor&quot;,&quot;ProMessageDisplay&quot;,status);
+
+    status = ProMessageIntegerRead(i_range, &amp;color_index);
+<a name="anchor-8"></a>    ERROR_CHECK(&quot;UserNotesColor&quot;,&quot;ProMessageIntegerRead&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return(status);
+ 
+    /*------------------------------------------------------------*\
+    Get the current model
+<a name="anchor-9"></a>    \*------------------------------------------------------------*/
+    status = ProMdlCurrentGet((ProMdl*)&amp;p_draw);
+    ERROR_CHECK(&quot;UserNotesColor&quot;,&quot;ProMdlCurrentGet&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return(status);
+
+<a name="anchor-10"></a>    /*------------------------------------------------------------*\
+    Get the list of notes on the current sheet.
+    \*------------------------------------------------------------*/
+    status = ProDrawingCurrentSheetGet(p_draw, &amp;sheet);
+    ERROR_CHECK(&quot;UserNotesColor&quot;,&quot;ProDrawingCurrentSheetGet&quot;,status);
+<a name="anchor-11"></a>    if (sheet &lt;=0) return (PRO_TK_NOT_VALID);
+
+    status = ProDrawingDtlnotesCollect(p_draw, NULL, sheet, &amp;notes);
+    ERROR_CHECK(&quot;UserNotesColor&quot;,&quot;prodtl_get_ids&quot;, status);
+    status = ProArraySizeGet ((ProArray)notes, &amp;n_notes);
+<a name="anchor-12"></a>    ERROR_CHECK(&quot;UserNotesColor&quot;,&quot;prodtl_get_ids&quot;, (n_notes &lt;0));
+
+    if (n_notes &lt; 0) return (PRO_TK_E_NOT_FOUND);
+ 
+    color.method = PRO_COLOR_METHOD_TYPE;
+<a name="anchor-13"></a>    color.value.type = (ProColortype)color_index;
+
+    for (n = 0; n &lt; n_notes; n++)
+    {
+        ProDtlnote  *p_note;
+<a name="anchor-14"></a>        ProDtlnotedata notedata;
+
+        p_note = &amp;notes[n];
+
+
+<a name="anchor-15"></a>    	/*--------------------------------------------------------*\
+        Get the note description and modify the note color.
+    	\*--------------------------------------------------------*/
+        status = ProDtlnoteDataGet (p_note, NULL, PRODISPMODE_NUMERIC, &amp;notedata);
+        status = ProDtlnotedataColorSet(notedata, &amp;color);
+<a name="anchor-16"></a>     	/*--------------------------------------------------------*\
+        Erase, modify, and redraw the note.
+    	\*--------------------------------------------------------*/
+        status = ProDtlnoteErase(p_note);
+        ERROR_CHECK(&quot;UserNotesColor&quot;,&quot;ProDtlnoteErase&quot;, status);
+<a name="anchor-17"></a>        if (status != PRO_TK_NO_ERROR) return (PRO_TK_GENERAL_ERROR);
+
+        status = ProDtlnoteModify(p_note, NULL, notedata);
+        ERROR_CHECK(&quot;UserNotesColor&quot;,&quot;ProDtlnoteModify&quot;, status);
+        if (status != PRO_TK_NO_ERROR) return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-18"></a>
+        status = ProDtlnoteDraw(p_note);
+        ERROR_CHECK(&quot;UserNotesColor&quot;,&quot;ProDtlnoteDraw&quot;, status);
+        if (status != PRO_TK_NO_ERROR) return (PRO_TK_GENERAL_ERROR);
+    }
+<a name="anchor-19"></a>   return (PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

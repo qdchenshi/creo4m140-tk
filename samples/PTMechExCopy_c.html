@@ -1,0 +1,265 @@
+<html>
+<head>
+<title>PTMechExCopy.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*====================================================================*\
+FILE    : PTMechExCopy.c
+PURPOSE : Test Pro/TOOLKIT functions for Mechanica 
+\*====================================================================*/
+<a name="anchor-2"></a>
+/*--------------------------------------------------------------------*\
+  Pro/Toolkit includes -- include this first
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-3"></a>#include &lt;ProMdl.h>
+#include &lt;ProMechItem.h>
+#include &lt;ProMechConstraint.h>
+#include &lt;ProUtil.h>
+#include &lt;ProMessage.h>
+<a name="anchor-4"></a>
+#include &lt;PTMechExamples.h>
+
+static ProError status;
+static ProCharLine msgbuf;
+<a name="anchor-5"></a>static ProFileName msgfile;
+
+/*================================================================*\
+  FUNCTION: PTMechExDispconstrPostfilter 
+  PURPOSE:  Selection filter to ensure that only displacement constrs are selected
+<a name="anchor-6"></a>\*================================================================*/
+static ProError PTMechExDispconstrPostfilter (ProSelection selection, ProAppData app_data)
+{
+	ProModelitem mech_item;
+	ProMechConstrType constr_type;
+<a name="anchor-7"></a>
+	status = ProSelectionModelitemGet (selection, (ProModelitem*)&amp;mech_item);
+    PT_TEST_LOG_SUCC (&quot;ProSelectionModelitemGet()&quot;);
+
+	if (mech_item.type != PRO_SIMULATION_CONSTRAINT)
+<a name="anchor-8"></a>		return (PRO_TK_CONTINUE);
+
+   status = ProMechconstrTypeGet (&amp;mech_item, &amp;constr_type);
+      PT_TEST_LOG_SUCC (&quot;ProMechconstrTypeGet()&quot;);
+      
+<a name="anchor-9"></a>/*--------------------------------------------------------------------*\
+  Check if the selection is of valid type 
+\*--------------------------------------------------------------------*/
+  
+      if ((constr_type != PRO_MECH_CONSTR_DISPLACEMENT) || ( status != PRO_TK_NO_ERROR))
+<a name="anchor-10"></a>  		return (PRO_TK_CONTINUE);
+
+	return (PRO_TK_NO_ERROR);
+}
+/*================================================================*\
+<a name="anchor-11"></a>  FUNCTION: PTMechExConstrCopy 
+  PURPOSE:  Copies the displacement data from one ref to another 
+\*================================================================*/
+
+ProError PTMechExConstrCopy()
+<a name="anchor-12"></a>{
+  ProSelFunctions sel_funcs;
+  ProMechConstrType  constr_type;
+  ProMechDisplacementType type;
+  ProMechDisplacementConstr* trans_datas;
+<a name="anchor-13"></a>  ProMechDisplacementConstr* rot_datas;
+  ProMechGeomref csys_data;
+  int i,n_sels;
+  ProSelection* sels;
+  ProMechDisplacementData data; 
+<a name="anchor-14"></a>  ProLine buffer; 
+  char line [PRO_LINE_SIZE];
+  PTMechExGeomRef *array_refs;
+  ProMechGeomrefType reftype;
+  ProMechGeomrefSubType refsubtype;
+<a name="anchor-15"></a>  ProModelitem mech_item,model_item;
+  ProMechItem tk_constraint_item;
+  ProMechGeomref *array_geomrefs;
+  ProMechStatus mech_status;
+  ProCharLine constrset_name;
+<a name="anchor-16"></a>  ProMdl constraint_part;
+
+  
+  sel_funcs.pre_filter = NULL;
+  sel_funcs.post_filter = PTMechExDispconstrPostfilter;
+<a name="anchor-17"></a>  sel_funcs.post_selact = NULL;
+  sel_funcs.app_data = NULL;
+
+  status = ProMdlCurrentGet(&amp;constraint_part);
+  PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet&quot;);
+<a name="anchor-18"></a>
+/*--------------------------------------------------------------------*\
+  Select the displacement constraint to get the data 
+\*--------------------------------------------------------------------*/
+  
+<a name="anchor-19"></a>  status = ProMessageDisplay(msgfile, &quot;PTMechEx Select the displacement constraint&quot;);
+  PT_TEST_LOG_SUCC(&quot;ProMessageDisplay()&quot;);
+  
+  while(1)
+    {
+<a name="anchor-20"></a>      status =ProSelect (&quot;sim_load&quot;,
+			 1,
+			 NULL, 
+			 &amp;sel_funcs,
+			 NULL,
+<a name="anchor-21"></a>			 NULL,
+			 &amp;sels,
+			 &amp;n_sels);
+      PT_TEST_LOG_SUCC (&quot;ProSelect()&quot;);
+      
+<a name="anchor-22"></a>      if( status != PRO_TK_NO_ERROR || n_sels &lt;= 0 )
+	break;
+      
+      status = ProSelectionModelitemGet (sels[0], &amp;mech_item);
+      PT_TEST_LOG_SUCC (&quot;ProSelectionModelitemGet()&quot;);
+<a name="anchor-23"></a>      
+      status = ProModelitemInit (mech_item.owner,
+				 mech_item.id,
+				 mech_item.type,
+				 &amp;mech_item);
+<a name="anchor-24"></a>      PT_TEST_LOG_SUCC (&quot;ProModelitemInit()&quot;);
+      
+/*--------------------------------------------------------------------*\  
+  Get displacement data from the mech item
+\*--------------------------------------------------------------------*/
+<a name="anchor-25"></a>
+      status = ProMechconstrDisplacementdataGet (&amp;mech_item, &amp;data);
+      PT_TEST_LOG_SUCC (&quot;ProMechconstrDisplacementdataGet()&quot;);
+      
+      status = ProMechdisplacementdataTypeGet (data, &amp;type);
+<a name="anchor-26"></a>      PT_TEST_LOG_SUCC (&quot;ProMechdisplacementdataTypeGet()&quot;);
+
+/*--------------------------------------------------------------------*\  
+  Create new mech item
+\*--------------------------------------------------------------------*/
+<a name="anchor-27"></a>      
+      status = ProMechitemCreate ( (ProSolid) constraint_part,
+				   PRO_SIMULATION_CONSTRAINT,
+				   &amp;tk_constraint_item);
+      PT_TEST_LOG_SUCC (&quot;ProMechitemCreate&quot;);
+<a name="anchor-28"></a>      
+      status = ProMechitemNameSet ( &amp;tk_constraint_item, L&quot;tk_created_constr&quot;);
+      PT_TEST_LOG_SUCC (&quot;ProMechitemNameSet&quot;);
+
+/*--------------------------------------------------------------------*\  
+<a name="anchor-29"></a>  Select the new references
+\*--------------------------------------------------------------------*/
+ 
+      status = ProMessageDisplay(msgfile, &quot;PTMechEx Select references&quot;);
+      PT_TEST_LOG_SUCC(&quot;ProMessageDisplay&quot;);
+<a name="anchor-30"></a>
+      status = ProSelect(&quot;surface,edge,curve,point&quot;,-1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+      PT_TEST_LOG_SUCC (&quot;ProSelect()&quot;);
+
+      if( status != PRO_TK_NO_ERROR || n_sels &lt;= 0 )
+<a name="anchor-31"></a>	 break;
+      
+      status =ProArrayAlloc (n_sels,sizeof (PTMechExGeomRef),1, (ProArray *) &amp;array_refs);
+      PT_TEST_LOG_SUCC (&quot;ProArrayAlloc&quot;);
+
+<a name="anchor-32"></a>/*--------------------------------------------------------------------*\  
+  Poppulate the new references with type/subtype 
+\*--------------------------------------------------------------------*/
+      
+      for ( i =0 ; i&lt;n_sels; i++)
+<a name="anchor-33"></a>	{
+	  ProSelectionModelitemGet(sels[i],&amp;model_item);
+	  
+	  switch (model_item.type)
+	    {
+<a name="anchor-34"></a>	    case PRO_EDGE :
+	      reftype = PRO_MECH_EDGE;
+	      refsubtype =PRO_MECH_CURVE_NORMAL; 
+	      break;
+	      
+<a name="anchor-35"></a>	    case PRO_CURVE :
+	      reftype = PRO_MECH_CURVE;
+	      refsubtype = PRO_MECH_CURVE_NORMAL;
+	      break;
+	      
+<a name="anchor-36"></a>	    case PRO_POINT :
+	      reftype = PRO_MECH_POINT;
+	      refsubtype =PRO_MECH_POINT_SINGLE;
+	      break;
+	      
+<a name="anchor-37"></a>	    case PRO_SURFACE :
+	      reftype = PRO_MECH_SURFACE;
+	      refsubtype = PRO_MECH_SURFACE_NORMAL;
+	      break;
+	    }	
+<a name="anchor-38"></a>	  
+	  array_refs[i].type = reftype;
+	  array_refs[i].subtype = refsubtype;
+	  array_refs[i].id = model_item.id;
+	  array_refs[i].path = NULL;
+<a name="anchor-39"></a>        } 
+/*--------------------------------------------------------------------*\  
+  Create array of the geom refs from the array of refs
+\*--------------------------------------------------------------------*/
+      
+<a name="anchor-40"></a>      status = PTMechExGeomReferenceArrayCreate ( n_sels, array_refs, &amp;array_geomrefs);
+      PT_TEST_LOG_SUCC (&quot;PTMechExGeomReferenceArrayCreate&quot;); 
+
+/*--------------------------------------------------------------------*\  
+  Set the array of geom ref to the newly created constraint
+<a name="anchor-41"></a>\*--------------------------------------------------------------------*/
+
+      status = ProMechconstrReferencesSet (&amp;tk_constraint_item,array_geomrefs);
+      PT_TEST_LOG_SUCC (&quot;ProMechconstrReferencesGet()&quot;);
+      
+<a name="anchor-42"></a>/*--------------------------------------------------------------------*\  
+  Set the displacement data to the newly created constraint
+\*--------------------------------------------------------------------*/
+      
+      status = ProMechconstrDisplacementdataSet (&amp;tk_constraint_item,data);
+<a name="anchor-43"></a>      PT_TEST_LOG_SUCC (&quot;ProMechconstrDisplacementdataSet&quot;);
+      
+/*--------------------------------------------------------------------*\  
+  Get the name of the constraint set from where the displacement conatrsint selected
+\*--------------------------------------------------------------------*/
+<a name="anchor-44"></a>
+      status = PTMechExConstraintsetNameGet(&amp;mech_item,constrset_name); 
+      PT_TEST_LOG_SUCC (&quot;PTMechExConstraintsetNameGet&quot;);
+
+/*--------------------------------------------------------------------*\  
+<a name="anchor-45"></a>  Add the newly  created constraint in to the constrait set
+\*--------------------------------------------------------------------*/
+      
+      status = PTMechExConstraintAddinConstraintset (constraint_part,constrset_name, 
+						   &amp;tk_constraint_item);
+<a name="anchor-46"></a>      PT_TEST_LOG_SUCC (&quot;PTMechExConstraintAddinConstraintset&quot;);
+      
+      status = ProMechitemStatusGet (&amp;tk_constraint_item, &amp;mech_status);
+      PT_TEST_LOG_SUCC (&quot;ProMechitemStatusGet&quot;);
+
+<a name="anchor-47"></a>/*--------------------------------------------------------------------*\
+  Print Message from the result 
+\*--------------------------------------------------------------------*/
+      
+      if (mech_status == PRO_MECH_ACTIVE)
+<a name="anchor-48"></a>	{
+	  status = ProMessageDisplay(msgfile, &quot;PTMechEx New displacement constraint created successfuly&quot;);
+	  PT_TEST_LOG_SUCC(&quot;ProMessageDisplay()&quot;);
+	}
+      else
+<a name="anchor-49"></a>	{
+	  status = ProMessageDisplay(msgfile, &quot;PTMechEx New displacement constraint creation failed&quot;, msgbuf);
+	  PT_TEST_LOG_SUCC(&quot;ProMessageDisplay()&quot;);
+	} 
+      
+<a name="anchor-50"></a>      status = ProMechitemUpdateComplete (&amp;tk_constraint_item);
+      PT_TEST_LOG_SUCC (&quot;ProMechitemUpdateComplete&quot;);
+
+    }
+
+<a name="anchor-51"></a>   return PRO_TK_NO_ERROR;
+}
+</pre>
+</body>
+</html>

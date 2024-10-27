@@ -1,0 +1,239 @@
+<html>
+<head>
+<title>TestSmtlSurf.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+<a name="anchor-2"></a>#include &quot;ProMdl.h&quot;
+#include &quot;ProSolid.h&quot;
+#include &quot;ProSurface.h&quot;
+#include &quot;ProSheetmetal.h&quot;
+#include &quot;ProMode.h&quot;
+<a name="anchor-3"></a>
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-4"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &lt;TestError.h>
+#include &lt;TestFiletypes.h>
+<a name="anchor-5"></a>#include &lt;UtilMessage.h>
+#include &lt;UtilNames.h>
+#include &lt;UtilString.h>
+#include &lt;UtilTypes.h>
+#include &lt;UtilVisit.h>
+<a name="anchor-6"></a>#include &lt;UtilFiles.h>
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;UtilCollect.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;ProUtil.h>
+<a name="anchor-7"></a>
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-8"></a>/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+
+typedef struct testsmtlsurf
+<a name="anchor-9"></a>{
+    ProMdl  *model;
+    FILE    *fp;
+} ProTestSmtlSurf;
+
+<a name="anchor-10"></a>/*--------------------------------------------------------------------*\
+Application prototypes
+\*--------------------------------------------------------------------*/
+ProError ProTestCurveCompAct( ProCurve , ProCurve , int, ProBoolean,
+    						   ProError, ProAppData);
+<a name="anchor-11"></a>ProError ProTestCurveAct( ProModelitem* , ProError, ProAppData);
+int ProTestGeomTraverse(ProMdl *, int);
+
+
+
+<a name="anchor-12"></a>
+/*====================================================================*\
+    FUNCTION :  ProTestSheetmetalTraverse()
+    PURPOSE  :  Traverse all sheetmetal surfaces.
+\*====================================================================*/
+<a name="anchor-13"></a>int ProTestSheetmetalTraverse(
+    ProMdl *model)
+{
+  ProUtilCname fname;
+  ProTestSmtlSurf app_data;
+<a name="anchor-14"></a>  ProError   status;
+  FILE       *fp;
+  ProSurface *surfaces;
+  int surfaces_num, i;
+
+<a name="anchor-15"></a>  ProError ProTestShtmtlSurfAct(ProSurface surface, ProError instatus,
+                                ProAppData tmp_app_data);
+
+/*--------------------------------------------------------------------*\
+    Get the name of the output file
+<a name="anchor-16"></a>\*--------------------------------------------------------------------*/
+    ProTestQcrName(model, (char*)TRAVERSAL, fname);
+    fp = PTApplsUnicodeFopen(fname,&quot;w&quot;);
+
+    if (fp == NULL)
+<a name="anchor-17"></a>        return(-1);
+
+/*--------------------------------------------------------------------*\
+    Set up the general data with the model and the file
+\*--------------------------------------------------------------------*/
+<a name="anchor-18"></a>    app_data.fp = fp;
+    app_data.model = model;
+
+/*--------------------------------------------------------------------*\
+        Set up a header for the output file
+<a name="anchor-19"></a>\*--------------------------------------------------------------------*/
+        ProTKFprintf(fp,&quot;SHEETMETAL SURFACES:\n\n&quot;);
+        ProTKFprintf(fp,&quot;  Id      Surface Type    \n&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-20"></a>    Visit all the solid surfaces
+\*--------------------------------------------------------------------*/
+                               					 
+    status = ProUtilCollectSolidSurfaces ((ProSolid) *model, &amp;surfaces);
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-21"></a>    {
+        status = ProArraySizeGet ((ProArray)surfaces, &amp;surfaces_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestShtmtlSurfAct()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; surfaces_num; i++)
+<a name="anchor-22"></a>        {
+            status = ProTestShtmtlSurfAct (surfaces[i],
+	        PRO_TK_NO_ERROR, (ProAppData)&amp;app_data);
+        }
+        status = ProArrayFree ((ProArray*)&amp;surfaces);
+<a name="anchor-23"></a>        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestShtmtlSurfAct()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+    }
+
+    if (status == PRO_TK_E_NOT_FOUND)
+<a name="anchor-24"></a>            ProTKFprintf(fp, &quot; -- (No surfaces found) --\n&quot;);
+
+    fclose(fp);
+
+  return(0);
+<a name="anchor-25"></a>}
+
+
+/*====================================================================*\
+    FUNCTION :  ProTestShtmtlSurfAct()
+<a name="anchor-26"></a>    PURPOSE  :  General action function for a surface
+\*====================================================================*/
+ProError ProTestShtmtlSurfAct(
+    ProSurface surface,
+    ProError instatus,
+<a name="anchor-27"></a>    ProAppData tmp_app_data)
+{
+  ProTestSmtlSurf *app_data = (ProTestSmtlSurf *) tmp_app_data;
+  ProSmtSurfType  smt_surf_type;
+  ProMdl *model;
+<a name="anchor-28"></a>  int surf_id;
+  ProError status;
+  FILE *fp;
+
+    fp     = app_data->fp;
+<a name="anchor-29"></a>    model  = app_data->model;
+
+/*--------------------------------------------------------------------*\
+        Get the surface id.
+\*--------------------------------------------------------------------*/
+<a name="anchor-30"></a>    status = ProSurfaceIdGet(surface, &amp;surf_id);
+    TEST_CALL_REPORT(&quot;ProSurfaceIdGet()&quot;, &quot;ProTestShtmtlSurfAct()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-31"></a>        Get the sheetmetal surface type.
+\*--------------------------------------------------------------------*/
+    status = ProSmtSurfaceTypeGet ((ProPart)(*model), surface,
+                                                   &amp;smt_surf_type);
+    TEST_CALL_REPORT(&quot;ProSmtSurfaceTypeGet()&quot;, &quot;ProTestShtmtlSurfAct()&quot;,
+<a name="anchor-32"></a>                      status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+        Print the id and type of the sheetmetal surface.
+\*--------------------------------------------------------------------*/
+<a name="anchor-33"></a>    switch (smt_surf_type)
+    {
+        case PRO_SMT_SURF_NON_SMT :
+            ProTKFprintf(fp,&quot;  %d \t %s\n&quot;, surf_id, 
+                          &quot;PRO_SMT_SURF_NON_SMT - surface created by solid feature.&quot;);
+<a name="anchor-34"></a>          break;
+        case PRO_SMT_SURF_SIDE :
+            ProTKFprintf(fp,&quot;  %d \t %s\n&quot;, surf_id, 
+                          &quot;PRO_SMT_SURF_SIDE - side surface.&quot;);
+          break;
+<a name="anchor-35"></a>        case PRO_SMT_SURF_FACE :
+            ProTKFprintf(fp,&quot;  %d \t %s\n&quot;, surf_id, 
+                          &quot;PRO_SMT_SURF_FACE - face (green) surface.&quot;);
+          break;
+        case PRO_SMT_SURF_OFFSET :
+<a name="anchor-36"></a>            ProTKFprintf(fp,&quot;  %d \t %s\n&quot;, surf_id, 
+                          &quot;PRO_SMT_SURF_OFFSET - offset (white) surface.&quot;);
+          break;
+        default :;
+    }
+<a name="anchor-37"></a>
+  return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-38"></a>    FUNCTION :  ProTestSheetmetalSurfs()
+    PURPOSE  :  Command Traversal for listing of all surfaces in a
+                sheetmetal model and evaluation of surface types.
+\*====================================================================*/
+int ProTestSheetmetalSurfs(
+<a name="anchor-39"></a>    ProMdl *model,
+    int action)
+{
+  ProError status;
+  ProMdldata mdata;
+<a name="anchor-40"></a>  ProMdlExtension modelExtension;
+  ProMode  curr_mode;
+  ProUtilCname type;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-41"></a>    Find out the current mode (works only in the sheetmetal mode)
+\*--------------------------------------------------------------------*/
+    status = ProModeCurrentGet(&amp;curr_mode);
+    TEST_CALL_REPORT(&quot;ProModeCurrentGet()&quot;, &quot;ProTestSheetmetalSurfs()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+<a name="anchor-42"></a>
+    if (curr_mode != PRO_MODE_SHEET_METAL)
+        return(-1);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-43"></a>    Find out the model type
+\*--------------------------------------------------------------------*/
+    status = ProMdlExtensionGet(*model, modelExtension);
+    TEST_CALL_REPORT(&quot;ProMdlExtensionGet()&quot;, &quot;ProTestSheetmetalSurfs()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+<a name="anchor-44"></a>    ProWstringToString(type, modelExtension);
+
+/*--------------------------------------------------------------------*\
+    Visit all surfaces in the sheetmetal model.
+\*--------------------------------------------------------------------*/
+<a name="anchor-45"></a>    if(!ProUtilStrcmp(type, (char*)&quot;PRT&quot;))
+        ProTestSheetmetalTraverse(model);
+
+    return(0);
+}
+<a name="anchor-46"></a>
+</pre>
+</body>
+</html>

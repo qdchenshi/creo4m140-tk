@@ -1,0 +1,440 @@
+<html>
+<head>
+<title>TestConfig.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+    Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMenu.h>
+#include &lt;ProUtil.h>
+#include &lt;ProMessage.h>
+#include &lt;ProMdl.h>
+#include &lt;ProArray.h>
+<a name="anchor-3"></a>
+/*--------------------------------------------------------------------*\
+    Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+<a name="anchor-4"></a>#include &quot;TestConfig.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-5"></a>    Macros
+\*--------------------------------------------------------------------*/
+#define OPT_NUM		    15
+#define MODE_NUM	    21
+
+<a name="anchor-6"></a>/*--------------------------------------------------------------------*\
+    Application global/external data
+\*--------------------------------------------------------------------*/
+char*	    config_options[OPT_NUM] = 
+	    {
+<a name="anchor-7"></a>		&quot;AXIS_DISPLAY&quot;,
+		&quot;BELL&quot;,
+		&quot;COLOR&quot;,
+		&quot;DATUM_DISPLAY&quot;,
+		&quot;DATUM_POINT_DISPLAY&quot;,
+<a name="anchor-8"></a>		&quot;DATUM_POINT_TAG_DISPLAY&quot;,
+		&quot;DISPLAY_COORDINATE_SYS&quot;,
+		&quot;GRID_SNAP&quot;,
+		&quot;IGES_OUT_TRIM_CURVE_DEVIATION&quot;,
+		&quot;ORTHOGONAL_SNAP&quot;,
+<a name="anchor-9"></a>		&quot;REGEN_BACKUP_USE_DISK&quot;,
+		&quot;SAVE_DISPLAY&quot;,
+		&quot;SEARCH_PATH&quot;,
+		&quot;SPIN_CENTER_DISPLAY&quot;,
+		&quot;TOL_DISPLAY&quot;
+<a name="anchor-10"></a>	    };
+
+char*	    mode_names[MODE_NUM] = 
+	    {
+		&quot;PRO_MODE_SKETCHER&quot;,
+<a name="anchor-11"></a>		&quot;PRO_MODE_PART&quot;,
+		&quot;PRO_MODE_SHEET_METAL&quot;,
+		&quot;PRO_MODE_COMPOSITE&quot;,
+		&quot;PRO_MODE_SCAN_MODEL&quot;,
+		&quot;PRO_MODE_ASSEMBLY&quot;,
+<a name="anchor-12"></a>		&quot;PRO_MODE_DRAWING&quot;,
+		&quot;PRO_MODE_MANUFACTURE&quot;,
+		&quot;PRO_MODE_MOLD&quot;,
+		&quot;PRO_MODE_CAST&quot;,
+		&quot;PRO_MODE_DIEFACE&quot;,
+<a name="anchor-13"></a>		&quot;PRO_MODE_LAYOUT&quot;,
+		&quot;PRO_MODE_FORMAT&quot;,
+		&quot;PRO_MODE_REPORT&quot;,
+		&quot;PRO_MODE_MARKUP&quot;,
+		&quot;PRO_MODE_DIAGRAM&quot;,
+<a name="anchor-14"></a>		&quot;PRO_MODE_INTERCHANGE&quot;,
+		&quot;PRO_MODE_LEGACY&quot;,
+		&quot;PRO_MODE_USER_DEFINED&quot;,
+		&quot;PRO_MODE_VERIFY&quot;,
+		&quot;PRO_MODE_PROCESS&quot;
+<a name="anchor-15"></a>	    };
+
+
+int ProTestConfig( void* p_dummy, int int_dummy )
+{
+<a name="anchor-16"></a>    ProError		status;
+    int			menu_id;    /* The identifier of the created menu */
+    int			action;
+
+
+<a name="anchor-17"></a>    /* Load menu from file */
+    status = ProMenuFileRegister( (char*)&quot;TkConfig&quot;, (char*)&quot;tkconfig.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestConfig()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-18"></a>    /* Define menu buttons */
+    ProMenubuttonActionSet( (char*)&quot;TkConfig&quot;, (char*)&quot;Get Opt&quot;, 
+	(ProMenubuttonAction)ProTestGetOption, NULL, 0 );
+    ProMenubuttonActionSet( (char*)&quot;TkConfig&quot;, (char*)&quot;Set Opt&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSetMenu, NULL, 0 );
+<a name="anchor-19"></a>	ProMenubuttonActionSet( (char*)&quot;TkConfig&quot;, (char*)&quot;Get Opt By Name&quot;, 
+	(ProMenubuttonAction)ProTestGetOptionByName, NULL, 0 );
+	ProMenubuttonActionSet( (char*)&quot;TkConfig&quot;, (char*)&quot;Set Opt By Name&quot;, 
+	(ProMenubuttonAction)ProTestSetOptionByName, NULL, 0 );
+    ProMenubuttonActionSet( (char*)&quot;TkConfig&quot;, (char*)&quot;Edit Cfg File&quot;, 
+<a name="anchor-20"></a>	(ProMenubuttonAction)ProTestFileEdit, NULL, 0 );
+    ProMenubuttonActionSet( (char*)&quot;TkConfig&quot;, (char*)&quot;Verify Opt&quot;, 
+	(ProMenubuttonAction)ProTestOptionOrderedVerify, NULL, 0 );
+    ProMenubuttonActionSet( (char*)&quot;TkConfig&quot;, (char*)&quot;Current Mode&quot;, 
+	(ProMenubuttonAction)ProTestMode, NULL, 0 );
+<a name="anchor-21"></a>    ProMenubuttonActionSet( (char*)&quot;TkConfig&quot;, (char*)&quot;Done&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+    ProMenubuttonActionSet( (char*)&quot;TkConfig&quot;, (char*)&quot;TkConfig&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+<a name="anchor-22"></a>    /* Rubn MEnu */
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkConfig&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestConfig()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-23"></a>    {
+	status = ProMenuProcess( (char*)&quot;TkConfig&quot;, &amp;action );
+	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestConfig()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+<a name="anchor-24"></a>
+
+    return 0;
+}
+
+<a name="anchor-25"></a>/*=====================================================================*\
+FUNCTION: ProTestGetOption
+PURPOSE:  Get a list of config option values
+NOTE:     Legacy function - maintained for existing tests only - 
+			use ProTestGetOptionByName() instead
+<a name="anchor-26"></a>\*=====================================================================*/
+int ProTestGetOption( void* p_dummy, int int_dummy )
+{
+    ProError	    status;
+    FILE*	    f;
+<a name="anchor-27"></a>    ProName	    w_congig_option;
+    ProLine	    w_option_value;
+    char	    option_value[ 80 ];
+    char	    filename[] = &quot;pttestcfgopt.inf&quot;;
+    wchar_t	    w_filename[ PRO_PATH_SIZE ];
+<a name="anchor-28"></a>    int		    i;
+    ProInfoWindowLocation   win_location = { 0.0, 0.0 };
+    ProInfoWindowSize	    win_size = { 25, 80 };
+
+
+<a name="anchor-29"></a>
+    if( (f = PTApplsUnicodeFopen( filename, &quot;wt&quot; )) == NULL )
+	return -1;
+
+    for( i=0; i&lt;OPT_NUM; i++ )
+<a name="anchor-30"></a>    {
+	ProStringToWstring( w_congig_option, config_options[i] );
+	status = ProConfigoptGet( w_congig_option, w_option_value );
+	TEST_CALL_REPORT( &quot;ProConfigoptGet()&quot;, &quot;ProTestGetOption()&quot;, 
+			    status, status != PRO_TK_NO_ERROR &amp;&amp;
+<a name="anchor-31"></a>                            status != PRO_TK_E_NOT_FOUND);
+	ProWstringToString( option_value, w_option_value );
+
+	if( status == PRO_TK_NO_ERROR )
+	{
+<a name="anchor-32"></a>	    ProTKFprintf( f, &quot;%s = %s\n&quot;, config_options[i], option_value );
+	}
+    }
+
+    fclose( f );
+<a name="anchor-33"></a>
+    status = ProInfoWindowDisplay( ProStringToWstring(w_filename, filename),
+				    &amp;win_location, &amp;win_size );
+    TEST_CALL_REPORT( &quot;ProInfoWindowDisplay()&quot;, &quot;ProTestGetOption()&quot;,
+			status, status != PRO_TK_NO_ERROR);
+<a name="anchor-34"></a>
+
+    return 0;
+}
+
+<a name="anchor-35"></a>
+int ProTestGetOptionByName ( void* p_dummy, int int_dummy )
+{
+    ProError	    status;
+    FILE*	    f;
+<a name="anchor-36"></a>    ProName	    w_config_option;
+	char        config_option [PRO_NAME_SIZE];
+    ProPath*	w_option_values;
+    char	    option_value[PRO_PATH_SIZE];
+    char	    filename[] = &quot;pttestcfgopt.inf&quot;;
+<a name="anchor-37"></a>    wchar_t	    w_filename[ PRO_PATH_SIZE ];
+    int		    i, arr_size;
+
+    ProInfoWindowLocation   win_location = { 0.0, 0.0 };
+    ProInfoWindowSize	    win_size = { 25, 80 };
+<a name="anchor-38"></a>
+
+
+    if( (f = PTApplsUnicodeFopen( filename, &quot;wt&quot; )) == NULL )
+	return -1;
+<a name="anchor-39"></a>
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter option name: &quot; );
+    if( !ProUtilStringGet( w_config_option, NULL, PRO_NAME_SIZE ) )
+	return -1;
+
+<a name="anchor-40"></a>	status = ProConfigoptArrayGet( w_config_option, &amp;w_option_values );
+	TEST_CALL_REPORT( &quot;ProConfigoptArrayGet()&quot;, &quot;ProTestGetOption()&quot;, 
+			    status, status != PRO_TK_NO_ERROR &amp;&amp;
+                            status != PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-41"></a>	if (status == PRO_TK_E_NOT_FOUND)
+	{
+		ProTKFprintf ( f, &quot;Option not found.\n&quot;);
+	}
+
+<a name="anchor-42"></a>	if (status == PRO_TK_NO_ERROR)
+	{
+		ProWstringToString (config_option, w_config_option);
+
+		status = ProArraySizeGet (w_option_values, &amp;arr_size);
+<a name="anchor-43"></a>
+		for (i = 0; i &lt; arr_size; i ++)
+		{			
+			ProWstringToString (option_value, w_option_values [i]);
+
+<a name="anchor-44"></a>			if (i == 0)
+			{
+				ProTKFprintf( f, &quot;%s\n&quot;, config_option);
+				ProTKFprintf( f, &quot;\t = %s\n&quot;, option_value);
+			}
+<a name="anchor-45"></a>			else
+				ProTKFprintf( f, &quot;\t = %s\n&quot;, option_value );	
+		}
+	}	
+
+<a name="anchor-46"></a>    fclose( f );
+
+    status = ProInfoWindowDisplay( ProStringToWstring(w_filename, filename),
+				    &amp;win_location, &amp;win_size );
+    TEST_CALL_REPORT( &quot;ProInfoWindowDisplay()&quot;, &quot;ProTestGetOption()&quot;,
+<a name="anchor-47"></a>			status, status != PRO_TK_NO_ERROR);
+
+    return 0;
+}
+
+<a name="anchor-48"></a>/*=====================================================================*\
+FUNCTION: ProTestConfigOptionSetMenu
+PURPOSE:  Set one of a list of config option values
+NOTE:     Legacy function - maintained for existing tests only - 
+			use ProTestSetOptionByName() instead
+<a name="anchor-49"></a>\*=====================================================================*/
+int ProTestConfigOptionSetMenu( void* p_dummy, int int_dummy )
+{
+    ProError		status;
+    int			menu_id;    /* The identifier of the created menu */
+<a name="anchor-50"></a>    int			action;
+
+
+    /* Load menu from file */
+    status = ProMenuFileRegister( (char*)&quot;Option&quot;, (char*)&quot;tkoption.mnu&quot;, &amp;menu_id );
+<a name="anchor-51"></a>    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestConfigOptionSetMenu()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    /* Define menu buttons */
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;AXIS_DISPLAY&quot;, 
+<a name="anchor-52"></a>	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;AXIS_DISPLAY&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;BELL&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;BELL&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;COLOR&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;COLOR&quot;, 0 );
+<a name="anchor-53"></a>    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;DATUM_DISPLAY&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;DATUM_DISPLAY&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;DATUM_POINT_DISPLAY&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;DATUM_POINT_DISPLAY&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;DATUM_POINT_TAG_DISPLAY&quot;, 
+<a name="anchor-54"></a>	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;DATUM_POINT_TAG_DISPLAY&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;DISPLAY_COORDINATE_SYS&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;DISPLAY_COORDINATE_SYS&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;GRID_SNAP&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;GRID_SNAP&quot;, 0 );
+<a name="anchor-55"></a>    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;IGES_OUT_TRIM_CURVE_DEVIATION&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;IGES_OUT_TRIM_CURVE_DEVIATION&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;ORTHOGONAL_SNAP&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;ORTHOGONAL_SNAP&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;REGEN_BACKUP_USE_DISK&quot;, 
+<a name="anchor-56"></a>	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;REGEN_BACKUP_USE_DISK&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;SAVE_DISPLAY&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;SAVE_DISPLAY&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;SEARCH_PATH&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;SEARCH_PATH&quot;, 0 );
+<a name="anchor-57"></a>    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;SPIN_CENTER_DISPLAY&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;SPIN_CENTER_DISPLAY&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;TOL_DISPLAY&quot;, 
+	(ProMenubuttonAction)ProTestConfigOptionSet, (char*)&quot;TOL_DISPLAY&quot;, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Option&quot;, (char*)&quot;Option&quot;,
+<a name="anchor-58"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+    /* Rubn MEnu */
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;Option&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestConfigOptionSetMenu()&quot;, 
+<a name="anchor-59"></a>			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+	status = ProMenuProcess( (char*)&quot;Option&quot;, &amp;action );
+	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestConfigOptionSetMenu()&quot;, 
+<a name="anchor-60"></a>			    status, status != PRO_TK_NO_ERROR );
+    }
+
+    return 0;
+}
+<a name="anchor-61"></a>
+int ProTestConfigOptionSet( char* p_option, int int_dummy )
+{
+    ProError	    status;
+    ProName	    w_option;
+<a name="anchor-62"></a>    ProLine	    w_option_value;
+
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter option value: &quot; );
+    if( !ProUtilStringGet( w_option_value, NULL, PRO_LINE_SIZE ) )
+<a name="anchor-63"></a>	return -1;
+
+    ProStringToWstring( w_option, p_option );
+    status = ProConfigoptSet( w_option, w_option_value );
+    TEST_CALL_REPORT( &quot;ProConfigoptSet()&quot;, &quot;ProTestConfigOptionSet()&quot;, 
+<a name="anchor-64"></a>			status, status != PRO_TK_NO_ERROR );
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, 
+	status == PRO_TK_NO_ERROR ? &quot;Option set successfully&quot; : 
+	&quot;Can't set option&quot; );
+<a name="anchor-65"></a>
+    ProMessageClear();
+    TEST_CALL_REPORT( &quot;ProMessageClear()&quot;, &quot;ProTestConfigOptionSet()&quot;, 
+			PRO_TK_NO_ERROR, 0 );
+
+<a name="anchor-66"></a>    status = ProMenuDelete();
+    TEST_CALL_REPORT( &quot;ProMenuDelete()&quot;, &quot;ProTestConfigOptionSet()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+
+<a name="anchor-67"></a>    return 0;
+}
+
+
+int ProTestSetOptionByName( void* p_dummy, int int_dummy )
+<a name="anchor-68"></a>{
+    ProError	    status;
+    ProName	    w_option;
+    ProPath	    w_option_value;
+
+<a name="anchor-69"></a>	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter option name: &quot; );
+    if( !ProUtilStringGet( w_option, NULL, PRO_NAME_SIZE ) )
+	return -1;
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter option value: &quot; );
+<a name="anchor-70"></a>    if( !ProUtilStringGet( w_option_value, NULL, PRO_PATH_SIZE ) )
+	return -1;
+
+    status = ProConfigoptSet( w_option, w_option_value );
+    TEST_CALL_REPORT( &quot;ProConfigoptSet()&quot;, &quot;ProTestConfigOptionSet()&quot;, 
+<a name="anchor-71"></a>			status, status != PRO_TK_NO_ERROR );
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, 
+	status == PRO_TK_NO_ERROR ? &quot;Option set successfully&quot; : 
+	&quot;Couldn't set option&quot; );
+<a name="anchor-72"></a>
+    ProMessageClear();
+    TEST_CALL_REPORT( &quot;ProMessageClear()&quot;, &quot;ProTestConfigOptionSet()&quot;, 
+			PRO_TK_NO_ERROR, 0 );
+
+<a name="anchor-73"></a>    return 0;
+}
+
+
+int ProTestFileEdit( void* p_dummy, int int_dummy )
+<a name="anchor-74"></a>{
+    ProError	    status;
+    char	    filename[] = &quot;config.pro&quot;;
+    ProPath	    w_filename;
+
+<a name="anchor-75"></a>
+    ProStringToWstring( w_filename, filename );
+    status = ProFileEdit( w_filename );
+    TEST_CALL_REPORT( &quot;ProFileEdit()&quot;, &quot;ProTestFileEdit()&quot;, 
+			status, status != PRO_TK_NO_ERROR &amp;&amp;
+<a name="anchor-76"></a>                        status != PRO_TK_NO_CHANGE);
+    return 0;
+}
+
+int ProTestOptionOrderedVerify( void* p_dummy, int int_dummy )
+<a name="anchor-77"></a>{
+    ProError	    status;
+    ProCharName	    option;
+    ProName	    w_option;
+    ProBoolean	    option_exist;
+<a name="anchor-78"></a>    char*	    str = NULL;
+
+    /* Get opt name */
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter option name: &quot; );
+    if( !ProUtilStringGet( w_option, NULL, PRO_NAME_SIZE ) )
+<a name="anchor-79"></a>	return -1;
+
+    /* Verify opt */
+    ProWstringToString( option, w_option );
+    status = ProOptionOrderedVerify( option, &amp;option_exist );
+<a name="anchor-80"></a>    TEST_CALL_REPORT( &quot;ProOptionOrderedVerify()&quot;, 
+			&quot;ProTestOptionOrderedVerify()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    /* Display opt status */
+<a name="anchor-81"></a>    if( status != PRO_TK_NO_ERROR )
+	str = (char *)&quot;Invalid option&quot;;
+    else
+    {
+        str = (char *)( (option_exist == PRO_B_TRUE)?
+<a name="anchor-82"></a>		      (&quot;Option exists&quot;):(&quot;Option doesn't exist&quot;) );
+    }
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str );
+
+<a name="anchor-83"></a>    ProMessageClear();
+    TEST_CALL_REPORT( &quot;ProMessageClear()&quot;, &quot;ProTestOptionOrderedVerify()&quot;, 
+			PRO_TK_NO_ERROR, 0 );
+
+    return 0;
+<a name="anchor-84"></a>}
+
+int ProTestMode( void* p_dummy, int int_dummy )
+{
+    ProError	    status;
+<a name="anchor-85"></a>    ProMode	    mode = PRO_MODE_UNUSED;
+
+    status = ProModeCurrentGet( &amp;mode );
+    TEST_CALL_REPORT( &quot;ProModeCurrentGet()&quot;, &quot;ProTestMode()&quot;, 
+        status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_BAD_CONTEXT);
+<a name="anchor-86"></a>    return 0;
+}
+</pre>
+</body>
+</html>

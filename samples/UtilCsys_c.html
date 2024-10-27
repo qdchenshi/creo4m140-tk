@@ -1,0 +1,105 @@
+<html>
+<head>
+<title>UtilCsys.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProGeomitem.h>
+<a name="anchor-2"></a>#include &lt;ProCsys.h>
+#include &lt;ProSolid.h>
+
+#include &lt;UtilString.h>
+
+<a name="anchor-3"></a>/*--------------------------------------------------------------------*\
+ProAppData used while visiting Csys
+\*--------------------------------------------------------------------*/
+typedef struct {
+	ProMdl		model;
+<a name="anchor-4"></a>	ProCsys		p_csys;
+	ProName		csys_name;
+	}UserCsysAppData ; 
+/*--------------------------------------------------------------------*\
+Filter function used while visiting Csys
+<a name="anchor-5"></a>\*--------------------------------------------------------------------*/
+ProError CsysFindFilterAction (
+	ProCsys		this_csys,
+	ProAppData	app_data)
+{
+<a name="anchor-6"></a>  int 		status;
+  ProName	this_csys_name;
+  ProModelitem mdlitem;
+  int id;
+
+<a name="anchor-7"></a>  status = ProCsysIdGet (this_csys, &amp;id);
+  status = ProModelitemInit(((UserCsysAppData *) app_data)->model, id, PRO_CSYS, &amp;mdlitem);
+  status = ProModelitemNameGet ( &amp;mdlitem, this_csys_name);
+  if (status != PRO_TK_NO_ERROR)
+	return(status);
+<a name="anchor-8"></a>
+  if (ProUtilWstrcmp( ((UserCsysAppData *) app_data)->csys_name, this_csys_name) == 0)
+    return(PRO_TK_NO_ERROR);
+  return(PRO_TK_CONTINUE);
+}  
+<a name="anchor-9"></a>
+/*--------------------------------------------------------------------*\
+Visit Action used while visiting Csys
+\*--------------------------------------------------------------------*/
+ProError CsysFindVisitAction (
+<a name="anchor-10"></a>	ProCsys		this_csys,
+	ProError	filter_return,
+        ProAppData      app_data)
+{
+  int 		status;
+<a name="anchor-11"></a> 
+  if (filter_return != PRO_TK_NO_ERROR)
+	return (filter_return);
+  
+   ( (UserCsysAppData *) app_data) -> p_csys = this_csys; 
+<a name="anchor-12"></a>  return (PRO_TK_USER_ABORT);
+}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilCsysFind()
+<a name="anchor-13"></a>    PURPOSE  :  Find a csys given a model and a csys name
+\*====================================================================*/
+ProError ProUtilCsysFind(
+	ProMdl		p_model,	/* IN  - the model in which to look */
+	ProName		csys_name,	/* IN  - the name of the csys to find */
+<a name="anchor-14"></a>	ProCsys		*p_csys)	/* OUT - the csys handle */
+{
+  int 			status;
+  ProMdlType		mdl_type;
+  UserCsysAppData	app_data;
+<a name="anchor-15"></a> 
+  status = ProMdlTypeGet ( p_model, &amp;mdl_type);
+  if (status != PRO_TK_NO_ERROR) 
+	return(status);
+
+<a name="anchor-16"></a>  if ((mdl_type != PRO_MDL_PART) &amp;&amp; (mdl_type != PRO_MDL_ASSEMBLY))
+	return(PRO_TK_INVALID_TYPE);
+
+  ProUtilWstrcpy (app_data.csys_name, csys_name);
+  app_data.model = p_model;
+<a name="anchor-17"></a>
+  status = ProSolidCsysVisit( 	(ProSolid) p_model, 
+				(ProCsysVisitAction) CsysFindVisitAction,
+				(ProCsysFilterAction) CsysFindFilterAction,
+				(ProAppData) &amp;app_data);
+<a name="anchor-18"></a>  if (status != PRO_TK_USER_ABORT) 
+	return(PRO_TK_E_NOT_FOUND);
+  *p_csys = app_data.p_csys;
+
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-19"></a>}
+
+</pre>
+</body>
+</html>

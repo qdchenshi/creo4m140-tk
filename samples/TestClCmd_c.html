@@ -1,0 +1,1307 @@
+<html>
+<head>
+<title>TestClCmd.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit  includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProElement.h>
+#include &lt;ProFeature.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProMenu.h>
+#include &lt;ProModelitem.h>
+<a name="anchor-3"></a>#include &lt;ProNcseq.h>
+#include &lt;ProNcseqElem.h>
+#include &lt;ProClCmd.h>
+#include &lt;ProClcmdElem.h>
+#include &lt;ProSelection.h>
+<a name="anchor-4"></a>#include &lt;ProUtil.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-5"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestConsts.h&quot;
+#include &quot;TestMfgNew.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilMessage.h&quot;
+#include &quot;UtilGroups.h&quot;
+
+/*--------------------------------------------------------------------*\
+Application types
+<a name="anchor-7"></a>\*--------------------------------------------------------------------*/
+typedef  enum {
+    TEST_NCL_CREATE = 0,
+	TEST_NCL_REMOVE,
+	TEST_NCL_REMOVE_BY_IDX,
+<a name="anchor-8"></a>	TEST_NCL_REDEFINE,
+    TEST_NCL_REDEFINE_BY_IDX
+} TestNclActType ;
+
+
+<a name="anchor-9"></a>
+typedef struct usr_elem_table{
+    int elem_type;
+    int val_type;
+} UserElemTable;
+<a name="anchor-10"></a>
+
+#define TEST_NCLC_CREATE 0
+#define TEST_NCLC_RECREATE 1
+#define TEST_NCLC_REDEFINE 2
+<a name="anchor-11"></a>
+
+/*--------------------------------------------------------------------*\
+Function prototypes
+\*--------------------------------------------------------------------*/
+<a name="anchor-12"></a>ProError ProTestCmdsArrayFree (wchar_t*** cmds);
+ProError ProTestClcmdElemCreate( ProElement NclCmds)  ;
+ProError ProTestClcmdElemRemove(    ProElement elem_tree) ;
+ProError ProTestClcmdElemRemoveByIndex(    ProElement elem_tree);
+ProError ProTestClcmdElemRedefineByIndex(    ProElement elem_tree);
+<a name="anchor-13"></a>ProError ProTestClcmdElemRedefine(    ProElement elem_tree);
+int ProTestCustmzRecreate( void* p_dummy,     int action );
+int ProTestCustmzRedefine(  void* p_dummy,     int action );
+int ProTestCustmzCreateMenuAct(void* p_dummy, int action );
+
+<a name="anchor-14"></a>/*====================================================================*\
+FUNCTION : ProTestPrintErrs
+PURPOSE  : print feature creation or redefinition errors
+\*====================================================================*/
+ProError ProTestRootToNclcommElem (
+<a name="anchor-15"></a>    ProElement tree_root,
+    ProElement * NclcommsElem)
+{
+    ProError err;
+    ProElempath to_ncl_cmds;
+<a name="anchor-16"></a>    ProElempathItem path = {
+	PRO_ELEM_PATH_ITEM_TYPE_ID,
+	PRO_E_NCL_COMMANDS
+    };
+    ProElemId id;
+<a name="anchor-17"></a>
+    err = ProElementIdGet (tree_root, &amp;id);
+    TEST_CALL_REPORT(&quot;ProElementIdGet()&quot;,
+			         &quot;ProTestRootToNclcommElem()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+<a name="anchor-18"></a>    
+    if (id == PRO_E_NCL_COMMANDS)
+    {
+	*NclcommsElem = tree_root;
+	return PRO_TK_NO_ERROR;
+<a name="anchor-19"></a>    }
+	
+
+    err = ProElempathAlloc ( &amp;to_ncl_cmds);
+    TEST_CALL_REPORT(&quot;ProElempathAlloc()&quot;,
+<a name="anchor-20"></a>			         &quot;ProTestRootToNclcommElem()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+
+    err = ProElempathDataSet ( to_ncl_cmds, &amp;path, 1);
+    TEST_CALL_REPORT(&quot;ProElempathDataSet()&quot;,
+<a name="anchor-21"></a>			         &quot;ProTestRootToNclcommElem()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+
+    err = ProElemtreeElementGet (tree_root, to_ncl_cmds, NclcommsElem);
+    TEST_CALL_REPORT(&quot;ProElemtreeElementGet()&quot;,
+<a name="anchor-22"></a>			         &quot;ProTestRootToNclcommElem()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+    
+    err = ProElementIdGet (*NclcommsElem, &amp;id);
+    TEST_CALL_REPORT(&quot;ProElementIdGet()&quot;,
+<a name="anchor-23"></a>			         &quot;ProTestRootToNclcommElem()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+    ProTKPrintf ((char*)&quot;Id: %d\n&quot;, id);
+    
+    err = ProElempathFree ( &amp;to_ncl_cmds);
+<a name="anchor-24"></a>    TEST_CALL_REPORT(&quot;ProElempathFree()&quot;,
+			         &quot;ProTestRootToNclcommElem()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+
+
+<a name="anchor-25"></a>    return (err);
+}
+/*====================================================================*\
+FUNCTION : ProTestChooseNclAct
+PURPOSE  : Select 
+<a name="anchor-26"></a>\*====================================================================*/
+int ProTestChooseNclAct(
+    ProElement custm_tree, 
+    int opt )
+{
+<a name="anchor-27"></a>    ProError err;
+
+    switch (opt)
+    {
+	case TEST_NCL_CREATE:
+<a name="anchor-28"></a>	    err = ProTestClcmdElemCreate(custm_tree);
+	    break;
+	case TEST_NCL_REMOVE:
+	    err = ProTestClcmdElemRemove(custm_tree);
+	    break;
+<a name="anchor-29"></a>	case TEST_NCL_REMOVE_BY_IDX:
+	    err = ProTestClcmdElemRemoveByIndex(custm_tree);
+	    break;
+	case TEST_NCL_REDEFINE:
+	    err = ProTestClcmdElemRedefine(custm_tree);
+<a name="anchor-30"></a>	    break;
+	case TEST_NCL_REDEFINE_BY_IDX:
+	    err = ProTestClcmdElemRedefineByIndex(custm_tree);
+	    break;
+	default:
+<a name="anchor-31"></a>	    ProTKPrintf((char*)&quot;error in data\n&quot;);
+    }
+    
+    return (0);
+}
+<a name="anchor-32"></a>
+    
+/*====================================================================*\
+FUNCTION : ProTest
+PURPOSE  : Select 
+<a name="anchor-33"></a>\*====================================================================*/
+int ProTestTkClcmdsAct (ProAppData data, int dummy)
+{
+    ProError err;
+    int menu_id;
+<a name="anchor-34"></a>    int opt;
+    
+    
+    err = ProMenuFileRegister( (char*)&quot;TkCLcmds&quot;, (char*)&quot;tkclcmds.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestAsmFunc()&quot;,
+<a name="anchor-35"></a>                        err, err != PRO_TK_NO_ERROR );
+    
+    ProMenubuttonActionSet( (char*)&quot;TkCLcmds&quot;, (char*)&quot;-Recreate&quot;, 
+	(ProMenubuttonAction)ProTestCustmzRecreate, (ProAppData)&amp;opt ,
+	TEST_NCLC_RECREATE	);
+<a name="anchor-36"></a>     
+    ProMenubuttonActionSet( (char*)&quot;TkCLcmds&quot;, (char*)&quot;-Redefine&quot;, 
+	(ProMenubuttonAction)ProTestCustmzRedefine, (ProAppData)&amp;opt ,
+	TEST_NCLC_REDEFINE);
+     
+<a name="anchor-37"></a>    ProMenubuttonActionSet( (char*)&quot;TkCLcmds&quot;, (char*)&quot;-Create&quot;, 
+	(ProMenubuttonAction)ProTestCustmzCreateMenuAct, (ProAppData)&amp;opt ,
+	TEST_NCLC_REDEFINE);
+       
+    ProMenubuttonActionSet( (char*)&quot;TkCLcmds&quot;, (char*)&quot;TkCLcmds&quot;, 
+<a name="anchor-38"></a>	(ProMenubuttonAction)ProMenuDelete, NULL , 0);
+    ProMenubuttonActionSet( (char*)&quot;TkCLcmds&quot;, (char*)&quot;-Done&quot;, 
+	    (ProMenubuttonAction)ProMenuDelete, NULL , 0);
+     
+    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkCLcmds&quot;, NULL);
+<a name="anchor-39"></a>    ProMenuProcess((char*)&quot;TkCLcmds&quot;, &amp;menu_id);
+
+    return 0;
+}
+
+<a name="anchor-40"></a>/*====================================================================*\
+FUNCTION : ProTestPrintErrs
+PURPOSE  : print feature creation or redefinition errors
+\*====================================================================*/
+ProError ProTestPrintErrs1(
+<a name="anchor-41"></a>   ProErrorlist err_list)
+{
+    int i;
+    char elem_name[PRO_LINE_SIZE];
+    char elem_str[PRO_LINE_SIZE + 10];
+<a name="anchor-42"></a>    char err_str[50];
+    char title[30];
+    char text[100];
+
+    for (i=0; i&lt;err_list.error_number; i++)
+<a name="anchor-43"></a>    {
+         if (ProUtilIdToStr(err_list.error_list->err_item_id, elem_name) ==
+                                                    PRO_TK_E_NOT_FOUND)
+            ProTKSprintf(elem_str, (char*)&quot;Elem: %d&quot;, err_list.error_list->err_item_id);
+         else
+<a name="anchor-44"></a>            ProTKSprintf(elem_str, (char*)&quot;Elem: %s&quot;, elem_name);
+
+         ProUtilErrPrint(err_list.error_list->error, err_str);
+
+	 ProTKFprintf(stderr, (char*)&quot;Err %d: %s, %s\n&quot;, i, err_str, elem_str);
+<a name="anchor-45"></a>         ProTKSprintf(title, (char*)&quot;Error %d&quot;, i);
+         ProTKSprintf(text, (char*)&quot;%s, %s&quot;, err_str, elem_str);
+	 ProTKPrintf ((char*)&quot;%s\n&quot;, title);
+	 ProTKPrintf ((char*)&quot;%s\n&quot;,text);
+	 
+<a name="anchor-46"></a>    }
+    
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-47"></a>/*====================================================================*\
+FUNCTION : ProTestSelectionPreCustFilter
+PURPOSE  : 
+\*====================================================================*/
+ProError ProTestSelectionPreCustFilter(
+<a name="anchor-48"></a>    ProSelection selection,
+    Pro3dPnt point,
+    ProMatrix transform,
+    char * option,
+    int level,
+<a name="anchor-49"></a>    ProAppData app_data)
+{
+    ProModelitem feature;
+    ProFeattype feat_type;
+    ProError err;
+<a name="anchor-50"></a>
+    err = ProSelectionModelitemGet ( selection, &amp;feature);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+			         &quot;ProTestSelectionPreCustFilter()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+<a name="anchor-51"></a>
+    err = ProFeatureTypeGet ( &amp;feature, &amp;feat_type);
+    TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;,
+			         &quot;ProTestSelectionPreCustFilter()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+<a name="anchor-52"></a>    if (feat_type == PRO_FEAT_CUSTOMIZE)
+
+	return PRO_TK_NO_ERROR;
+
+
+<a name="anchor-53"></a>    return (PRO_TK_CONTINUE);
+
+}
+
+/*====================================================================*\
+<a name="anchor-54"></a>FUNCTION : ProTestSelectionPreNcseqFilter
+PURPOSE  : 
+\*====================================================================*/
+ProError ProTestSelectionPreNcseqFilter(
+    ProSelection selection,
+<a name="anchor-55"></a>    Pro3dPnt point,
+    ProMatrix transform,
+    char * option,
+    int level,
+    ProAppData app_data)
+<a name="anchor-56"></a>{
+    ProModelitem feature;
+    ProFeattype feat_type;
+    ProError err;
+
+<a name="anchor-57"></a>    
+
+    err = ProSelectionModelitemGet ( selection, &amp;feature);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+			         &quot;ProTestSelectionPreNcseqFilter()&quot;,
+<a name="anchor-58"></a>		     err, err != PRO_TK_NO_ERROR );
+
+    err = ProFeatureTypeGet ( &amp;feature, &amp;feat_type);
+    TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;,
+			         &quot;ProTestSelectionPreNcseqFilter()&quot;,
+<a name="anchor-59"></a>		     err, err != PRO_TK_NO_ERROR );
+    if (feat_type == PRO_FEAT_AUXILIARY)
+
+	return PRO_TK_NO_ERROR;
+
+<a name="anchor-60"></a>
+    return (PRO_TK_CONTINUE);
+
+}
+
+<a name="anchor-61"></a>/*====================================================================*\
+FUNCTION : ProTestCustmzSelect
+PURPOSE  : Select cust. feature.
+\*====================================================================*/
+ProError ProTestCustmzSelect(
+<a name="anchor-62"></a>    ProSelection * customize )
+{
+    ProSelFunctions sel_funcs;
+    ProError err;
+    int nsels;
+<a name="anchor-63"></a>    ProSelection * sel;
+    
+
+    sel_funcs.pre_filter = (ProSelectionPreFilter)ProTestSelectionPreCustFilter;
+
+<a name="anchor-64"></a>    sel_funcs.post_filter =  NULL;
+    sel_funcs.post_selact = NULL;
+    sel_funcs.app_data = NULL;
+
+    err = ProSelect ( (char*)&quot;feature&quot;, 1, NULL, &amp;sel_funcs, NULL, NULL,
+<a name="anchor-65"></a>		      &amp;sel, &amp;nsels);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;,
+		     &quot;ProTestCustmzSelect()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+    if (nsels == 0)
+<a name="anchor-66"></a>	*customize = NULL;
+    else
+	*customize = sel[0];
+    
+    return (err);
+<a name="anchor-67"></a>    
+}
+
+/*====================================================================*\
+FUNCTION : ProTestNclActionDo
+<a name="anchor-68"></a>PURPOSE  :
+\*====================================================================*/
+ProError ProTestNclActionDo (
+    ProElement elem_tree)
+{
+<a name="anchor-69"></a>    ProError err;
+    int menu_action, menu_id;
+/*------------------------------------------------------------------------*\
+ Select action for custm elem tree
+\*------------------------------------------------------------------------*/
+<a name="anchor-70"></a>      err = ProMenuFileRegister( (char*)&quot;TkClcmd&quot;, (char*)&quot;tkclcmd.mnu&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, 
+            &quot;ProUtilNcseqElemSurfacesAdd()&quot;, 
+	    err, err != PRO_TK_NO_ERROR );
+
+<a name="anchor-71"></a>        /* Define menu buttons */
+        ProMenubuttonActionSet( (char*)&quot;TkClcmd&quot;, (char*)&quot;-Create&quot;,
+            (ProMenubuttonAction)ProTestChooseNclAct, elem_tree,
+				TEST_NCL_CREATE );
+	
+<a name="anchor-72"></a>        ProMenubuttonActionSet( (char*)&quot;TkClcmd&quot;, (char*)&quot;-Remove&quot;,
+            (ProMenubuttonAction)ProTestChooseNclAct, elem_tree,
+				TEST_NCL_REMOVE);
+
+	ProMenubuttonActionSet( (char*)&quot;TkClcmd&quot;, (char*)&quot;-RemoveByIdx&quot;,
+<a name="anchor-73"></a>            (ProMenubuttonAction)ProTestChooseNclAct, elem_tree,
+				TEST_NCL_REMOVE_BY_IDX);
+	
+        ProMenubuttonActionSet( (char*)&quot;TkClcmd&quot;, (char*)&quot;-RedefineByIdx&quot;,
+            (ProMenubuttonAction)ProTestChooseNclAct, elem_tree,
+<a name="anchor-74"></a>				TEST_NCL_REDEFINE_BY_IDX);
+
+	ProMenubuttonActionSet( (char*)&quot;TkClcmd&quot;, (char*)&quot;-Redefine&quot;,
+            (ProMenubuttonAction)ProTestChooseNclAct, elem_tree,
+				TEST_NCL_REDEFINE);
+<a name="anchor-75"></a>
+	 ProMenubuttonActionSet( (char*)&quot;TkClcmd&quot;, (char*)&quot;-Done&quot;, 
+            (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+	
+        ProMenubuttonActionSet( (char*)&quot;TkClcmd&quot;, (char*)&quot;TkClcmd&quot;, 
+<a name="anchor-76"></a>            (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+	
+	
+        err = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkClcmd&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestNclActionDo()&quot;, 
+<a name="anchor-77"></a>			err, err != PRO_TK_NO_ERROR );
+        if( err == PRO_TK_NO_ERROR )
+        {
+            err = ProMenuProcess( (char*)&quot;TkClcmd&quot;, &amp;menu_action );
+            TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestNclActionDo()&quot;, 
+<a name="anchor-78"></a>	        err, err != PRO_TK_NO_ERROR );
+        }
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-79"></a>
+/*====================================================================*\
+FUNCTION :ProTestCustmzCreate 
+PURPOSE  : 
+\*====================================================================*/
+<a name="anchor-80"></a>ProError ProTestCustmzCreate(
+    int ref_ncseq_id, ProSelection owner)
+{
+
+   ProError         err = PRO_TK_NO_ERROR;
+<a name="anchor-81"></a>   ProElement       custmz_elem = NULL;
+   ProElement       custmz_elem_tree = NULL;
+   ProValue         value;
+   ProValueData     value_data;
+   ProErrorlist     errors;
+<a name="anchor-82"></a>   ProFeature       custmz_feat; 
+   ProFeatureCreateOptions *opts = 0;
+   static  UserElemTable custmz_elem_table[] = {
+           { PRO_E_FEATURE_TYPE,      PRO_VALUE_TYPE_INT       },
+           { PRO_E_REF_NCSEQ,         PRO_VALUE_TYPE_INT       },
+<a name="anchor-83"></a>           { PRO_E_NCL_COMMANDS,      ARRAY                    }};
+
+   int     custmz_elem_type_size = sizeof (custmz_elem_table)/sizeof (UserElemTable);
+   int ii;
+
+<a name="anchor-84"></a>
+   err = ProElementAlloc (PRO_E_FEATURE_TREE, &amp;custmz_elem_tree);
+
+   for (ii = 0; ii &lt; custmz_elem_type_size; ii++)
+   {
+<a name="anchor-85"></a>      err = ProElementAlloc (custmz_elem_table[ii].elem_type, &amp;custmz_elem);
+       TEST_CALL_REPORT( &quot;ProElementAlloc()&quot;, &quot;ProTestCustmzCreate()&quot;, 
+			err, err != PRO_TK_NO_ERROR );
+
+      switch (custmz_elem_table[ii].elem_type)
+<a name="anchor-86"></a>      {  
+         case PRO_E_FEATURE_TYPE:
+            err = ProElementIntegerSet (custmz_elem, PRO_FEAT_CUSTOMIZE);
+            TEST_CALL_REPORT( &quot;ProElementIntegerSet()&quot;, 
+				  &quot;ProTestCustmzCreate()&quot;, err, err != PRO_TK_NO_ERROR );
+<a name="anchor-87"></a>         break;
+ 
+         case PRO_E_REF_NCSEQ:
+			err = ProElementIntegerSet (custmz_elem, ref_ncseq_id);
+            TEST_CALL_REPORT( &quot;ProElementIntegerSet()&quot;, 
+<a name="anchor-88"></a>				  &quot;ProTestCustmzCreate()&quot;, err, err != PRO_TK_NO_ERROR );
+         break;
+ 
+         case PRO_E_NCL_COMMANDS:
+	      err = ProElemtreeElementAdd (custmz_elem_tree,
+<a name="anchor-89"></a>		  NULL, custmz_elem);
+	      TEST_CALL_REPORT( &quot;ProElemtreeElementAdd()&quot;,
+		  &quot;ProTestCustmzCreate()&quot;, 
+			err, err != PRO_TK_NO_ERROR );
+		 
+<a name="anchor-90"></a>	     err = ProTestNclActionDo (custmz_elem_tree);
+		 
+         break;
+
+         default: 
+<a name="anchor-91"></a>            return PRO_TK_GENERAL_ERROR; 
+      }     
+ 
+      value_data.type = (ProValueDataType)custmz_elem_table[ii].val_type;
+ 
+<a name="anchor-92"></a>      if (custmz_elem_table[ii].val_type != ARRAY)
+      {        
+         if (err == PRO_TK_NO_ERROR)
+         {
+             err = ProElemtreeElementAdd (custmz_elem_tree, NULL, custmz_elem);
+<a name="anchor-93"></a>	     TEST_CALL_REPORT( &quot;ProElemtreeElementAdd()&quot;,
+		 &quot;ProTestCustmzCreate()&quot;, 
+			err, err != PRO_TK_NO_ERROR );
+         }
+         else
+<a name="anchor-94"></a>         {
+             ProElementFree (&amp;custmz_elem);
+	     TEST_CALL_REPORT( &quot;ProElementFree()&quot;, &quot;ProTestCustmzCreate()&quot;, 
+			err, err != PRO_TK_NO_ERROR );
+         }
+<a name="anchor-95"></a>      }/* if ARRAY */
+
+   }
+   
+ 
+<a name="anchor-96"></a>   if (err == PRO_TK_NO_ERROR)
+   {
+      err = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+            1, (ProArray*)&amp;opts);
+
+<a name="anchor-97"></a>      opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+      err = ProFeatureWithoptionsCreate (owner, custmz_elem_tree,
+            opts, PRO_REGEN_NO_FLAGS, &amp;custmz_feat, &amp;errors);
+      TEST_CALL_REPORT( &quot;ProFeatureWithoptionsCreate()&quot;, &quot;ProTestCustmzCreate()&quot;, 
+<a name="anchor-98"></a>			err, err != PRO_TK_NO_ERROR );
+
+      err = ProArrayFree((ProArray*)&amp;opts);
+
+   }
+<a name="anchor-99"></a>
+    if (err != PRO_TK_NO_ERROR)
+     {
+	 ProTestPrintErrs1(errors);
+     }
+<a name="anchor-100"></a>   return err;
+}
+
+/*====================================================================*\
+FUNCTION : 
+<a name="anchor-101"></a>PURPOSE  : 
+\*====================================================================*/
+int ProTestCustmzCreateMenuAct(
+    void* p_dummy, 
+    int action )
+<a name="anchor-102"></a>{
+    ProError err;
+    int nsels;
+    ProSelection * sel;
+    ProSelFunctions sel_funcs;
+<a name="anchor-103"></a>    int ref_ncseq_id;
+    ProFeature ref_ncseq;
+    ProSelection  custm_owner;
+    ProMdl mfg;
+    ProSolid       mfg_solid;
+<a name="anchor-104"></a>    ProAsmcomppath comp_path;
+    ProModelitem   storage;
+	
+    sel_funcs.pre_filter = (ProSelectionPreFilter)ProTestSelectionPreNcseqFilter;
+
+<a name="anchor-105"></a>    sel_funcs.post_filter =  NULL;
+    sel_funcs.post_selact = NULL;
+    sel_funcs.app_data = NULL;
+    
+    err = ProSelect ( (char*)&quot;feature&quot;, 1, NULL, &amp;sel_funcs, NULL, NULL,
+<a name="anchor-106"></a>		      &amp;sel, &amp;nsels);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;,
+		     &quot;ProTestCustmzCreateMenuAct()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+    if (nsels &lt;1)
+<a name="anchor-107"></a>	return PRO_TK_NO_ERROR;
+
+    err = ProSelectionModelitemGet (sel[0], &amp;ref_ncseq);
+     TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+		     &quot;ProTestCustmzCreateMenuAct()&quot;,
+<a name="anchor-108"></a>		     err, err != PRO_TK_NO_ERROR );
+    ref_ncseq_id = ref_ncseq.id; 
+
+    err = ProMdlCurrentGet (&amp;mfg);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;,
+<a name="anchor-109"></a>		     &quot;ProTestCustmzCreateMenuAct()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+
+    err = ProMfgSolidGet ((ProMfg)mfg, &amp;mfg_solid);
+     TEST_CALL_REPORT(&quot;ProMfgSolidGet()&quot;,
+<a name="anchor-110"></a>		     &quot;ProTestCustmzCreateMenuAct()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+
+     err = ProMfgFeatureOwnerGet ((ProMfg)mfg, &amp;comp_path);
+     TEST_CALL_REPORT(&quot;ProMfgFeatureOwnerGet()&quot;,
+<a name="anchor-111"></a>		     &quot;ProTestCustmzCreateMenuAct()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+
+     err = ProModelitemInit (mfg_solid, PRO_TK_NOT_USED,
+			      (ProType)PRO_TK_NOT_USED, &amp;storage );
+<a name="anchor-112"></a>     TEST_CALL_REPORT(&quot;ProModelitemInit()&quot;,
+		     &quot;ProTestCustmzCreateMenuAct()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+     err = ProSelectionAlloc (&amp;comp_path, &amp;storage,
+			      &amp;custm_owner);
+<a name="anchor-113"></a>     TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;,
+		     &quot;ProTestCustmzCreateMenuAct()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+
+     err = ProTestCustmzCreate( ref_ncseq_id,  custm_owner);
+<a name="anchor-114"></a>     
+     return (0);
+     
+    
+}
+<a name="anchor-115"></a>/*====================================================================*\
+FUNCTION : ProTestCustoElemtreeGet
+PURPOSE  : 
+\*====================================================================*/
+ProError ProTestCustoElemtreeGet (
+<a name="anchor-116"></a>    ProModelitem* custm,
+    ProSolid * mfg_solid,
+    ProSelection * custm_owner,
+    ProElement * elem_tree,
+    ProAsmcomppath * comp_path )
+<a name="anchor-117"></a>{
+    ProError err;
+    ProSelection  customize;
+    ProMdl mfg;
+    ProModelitem   storage;
+<a name="anchor-118"></a>    ProMfgType m_type;
+    
+/*------------------------------------------------------------------------*\
+  1. Select customize feature.
+\*------------------------------------------------------------------------*/
+<a name="anchor-119"></a>
+    err = ProTestCustmzSelect (&amp;customize);
+    if (err != PRO_TK_NO_ERROR)
+	return (PRO_TK_USER_ABORT);
+        
+<a name="anchor-120"></a>    err = ProSelectionModelitemGet (customize, custm);
+     TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+        &quot;ProTestCustoElemtreeGet()&quot;, err, err != PRO_TK_NO_ERROR );
+
+/*------------------------------------------------------------------------*\
+<a name="anchor-121"></a>  2. Obtain ProSelection feature owner for ProFeatureCreate
+     2a. Obtain manufacture storage solid
+     2b. Obtain asm path to feature owner
+     2c. Fill model item for storage solid
+     2d. Create ProSelection for mfg feature owner
+<a name="anchor-122"></a>\*------------------------------------------------------------------------*/
+
+    err = ProMdlCurrentGet (&amp;mfg);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;,
+        &quot;ProTestCustoElemtreeGet()&quot;, err, err != PRO_TK_NO_ERROR );
+<a name="anchor-123"></a>
+    err = ProMfgTypeGet ((ProMfg)mfg, &amp;m_type);
+    TEST_CALL_REPORT(&quot;ProMfgTypeGet()&quot;,
+        &quot;ProTestCustoElemtreeGet()&quot;, err, err != PRO_TK_NO_ERROR );
+                     
+<a name="anchor-124"></a>
+    err = ProMfgSolidGet ((ProMfg)mfg, mfg_solid);
+    TEST_CALL_REPORT(&quot;ProMfgSolidGet()&quot;,
+        &quot;ProTestCustoElemtreeGet()&quot;, err, err != PRO_TK_NO_ERROR );
+        
+<a name="anchor-125"></a>    err = ProMfgFeatureOwnerGet ((ProMfg)mfg, comp_path);
+    TEST_CALL_REPORT(&quot;ProMfgFeatureOwnerGet()&quot;, 
+        &quot;ProTestCustoElemtreeGet()&quot;, err, err != PRO_TK_NO_ERROR );
+
+    err = ProModelitemInit ((*mfg_solid), PRO_TK_NOT_USED,
+<a name="anchor-126"></a>			      (ProType)PRO_TK_NOT_USED, &amp;storage );
+    TEST_CALL_REPORT(&quot;ProModelitemInit()&quot;, 
+        &quot;ProTestCustoElemtreeGet()&quot;, err, err != PRO_TK_NO_ERROR );
+
+    err = ProSelectionAlloc (comp_path, &amp;storage,
+<a name="anchor-127"></a>			      custm_owner);
+    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;,
+        &quot;ProTestCustoElemtreeGet()&quot;, err, err != PRO_TK_NO_ERROR );
+/*------------------------------------------------------------------------*\
+  Naw we have ProSelection
+<a name="anchor-128"></a>  Next:
+  Obtain elem tree 
+\*------------------------------------------------------------------------*/
+
+    err = ProFeatureElemtreeExtract (custm, NULL, PRO_FEAT_EXTRACT_NO_OPTS, elem_tree);
+<a name="anchor-129"></a>     TEST_CALL_REPORT(&quot;ProFeatureElemtreeExtract()&quot;,
+        &quot;ProTestCustoElemtreeGet()&quot;, err, err != PRO_TK_NO_ERROR );
+
+     err = ProTestNclActionDo (*elem_tree);
+
+<a name="anchor-130"></a>     return err;
+}
+
+/*====================================================================*\
+FUNCTION : ProTestCustmzRecreate
+<a name="anchor-131"></a>PURPOSE  : Select and recreate cust. feature.
+\*====================================================================*/
+int ProTestCustmzRecreate(
+    void* p_dummy, 
+    int action )
+<a name="anchor-132"></a>{
+    ProError err;
+
+    ProSelection  custm_owner;
+
+<a name="anchor-133"></a>
+    ProSolid       mfg_solid;
+    ProAsmcomppath comp_path;
+    ProModelitem    custm;
+
+<a name="anchor-134"></a>
+
+    ProElement elem_tree = NULL;
+    ProFeature  new_custom;
+    ProErrorlist  errors;
+<a name="anchor-135"></a>    ProFeatureCreateOptions *opts = 0;
+    ProFeatureDeleteOptions *delete_opts = 0;
+    int *feat_ids = NULL;
+
+    err = ProTestCustoElemtreeGet (&amp;custm, &amp;mfg_solid, &amp;custm_owner,
+<a name="anchor-136"></a>	&amp;elem_tree, &amp;comp_path);
+    if (err == PRO_TK_USER_ABORT)
+	return (0);
+    
+
+<a name="anchor-137"></a>    err = ProArrayAlloc(1,sizeof(ProFeatureDeleteOptions),
+        1, (ProArray*)&amp;delete_opts);
+
+    delete_opts[0] = PRO_FEAT_DELETE_NO_OPTS;
+
+<a name="anchor-138"></a>    err = ProArrayAlloc(1,sizeof(int),
+        1, (ProArray*)&amp;feat_ids);
+
+    feat_ids[0] = custm.id;
+
+<a name="anchor-139"></a>     err = ProFeatureWithoptionsDelete (mfg_solid, feat_ids, 
+     delete_opts, PRO_REGEN_NO_FLAGS);
+     TEST_CALL_REPORT(&quot;ProFeatureWithoptionsDelete()&quot;,
+		     &quot;ProTestCustmzRecreate()&quot;,
+		      err, err != PRO_TK_NO_ERROR );
+<a name="anchor-140"></a>
+     err = ProArrayFree((ProArray*)&amp;delete_opts);
+     err = ProArrayFree((ProArray*)&amp;feat_ids);
+     
+/*------------------------------------------------------------------------*\
+<a name="anchor-141"></a>  Create feature
+
+\*------------------------------------------------------------------------*/
+	 
+     err = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+<a name="anchor-142"></a>          1, (ProArray*)&amp;opts);
+
+     opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+     err = ProFeatureWithoptionsCreate (custm_owner, elem_tree,
+<a name="anchor-143"></a>          opts, PRO_REGEN_NO_FLAGS, &amp;new_custom, &amp;errors);
+     TEST_CALL_REPORT(&quot;ProFeatureWithoptionsCreate()&quot;,
+		     &quot;ProTestCustmzRecreate()&quot;,
+		      err, err != PRO_TK_NO_ERROR );
+
+<a name="anchor-144"></a>     err = ProArrayFree((ProArray*)&amp;opts);
+     if (err != PRO_TK_NO_ERROR)
+     {
+	 ProTestPrintErrs1(errors);
+     }
+<a name="anchor-145"></a>     
+		 
+     return ( (int)err);
+    
+}
+<a name="anchor-146"></a>
+/*====================================================================*\
+FUNCTION : ProTestCustmzRedefine
+PURPOSE  : Select and redefine cust. feature.
+\*====================================================================*/
+<a name="anchor-147"></a>int ProTestCustmzRedefine(
+    void* p_dummy, 
+    int action )
+{
+    ProError err;
+<a name="anchor-148"></a>
+
+    ProSelection  custm_owner;
+
+
+<a name="anchor-149"></a>    ProSolid       mfg_solid;
+    ProAsmcomppath comp_path;
+
+    ProModelitem custm;
+
+<a name="anchor-150"></a>    ProElement elem_tree = NULL;
+    ProErrorlist  errors;
+    ProFeatureCreateOptions *opts = 0;
+
+
+<a name="anchor-151"></a>    err = ProTestCustoElemtreeGet (&amp;custm, &amp;mfg_solid, &amp;custm_owner,
+	&amp;elem_tree, &amp;comp_path);
+    if (err == PRO_TK_USER_ABORT)
+	return (0);
+
+<a name="anchor-152"></a>/*------------------------------------------------------------------------*\
+  Redefine feature
+
+\*------------------------------------------------------------------------*/
+     err = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+<a name="anchor-153"></a>          1, (ProArray*)&amp;opts);
+
+     opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+     err = ProFeatureWithoptionsRedefine (&amp;comp_path, &amp;custm, elem_tree ,
+<a name="anchor-154"></a>          opts, PRO_REGEN_NO_FLAGS, &amp;errors);
+     TEST_CALL_REPORT(&quot;ProFeatureWithoptionsRedefine()&quot;,
+		     &quot;ProTestCustmzRedefine()&quot;,
+		      err, err != PRO_TK_NO_ERROR );
+
+<a name="anchor-155"></a>     err = ProArrayFree((ProArray*)&amp;opts);
+     if (err != PRO_TK_NO_ERROR)
+     {
+	 ProTestPrintErrs1(errors);
+     }
+<a name="anchor-156"></a>     
+	 
+    
+    return (0);
+    
+<a name="anchor-157"></a>}
+
+
+/*====================================================================*\
+FUNCTION : TestFileGet
+<a name="anchor-158"></a>PURPOSE  : 
+\*====================================================================*/
+int TestFileGet ( FILE ** ff)
+{
+    ProCharLine ch_file_name;
+<a name="anchor-159"></a>    ProLine wname;
+    
+    do
+    {
+	ProUtilMsgPrint((char*)&quot;gen&quot;,(char*)&quot;TEST %0s&quot;,
+<a name="anchor-160"></a>			&quot;Enter file name [NONE]: &quot;);
+	if (!ProUtilStringGet(wname, NULL, PRO_LINE_SIZE-1))
+	    return (1);
+	ProWstringToString (ch_file_name, wname);
+	
+<a name="anchor-161"></a>    }while ((*ff = PTApplsUnicodeFopen (ch_file_name, &quot;rt&quot;)) == NULL);
+    
+    return 0;
+}
+
+<a name="anchor-162"></a>
+/*====================================================================*\
+FUNCTION : ProTestClCmdDataGet
+PURPOSE  : 
+\*====================================================================*/
+<a name="anchor-163"></a>int ProTestClCmdDataGet (
+    FILE *cmgfile,            /* in */
+    wchar_t*** cmds,             /*  out wlines */
+    int  *   icmds,
+    ProVector  cmd_loc,       /* out */
+<a name="anchor-164"></a>    ProVector  cmd_axis)      /* out */
+{
+    ProCharLine cstr_from;
+    char * cur_tk;
+    char * end_dbl;
+<a name="anchor-165"></a>    double dbl, * pdbl;
+    wchar_t * wcur_tk;
+    int i;
+    ProError err;
+    
+<a name="anchor-166"></a>    memset (cmd_loc, 0, sizeof (ProVector));
+    memset (cmd_axis, 0, sizeof (ProVector));
+
+    err = ProArrayAlloc (0, sizeof (wchar_t*), 1, (ProArray *)cmds );
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,
+<a name="anchor-167"></a>			         &quot;ProTestClCmdDataGet()&quot;,
+				  err, err != PRO_TK_NO_ERROR );
+    
+    if ( (fgets (cstr_from, PRO_LINE_SIZE, cmgfile ) == NULL)
+	|| (cstr_from[0] == '\0') || (cstr_from[0] == '\n'))
+<a name="anchor-168"></a>	return 0;
+
+    cur_tk = strtok ((char*)cstr_from, &quot; \t,\n&quot;);
+    dbl = strtod ( cur_tk, &amp;end_dbl);
+    if (cur_tk == end_dbl &amp;&amp; cur_tk != NULL)
+<a name="anchor-169"></a>    {
+	wcur_tk = (wchar_t *) calloc (PRO_LINE_SIZE, sizeof (wchar_t));
+	
+	ProStringToWstring (wcur_tk, cur_tk);
+	err = ProArrayObjectAdd ((ProArray*) cmds, PRO_VALUE_UNUSED,1,
+<a name="anchor-170"></a>				 &amp;wcur_tk);
+    }
+    else
+	return (0);
+    
+<a name="anchor-171"></a>    for (i = 0;
+	 (cur_tk = strtok (NULL, &quot; \t,\n&quot;)) != NULL;
+	 i++)
+    {
+	dbl = strtod ( cur_tk, &amp;end_dbl);
+<a name="anchor-172"></a>	
+	if (cur_tk == end_dbl)
+	{
+	    
+	    wcur_tk = (wchar_t *) calloc(PRO_LINE_SIZE, sizeof (wchar_t));
+<a name="anchor-173"></a>	    
+	    ProStringToWstring (wcur_tk, cur_tk);
+	    
+	    err = ProArrayObjectAdd ((ProArray*) cmds, PRO_VALUE_UNUSED,
+				     1, &amp;wcur_tk);
+<a name="anchor-174"></a>	    
+	    TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;,
+			         &quot;ProTestClCmdDataGet()&quot;,
+				  err, err != PRO_TK_NO_ERROR );
+	    i--;
+<a name="anchor-175"></a>	    continue;
+	}
+
+	pdbl = ((i&lt;3) ? &amp;(cmd_loc[i]) : &amp;(cmd_axis[i-3]));
+	*pdbl = dbl;
+<a name="anchor-176"></a>    }
+
+    err = ProArraySizeGet ((ProArray)*cmds, icmds);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+			         &quot;ProTestClCmdDataGet()&quot;,
+<a name="anchor-177"></a>				  err, err != PRO_TK_NO_ERROR );
+
+    wcur_tk = NULL;
+    err = ProArrayObjectAdd ((ProArray*) cmds, PRO_VALUE_UNUSED,1, &amp;wcur_tk);
+    TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;,
+<a name="anchor-178"></a>			         &quot;ProTestClCmdDataGet()&quot;,
+				  err, err != PRO_TK_NO_ERROR );    
+    return (1);
+}
+
+<a name="anchor-179"></a>
+/*====================================================================*\
+FUNCTION : ProTestClCmdDataPrint
+PURPOSE  : 
+\*====================================================================*/
+<a name="anchor-180"></a>int ProTestClCmdDataPrint (
+    wchar_t** cmds,             /*  out wlines */
+    int  icmds,
+    ProVector  cmd_loc,       /* out */
+    ProVector  cmd_axis)      /* out */
+<a name="anchor-181"></a>{
+    int arr_size, i;
+    ProError err;
+    ProCharLine cstr;
+
+<a name="anchor-182"></a>    err = ProArraySizeGet ((ProArray) cmds, &amp;arr_size);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+			         &quot;ProTestClCmdDataPrint()&quot;,
+				  err, err != PRO_TK_NO_ERROR );
+    
+<a name="anchor-183"></a>    for (i= 0; i&lt;arr_size; i++)
+    {
+	if (cmds[i] != NULL)
+	{
+	    ProWstringToString (cstr, cmds[i]);
+<a name="anchor-184"></a>	    ProTKPrintf ((char*)&quot;%s &quot;, cstr);
+	}	
+    }
+
+    ProTKPrintf ((char*)&quot;%d &quot;, icmds);
+<a name="anchor-185"></a> 
+    ProTKPrintf ((char*)&quot;%f %f %f %f %f %f \n&quot;, cmd_loc[0],  cmd_loc[1],    cmd_loc[2],
+	    cmd_axis[0],  cmd_axis[1],    cmd_axis[2]);
+
+    return 0;
+<a name="anchor-186"></a>}
+
+
+/*====================================================================*\
+FUNCTION : ProTestClcmdElemCreate
+<a name="anchor-187"></a>PURPOSE  : reads info  from file creats Clcmd elements and adds
+\*====================================================================*/
+ProError ProTestClcmdElemCreate(
+    ProElement NclCmds)       /* elem to add Clcmds elements */
+{
+<a name="anchor-188"></a>#ifndef PT_PRODUCTS_BUILD
+    ProError err;
+    
+    FILE * clcs_file;
+    wchar_t **wlines;
+<a name="anchor-189"></a>    int incmds;
+
+    ProElement ncl_commd_elem;
+    double * pos;
+    double *axis;
+<a name="anchor-190"></a>
+    ProVector commd_loc, commd_axis;
+    if ( TestFileGet ( &amp;clcs_file) )
+	return (PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-191"></a>
+    for (;ProTestClCmdDataGet(clcs_file, &amp;wlines, &amp;incmds,
+			      commd_loc, commd_axis);)
+    {
+	ProTestClCmdDataPrint( wlines, incmds, commd_loc, commd_axis);
+<a name="anchor-192"></a>
+	 if (commd_loc[0] == 0.0 &amp;&amp; commd_loc[1] == 0.0
+	     &amp;&amp; commd_loc[2] == 0.0)
+	     pos = NULL;
+	 else
+<a name="anchor-193"></a>	     pos = commd_loc;
+	 
+	 if (commd_axis[0] == 0.0 &amp;&amp; commd_axis[1] == 0.0
+	     &amp;&amp; commd_axis[2] == 0.0)
+	     axis = NULL;
+<a name="anchor-194"></a>	 else
+	     axis = commd_axis;
+	    
+	     
+	 err = ProClcmdElemCreate ((wchar_t**)wlines, incmds, pos,
+<a name="anchor-195"></a>				   axis, &amp;ncl_commd_elem);
+	 TEST_CALL_REPORT(&quot;ProClcmdElemCreate()&quot;,
+			         &quot;ProTestClcmdElemCreate()&quot;,
+				  err, err != PRO_TK_NO_ERROR );
+	     
+<a name="anchor-196"></a>	 
+	     
+	  err = ProClcmdElemAdd (NclCmds, ncl_commd_elem, -1);
+	  TEST_CALL_REPORT(&quot;ProClcmdElemAdd()&quot;,
+			         &quot;ProTestClcmdElemCreate()&quot;,
+<a name="anchor-197"></a>				  err, err != PRO_TK_NO_ERROR );
+	    
+	err =ProTestCmdsArrayFree (&amp;wlines);
+    }
+
+<a name="anchor-198"></a>
+    fclose (clcs_file);
+    
+    return (PRO_TK_NO_ERROR);
+#else
+<a name="anchor-199"></a>    return PRO_TK_NOT_IMPLEMENTED;
+#endif
+}
+
+    
+<a name="anchor-200"></a>/*====================================================================*\
+FUNCTION : ProTestClcmdRemove
+PURPOSE  : reads info  from file and removes Clcmd elements 
+\*====================================================================*/
+ProError ProTestClcmdElemRemove(
+<a name="anchor-201"></a>    ProElement elem_tree)       /* elem tree */
+{
+ #ifndef PT_PRODUCTS_BUILD
+    ProError err;
+    FILE * clcs_file;
+<a name="anchor-202"></a>    wchar_t * *wlines;
+    int incmds;
+    double * pos;
+    double *axis;
+
+<a name="anchor-203"></a>    ProVector commd_loc, commd_axis;
+    if ( TestFileGet ( &amp;clcs_file) )
+	return (PRO_TK_GENERAL_ERROR);
+
+    for (;ProTestClCmdDataGet(clcs_file, &amp;wlines, &amp;incmds,
+<a name="anchor-204"></a>			      commd_loc, commd_axis);)
+    {
+
+	ProTestClCmdDataPrint( wlines, incmds, commd_loc, commd_axis);
+
+<a name="anchor-205"></a>	 if (commd_loc[0] == 0.0 &amp;&amp; commd_loc[1] == 0.0
+	     &amp;&amp; commd_loc[2] == 0.0)
+	     pos = NULL;
+	 else
+	     pos = commd_loc;
+<a name="anchor-206"></a>	 
+	 if (commd_axis[0] == 0.0 &amp;&amp; commd_axis[1] == 0.0
+	     &amp;&amp; commd_axis[2] == 0.0)
+	     axis = NULL;
+	 else
+<a name="anchor-207"></a>	     axis = commd_axis;
+	     
+	 
+	 err = ProClcmdElemRemove (elem_tree, wlines, incmds, pos, axis, NULL);
+	 TEST_CALL_REPORT(&quot;ProClcmdElemRemove()&quot;,
+<a name="anchor-208"></a>			         &quot;ProTestClcmdElemRemove()&quot;,
+				  err, err != PRO_TK_NO_ERROR );
+	     
+	 ProTestCmdsArrayFree (&amp;wlines);
+
+<a name="anchor-209"></a>    }
+
+    fclose (clcs_file);
+    
+    
+<a name="anchor-210"></a>    return (PRO_TK_NO_ERROR);
+#else
+    return PRO_TK_NOT_IMPLEMENTED;
+#endif
+}
+<a name="anchor-211"></a>
+
+/*====================================================================*\
+FUNCTION : ProTestClcmdRemoveByIndex
+PURPOSE  : ask indexes and removes Clcmd elements 
+<a name="anchor-212"></a>\*====================================================================*/
+ProError ProTestClcmdElemRemoveByIndex(
+    ProElement elem_tree)       /* elem tree */
+{
+#ifndef PT_PRODUCTS_BUILD 
+<a name="anchor-213"></a>    ProError err;
+    int index, range[2] = {0, 100};
+
+    while (1 == 1)
+    {
+<a name="anchor-214"></a>	ProUtilMsgPrint((char*)&quot;gen&quot;,(char*)&quot;TEST %0s&quot;,
+			&quot;Enter an element index to remove [Quit]: &quot;);
+	if (!ProUtilIntGet(range, NULL, &amp;index))
+	    return (PRO_TK_NO_ERROR);
+	
+<a name="anchor-215"></a>	err = ProClcmdElemRemoveByIndex (elem_tree, index, NULL);
+	 TEST_CALL_REPORT(&quot;ProClcmdElemRemoveByIndex()&quot;,
+			         &quot;ProTestClcmdElemRemoveByIndex()&quot;,
+				  err, err != PRO_TK_NO_ERROR );	    
+    }
+<a name="anchor-216"></a>
+#else
+    return PRO_TK_NOT_IMPLEMENTED;
+#endif
+}
+<a name="anchor-217"></a>
+ 
+/*====================================================================*\
+FUNCTION : ProTestClcmdAdd
+PURPOSE  : Adds custamazed elem to feature tree 
+<a name="anchor-218"></a>\*====================================================================*/
+ProError ProTestClcmdElemAdd(
+    ProElement elem_tree)       /* elem tree */
+{
+
+<a name="anchor-219"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+FUNCTION : ProTestClcmdRedefineByIndex
+<a name="anchor-220"></a>PURPOSE  : ask indexes and reads info  from file to redefine Clcmd elements 
+\*====================================================================*/
+ProError ProTestClcmdElemRedefineByIndex(
+    ProElement elem_tree)       /* elem tree */
+{
+<a name="anchor-221"></a>#ifndef PT_PRODUCTS_BUILD
+    ProError err;
+    FILE * clcs_file;
+    wchar_t *  *wlines;
+    ProElement ncl_commd_elem;
+<a name="anchor-222"></a>    double * pos;
+    double *axis;
+    int index, range[2] = {0, 100};
+    int incmds;
+    ProVector commd_loc, commd_axis;
+<a name="anchor-223"></a>
+
+   if ( TestFileGet ( &amp;clcs_file) )
+	return (PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-224"></a>   while (1 == 1)
+    {
+	ProUtilMsgPrint((char*)&quot;gen&quot;,(char*)&quot;TEST %0s&quot;,
+			&quot;Enter an element index to redefine [Quit]: &quot;);
+	if (!ProUtilIntGet(range, NULL, &amp;index))
+<a name="anchor-225"></a>	    break;
+
+	
+	err = ProClcmdElemGetByIndex (elem_tree, index, &amp;ncl_commd_elem);
+	TEST_CALL_REPORT(&quot;ProClcmdElemGetByIndex()&quot;,
+<a name="anchor-226"></a>			         &quot;ProTestClcmdElemRedefineByIndex()&quot;,
+				  err, err != PRO_TK_NO_ERROR );
+
+	    
+	 if (!ProTestClCmdDataGet(clcs_file, &amp;wlines, &amp;incmds,
+<a name="anchor-227"></a>			      commd_loc, commd_axis))
+	     break;
+	 ProTestClCmdDataPrint( wlines, incmds, commd_loc, commd_axis);
+	 
+	 if (commd_loc[0] == 0.0 &amp;&amp; commd_loc[1] == 0.0
+<a name="anchor-228"></a>	     &amp;&amp; commd_loc[2] == 0.0)
+	     pos = NULL;
+	 else
+	     pos = commd_loc;
+	 
+<a name="anchor-229"></a>	 if (commd_axis[0] == 0.0 &amp;&amp; commd_axis[1] == 0.0
+	     &amp;&amp; commd_axis[2] == 0.0)
+	     axis = NULL;
+	 else
+	     axis = commd_axis;
+<a name="anchor-230"></a>
+	 
+	     
+	 err = ProClcmdElemSet (ncl_commd_elem, wlines, incmds, pos, axis);
+	 TEST_CALL_REPORT(&quot;ProClcmdElemSet()&quot;,
+<a name="anchor-231"></a>			         &quot;ProTestClcmdElemRedefineByIndex()&quot;,
+				  err, err != PRO_TK_NO_ERROR );
+	     
+	 ProTestCmdsArrayFree (&amp;wlines);
+	
+<a name="anchor-232"></a>    }
+   
+    fclose (clcs_file);
+
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-233"></a>#else
+    return PRO_TK_NOT_IMPLEMENTED;
+#endif
+}
+/*====================================================================*\
+<a name="anchor-234"></a>FUNCTION : ProTestClcmdRedefine
+PURPOSE  : reads info  from one file to redefine Clcmd elements
+using info from anather file
+\*====================================================================*/
+ProError ProTestClcmdElemRedefine(
+<a name="anchor-235"></a>    ProElement elem_tree)       /* elem tree */
+{
+#ifndef PT_PRODUCTS_BUILD
+    ProError err;
+    FILE * clcs_file_from;
+<a name="anchor-236"></a>    FILE * clcs_file_to;
+    wchar_t * *wlines;
+    wchar_t * *wlines_to;
+    int incmds;
+
+<a name="anchor-237"></a>    ProElement ncl_commd_elem;
+    double * pos;
+    double *axis;
+    
+    ProVector commd_loc, commd_axis;
+<a name="anchor-238"></a>
+    
+    if ( TestFileGet ( &amp;clcs_file_from) )
+	return (PRO_TK_GENERAL_ERROR);
+    if ( TestFileGet ( &amp;clcs_file_to) )
+<a name="anchor-239"></a>    {
+	fclose (clcs_file_from);
+	return (PRO_TK_GENERAL_ERROR);
+    }
+    
+<a name="anchor-240"></a>  
+    for (;ProTestClCmdDataGet(clcs_file_from, &amp;wlines, &amp;incmds,
+			      commd_loc, commd_axis);)
+    {
+
+<a name="anchor-241"></a>	ProTestClCmdDataPrint( wlines, incmds, commd_loc, commd_axis);
+	
+
+	 if (commd_loc[0] == 0.0 &amp;&amp; commd_loc[1] == 0.0
+	     &amp;&amp; commd_loc[2] == 0.0)
+<a name="anchor-242"></a>	     pos = NULL;
+	 else
+	     pos = commd_loc;
+	 
+	 if (commd_axis[0] == 0.0 &amp;&amp; commd_axis[1] == 0.0
+<a name="anchor-243"></a>	     &amp;&amp; commd_axis[2] == 0.0)
+	     axis = NULL;
+	 else
+	     axis = commd_axis;
+
+<a name="anchor-244"></a>	     
+	 err = ProClcmdElemGet (elem_tree, wlines, incmds,  pos, axis,
+				&amp;ncl_commd_elem);
+	     
+
+<a name="anchor-245"></a>				
+	 TEST_CALL_REPORT(&quot;ProClcmdElemGet()&quot;,
+			         &quot;ProTestClcmdElemRedefine()&quot;,
+				  err, err != PRO_TK_NO_ERROR );
+
+<a name="anchor-246"></a>	 if (!ProTestClCmdDataGet(clcs_file_to, &amp;wlines_to, &amp;incmds,
+			      commd_loc, commd_axis))
+	     break;
+	 ProTestClCmdDataPrint( wlines_to, incmds, commd_loc, commd_axis);
+
+<a name="anchor-247"></a>
+	 if (commd_loc[0] == 0.0 &amp;&amp; commd_loc[1] == 0.0
+	     &amp;&amp; commd_loc[2] == 0.0)
+	     pos = NULL;
+	 else
+<a name="anchor-248"></a>	     pos = commd_loc;
+	 
+	 if (commd_axis[0] == 0.0 &amp;&amp; commd_axis[1] == 0.0
+	     &amp;&amp; commd_axis[2] == 0.0)
+	     axis = NULL;
+<a name="anchor-249"></a>	 else
+	     axis = commd_axis;
+
+	     
+	 err = ProClcmdElemSet (ncl_commd_elem, wlines_to, incmds, pos, axis);
+<a name="anchor-250"></a>	 
+	 TEST_CALL_REPORT(&quot;ProClcmdElemSet()&quot;,
+			         &quot;ProTestClcmdElemRedefine()&quot;,
+				  err, err != PRO_TK_NO_ERROR );
+	     
+<a name="anchor-251"></a>	  ProTestCmdsArrayFree (&amp;wlines);
+	  ProTestCmdsArrayFree (&amp;wlines_to);
+    }
+	 
+
+<a name="anchor-252"></a>    fclose (clcs_file_from);
+    fclose (clcs_file_to);
+   
+    return (PRO_TK_NO_ERROR);
+#else
+<a name="anchor-253"></a>    return PRO_TK_NOT_IMPLEMENTED;
+#endif
+}
+
+/*====================================================================*\
+<a name="anchor-254"></a>FUNCTION : ProTestCmdsArrayFree
+PURPOSE  : 
+\*====================================================================*/
+ProError ProTestCmdsArrayFree (
+    wchar_t*** cmds)             /*  in wlines */
+<a name="anchor-255"></a>{
+    int arr_size, i;
+    ProError err;
+    
+
+<a name="anchor-256"></a>    err = ProArraySizeGet ((ProArray) *cmds, &amp;arr_size);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+			         &quot;ProTestCmdsArrayFree()&quot;,
+				  err, err != PRO_TK_NO_ERROR );
+	
+<a name="anchor-257"></a>    for (i= 0; i&lt;arr_size; i++)
+    {
+	
+	if ((*cmds)[i] != NULL)
+	    free ((*cmds)[i]);
+<a name="anchor-258"></a>    }
+	
+
+    err = ProArrayFree ((ProArray *) cmds );
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+<a name="anchor-259"></a>			         &quot;ProTestCmdsArrayFree()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+    return err;
+}
+</pre>
+</body>
+</html>

@@ -1,0 +1,256 @@
+<html>
+<head>
+<title>UgDimLocationUtils.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*------------------------------------------------------------------*\
+Pro/Toolkit includes
+\*------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProFeature.h>
+#include &lt;ProDimension.h>
+#include &lt;ProAxis.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>#include &lt;ProSolid.h>
+#include &lt;ProMessage.h>
+#include &lt;ProAnnotation.h>
+/*------------------------------------------------------------------*\
+Application includes 
+<a name="anchor-4"></a>\*------------------------------------------------------------------*/
+#include &lt;TestError.h>
+#include &lt;UtilMath.h>
+
+typedef struct  
+<a name="anchor-5"></a>{
+  ProVector vector;        /* The direction that the dimension should
+			      be parallel to */
+  ProBoolean found;        /* Flag signalling if any matching 
+			      dimensions were found. */
+<a name="anchor-6"></a>  ProDimension dim_found;  /* May be used if visiting in an attempt 
+			      to locate a certain dimension */
+} DimByVector;
+
+
+<a name="anchor-7"></a>/*==================================================================*\
+FUNCTION : UserDimensionFilterByVector()
+PURPOSE  : Find linear dimensions oriented parallel to vector (a filter 
+           action)
+\*==================================================================*/
+<a name="anchor-8"></a>ProError UserDimensionFilterByVector (ProDimension* dim,
+				      ProAppData appdata)
+{
+  ProDimlocation dimloc;
+  ProDimensiontype type;  
+<a name="anchor-9"></a>  ProPoint3d arrow_1, arrow_2;
+  int i;
+  ProError status;
+  ProVector dimvector;
+  double dotproduct;
+<a name="anchor-10"></a>  DimByVector* data = (DimByVector*) appdata;
+
+/*------------------------------------------------------------------*\
+    Continue only for linear dimensions
+\*------------------------------------------------------------------*/
+<a name="anchor-11"></a>  ProDimensionTypeGet (dim, &amp;type);
+  if (type != PRODIMTYPE_LINEAR)
+    return (PRO_TK_CONTINUE);
+  
+/*------------------------------------------------------------------*\
+<a name="anchor-12"></a>    Extract the location of the arrows of the dimension
+\*------------------------------------------------------------------*/
+  status = ProDimensionLocationGet (dim, NULL, NULL, &amp;dimloc);
+  if (status != PRO_TK_NO_ERROR)
+    return (PRO_TK_CONTINUE);
+<a name="anchor-13"></a>
+  ProDimlocationArrowsGet (dimloc, arrow_1, arrow_2);
+  ProDimlocationFree (dimloc);
+
+/*------------------------------------------------------------------*\
+<a name="anchor-14"></a>    Construct, validate, and normalize the dimension direction vector
+\*------------------------------------------------------------------*/
+  for (i = 0; i &lt; 3; i++)
+    dimvector [i] = arrow_2 [i] - arrow_1 [i];
+
+<a name="anchor-15"></a>  if (ProUtilVectorLength (dimvector) &lt; EPSM6 )
+    return (PRO_TK_CONTINUE);
+
+  ProUtilVectorNormalize (dimvector, dimvector);
+
+<a name="anchor-16"></a>/*------------------------------------------------------------------*\
+    Check if the angle between the vectors is 0 or 180 degrees
+\*------------------------------------------------------------------*/
+  dotproduct = ProUtilVectorDot (data->vector, dimvector);
+
+<a name="anchor-17"></a>  if (fabs (fabs (dotproduct) - 1.0) &lt; EPSM6 )
+    {
+      data->found = PRO_B_TRUE;
+      return (PRO_TK_NO_ERROR);
+    }
+<a name="anchor-18"></a>  else
+    return (PRO_TK_CONTINUE);
+}
+
+/*==================================================================*\
+<a name="anchor-19"></a>FUNCTION : UserDimensionShow()
+PURPOSE  : Show the given dimension (a visit action)
+\*==================================================================*/
+ProError UserDimensionShow (ProDimension* dim, 
+			    ProError error_status,
+<a name="anchor-20"></a>			    ProAppData appdata)
+{
+  ProAnnotationShow ( (ProAnnotation*)dim, NULL, NULL);
+
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>}
+
+/*==================================================================*\
+FUNCTION : UserDimensionsByDirectionShow()
+PURPOSE  : Highlight linear dimensions in the feature that are 
+<a name="anchor-22"></a>           oriented parallel to a given vector.
+\*==================================================================*/
+ProError UserDimensionsByDirectionShow(ProSolid solid, 
+				       ProFeature* feature, 
+				       ProVector vector)
+<a name="anchor-23"></a>{
+  DimByVector data;
+  ProError status;
+  ProFileName msg_file;
+
+<a name="anchor-24"></a>  ProStringToWstring(msg_file, &quot;msg_ugfund.txt&quot;);
+
+  memcpy (data.vector, vector, sizeof (ProVector));
+  data.found = PRO_B_FALSE;
+
+<a name="anchor-25"></a>  if (feature != NULL)
+    {
+/*------------------------------------------------------------------*\
+    Visit all feature dimensions.
+\*------------------------------------------------------------------*/
+<a name="anchor-26"></a>      status = ProFeatureDimensionVisit (feature,
+					 UserDimensionShow,
+					 UserDimensionFilterByVector,
+					 (ProAppData)&amp;data);  
+    }
+<a name="anchor-27"></a>  else
+    {
+/*------------------------------------------------------------------*\
+    Visit all model dimensions.
+\*------------------------------------------------------------------*/
+<a name="anchor-28"></a>      status = ProSolidDimensionVisit (solid,
+				       PRO_B_FALSE,
+				       UserDimensionShow,
+				       UserDimensionFilterByVector,
+					 &amp;data);  
+<a name="anchor-29"></a>    }
+
+/*------------------------------------------------------------------*\
+   Return based on the success of the visit.
+\*------------------------------------------------------------------*/
+<a name="anchor-30"></a>  if (status != PRO_TK_NO_ERROR || data.found == PRO_B_FALSE)
+    {
+      ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, 
+			&quot;No dimensions found parallel to the supplied direction.&quot;); 
+      return (PRO_TK_E_NOT_FOUND);
+<a name="anchor-31"></a>    }
+  else
+    {
+      ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, 
+			&quot;Showing dimensions parallel to the supplied direction.&quot;); 
+<a name="anchor-32"></a>
+      return(PRO_TK_NO_ERROR); 
+    }
+}
+
+<a name="anchor-33"></a>/*==================================================================*\
+FUNCTION : UserDimensionsByAxisDirectionShow()
+PURPOSE  : Highlight model or feature dimensions parallel to a 
+           selected axis.
+\*==================================================================*/
+<a name="anchor-34"></a>ProError UserDimensionsByAxisDirectionShow ()
+{
+  ProError status;
+  ProSelection* sels;
+  int n_sels = -1;
+<a name="anchor-35"></a>  ProFileName msg_file;      
+  ProSolid input_solid_ptr;
+  ProFeature* input_feat_ptr;
+  ProFeature feature;
+  ProModelitem axis_item;
+<a name="anchor-36"></a>  ProAxis axis;
+  ProGeomitemdata* axis_data;
+  ProVector dirvector;
+  int i;
+
+<a name="anchor-37"></a>  ProStringToWstring(msg_file, &quot;msg_ugfund.txt&quot;) ;
+
+/*------------------------------------------------------------------*\
+  Prompt to select the context
+\*------------------------------------------------------------------*/
+<a name="anchor-38"></a>  ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, 
+		    &quot;Select the feature for locating dimensions.  &lt;CANCEL> to locate dimensions in the current model.&quot;); 
+
+  status = ProSelect (&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, 
+		      &amp;sels, &amp;n_sels);
+<a name="anchor-39"></a>  if (status == PRO_TK_USER_ABORT)
+    {
+      ProMdlCurrentGet ((ProMdl)&amp;input_solid_ptr);
+      input_feat_ptr = NULL;
+    }
+<a name="anchor-40"></a>  else if (status != PRO_TK_NO_ERROR || n_sels &lt; 1)
+    {
+      return (PRO_TK_USER_ABORT);
+    }
+  else
+<a name="anchor-41"></a>    {
+      ProSelectionModelitemGet (sels [0], &amp;feature);
+
+      input_solid_ptr = NULL;
+      input_feat_ptr = &amp;feature;
+<a name="anchor-42"></a>    }
+
+/*------------------------------------------------------------------*\
+  Prompt to select the axis
+\*------------------------------------------------------------------*/
+<a name="anchor-43"></a> ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, 
+		    &quot;Select the axis for orientation of the dimensions.&quot;); 
+
+  status = ProSelect (&quot;axis&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+  if (status != PRO_TK_NO_ERROR || n_sels &lt; 1)
+<a name="anchor-44"></a>    {
+      return (PRO_TK_USER_ABORT);
+    }
+  
+/*------------------------------------------------------------------*\
+<a name="anchor-45"></a>  Extract the direction vector of the axis
+\*------------------------------------------------------------------*/
+  ProSelectionModelitemGet (sels [0], &amp;axis_item);  
+  ProGeomitemToAxis (&amp;axis_item, &amp;axis);
+  ProAxisDataGet (axis, &amp;axis_data);
+<a name="anchor-46"></a>    
+  for (i = 0; i &lt; 3; i ++)
+    dirvector [i] = axis_data->data.p_curve_data->line.end2 [i] -
+      axis_data->data.p_curve_data->line.end1 [i];
+
+<a name="anchor-47"></a>  ProUtilVectorNormalize (dirvector, dirvector);
+
+  ProGeomitemdataFree (&amp;axis_data);
+
+/*------------------------------------------------------------------*\
+<a name="anchor-48"></a>  Show the dimensions
+\*------------------------------------------------------------------*/
+  UserDimensionsByDirectionShow (input_solid_ptr, input_feat_ptr, dirvector);
+
+  return PRO_TK_NO_ERROR;
+<a name="anchor-49"></a>}
+
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,2865 @@
+<html>
+<head>
+<title>GearDesign.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+    Pro/TOOLKIT includes
+  \*--------------------------------------------------------------------*/
+  #include &lt;GearDesign.h>
+<a name="anchor-2"></a>
+#include &quot;ProDimension.h&quot;
+#include &quot;ProDtmPln.h&quot;
+#include &quot;ProDtmCrv.h&quot;
+#include &quot;ProElement.h&quot;
+<a name="anchor-3"></a>#include &quot;ProElempath.h&quot;
+#include &quot;ProExtrude.h&quot;
+#include &quot;ProFeature.h&quot;
+#include &quot;ProFeatForm.h&quot;
+#include &quot;ProFeatType.h&quot;
+<a name="anchor-4"></a>#include &quot;ProGroup.h&quot;
+#include &quot;ProHole.h&quot;
+#include &quot;ProLayer.h&quot;
+#include &quot;ProMdl.h&quot;
+#include &quot;ProMenu.h&quot;
+<a name="anchor-5"></a>#include &quot;ProMenuBar.h&quot;
+#include &quot;ProMessage.h&quot;
+#include &quot;ProModelitem.h&quot;
+#include &quot;ProModFeat.h&quot;
+#include &quot;ProParameter.h&quot;
+<a name="anchor-6"></a>#include &quot;ProParamval.h&quot;
+#include &quot;ProPattern.h&quot;
+#include &quot;ProSecdim.h&quot;
+#include &quot;ProSelection.h&quot;
+#include &quot;ProSolid.h&quot;
+<a name="anchor-7"></a>#include &quot;ProSurface.h&quot;
+#include &quot;ProStdSection.h&quot;
+#include &quot;ProUtil.h&quot;
+#include &quot;ProTKRunTime.h&quot;
+#include &lt;ProMdlUnits.h>
+<a name="anchor-8"></a>
+
+/*--------------------------------------------------------------------*\
+    C System includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-9"></a>#include &lt;math.h>
+
+/*--------------------------------------------------------------------*\
+    Application includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-10"></a>#include &quot;TestError.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilMath.h&quot;
+#include &quot;UtilMenu.h&quot;
+<a name="anchor-11"></a>#include &quot;UtilTree.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-12"></a>    Macros
+\*--------------------------------------------------------------------*/
+
+#define SIZEOFARR(a) (sizeof(a)/sizeof(a[0]))
+
+<a name="anchor-13"></a>FILE* errlog_fp;
+
+#define C_PRINT(a) ProTKPrintf ( &quot;%s\n&quot;, a);
+
+#define PT_TEST_LOG(func,status,err) \
+<a name="anchor-14"></a>if (status) \
+{ \
+    printf (&quot; LOG Error: %s\t%d\n&quot;, func, status); \
+    fprintf (errlog_fp, &quot; LOG Error: %s\t%d\n&quot;, func, status); \
+} \
+<a name="anchor-15"></a>else \
+{ \
+   printf (&quot; LOG %s\t%d\n&quot;, func, status); \
+    fprintf (errlog_fp, &quot; LOG %s\t%d\n&quot;, func, status); \
+}
+<a name="anchor-16"></a>
+#define PT_TEST_LOG_SUCC(func) \
+ PT_TEST_LOG (func, status, status != PRO_TK_NO_ERROR)
+
+#define PTTestResfileWrite(str) \
+<a name="anchor-17"></a> {\
+   printf(str);\
+   printf(&quot;\n&quot;);\
+ }
+
+<a name="anchor-18"></a>
+#define STR_PARAM   0
+#define INT_PARAM   1
+#define DOUB_PARAM  2
+#define TAB_PARAM   3
+<a name="anchor-19"></a>
+typedef struct tableraw
+{
+    char *string_val;
+    int  int_val;
+<a name="anchor-20"></a>} TableRaw;
+
+typedef struct param
+{
+    int type;	/* 0 - string, 1 - int, 2 - double, 3 - table */
+<a name="anchor-21"></a>    int length; /* for string - max lenght */
+    char *param_name;
+    ProBool  required; /* 1 - required, 0 - optional */
+    TableRaw *table; /* for table only */
+    int	 tablesize;  /* for table only */   
+<a name="anchor-22"></a>    ProBool  set;    
+    void *value;
+} Param;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-23"></a>    Application global/external data
+\*--------------------------------------------------------------------*/
+static TableRaw Length_unit[] = {
+    {&quot;cm&quot;, PRO_UNITLENGTH_CM },
+    {&quot;foot&quot;, PRO_UNITLENGTH_FT},
+<a name="anchor-24"></a>    {&quot;inch&quot;, PRO_UNITLENGTH_IN},
+    {&quot;m&quot;, PRO_UNITLENGTH_M},
+    {&quot;mm&quot;, PRO_UNITLENGTH_MM}};
+static TableRaw Yes_no_tab[] = {
+    {&quot;no&quot;, 0},
+<a name="anchor-25"></a>    {&quot;yes&quot;, 1}};
+static TableRaw GearType [] = {
+    {&quot;spur&quot;, SPUR_GEAR},
+    {&quot;ring&quot;, RING_GEAR}};
+
+<a name="anchor-26"></a>
+static Param param_def[] = {
+    {STR_PARAM,  PRO_NAME_SIZE, &quot;Name_of_model&quot;, 1},
+    {TAB_PARAM,  0, &quot;Units&quot;, 1, Length_unit, SIZEOFARR(Length_unit)},
+    {STR_PARAM,  PRO_NAME_SIZE, &quot;Material&quot;, 0},
+<a name="anchor-27"></a>    {TAB_PARAM,  0, &quot;GearType&quot;, 0, GearType, SIZEOFARR(GearType)},
+    {DOUB_PARAM, 0, &quot;Datum_X_Offset&quot;, 0},
+    {DOUB_PARAM, 0, &quot;Datum_Y_Offset&quot;, 0},
+    {DOUB_PARAM, 0, &quot;Datum_Z_Offset&quot;, 0},
+    {DOUB_PARAM, 0, &quot;Gear_Outer_Diameter&quot;, 1},
+<a name="anchor-28"></a>    {DOUB_PARAM, 0, &quot;Gear_Disk_Depth&quot;, 1},
+    {DOUB_PARAM, 0, &quot;Helix_Angle&quot;, 1},
+    {DOUB_PARAM, 0, &quot;Outer_Plate_Diameter&quot;, 0},
+    {DOUB_PARAM, 0, &quot;Outer_Plate_Depth&quot;, 0},
+    {DOUB_PARAM, 0, &quot;Support_Hub_Outer_Diameter&quot;, 0},
+<a name="anchor-29"></a>    {DOUB_PARAM, 0, &quot;Support_Hub_Depth&quot;, 0},
+    {DOUB_PARAM, 0, &quot;Inner_Diameter&quot;, 1},
+    {INT_PARAM,  0, &quot;Number_of_teeth&quot;, 1},
+    {DOUB_PARAM, 0, &quot;Keyway_inner_width&quot;, 0},
+    {DOUB_PARAM, 0, &quot;Keyway_inner_height&quot;, 0},
+<a name="anchor-30"></a>    {DOUB_PARAM, 0, &quot;Key_outer_width&quot;, 0},  
+    {DOUB_PARAM, 0, &quot;Key_outer_height&quot;, 0},  
+    {DOUB_PARAM, 0, &quot;GearTooth_param1&quot;, 1},  
+    {DOUB_PARAM, 0, &quot;Backnotch_Radius&quot;, 0},
+    {DOUB_PARAM, 0, &quot;Pressure_angle&quot;, 1}
+<a name="anchor-31"></a>};
+
+static int ProUserFeatsReorder(GearParam *g_ptr);
+
+
+<a name="anchor-32"></a>
+/*=============================================================*\
+  Function: 	ProUserDeleteDesign
+  Purpose:	delete current design
+\*=============================================================*/
+<a name="anchor-33"></a>int ProUserDeleteDesign(GearParam *g_ptr) 
+{
+    int n_sel, *feat_ids, i;
+    ProSelection *p_sel;
+    ProFeatureDeleteOptions opt[]= {PRO_FEAT_DELETE_CLIP};
+<a name="anchor-34"></a>    ProModelitem modelitem;
+    ProError status;
+   
+    status = ProMessageDisplay(MSGFIL , &quot;PROTKGD Select feature(s) to be deleted&quot;);
+    PT_TEST_LOG_SUCC(&quot;ProMessageDisplay..........ProUserDeleteDesign&quot;);
+<a name="anchor-35"></a>    
+    status = ProSelect(&quot;feature&quot;, -1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+    PT_TEST_LOG_SUCC(&quot;ProSelect&quot;);
+    
+    if (status != PRO_TK_NO_ERROR || n_sel&lt;=0)
+<a name="anchor-36"></a>	return 0;
+
+    feat_ids = (int *)calloc(n_sel, sizeof(int));
+    for (i=0; i&lt;n_sel; i++)
+    {
+<a name="anchor-37"></a>	status = ProSelectionModelitemGet(p_sel[i], &amp;modelitem);
+	PT_TEST_LOG_SUCC(&quot;ProSelectionModelitemGet&quot;);
+	
+	feat_ids[i] = modelitem.id;
+    }
+<a name="anchor-38"></a>
+    status = ProFeatureDelete((ProSolid)g_ptr->model, feat_ids, n_sel, opt, 1);
+    PT_TEST_LOG_SUCC(&quot;ProFeatureDelete&quot;);
+    
+    status = ProTreetoolRefresh(g_ptr->model);
+<a name="anchor-39"></a>    PT_TEST_LOG_SUCC(&quot;ProTreetoolRefresh&quot;);
+    
+    status = ProSolidDisplay((ProSolid)g_ptr->model);
+    PT_TEST_LOG_SUCC(&quot;ProSolidDisplay&quot;);
+
+<a name="anchor-40"></a>    free (feat_ids);
+    
+    return (0);
+}
+
+<a name="anchor-41"></a>/*=============================================================*\
+  Function: 	ProUserModifyDesign
+  Purpose:	modify current design
+\*=============================================================*/
+int ProUserModifyDesign(GearParam *g_ptr)
+<a name="anchor-42"></a>{
+    int dim_id;
+    ProSelection  *p_sel;
+    int n_sels;
+    int  brk=0;
+<a name="anchor-43"></a>    double value, drange[2];
+    ProModelitem item;
+    ProError status;
+    
+    do
+<a name="anchor-44"></a>    {
+	status = ProMessageDisplay(MSGFIL , &quot;PROTKGD Select feature or dimension&quot;);
+	PT_TEST_LOG_SUCC(&quot;ProMessageDisplay.........ProUserModifyDesign&quot;);
+	
+	if (ProSelect(&quot;dimension,feature&quot;, 1, NULL, NULL, NULL, NULL,
+<a name="anchor-45"></a>		      &amp;p_sel, &amp;n_sels) != PRO_TK_NO_ERROR)
+	    return 0;
+
+	status = ProSelectionModelitemGet (p_sel [0], &amp;item);
+	PT_TEST_LOG_SUCC(&quot;ProSelectionModelitemGet&quot;);
+<a name="anchor-46"></a>	
+	if (item.type == PRO_FEATURE)
+	{
+	    status = ProFeatureParamsDisplay(p_sel[0], PRO_DIM_PARAM);
+	    PT_TEST_LOG_SUCC(&quot;ProFeatureParamsDisplay&quot;);
+<a name="anchor-47"></a>	}
+	else
+	{
+	  status = ProDimensionValueGet (&amp;item, &amp;value);
+	  PT_TEST_LOG_SUCC(&quot;ProDimensionValueGet&quot;);
+<a name="anchor-48"></a>	  
+	  status = ProMessageDisplay(MSGFIL , 
+			    &quot;PROTKGD Enter new value for dimension [%0f]&quot;,
+			    &amp;value);
+	  PT_TEST_LOG_SUCC(&quot;ProMessageDisplay&quot;);
+<a name="anchor-49"></a>	  
+	  drange[0] = 0;
+	  drange[1] = 1e10;
+	  if (ProMessageDoubleRead(drange, &amp;value)==PRO_TK_NO_ERROR)
+	    {
+<a name="anchor-50"></a>	      status = ProDimensionValueSet (&amp;item, value);
+	      PT_TEST_LOG_SUCC(&quot;ProDimensionValueSet&quot;);
+	      
+	      status = ProDimensionDisplayUpdate (&amp;item);
+	      PT_TEST_LOG_SUCC(&quot;ProDimensionDisplayUpdate&quot;);
+<a name="anchor-51"></a>	    }
+	}
+    } while (!brk);
+}
+
+<a name="anchor-52"></a>/*=============================================================*\
+  Function: 	ProUserRegenerate
+  Purpose:	regenerate model
+\*=============================================================*/
+int ProUserRegenerate(GearParam *g_ptr)
+<a name="anchor-53"></a>{
+
+   ProError status;
+
+    if (g_ptr->model != NULL)
+<a name="anchor-54"></a>	status = ProSolidRegenerate((ProSolid)g_ptr->model, PRO_B_FALSE);
+	PT_TEST_LOG_SUCC(&quot;ProSolidRegenerate..........ProUserRegenerate&quot;);
+	
+    status = ProSolidDisplay((ProSolid)g_ptr->model);
+    PT_TEST_LOG_SUCC(&quot;ProSolidDisplay&quot;);
+<a name="anchor-55"></a>    
+   return (0);
+}
+
+/*=============================================================*\
+<a name="anchor-56"></a>  Function: 	ProUserMaterial
+  Purpose:	change material for gear
+\*=============================================================*/
+int ProUserMaterial(GearParam *g_ptr)
+{
+<a name="anchor-57"></a>    ProName name;
+    ProError status;
+    
+    status = ProPartMaterialNameGet((ProPart)g_ptr->model, name);
+    PT_TEST_LOG_SUCC(&quot;ProPartMaterialNameGet........ProUserMaterial&quot;);
+<a name="anchor-58"></a>    
+    if (status != PRO_TK_NO_ERROR)
+	ProStringToWstring(name, &quot;&quot;);
+    do 
+    {
+<a name="anchor-59"></a>	status = PRO_TK_NO_ERROR;
+	
+	status = ProMessageDisplay(MSGFIL, &quot;PROTKGD Enter material name [%0w]&quot;, name);
+	PT_TEST_LOG_SUCC(&quot;ProMessageDisplay&quot;);
+	
+<a name="anchor-60"></a>	if (ProMessageStringRead(PRO_NAME_SIZE, name) == PRO_TK_NO_ERROR)
+	{
+	    status = ProPartMaterialSet((ProPart)g_ptr->model, name);
+	    PT_TEST_LOG_SUCC(&quot;ProPartMaterialSet&quot;);
+	    
+<a name="anchor-61"></a>	    if (status != PRO_TK_NO_ERROR)
+	    {
+		status = ProMessageDisplay(MSGFIL, &quot;PROTKGD Unable assign material %0w&quot;, name);
+		PT_TEST_LOG_SUCC(&quot;ProMessageDisplay&quot;);
+            }
+<a name="anchor-62"></a>		
+	    else
+	    {
+		status = ProMessageDisplay(MSGFIL, &quot;PROTKGD Material %0w was assigned to part&quot;, name);
+		PT_TEST_LOG_SUCC(&quot;ProMessageDisplay&quot;);
+<a name="anchor-63"></a>	    }
+	}
+    } while (status!=PRO_TK_NO_ERROR);   
+    
+  return (0);
+<a name="anchor-64"></a>}
+
+/*=============================================================*\
+  Function: 	ProUserCreateViewAuto
+  Purpose:	Create &quot;FRONT&quot;, &quot;SIDE&quot; and &quot;BOTTOM&quot; views
+<a name="anchor-65"></a>\*=============================================================*/
+int ProUserCreateViewAuto(GearParam *g_ptr)
+{
+    ProView view;
+    ProName name;
+<a name="anchor-66"></a>    int i;
+    static char *names[]={&quot;FRONT&quot;, &quot;SIDE&quot;, &quot;BOTTOM&quot;};
+    ProMatrix ident={{1,0,0,0},{0,1,0,0},{0,0,1,0},{0,0,0,1}};
+    double m[4];
+    ProError status;
+<a name="anchor-67"></a>    
+    for (i=0; i&lt;3; i++)
+    {
+	ProStringToWstring(name, names[i]);
+	ProViewStore(g_ptr->model, name, &amp;view);
+<a name="anchor-68"></a>	ProViewMatrixSet(g_ptr->model, view, ident);
+	memcpy(m, ident[0], 3*sizeof(double));
+	memcpy(ident[0], ident[1], 3*sizeof(double));
+	memcpy(ident[1], ident[2], 3*sizeof(double));
+	memcpy(ident[2], m, 3*sizeof(double));
+<a name="anchor-69"></a>    }
+    
+   return (0);
+}
+
+<a name="anchor-70"></a>/*=============================================================*\
+  Function: 	ProUserCreateViewManual
+  Purpose:	Create an user defined view
+\*=============================================================*/
+int ProUserCreateViewManual(GearParam *g_ptr)
+<a name="anchor-71"></a>{
+    ProView view;
+    ProName name;
+    ProError status;
+    
+<a name="anchor-72"></a>    status = ProMessageDisplay(MSGFIL, &quot;PROTKGD Enter a view name&quot;);
+    PT_TEST_LOG_SUCC(&quot;ProMessageDisplay.........ProUserCreateViewManual&quot;);
+    
+    status = ProMessageStringRead(PRO_NAME_SIZE, name);
+    PT_TEST_LOG_SUCC(&quot;ProMessageStringRead&quot;);
+<a name="anchor-73"></a>    
+    if (status == PRO_TK_NO_ERROR)
+    {
+	status = ProViewStore(g_ptr->model, name, &amp;view);
+	PT_TEST_LOG_SUCC(&quot;ProViewStore&quot;);
+<a name="anchor-74"></a>    }
+    
+    
+    return (status);
+}
+<a name="anchor-75"></a>
+/*=============================================================*\
+  Function: 	ProUserCreateDatum
+  Purpose:	create &quot;FRONT&quot;, &quot;SIDE&quot;, &quot;BOTTOM&quot; datum planes 
+\*=============================================================*/
+<a name="anchor-76"></a>int ProUserCreateDatum(GearParam *g_ptr)
+{
+    ElemTreeData def_tree[]={
+	{0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_DATUM}},
+<a name="anchor-77"></a>	{1, PRO_E_DTMPLN_CONSTRAINTS, {(ProValueDataType)-1}},
+	{2, PRO_E_DTMPLN_CONSTRAINT, {(ProValueDataType)-1}},
+	{3, PRO_E_DTMPLN_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, PRO_DTMPLN_DEF_X}}
+    };
+    ElemTreeData offs_tree[]={
+<a name="anchor-78"></a>      {0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+      {1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_DATUM}},
+      {1, PRO_E_DTMPLN_CONSTRAINTS, {(ProValueDataType)-1}},
+      {2, PRO_E_DTMPLN_CONSTRAINT, {(ProValueDataType)-1}},
+      {3, PRO_E_DTMPLN_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, PRO_DTMPLN_OFFS}},
+<a name="anchor-79"></a>      {3, PRO_E_DTMPLN_CONSTR_REF, {PRO_VALUE_TYPE_SELECTION}},
+      {3, PRO_E_DTMPLN_CONSTR_REF_OFFSET, {PRO_VALUE_TYPE_DOUBLE, 0.0}}
+    };
+    
+    int axes[3] = { 
+<a name="anchor-80"></a>	PRO_DTMPLN_DEF_X,
+	PRO_DTMPLN_DEF_Y,
+	PRO_DTMPLN_DEF_Z
+    };
+
+<a name="anchor-81"></a>    wchar_t *names[]={L&quot;GD_SIDE&quot;,L&quot;GD_BOTTOM&quot;,L&quot;GD_FRONT&quot;};
+    int  i, *id[3], *dim_id[3];
+    ProSelection featsel;
+    ProModelitem modelitem;
+    ProFeature f;
+<a name="anchor-82"></a>    ProErrorlist errs;
+    ProError status;
+    
+    ProElement elem_tree;
+    double offset;
+<a name="anchor-83"></a>    
+    if (!g_ptr->datum_created)
+      {
+	id[0] = &amp;g_ptr->side_surface_id;
+	id[1] = &amp;g_ptr->bottom_surface_id;
+<a name="anchor-84"></a>	id[2] = &amp;g_ptr->front_surface_id;
+	dim_id[0] = &amp;g_ptr->datum_x_offset_dim_id;
+	dim_id[1] = &amp;g_ptr->datum_y_offset_dim_id;
+	dim_id[2] = &amp;g_ptr->datum_z_offset_dim_id;
+	
+<a name="anchor-85"></a>	for (i=0; i&lt;3; i++)
+	  {
+	    
+	    switch (i)
+	      {
+<a name="anchor-86"></a>	      case 0:
+		offset = g_ptr->datum_x_offset;
+		break;
+	      case 1:
+		offset = g_ptr->datum_y_offset;
+<a name="anchor-87"></a>		break;
+	      case 2:
+		offset = g_ptr->datum_z_offset;
+		break;
+	      }
+<a name="anchor-88"></a>	    
+	    offs_tree[6].data.v.d = offset;
+	    
+	    
+	    /*-----------------------------------------------------------------*\
+<a name="anchor-89"></a>	      Create Element Tree
+	      \*-----------------------------------------------------------------*/
+	    def_tree[4].data.v.i = axes[i];
+	    status = ProUtilElemtreeCreate(def_tree, SIZEOFARR(def_tree), NULL, &amp;elem_tree);
+	    PT_TEST_LOG_SUCC(&quot;ProUtilElemtreeCreate.......ProUserCreateDatum&quot;);
+<a name="anchor-90"></a>	    
+	    /*-----------------------------------------------------------------*\
+	      Create Default Datum
+	      \*-----------------------------------------------------------------*/
+	    status = ProMdlToModelitem(g_ptr->model, &amp;modelitem);
+<a name="anchor-91"></a>	    PT_TEST_LOG_SUCC(&quot;ProMdlToModelitem&quot;);
+	    
+	    status = ProSelectionAlloc(NULL, &amp;modelitem, &amp;featsel);
+	    PT_TEST_LOG_SUCC(&quot;ProSelectionAlloc&quot;);
+	    
+<a name="anchor-92"></a>	    status = ProFeatureCreate(featsel, elem_tree, NULL, 0, &amp;f, &amp;errs);
+	    PT_TEST_LOG_SUCC(&quot;ProFeatureCreate&quot;);
+	    
+	    if (status != PRO_TK_NO_ERROR)
+	      {
+<a name="anchor-93"></a>		ProUtilFeatErrsWrite(&quot;ProFeatureCreate&quot;, status, elem_tree, &amp;errs);
+				
+		return (-1);
+	      }
+	    
+<a name="anchor-94"></a>	  /*-----------------------------------------------------------------*\
+	    Find surface ID for datum plane feature
+	    \*-----------------------------------------------------------------*/
+	    status = ProUtilFeatFirstGeomitem(&amp;f, PRO_SURFACE, id[i]);
+	    PT_TEST_LOG_SUCC(&quot;ProUtilFeatFirstGeomitem&quot;);
+<a name="anchor-95"></a>	    
+	    status = ProUtilSelectionFromSurfaceId(g_ptr->model, *id [i], &amp;offs_tree[5].data.v.r);
+	    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+	    
+	    status = ProUtilElemtreeCreate(offs_tree, SIZEOFARR(offs_tree), NULL, &amp;elem_tree);
+<a name="anchor-96"></a>	    PT_TEST_LOG_SUCC(&quot;ProUtilElemtreeCreate&quot;);
+	    
+	    status = ProFeatureCreate(featsel, elem_tree, NULL, 0, &amp;f, &amp;errs);
+	    PT_TEST_LOG_SUCC(&quot;ProFeatureCreate&quot;);
+	    
+<a name="anchor-97"></a>	    if (status != PRO_TK_NO_ERROR)
+	      {
+		ProUtilFeatErrsWrite(&quot;ProFeatureCreate&quot;, status, elem_tree, &amp;errs);
+				
+		return (-1);
+<a name="anchor-98"></a>	      }
+	    
+	    status = ProModelitemNameSet((ProModelitem*)&amp;f, names[i]);
+	    PT_TEST_LOG_SUCC(&quot;ProModelitemNameSet&quot;);
+	    
+<a name="anchor-99"></a>	    if (status != PRO_TK_NO_ERROR)
+	      return (-1);
+	    
+	    status = ProSelectionFree(&amp;featsel);
+	    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+<a name="anchor-100"></a>	    
+	    status = ProUtilFeatFirstGeomitem(&amp;f, PRO_SURFACE, id[i]);
+	    PT_TEST_LOG_SUCC(&quot;ProUtilFeatFirstGeomitem&quot;);
+	    
+	    status = ProUtilFeatFirstDimension(&amp;f, dim_id[i]);
+<a name="anchor-101"></a>	    PT_TEST_LOG_SUCC(&quot;ProUtilFeatFirstDimension&quot;);
+	  }
+      }
+    else 
+      {
+<a name="anchor-102"></a>	ProDimension dx, dy, dz;
+	
+	status = ProModelitemInit (g_ptr->model, g_ptr->datum_x_offset_dim_id,  PRO_DIMENSION, &amp;dx);
+	PT_TEST_LOG_SUCC(&quot;ProModelitemInit&quot;);
+	
+<a name="anchor-103"></a>	status = ProDimensionValueSet (&amp;dx, g_ptr->datum_x_offset);
+	PT_TEST_LOG_SUCC(&quot;ProDimensionValueSet&quot;);
+	
+	status = ProModelitemInit (g_ptr->model, g_ptr->datum_y_offset_dim_id, PRO_DIMENSION, &amp;dy);
+	PT_TEST_LOG_SUCC(&quot;ProModelitemInit&quot;);
+<a name="anchor-104"></a>	
+	status = ProDimensionValueSet (&amp;dy, g_ptr->datum_y_offset);
+	PT_TEST_LOG_SUCC(&quot;ProDimensionValueSet&quot;);
+	
+	status = ProModelitemInit (g_ptr->model, g_ptr->datum_z_offset_dim_id, PRO_DIMENSION, &amp;dz);
+<a name="anchor-105"></a>	PT_TEST_LOG_SUCC(&quot;ProModelitemInit&quot;);
+	
+	status = ProDimensionValueSet (&amp;dz, g_ptr->datum_z_offset);
+	PT_TEST_LOG_SUCC(&quot;ProDimensionValueSet&quot;);
+	
+<a name="anchor-106"></a>	status = ProSolidRegenerate (g_ptr->model, 0);
+	PT_TEST_LOG_SUCC(&quot;ProSolidRegenerate&quot;);
+
+	status = ProWindowRepaint (-1);
+	PT_TEST_LOG_SUCC(&quot;ProWindowRepaint&quot;);
+<a name="anchor-107"></a>      }
+
+    g_ptr->datum_created = PRO_B_TRUE;
+
+    return (0);
+<a name="anchor-108"></a>    
+  }
+
+/*=============================================================*\
+  Function: 	ProUserCreateDisk
+<a name="anchor-109"></a>  Purpose:	create gear disk
+  \*=============================================================*/
+  int ProUserCreateDisk(GearParam *g_ptr)
+  {
+     ElemTreeData tree[]={
+<a name="anchor-110"></a>       /* 0 */ {0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+       /* 1 */ {1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_PROTRUSION}},
+       /* 2 */ {1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+       /* 3 */ {1, PRO_E_EXT_SURF_CUT_SOLID_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_TYPE_SOLID}},
+       /* 4 */ {1, PRO_E_REMOVE_MATERIAL, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_ADD}},
+<a name="anchor-111"></a>       /* 5 */ {1, PRO_E_STD_SECTION,  {(ProValueDataType)-1}},
+       /* 6 */ {2, PRO_E_STD_SEC_SETUP_PLANE, {(ProValueDataType)-1}},
+       /* 7 */ {3, PRO_E_STD_SEC_PLANE, {PRO_VALUE_TYPE_SELECTION}},
+       /* 8 */ {3, PRO_E_STD_SEC_PLANE_VIEW_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_VIEW_DIR_SIDE_ONE}},
+       /* 9 */ {3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_ORIENT_DIR_LEFT}},
+<a name="anchor-112"></a>       /* 10 */{3, PRO_E_STD_SEC_PLANE_ORIENT_REF, {PRO_VALUE_TYPE_SELECTION}},
+       /* 11 */{1, PRO_E_FEAT_FORM_IS_THIN, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_FORM_NO_THIN}},
+       /* 12 */{1, PRO_E_STD_DIRECTION, {PRO_VALUE_TYPE_INT, PRO_EXT_CR_IN_SIDE_TWO}},
+       /* 13 */{1, PRO_E_STD_EXT_DEPTH, {(ProValueDataType)-1}},
+       /* 14 */{2, PRO_E_EXT_DEPTH_FROM, {(ProValueDataType)-1}},
+<a name="anchor-113"></a>       /* 15 */{3, PRO_E_EXT_DEPTH_FROM_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_FROM_NONE}},
+       /* 16 */{2, PRO_E_EXT_DEPTH_TO, {(ProValueDataType)-1}},
+       /* 17 */{3, PRO_E_EXT_DEPTH_TO_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_TO_BLIND}},
+       /* 18 */{3, PRO_E_EXT_DEPTH_TO_VALUE, {PRO_VALUE_TYPE_DOUBLE}}
+     };
+<a name="anchor-114"></a>     ProElempathItem depth_path[] = {
+       {PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_EXT_DEPTH},
+       {PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_EXT_DEPTH_FROM},
+       {PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_EXT_DEPTH_FROM_VALUE}
+     };
+<a name="anchor-115"></a>
+     ElemTreeData axis_tree[] = {
+     /* 0 */ {0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+     /* 1 */ {1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_DATUM_AXIS}},
+     /* 2 */ {1, PRO_E_DTMAXIS_CONSTRAINTS, {(ProValueDataType)-1}},
+<a name="anchor-116"></a>     /* 3 */ {2, PRO_E_DTMAXIS_CONSTRAINT, {(ProValueDataType)-1}},
+     /* 4 */ {3, PRO_E_DTMAXIS_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, 1}},
+     /* 5 */ {3, PRO_E_DTMAXIS_CONSTR_REF, {PRO_VALUE_TYPE_SELECTION}},
+     /* 6 */ {2, PRO_E_DTMAXIS_CONSTRAINT, {(ProValueDataType)-1}},
+     /* 7 */ {3, PRO_E_DTMAXIS_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, 1}},
+<a name="anchor-117"></a>     /* 8 */ {3, PRO_E_DTMAXIS_CONSTR_REF, {PRO_VALUE_TYPE_SELECTION}}
+     };
+
+     ElemTreeData dtm_tree[]={
+       /* 0 */ {0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+<a name="anchor-118"></a>       /* 1 */ {1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_DATUM}},
+       /* 2 */ {1, PRO_E_DTMPLN_CONSTRAINTS, {(ProValueDataType)-1}},
+       /* 3 */ {2, PRO_E_DTMPLN_CONSTRAINT, {(ProValueDataType)-1}},
+       /* 4 */ {3, PRO_E_DTMPLN_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, 0}},
+       /* 5 */ {3, PRO_E_DTMPLN_CONSTR_REF, {PRO_VALUE_TYPE_SELECTION, NULL}},
+<a name="anchor-119"></a>       /* 6 */ {2, PRO_E_DTMPLN_CONSTRAINT, {(ProValueDataType)-1}},
+       /* 7 */ {3, PRO_E_DTMPLN_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, 4}},
+       /* 8 */ {3, PRO_E_DTMPLN_CONSTR_REF, {PRO_VALUE_TYPE_SELECTION}},
+       /* 9 */ {3, PRO_E_DTMPLN_CONSTR_REF_ANGLE, {PRO_VALUE_TYPE_DOUBLE}}
+     };
+<a name="anchor-120"></a>
+     ElemTreeData dtm_tree_normal[]={
+       /* 0 */ {0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+       /* 1 */ {1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_DATUM}},
+       /* 2 */ {1, PRO_E_DTMPLN_CONSTRAINTS, {(ProValueDataType)-1}},
+<a name="anchor-121"></a>       /* 3 */ {2, PRO_E_DTMPLN_CONSTRAINT, {(ProValueDataType)-1}},
+       /* 4 */ {3, PRO_E_DTMPLN_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, 0}},
+       /* 5 */ {3, PRO_E_DTMPLN_CONSTR_REF, {PRO_VALUE_TYPE_SELECTION, NULL}},
+       /* 6 */	{2, PRO_E_DTMPLN_CONSTRAINT, {(ProValueDataType)-1}},
+       /* 7 */ {3, PRO_E_DTMPLN_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, 1}},
+<a name="anchor-122"></a>       /* 8 */ {3, PRO_E_DTMPLN_CONSTR_REF, {PRO_VALUE_TYPE_SELECTION}},
+       /* 9 */ {3, PRO_E_DTMPLN_CONSTR_REF_ANGLE, {PRO_VALUE_TYPE_DOUBLE}}
+     };
+
+     
+<a name="anchor-123"></a>     FeatureDef feat_def;
+     ProFeature feature, feature_handle;
+     ProModelitem modelitem;
+     Pro3dPnt pnt;
+     ProMdl model;
+<a name="anchor-124"></a>
+     /* Declaration for axis element tree generation */
+     ProElement elem_axis_tree;
+     ProSelection featsel_axis;
+     ProFeature feature_axis;
+<a name="anchor-125"></a>     ProModelitem model_item;
+     ProErrorlist axis_errs;
+     int axis_id, id;
+     ProFeatureCreateOptions opts[2], *cr_opts;
+
+<a name="anchor-126"></a>     /* Declaration for datum plane tree generation */
+     ProElement elem_tree;
+     ProSelection featsel_plane;
+     ProErrorlist errs_plane;
+     ProFeature feature_plane;
+<a name="anchor-127"></a>     ProModelitem model_item_plane;
+
+     /* Declarations for second datum plane */
+     ProElement elem_dtm_tree;
+     ProSelection feat_plane_sel;
+<a name="anchor-128"></a>     ProErrorlist errs_dtm;
+     ProFeature feature_dtm;
+     ProModelitem model_dtm;
+     int surf_id;
+     ProError status;
+<a name="anchor-129"></a>     
+     if (g_ptr->gear_depth == 0.0 || g_ptr->gear_diam == 0.0 )
+     return 1;
+
+     /*-----------------------------------------------------------------*\
+<a name="anchor-130"></a>     Preparation of feature data
+     \*-----------------------------------------------------------------*/
+     memset(&amp;feat_def, 0, sizeof(feat_def));
+     
+     status =ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->front_surface_id, &amp;tree[7].data.v.r);
+<a name="anchor-131"></a>     PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId.........ProUserCreateDisk&quot;);
+     
+     status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->side_surface_id, &amp;tree[10].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+
+<a name="anchor-132"></a>     tree[18].data.v.d = g_ptr->gear_depth; 
+
+     feat_def.tree = tree;
+     feat_def.sizeof_tree = SIZEOFARR(tree);
+
+<a name="anchor-133"></a>     feat_def.params[0].d = g_ptr->gear_diam;
+     feat_def.params[1].r = tree[10].data.v.r;
+     
+     status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->bottom_surface_id, &amp;feat_def.params[2].r);
+     PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+<a name="anchor-134"></a>     
+     feat_def.section_create_func = ProUtilCreateCircleSection;
+
+     feat_def.feat_name  = &quot;Gear_Disk&quot;;
+
+<a name="anchor-135"></a>     /*-----------------------------------------------------------------*\
+     Create new feature
+     \*-----------------------------------------------------------------*/
+     status  = ProUtilCreateSketchedFeature(g_ptr, &amp;feat_def, &amp;feature);
+     PT_TEST_LOG_SUCC(&quot;ProUtilCreateSketchedFeature&quot;);
+<a name="anchor-136"></a>     
+     if (status == PRO_TK_NO_ERROR)
+     {
+       g_ptr->disk_created = 1;
+
+<a name="anchor-137"></a>     /*-----------------------------------------------------------------*\
+     Create new axis
+     \*-----------------------------------------------------------------*/
+     opts[0] = PRO_FEAT_CR_NO_OPTS;
+
+<a name="anchor-138"></a>     status = ProArrayAlloc(0, sizeof(ProFeatureCreateOptions),1, (ProArray*)&amp;cr_opts);
+     PT_TEST_LOG_SUCC(&quot;ProArrayAlloc&quot;);
+
+     status = ProArrayObjectAdd((ProArray*)&amp;cr_opts,PRO_VALUE_UNUSED, 1, (void*)&amp;(opts[0])); 
+     PT_TEST_LOG_SUCC(&quot;ProArrayObjectAdd&quot;);
+<a name="anchor-139"></a>
+     status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->front_surface_id, &amp;axis_tree[5].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+
+     status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->side_surface_id,  &amp;axis_tree[8].data.v.r);
+<a name="anchor-140"></a>     PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+
+     status = ProUtilElemtreeCreate(axis_tree, SIZEOFARR(axis_tree), NULL, &amp;elem_axis_tree);
+     PT_TEST_LOG_SUCC(&quot;ProUtilElemtreeCreate&quot;);
+
+<a name="anchor-141"></a>     status = ProMdlToModelitem(g_ptr->model, &amp;model_item);
+     PT_TEST_LOG_SUCC(&quot;ProMdlToModelitem&quot;);
+
+     status = ProSelectionAlloc(NULL, &amp;model_item, &amp;featsel_axis);
+     PT_TEST_LOG_SUCC(&quot;ProSelectionAlloc&quot;);
+<a name="anchor-142"></a>
+     status = ProFeatureWithoptionsCreate(featsel_axis, elem_axis_tree, cr_opts, PRO_REGEN_FORCE_REGEN, &amp;feature_axis, &amp;axis_errs);
+     PT_TEST_LOG_SUCC(&quot;ProFeatureWithoptionsCreate&quot;);
+     
+     if (status != PRO_TK_NO_ERROR)
+<a name="anchor-143"></a>     {
+       ProUtilFeatErrsWrite(&quot;ProFeatureCreate&quot;, status, elem_axis_tree, &amp;axis_errs);
+       
+       return (-1);
+     }
+<a name="anchor-144"></a>
+     status = ProUtilAxisGeomitem(&amp;feature_axis, PRO_AXIS, &amp;axis_id);    
+     PT_TEST_LOG_SUCC(&quot;ProUtilAxisGeomitem&quot;);
+     
+     if (status != PRO_TK_NO_ERROR)
+<a name="anchor-145"></a>       return(status);
+
+     status = ProArrayFree((ProArray*)&amp;cr_opts);
+     PT_TEST_LOG_SUCC(&quot;ProArrayFree&quot;);
+     
+<a name="anchor-146"></a>     status = ProSelectionFree(&amp;featsel_axis);
+     PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+     
+     status = ProSelectionFree(&amp;axis_tree[5].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+<a name="anchor-147"></a>     
+     status = ProSelectionFree(&amp;axis_tree[8].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+
+     /*-----------------------------------------------------------------*\
+<a name="anchor-148"></a>     Set datum axis name
+     \*-----------------------------------------------------------------*/
+     status = ProUtilModelitemNameSet((ProModelitem*)&amp;feature_axis, &quot;DTM_AXIS_1&quot;);
+     PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+     
+<a name="anchor-149"></a>     if (status != PRO_TK_NO_ERROR)
+       return (-1);
+
+     /*-----------------------------------------------------------------*\
+     Create Datum Plane first
+<a name="anchor-150"></a>     \*-----------------------------------------------------------------*/
+     
+     status = ProArrayAlloc(0, sizeof(ProFeatureCreateOptions),1, (ProArray*)&amp;cr_opts);
+     PT_TEST_LOG_SUCC(&quot;ProArrayAlloc&quot;);
+
+<a name="anchor-151"></a>     status = ProArrayObjectAdd((ProArray*)&amp;cr_opts,PRO_VALUE_UNUSED, 1, (void*)&amp;(opts[0])); 
+     PT_TEST_LOG_SUCC(&quot;ProArrayObjectAdd&quot;);
+
+     status = ProUtilSelectionFromAxisId(g_ptr->model, axis_id, &amp;dtm_tree[5].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromAxisId&quot;);
+<a name="anchor-152"></a>     
+     status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->side_surface_id, &amp;dtm_tree[8].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+     
+     if(g_ptr->gear_type == HELICAL_GEAR)
+<a name="anchor-153"></a>     {
+     	dtm_tree[9].data.v.d = g_ptr->helix_angle;
+     }
+     else
+     {
+<a name="anchor-154"></a>     	dtm_tree[9].data.v.d = 0.0;
+     }
+
+     status = ProUtilElemtreeCreate(dtm_tree, SIZEOFARR(dtm_tree), NULL, &amp;elem_tree);
+     PT_TEST_LOG_SUCC(&quot;ProUtilElemtreeCreate&quot;);
+<a name="anchor-155"></a>
+     status = ProMdlToModelitem(g_ptr->model, &amp;model_item_plane);
+     PT_TEST_LOG_SUCC(&quot;ProMdlToModelitem&quot;);
+
+     status = ProSelectionAlloc(NULL, &amp;model_item_plane, &amp;featsel_plane);
+<a name="anchor-156"></a>     PT_TEST_LOG_SUCC(&quot;ProSelectionAlloc&quot;);
+
+     status = ProFeatureWithoptionsCreate(featsel_plane, elem_tree, cr_opts, PRO_REGEN_FORCE_REGEN, &amp;feature_plane, &amp;errs_plane);
+     PT_TEST_LOG_SUCC(&quot;ProFeatureWithoptionsCreate&quot;);
+
+<a name="anchor-157"></a>     if (status != PRO_TK_NO_ERROR)
+     {
+       ProUtilFeatErrsWrite(&quot;ProFeatureCreate&quot;, status, elem_tree, &amp;errs_plane);
+       
+       return (-1);
+<a name="anchor-158"></a>     }
+     
+     ProUtilAxisGeomitem(&amp;feature_plane, PRO_SURFACE, &amp;surf_id);    
+     
+     if (status != PRO_TK_NO_ERROR)
+<a name="anchor-159"></a>     return(status);
+     
+     status = ProArrayFree((ProArray*)&amp;cr_opts); 
+     PT_TEST_LOG_SUCC(&quot;ProArrayFree&quot;);
+     
+<a name="anchor-160"></a>     status = ProSelectionFree(&amp;featsel_plane);
+     PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+     
+     status = ProSelectionFree(&amp;dtm_tree[5].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+<a name="anchor-161"></a>     
+     status = ProSelectionFree(&amp;dtm_tree[8].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+
+     /*-----------------------------------------------------------------*\
+<a name="anchor-162"></a>     Set datum plane name
+     \*-----------------------------------------------------------------*/
+     status = ProUtilModelitemNameSet((ProModelitem*)&amp;feature_plane, &quot;DTM_TOOTH_1&quot;);
+     PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+     
+<a name="anchor-163"></a>     if (status != PRO_TK_NO_ERROR)
+      return (-1);
+
+     /*-----------------------------------------------------------------*\
+     Create Datum Plane second
+<a name="anchor-164"></a>     \*-----------------------------------------------------------------*/
+
+     status = ProArrayAlloc(0, sizeof(ProFeatureCreateOptions),1, (ProArray*)&amp;cr_opts);
+     PT_TEST_LOG_SUCC(&quot;ProArrayAlloc&quot;);
+
+<a name="anchor-165"></a>     status = ProArrayObjectAdd((ProArray*)&amp;cr_opts,PRO_VALUE_UNUSED, 1, (void*)&amp;(opts[0])); 
+     PT_TEST_LOG_SUCC(&quot;ProArrayObjectAdd&quot;);
+
+     status = ProUtilSelectionFromAxisId(g_ptr->model, axis_id, &amp;dtm_tree_normal[5].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromAxisId&quot;);
+<a name="anchor-166"></a>
+     status = ProUtilSelectionFromSurfaceId(g_ptr->model, surf_id, &amp;dtm_tree_normal[8].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+     
+     dtm_tree[9].data.v.d = 00.0;
+<a name="anchor-167"></a>
+     status = ProUtilElemtreeCreate(dtm_tree_normal, SIZEOFARR(dtm_tree_normal), NULL, &amp;elem_dtm_tree);
+     PT_TEST_LOG_SUCC(&quot;ProUtilElemtreeCreate&quot;);
+
+     status = ProMdlToModelitem(g_ptr->model, &amp;model_dtm);
+<a name="anchor-168"></a>     PT_TEST_LOG_SUCC(&quot;ProMdlToModelitem&quot;);
+
+     status = ProSelectionAlloc(NULL, &amp;model_item_plane, &amp;feat_plane_sel);
+     PT_TEST_LOG_SUCC(&quot;ProSelectionAlloc&quot;);
+
+<a name="anchor-169"></a>     status = ProFeatureWithoptionsCreate(feat_plane_sel, elem_dtm_tree, cr_opts, PRO_REGEN_FORCE_REGEN, &amp;feature_dtm, &amp;errs_dtm);
+     PT_TEST_LOG_SUCC(&quot;ProFeatureWithoptionsCreate&quot;);
+
+     if (status != PRO_TK_NO_ERROR)
+     {
+<a name="anchor-170"></a>       ProUtilFeatErrsWrite(&quot;ProFeatureCreate&quot;, status, elem_dtm_tree, &amp;errs_dtm);
+       
+       return (-1);
+     }
+     status = ProArrayFree((ProArray*)&amp;cr_opts); 
+<a name="anchor-171"></a>     PT_TEST_LOG_SUCC(&quot;ProArrayFree&quot;);
+     
+     status = ProSelectionFree(&amp;feat_plane_sel);
+     PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+     
+<a name="anchor-172"></a>     status = ProSelectionFree(&amp;dtm_tree_normal[5].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+     
+     status = ProSelectionFree(&amp;dtm_tree_normal[8].data.v.r);
+     PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+<a name="anchor-173"></a>
+     /*-----------------------------------------------------------------*\
+     Set datum plane name
+     \*-----------------------------------------------------------------*/
+     status = ProUtilModelitemNameSet((ProModelitem*)&amp;feature_dtm, &quot;DTM_TOOTH_2&quot;);
+<a name="anchor-174"></a>     PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+     
+     if (status != PRO_TK_NO_ERROR)
+      return (-1);
+
+<a name="anchor-175"></a>     /*-----------------------------------------------------------------*\
+     Find and name required surfaces
+     \*-----------------------------------------------------------------*/
+
+       pnt[0] = g_ptr->datum_x_offset;
+<a name="anchor-176"></a>       pnt[1] = g_ptr->datum_y_offset;
+       pnt[2] = g_ptr->gear_depth + g_ptr->datum_z_offset;
+       
+       status = ProUtilGeometryAtPointFind((ProPart)g_ptr->model, pnt, &amp;modelitem);
+       PT_TEST_LOG_SUCC(&quot;ProUtilGeometryAtPointFind&quot;);
+<a name="anchor-177"></a>       
+       g_ptr->disk_front_surf_id = modelitem.id;
+       
+       status = ProUtilModelitemNameSet(&amp;modelitem, &quot;DISK_FRONT&quot;);
+       PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+<a name="anchor-178"></a>
+       pnt[0] = g_ptr->datum_x_offset;
+       pnt[1] = (g_ptr->gear_diam/2) + g_ptr->datum_y_offset; 
+       pnt[2] = g_ptr->gear_depth/2 + g_ptr->datum_z_offset;
+       
+<a name="anchor-179"></a>       status = ProUtilGeometryAtPointFind((ProPart)g_ptr->model, pnt, &amp;modelitem);
+       PT_TEST_LOG_SUCC(&quot;ProUtilGeometryAtPointFind&quot;);
+       
+       g_ptr->disk_side_surf_id = modelitem.id;
+       
+<a name="anchor-180"></a>       status = ProUtilModelitemNameSet(&amp;modelitem, &quot;DISK_SIDE&quot;);
+       PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+
+       status = ProViewRefit (g_ptr->model, NULL);
+       PT_TEST_LOG_SUCC(&quot;ProViewRefit&quot;);
+<a name="anchor-181"></a>
+    }
+    
+/*-----------------------------------------------------------------*\
+    Free allocated memory
+<a name="anchor-182"></a>\*-----------------------------------------------------------------*/
+    status = ProSelectionFree(&amp;tree[7].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    status = ProSelectionFree(&amp;tree[10].data.v.r);
+<a name="anchor-183"></a>    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    status = ProSelectionFree(&amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+<a name="anchor-184"></a>    return (status);
+}
+
+/*=============================================================*\
+  Function: 	ProUserCreateHole
+<a name="anchor-185"></a>  Purpose:	create gear hole
+\*=============================================================*/
+int ProUserCreateHole(GearParam *g_ptr)
+{
+    ElemTreeData tree[]={
+<a name="anchor-186"></a>  /* 0*/ 	{0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+  /* 1*/	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_HOLE}},
+  /* 2*/	{1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+  /* 3*/	{1, PRO_E_HLE_COM, {(ProValueDataType)-1}},
+  /* 4*/ 	{2, PRO_E_HLE_TYPE_NEW, {PRO_VALUE_TYPE_INT, 16}},
+<a name="anchor-187"></a>  /* 5*/ 	{2, PRO_E_DIAMETER, {PRO_VALUE_TYPE_DOUBLE, 4}},		
+  /* 6*/ 	{2, PRO_E_HOLE_STD_DEPTH, {(ProValueDataType)-1}},
+  /* 7*/ 	{3, PRO_E_HOLE_DEPTH_TO, {(ProValueDataType)-1}},
+  /* 8*/ 	{4, PRO_E_HOLE_DEPTH_TO_TYPE, {PRO_VALUE_TYPE_INT, 3}},
+  /* 9*/	{3, PRO_E_HOLE_DEPTH_FROM, {(ProValueDataType)-1}},
+<a name="anchor-188"></a>  /* 10*/	{4, PRO_E_HOLE_DEPTH_FROM_TYPE, {PRO_VALUE_TYPE_INT, 3}},
+  /* 11*/	{1, PRO_E_HLE_PLACEMENT, {(ProValueDataType)-1}},
+  /* 12*/	{2, PRO_E_HLE_PRIM_REF, {PRO_VALUE_TYPE_SELECTION}},		
+  /* 13*/	{2, PRO_E_HLE_PL_TYPE, {PRO_VALUE_TYPE_INT, 5}},
+  /* 14*/	{2, PRO_E_HLE_PLCMNT_PLANE, {PRO_VALUE_TYPE_SELECTION}},	
+<a name="anchor-189"></a>	};
+
+
+	
+    int axis_id;
+<a name="anchor-190"></a>    ProFeature feature, f;
+    ProErrorlist errs;
+    Pro3dPnt pnt;
+    ProModelitem modelitem;
+    ProElement elem_tree;
+<a name="anchor-191"></a>    ProSelection featsel;
+    int n_of_teeth;
+    ProError status;
+        
+    FeatByName feat_disk[] = {
+<a name="anchor-192"></a>	{&quot;GEAR_DISK&quot;}
+    };
+    
+    if (g_ptr->inner_diam == 0.0)
+	 return 1;
+<a name="anchor-193"></a>/*-----------------------------------------------------------------*\
+    Preparation of feature data
+\*-----------------------------------------------------------------*/
+    status = ProUtilFeatsByName(g_ptr->model, feat_disk, 1);
+    PT_TEST_LOG_SUCC(&quot;ProUtilFeatsByName..........ProUserCreateHole&quot;);
+<a name="anchor-194"></a>    
+    if (status != PRO_TK_NO_ERROR || feat_disk[0].id == -1)
+	return (status);
+
+    status = ProFeatureInit(g_ptr->model, feat_disk[0].id, &amp;feature);
+<a name="anchor-195"></a>    PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+    
+    status = ProUtilFeatFirstGeomitem(&amp;feature, PRO_AXIS, &amp;axis_id); 
+    PT_TEST_LOG_SUCC(&quot;ProUtilFeatFirstGeomitem&quot;);
+       
+<a name="anchor-196"></a>    if (status != PRO_TK_NO_ERROR)
+	return (status);
+
+    status = ProModelitemInit(g_ptr->model, axis_id, PRO_AXIS, &amp;modelitem);
+    PT_TEST_LOG_SUCC(&quot;ProModelitemInit&quot;);
+<a name="anchor-197"></a>    
+    if (status!=PRO_TK_NO_ERROR) 
+	return (status);
+
+    status = ProSelectionAlloc(NULL, &amp;modelitem, &amp;tree[12].data.v.r);
+<a name="anchor-198"></a>    PT_TEST_LOG_SUCC(&quot;ProSelectionAlloc&quot;);
+ 
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->front_surface_id, &amp;tree[14].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+    
+<a name="anchor-199"></a>    tree[5].data.v.d = g_ptr->inner_diam;
+
+/*-----------------------------------------------------------------*\
+    Create new feature
+\*-----------------------------------------------------------------*/
+<a name="anchor-200"></a>    status = ProUtilElemtreeCreate(tree, SIZEOFARR(tree), NULL, &amp;elem_tree);
+    PT_TEST_LOG_SUCC(&quot;ProUtilElemtreeCreate&quot;);
+    
+    status = ProMdlToModelitem(g_ptr->model, &amp;modelitem);
+    PT_TEST_LOG_SUCC(&quot;ProUtilFeatsByName&quot;);
+<a name="anchor-201"></a>    
+    status = ProSelectionAlloc(NULL, &amp;modelitem, &amp;featsel);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionAlloc&quot;);
+    
+    status = ProFeatureCreate(featsel, elem_tree, NULL, 0, &amp;f, &amp;errs);
+<a name="anchor-202"></a>    PT_TEST_LOG_SUCC(&quot;ProFeatureCreate&quot;);
+    
+    status = ProSelectionFree(&amp;featsel);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+<a name="anchor-203"></a>    if (status != PRO_TK_NO_ERROR)
+    {
+	ProUtilFeatErrsWrite(&quot;ProFeatureCreate&quot;, status, elem_tree, &amp;errs);
+	return (-1);
+    }
+<a name="anchor-204"></a>    else
+    {
+
+/*-----------------------------------------------------------------*\
+    Set feature name
+<a name="anchor-205"></a>\*-----------------------------------------------------------------*/
+        status = ProUtilModelitemNameSet((ProModelitem*)&amp;f, &quot;GEAR_HOLE&quot;);
+	PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+	
+        if (status != PRO_TK_NO_ERROR)
+<a name="anchor-206"></a>            return (-1);
+
+	g_ptr->hole_created = 1;
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-207"></a>    Find and name required surfaces
+\*-----------------------------------------------------------------*/
+	pnt[0] = g_ptr->datum_x_offset;
+	pnt[1] = g_ptr->datum_y_offset + g_ptr->inner_diam/2;  /* point on surface */
+	if (g_ptr->gear_type == SPUR_GEAR)
+<a name="anchor-208"></a>	    pnt[2] = g_ptr->datum_z_offset + g_ptr->gear_depth/2;
+	else
+	    pnt[2] = g_ptr->datum_z_offset - g_ptr->backplate_depth/2;
+	
+	status = ProUtilGeometryAtPointFind((ProPart)g_ptr->model, pnt, &amp;modelitem);
+<a name="anchor-209"></a>	PT_TEST_LOG_SUCC(&quot;ProUtilGeometryAtPointFind&quot;);
+	
+	g_ptr->hole_side_surf_id = modelitem.id;
+	
+	status = ProUtilModelitemNameSet(&amp;modelitem, &quot;HOLE_SIDE&quot;);
+<a name="anchor-210"></a>	PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+    }
+/*-----------------------------------------------------------------*\
+    Free allocated memory
+\*-----------------------------------------------------------------*/
+<a name="anchor-211"></a>    status = ProSelectionFree(&amp;tree[12].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    status = ProSelectionFree(&amp;tree[14].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+<a name="anchor-212"></a>    
+    return (status);
+}
+
+
+<a name="anchor-213"></a>/*=============================================================*\
+  Function: 	ProUserCreateToothSurf
+  Purpose:	create all gear tooth surface locator hole (ring gear)
+\*=============================================================*/
+int ProUserCreateToothSurf(GearParam *g_ptr)
+<a name="anchor-214"></a>{
+    ElemTreeData tree[]={
+	/* 0 */ {0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+	/* 1 */ {1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_CUT}},
+	/* 2 */ {1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+<a name="anchor-215"></a>	/* 3 */ {1, PRO_E_EXT_SURF_CUT_SOLID_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_TYPE_SOLID}},
+	/* 4 */ {1, PRO_E_REMOVE_MATERIAL, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_REMOVE}},
+	/* 5 */ {1, PRO_E_STD_SECTION,  {(ProValueDataType)-1}},
+	/* 6 */ {2, PRO_E_STD_SEC_SETUP_PLANE,  {(ProValueDataType)-1}},
+	/* 7 */ {3, PRO_E_STD_SEC_PLANE, {PRO_VALUE_TYPE_SELECTION}},
+<a name="anchor-216"></a>	/* 8 */ {3, PRO_E_STD_SEC_PLANE_VIEW_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_VIEW_DIR_SIDE_TWO}},
+	/* 9 */ {3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_ORIENT_DIR_LEFT}},
+	/* 10 */{3, PRO_E_STD_SEC_PLANE_ORIENT_REF, {PRO_VALUE_TYPE_SELECTION}},
+	/* 11 */{1, PRO_E_FEAT_FORM_IS_THIN, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_FORM_NO_THIN}},
+	/* 12 */{1, PRO_E_STD_DIRECTION, {PRO_VALUE_TYPE_INT, PRO_EXT_CR_IN_SIDE_ONE}},
+<a name="anchor-217"></a>	/* 13 */{1, PRO_E_STD_MATRLSIDE, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_SIDE_TWO}},
+	/* 14 */{1, PRO_E_STD_EXT_DEPTH, {(ProValueDataType)-1}},
+	/* 15 */{2, PRO_E_EXT_DEPTH_FROM, {(ProValueDataType)-1}},
+	/* 16 */{3, PRO_E_EXT_DEPTH_FROM_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_FROM_NONE}},
+	/* 17 */{2, PRO_E_EXT_DEPTH_TO, {(ProValueDataType)-1}},
+<a name="anchor-218"></a>	/* 18 */{3, PRO_E_EXT_DEPTH_TO_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_TO_NEXT}}
+    };
+   
+    FeatureDef feat_def;
+    ProFeature feature;
+<a name="anchor-219"></a>    Pro3dPnt pnt;
+    ProModelitem modelitem;
+    double diam;
+    ProError status;
+    
+<a name="anchor-220"></a>/*-----------------------------------------------------------------*\
+    Preparation of feature data
+\*-----------------------------------------------------------------*/
+    memset(&amp;feat_def, 0, sizeof(feat_def));
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->front_surface_id, &amp;tree[7].data.v.r);
+<a name="anchor-221"></a>    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId........ProUserCreateToothSurf&quot;);
+    
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->side_surface_id, &amp;tree[10].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+
+<a name="anchor-222"></a>    feat_def.tree = tree;
+    feat_def.sizeof_tree = SIZEOFARR(tree);
+
+    diam = (g_ptr->n_of_teeth - 2) * g_ptr->tooth_par1;
+    feat_def.params[0].d = diam;
+<a name="anchor-223"></a>    feat_def.params[1].r = tree[10].data.v.r;
+    
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->bottom_surface_id, &amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+    
+<a name="anchor-224"></a>    feat_def.section_create_func = ProUtilCreateCircleSection;
+
+    feat_def.feat_name  = &quot;Tooth_Surf&quot;;
+
+    
+<a name="anchor-225"></a>
+/*-----------------------------------------------------------------*\
+    Create new feature
+\*-----------------------------------------------------------------*/
+    status  = ProUtilCreateSketchedFeature(g_ptr, &amp;feat_def, &amp;feature);
+<a name="anchor-226"></a>    PT_TEST_LOG_SUCC(&quot;ProUtilCreateSketchedFeature&quot;);
+    
+    if (status == PRO_TK_NO_ERROR)
+    {
+	g_ptr->tooth_surf_created = 1;
+<a name="anchor-227"></a>
+/*-----------------------------------------------------------------*\
+    Find and name required surfaces
+\*-----------------------------------------------------------------*/
+	pnt[0] = g_ptr -> datum_x_offset;
+<a name="anchor-228"></a>	pnt[1] = g_ptr -> datum_y_offset + diam/2;  /* point on surface */
+	pnt[2] = g_ptr -> datum_z_offset + g_ptr->gear_depth/2;
+	
+	status = ProUtilGeometryAtPointFind((ProPart)g_ptr->model, pnt, &amp;modelitem);
+	PT_TEST_LOG_SUCC(&quot;ProUtilGeometryAtPointFind&quot;);
+<a name="anchor-229"></a>	
+	g_ptr->tooth_surf_side_surf_id = modelitem.id;
+	
+	status = ProUtilModelitemNameSet(&amp;modelitem, &quot;TOOTH_SURF_SIDE&quot;);
+	PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+<a name="anchor-230"></a>    }
+/*-----------------------------------------------------------------*\
+    Free allocated memory
+\*-----------------------------------------------------------------*/
+    status = ProSelectionFree(&amp;tree[7].data.v.r);
+<a name="anchor-231"></a>    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    status = ProSelectionFree(&amp;tree[10].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+<a name="anchor-232"></a>    status = ProSelectionFree(&amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    return (0);
+}
+<a name="anchor-233"></a>
+/*=============================================================*\
+  Function: 	ProUserCreateTooth
+  Purpose:	create first gear tooth
+\*=============================================================*/
+<a name="anchor-234"></a>int ProUserCreateTooth(GearParam *g_ptr)
+{
+
+  ElemTreeData sketch_tree[]={
+     /* 0 */ {0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+<a name="anchor-235"></a>     /* 1 */ {1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_CURVE}},
+     /* 2 */ {1, PRO_E_CURVE_TYPE, {PRO_VALUE_TYPE_INT, 0}},
+     /* 3 */ {1, PRO_E_STD_SECTION, {(ProValueDataType)-1}},
+     /* 4 */ {2, PRO_E_STD_SEC_METHOD, {PRO_VALUE_TYPE_INT, 0}},
+     /* 5 */ {2, PRO_E_STD_SEC_SELECT, {(ProValueDataType)-1}},
+<a name="anchor-236"></a>     /* 6 */ {3, PRO_E_SURF_CHAIN_CMPND, {(ProValueDataType)-1}},
+     /* 7 */ {4, PRO_E_SURF_CHAIN_METHOD, {PRO_VALUE_TYPE_INT, 0}},
+     /* 8 */ {2, PRO_E_STD_SEC_SETUP_PLANE, {(ProValueDataType)-1}},
+     /* 9 */ {3, PRO_E_STD_SEC_PLANE, {PRO_VALUE_TYPE_SELECTION}},
+     /* 10 */{3, PRO_E_STD_SEC_PLANE_VIEW_DIR, {PRO_VALUE_TYPE_INT, 1}},
+<a name="anchor-237"></a>     /* 11 */{3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, {PRO_VALUE_TYPE_INT, 4}},
+     /* 12 */{3, PRO_E_STD_SEC_PLANE_ORIENT_REF, {PRO_VALUE_TYPE_SELECTION}},
+     /* 13 */{1, PRO_E_ATTRIBUTES, {(ProValueDataType)-1}},
+     /* 14 */{2, PRO_E_DTMCRV_DISPLAY_HATCH, {PRO_VALUE_TYPE_INT, 0}},
+     /* 15 */{2, PRO_E_DTMCRV_HATCH_DENSITY, {PRO_VALUE_TYPE_DOUBLE, 0.0}}
+<a name="anchor-238"></a>  };
+
+  ElemTreeData tree[]={
+     /* 0 */ {0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+     /* 1 */ {1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_CUT}},
+<a name="anchor-239"></a>     /* 2 */ {1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+     /* 3 */ {1, PRO_E_EXT_SURF_CUT_SOLID_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_TYPE_SOLID}},
+     /* 4 */ {1, PRO_E_REMOVE_MATERIAL, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_REMOVE}},
+     /* 5 */ {1, PRO_E_STD_SECTION,  {(ProValueDataType)-1}},
+     /* 6 */ {2, PRO_E_STD_SEC_SETUP_PLANE,  {(ProValueDataType)-1}},
+<a name="anchor-240"></a>     /* 7 */ {3, PRO_E_STD_SEC_PLANE, {PRO_VALUE_TYPE_SELECTION}},
+     /* 8 */ {3, PRO_E_STD_SEC_PLANE_VIEW_DIR, {PRO_VALUE_TYPE_INT, 1}},
+     /* 9 */ {3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, {PRO_VALUE_TYPE_INT, 2}},
+     /* 10 */{3, PRO_E_STD_SEC_PLANE_ORIENT_REF, {PRO_VALUE_TYPE_SELECTION}},
+     /* 11 */{1, PRO_E_FEAT_FORM_IS_THIN, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_FORM_NO_THIN}},
+<a name="anchor-241"></a>     /* 12 */{1, PRO_E_STD_DIRECTION, {PRO_VALUE_TYPE_INT, -1}},
+     /* 13 */{1, PRO_E_STD_MATRLSIDE, {PRO_VALUE_TYPE_INT, 1}},
+     /* 14 */{1, PRO_E_STD_EXT_DEPTH, {(ProValueDataType)-1}},
+     /* 15 */{2, PRO_E_EXT_DEPTH_FROM, {(ProValueDataType)-1}},
+     /* 16 */{3, PRO_E_EXT_DEPTH_FROM_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_FROM_NONE}},
+<a name="anchor-242"></a>     /* 17 */{2, PRO_E_EXT_DEPTH_TO, {(ProValueDataType)-1}},
+     /* 18 */{3, PRO_E_EXT_DEPTH_TO_TYPE, {PRO_VALUE_TYPE_INT, 268435456}},
+     /* 19 */{3, PRO_E_EXT_DEPTH_TO_VALUE, {PRO_VALUE_TYPE_DOUBLE}}
+  };
+
+<a name="anchor-243"></a>  ElemTreeData tree_1[]={
+     /* 0 */ {0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+     /* 1 */ {1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_CUT}},
+     /* 2 */ {1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+     /* 3 */ {1, PRO_E_EXT_SURF_CUT_SOLID_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_TYPE_SOLID}},
+<a name="anchor-244"></a>     /* 4 */ {1, PRO_E_REMOVE_MATERIAL, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_REMOVE}},
+     /* 5 */ {1, PRO_E_STD_SECTION,  {(ProValueDataType)-1}},
+     /* 6 */ {2, PRO_E_STD_SEC_SETUP_PLANE,  {(ProValueDataType)-1}},
+     /* 7 */ {3, PRO_E_STD_SEC_PLANE, {PRO_VALUE_TYPE_SELECTION}},
+     /* 8 */ {3, PRO_E_STD_SEC_PLANE_VIEW_DIR, {PRO_VALUE_TYPE_INT, 1}},
+<a name="anchor-245"></a>     /* 9 */ {3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, {PRO_VALUE_TYPE_INT, 2}},
+     /* 10 */{3, PRO_E_STD_SEC_PLANE_ORIENT_REF, {PRO_VALUE_TYPE_SELECTION}},
+     /* 11 */{1, PRO_E_FEAT_FORM_IS_THIN, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_FORM_NO_THIN}},
+     /* 12 */{1, PRO_E_STD_DIRECTION, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_SIDE_TWO}},
+     /* 13 */{1, PRO_E_STD_MATRLSIDE, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_SIDE_TWO}},
+<a name="anchor-246"></a>     /* 14 */{1, PRO_E_STD_EXT_DEPTH, {(ProValueDataType)-1}},
+     /* 15 */{2, PRO_E_EXT_DEPTH_FROM, {(ProValueDataType)-1}},
+     /* 16 */{3, PRO_E_EXT_DEPTH_FROM_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_FROM_NONE}},
+     /* 17 */{2, PRO_E_EXT_DEPTH_TO, {(ProValueDataType)-1}},
+     /* 18 */{3, PRO_E_EXT_DEPTH_TO_TYPE, {PRO_VALUE_TYPE_INT, 268435456}},
+<a name="anchor-247"></a>     /* 19 */{3, PRO_E_EXT_DEPTH_TO_VALUE, {PRO_VALUE_TYPE_DOUBLE}}
+  };
+
+  
+  FeatureDef feat_def;
+<a name="anchor-248"></a>  ProFeature feature, feat_tooth, feature_datum_1, feature_datum_2;
+  ProModelitem modelitem;
+  int axis_id, surface_id_1, *feats_ids, ret, n_dims, *p_dim_ids, surface_id_2, sketch_id;
+  ProErrorlist errs, errors;
+  ProElement elem_tree,  elemtree;
+<a name="anchor-249"></a>  ProSelection featsel;
+  ProLayer layer;
+  ProLayerItem layer_item;
+  ProGroup group;
+  ProName w_name;
+<a name="anchor-250"></a>  Pro3dPnt pnt;
+  ProError status;
+  ProElement elem_tree_1, tree_2;
+  FeatureDef feat_def_1,feat_def_sketch, feat_def_sketch_1;
+  ProFeature sketch, sketch_1;
+<a name="anchor-251"></a>  ProModelitem model_sktech, model_item_tooth, model_item_edge, model_item_surf, item, model_item;
+  ProSection section;
+  ProFeature feature_sketch, feature_tooth;
+  int sec_id, r_ent_id, sel_count, i;
+  ProSelection    *sel_ptr = NULL, sel1, sel2;
+<a name="anchor-252"></a>  ProFeatureCreateOptions opts[1],  *cr_opts;
+  ProValue	 value;
+  ProValueData value_data;
+  ProElement        sketch_element; 
+  ProFeatureCreateOptions redefine_options[] = {PRO_FEAT_CR_DEFINE_MISS_ELEMS};
+<a name="anchor-253"></a>  ProElement pro_e_std_matrlside;
+  int sel_no_surf, sel_no_edge;
+  int size;
+  ProIntlist p_id_list;
+  int curve_id;
+<a name="anchor-254"></a>  ProModelitem ref_item;
+  ProModelitem app_data;
+
+  FeatByName feat_disk[] = {
+     {&quot;GEAR_DISK&quot;}
+<a name="anchor-255"></a>  };
+
+  FeatByName datum_1[] = {
+     {&quot;DTM_TOOTH_1&quot;}
+  };
+<a name="anchor-256"></a>
+  FeatByName datum_2[] = {
+     {&quot;DTM_TOOTH_2&quot;}
+  };
+
+<a name="anchor-257"></a>
+  if (g_ptr->Pressure_angle == 0.0 || g_ptr->n_of_teeth == 0 )
+
+   return 1;
+  /*--------------------------------------------------------------------------*\
+<a name="anchor-258"></a>	     Blank cut for making disk of outer diameter
+  \*--------------------------------------------------------------------------*/
+  if(g_ptr->gear_type != RING_GEAR)
+  {
+      memset(&amp;feat_def, 0, sizeof(feat_def));
+<a name="anchor-259"></a>      status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->front_surface_id, &amp;tree[7].data.v.r);
+      PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId.......ProUserCreateTooth&quot;);
+      
+      status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->side_surface_id, &amp;tree[10].data.v.r);
+      PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+<a name="anchor-260"></a>      
+      tree[19].data.v.d = 5*g_ptr->gear_depth;
+
+      feat_def.tree = tree;
+      feat_def.sizeof_tree = SIZEOFARR(tree);
+<a name="anchor-261"></a>
+      feat_def.params[0].d = (g_ptr->n_of_teeth * g_ptr->tooth_par1) + (2 * g_ptr->tooth_par1);
+      feat_def.params[1].r = tree[10].data.v.r;      
+      
+      status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->bottom_surface_id, &amp;feat_def.params[2].r);
+<a name="anchor-262"></a>      PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+      
+      feat_def.section_create_func = ProUtilCreateCircleSection;
+
+      feat_def.feat_name  = &quot;Tooth_hole&quot;;
+<a name="anchor-263"></a>
+      /*-----------------------------------------------------------------*\
+        	   Create new feature
+      \*-----------------------------------------------------------------*/
+      status  = ProUtilCreateSketchedFeature(g_ptr, &amp;feat_def, &amp;feature);
+<a name="anchor-264"></a>      PT_TEST_LOG_SUCC(&quot;ProUtilCreateSketchedFeature&quot;);
+      
+      /*-----------------------------------------------------------------*\
+      Free allocated memory
+      \*-----------------------------------------------------------------*/
+<a name="anchor-265"></a>      status = ProSelectionFree(&amp;tree[7].data.v.r);
+      PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+      
+      status = ProSelectionFree(&amp;tree[10].data.v.r);
+      PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+<a name="anchor-266"></a>      
+      status = ProSelectionFree(&amp;feat_def.params[2].r);
+      PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+  }
+    /*--------------------------------------------------------------------------*\
+<a name="anchor-267"></a>     Init Datum planes along which extrude feature is to be performed
+  \*--------------------------------------------------------------------------*/
+
+  status = ProUtilFeatsByName(g_ptr->model, datum_1, 1);
+  PT_TEST_LOG_SUCC(&quot;ProUtilFeatsByName&quot;);
+<a name="anchor-268"></a>  
+  if (status != PRO_TK_NO_ERROR || datum_1[0].id == -1)
+     return (status);
+
+  status = ProFeatureInit(g_ptr->model, datum_1[0].id, &amp;feature_datum_1);
+<a name="anchor-269"></a>  PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+
+  status = ProUtilFeatFirstGeomitem(&amp;feature_datum_1, PRO_SURFACE, &amp;surface_id_1);
+  PT_TEST_LOG_SUCC(&quot;ProUtilFeatFirstGeomitem&quot;);
+  
+<a name="anchor-270"></a>  if (status != PRO_TK_NO_ERROR)
+     return (-1);
+
+  status = ProUtilFeatsByName(g_ptr->model, datum_2, 1);
+  PT_TEST_LOG_SUCC(&quot;ProUtilFeatsByName&quot;);
+<a name="anchor-271"></a>  
+  if (status != PRO_TK_NO_ERROR || datum_2[0].id == -1)
+     return (status);
+
+  status = ProFeatureInit(g_ptr->model, datum_2[0].id, &amp;feature_datum_2);
+<a name="anchor-272"></a>  PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+  
+  status = ProUtilFeatFirstGeomitem(&amp;feature_datum_2, PRO_SURFACE, &amp;surface_id_2);
+  PT_TEST_LOG_SUCC(&quot;ProUtilFeatFirstGeomitem&quot;);
+  
+<a name="anchor-273"></a>  if (status != PRO_TK_NO_ERROR)
+     return (-1);
+
+  status = ProUtilFeatsByName(g_ptr->model, feat_disk, 1);
+  PT_TEST_LOG_SUCC(&quot;ProUtilFeatsByName&quot;);
+<a name="anchor-274"></a>  
+  if (status != PRO_TK_NO_ERROR || feat_disk[0].id == -1)
+     return (status);
+
+  status = ProFeatureInit(g_ptr->model, feat_disk[0].id, &amp;feature);
+<a name="anchor-275"></a>  PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+  
+  status = ProUtilFeatFirstGeomitem(&amp;feature, PRO_AXIS, &amp;axis_id);    
+  PT_TEST_LOG_SUCC(&quot;ProUtilFeatFirstGeomitem&quot;);
+  
+<a name="anchor-276"></a>  if (status != PRO_TK_NO_ERROR)
+     return (status);
+
+  status=ProModelitemInit(g_ptr->model, axis_id, PRO_AXIS, &amp;modelitem);
+  PT_TEST_LOG_SUCC(&quot;ProModelitemInit&quot;);
+<a name="anchor-277"></a>  
+  if (status!=PRO_TK_NO_ERROR) 
+     return (status);
+  /*--------------------------------------------------------------------------*\
+	     Draw the tooth profile
+<a name="anchor-278"></a>  \*--------------------------------------------------------------------------*/
+  memset(&amp;feat_def_sketch, 0, sizeof(feat_def_sketch));
+
+  status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->front_surface_id, &amp;sketch_tree[9].data.v.r); 
+  PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+<a name="anchor-279"></a>  
+  status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->side_surface_id, &amp;sketch_tree[12].data.v.r); 
+  PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+
+  feat_def_sketch.tree = sketch_tree;
+<a name="anchor-280"></a>  feat_def_sketch.sizeof_tree = SIZEOFARR(sketch_tree);
+
+  feat_def_sketch.params[0].d = g_ptr->tooth_par1;
+  feat_def_sketch.params[1].i = g_ptr->n_of_teeth;
+  feat_def_sketch.params[2].d = g_ptr->Pressure_angle;
+<a name="anchor-281"></a>  
+  if(g_ptr->gear_type == HELICAL_GEAR || g_ptr->gear_type == SPUR_GEAR)
+  {
+  	status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->disk_side_surf_id, &amp;feat_def_sketch.params[3].r);
+	PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+<a name="anchor-282"></a>  }
+  
+  else
+  {
+        status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->tooth_surf_side_surf_id, &amp;feat_def_sketch.params[3].r);
+<a name="anchor-283"></a>	PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+  }
+		       
+  feat_def_sketch.params[4].r = sketch_tree[12].data.v.r;
+
+<a name="anchor-284"></a>  feat_def_sketch.section_create_func = ProUtilCreateToothSection;
+
+  feat_def_sketch.feat_name = &quot;SKETCH_1&quot;;
+  
+  status  = ProUtilCreateSketchedFeature(g_ptr, &amp;feat_def_sketch, &amp;sketch);
+<a name="anchor-285"></a>  PT_TEST_LOG_SUCC(&quot;ProUtilCreateSketchedFeature&quot;);
+  
+  if (status!=PRO_TK_NO_ERROR)
+	 return (-1);
+
+<a name="anchor-286"></a> 
+  /*--------------------------------------------------------------------------*\
+	     Create tooth
+  \*--------------------------------------------------------------------------*/
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, surface_id_2, &amp;tree_1[7].data.v.r); 
+<a name="anchor-287"></a>    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+    
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, surface_id_1, &amp;tree_1[10].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+    
+<a name="anchor-288"></a>    tree_1[19].data.v.d = 5 * g_ptr->gear_depth; 
+        
+    memset(&amp;feat_def_1, 0, sizeof(feat_def_1));
+    
+    feat_def_1.tree = tree_1;
+<a name="anchor-289"></a>    feat_def_1.sizeof_tree = SIZEOFARR(tree_1);
+
+    feat_def_1.params[0].r = tree_1[7].data.v.r;
+    feat_def_1.params[1].r = tree_1[10].data.v.r;
+     
+<a name="anchor-290"></a>    feat_def_1.section_create_func = ProUtilSecEntityUseCurveLoop;
+
+    feat_def_1.feat_name = &quot;TOOTH_1&quot;;
+    
+    status  = ProUtilCreateSketchedFeature(g_ptr, &amp;feat_def_1, &amp;feat_tooth);
+<a name="anchor-291"></a>    PT_TEST_LOG_SUCC(&quot;ProUtilCreateSketchedFeature&quot;);
+    
+    if (status!=PRO_TK_NO_ERROR)
+	    return (-1);
+    
+<a name="anchor-292"></a>    ProStringToWstring(w_name, &quot;TOOTH&quot;);
+    
+    status = ProArrayAlloc(0, sizeof(int), 1, (ProArray*)&amp;feats_ids);
+    PT_TEST_LOG_SUCC(&quot;ProArrayAlloc&quot;);
+    
+<a name="anchor-293"></a>    status = ProArrayObjectAdd((ProArray*)&amp;feats_ids, -1, 1, &amp;feat_tooth.id);
+    PT_TEST_LOG_SUCC(&quot;ProArrayObjectAdd&quot;);
+    
+    status = ProLocalGroupCreate(g_ptr->model, feats_ids, 1, w_name, &amp;group);
+    PT_TEST_LOG_SUCC(&quot;ProLocalGroupCreate&quot;);
+<a name="anchor-294"></a>    
+    status = ProArrayFree((ProArray*)&amp;feats_ids);
+    PT_TEST_LOG_SUCC(&quot;ProArrayFree&quot;);
+    
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-295"></a>    {
+	g_ptr->tooth_created = 1;
+    }
+    
+  /*-----------------------------------------------------------------*\
+<a name="anchor-296"></a>  Hide Sketch 
+  \*-----------------------------------------------------------------*/
+  status = ProFeatureGeomitemVisit(&amp;sketch, PRO_CURVE, ProUtilGeomItemVisitCurve, NULL, (ProAppData)&amp;app_data);
+  PT_TEST_LOG_SUCC(&quot;ProFeatureGeomitemVisit&quot;);
+
+<a name="anchor-297"></a>  curve_id = app_data.id;
+
+  status = ProModelitemInit (g_ptr->model,  curve_id, PRO_CURVE,  &amp;ref_item);
+  PT_TEST_LOG_SUCC(&quot;ProModelitemInit&quot;);
+  
+<a name="anchor-298"></a>  status = ProModelitemHide(&amp;ref_item);
+  PT_TEST_LOG_SUCC(&quot;ProModelitemHide&quot;);
+  /*-----------------------------------------------------------------*\
+  Free allocated memory
+  \*-----------------------------------------------------------------*/
+<a name="anchor-299"></a>  status = ProSelectionFree(&amp;tree_1[10].data.v.r);
+  PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+  
+  status = ProSelectionFree(&amp;tree_1[7].data.v.r);
+  PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+<a name="anchor-300"></a>
+  return (0);
+}
+
+/*=============================================================*\
+<a name="anchor-301"></a>  Function: 	ProUserCreateTeeth
+  Purpose:	create gear teeth
+\*=============================================================*/
+int ProUserCreateTeeth(GearParam *g_ptr)
+{
+<a name="anchor-302"></a>    FeatByName tooth_datum[] = {
+	{&quot;TOOTH_1&quot;}
+    };
+    FeatByName feat_disk[] = {
+	{&quot;GEAR_DISK&quot;}
+<a name="anchor-303"></a>    };
+
+  ElemTreeData tree[] = {
+	/* 0 */ {0, PRO_E_PATTERN_ROOT, {(ProValueDataType)-1}},
+	/* 1 */ {1, PRO_E_GENPAT_TYPE, {PRO_VALUE_TYPE_INT, PRO_GENPAT_AXIS_DRIVEN}},
+<a name="anchor-304"></a>	/* 2 */ {1, PRO_E_GENPAT_DIM, {(ProValueDataType)-1}},
+	/* 3 */ {2, PRO_E_GENPAT_DIM_FIRST_DIR_NUM_INST, {PRO_VALUE_TYPE_INT, 0}},
+	/* 4 */ {2, PRO_E_GENPAT_DIM_SECOND_DIR_NUM_INST, {PRO_VALUE_TYPE_INT, 0}},
+	/* 5 */ {1, PRO_E_GENPAT_TABLE, {(ProValueDataType)-1}},
+	/* 6 */ {2, PRO_E_GENPAT_TABLE_SET_ACTIVE, {PRO_VALUE_TYPE_INT, 0}},
+<a name="anchor-305"></a>	/* 7 */ {1, PRO_E_GENPAT_REF, {(ProValueDataType)-1}},
+	/* 8 */ {2, PRO_E_GENPAT_REF_TYPE, {PRO_VALUE_TYPE_INT, 0}},
+	/* 9 */ {1, PRO_E_GENPAT_CURVE, {(ProValueDataType)-1}},
+	/* 10 */{2, PRO_E_GENPAT_CRV_PLC_TYPE, {PRO_VALUE_TYPE_INT, 0}},
+	/* 11 */{2, PRO_E_GENPAT_CRV_SPACING, {PRO_VALUE_TYPE_DOUBLE, 0}},
+<a name="anchor-306"></a>	/* 12 */{2, PRO_E_GENPAT_CRV_NUMBER, {PRO_VALUE_TYPE_INT, 0}},
+	/* 13 */{2, PRO_E_GENPAT_CRV_FLIP, {PRO_VALUE_TYPE_INT, 0}},
+	/* 14 */{1, PRO_E_GENPAT_DIR, {(ProValueDataType)-1}},
+	/* 15 */{2, PRO_E_GENPAT_DIR1, {(ProValueDataType)-1}},
+	/* 16 */{3, PRO_E_DIRECTION_COMPOUND, {(ProValueDataType)-1}},
+<a name="anchor-307"></a>	/* 17 */{4, PRO_E_DIRECTION_FLIP, {PRO_VALUE_TYPE_INT, 0}},
+	/* 18 */{2, PRO_E_GENPAT_DIR1_INC, {PRO_VALUE_TYPE_DOUBLE, 0}},
+	/* 19 */{2, PRO_E_DIR1_X_OFFSET, {PRO_VALUE_TYPE_DOUBLE, 0}},
+	/* 20 */{2, PRO_E_DIR1_Y_OFFSET, {PRO_VALUE_TYPE_DOUBLE, 0}},
+	/* 21 */{2, PRO_E_DIR1_Z_OFFSET, {PRO_VALUE_TYPE_DOUBLE, 0}},
+<a name="anchor-308"></a>	/* 22 */{2, PRO_E_DIR_PAT_DIR1_FLIP, {PRO_VALUE_TYPE_INT, 0}},
+	/* 23 */{2, PRO_E_DIR_PAT_DIR1_OPT, {PRO_VALUE_TYPE_INT, 0}},
+	/* 24 */{2, PRO_E_GENPAT_DIR2, {(ProValueDataType)-1}},
+	/* 25 */{3, PRO_E_DIRECTION_COMPOUND, {(ProValueDataType)-1}},
+	/* 26 */{4, PRO_E_DIRECTION_FLIP, {PRO_VALUE_TYPE_INT, 0}},
+<a name="anchor-309"></a>	/* 27 */{2, PRO_E_GENPAT_DIR2_INC, {PRO_VALUE_TYPE_DOUBLE, 0}},
+	/* 28 */{2, PRO_E_DIR1_X_OFFSET, {PRO_VALUE_TYPE_DOUBLE, 0}},
+	/* 29 */{2, PRO_E_DIR1_Y_OFFSET, {PRO_VALUE_TYPE_DOUBLE, 0}},
+	/* 30 */{2, PRO_E_DIR1_Z_OFFSET, {PRO_VALUE_TYPE_DOUBLE, 0}},
+	/* 31 */{2, PRO_E_DIR_PAT_DIR2_FLIP, {PRO_VALUE_TYPE_INT, 0}},
+<a name="anchor-310"></a>	/* 32 */{2, PRO_E_DIR_PAT_DIR2_OPT, {PRO_VALUE_TYPE_INT, 0}},
+	/* 33 */{2, PRO_E_GENPAT_DIM_FIRST_DIR_NUM_INST, {PRO_VALUE_TYPE_INT, 0}},
+	/* 34 */{2, PRO_E_GENPAT_DIM_SECOND_DIR_NUM_INST, {PRO_VALUE_TYPE_INT, 0}},
+	/* 35 */{1, PRO_E_GENPAT_AXIS, {(ProValueDataType)-1}},
+	/* 36 */{2, PRO_E_GENPAT_AXIS_REF, {PRO_VALUE_TYPE_SELECTION}},
+<a name="anchor-311"></a>	/* 37 */{2, PRO_E_GENPAT_AXIS1_INC, {PRO_VALUE_TYPE_DOUBLE}},
+	/* 38 */{2, PRO_E_AXIS_PAT_DIR1_FLIP, {PRO_VALUE_TYPE_INT, 0}},
+	/* 39 */{2, PRO_E_GENPAT_AXIS2_INC, {PRO_VALUE_TYPE_DOUBLE, 4.0200}},
+	/* 40 */{2, PRO_E_AXIS_PAT_DIR2_FLIP, {PRO_VALUE_TYPE_INT, 0}},
+	/* 41 */{2, PRO_E_GENPAT_AXIS_ANG_WHOLE, {PRO_VALUE_TYPE_DOUBLE, 360}},
+<a name="anchor-312"></a>	/* 42 */{2, PRO_E_GENPAT_DIM_FIRST_DIR_NUM_INST, {PRO_VALUE_TYPE_INT}},
+	/* 43 */{2, PRO_E_GENPAT_DIM_SECOND_DIR_NUM_INST, {PRO_VALUE_TYPE_INT, 1}},
+	/* 44 */{1, PRO_E_GEOMPAT_SOLIDIFY_OPT, {PRO_VALUE_TYPE_INT, 0}},
+	/* 45 */{1, PRO_E_GENPAT_REGEN_METHOD, {PRO_VALUE_TYPE_INT, 4}},
+	/* 46 */{1, PRO_E_STD_SECTION, {(ProValueDataType)-1}},
+<a name="anchor-313"></a>	/* 47 */{2, PRO_E_STD_SEC_METHOD, {PRO_VALUE_TYPE_INT, 0}},
+	/* 48 */{2, PRO_E_STD_SEC_SETUP_PLANE, {(ProValueDataType)-1}},
+	/* 49 */{3, PRO_E_STD_SEC_PLANE_VIEW_DIR, {PRO_VALUE_TYPE_INT, 0}},
+	/* 50 */{3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, {PRO_VALUE_TYPE_INT, 0}},
+	/* 51 */{1, PRO_E_GENPAT_PROJECT, {(ProValueDataType)-1}},
+<a name="anchor-314"></a>	/* 52 */{2, PRO_E_GENPAT_PROJ_OPT, {PRO_VALUE_TYPE_INT, 0}},
+	/* 53 */{2, PRO_E_GENPAT_PROJ_OR_TYPE, {PRO_VALUE_TYPE_INT, 1}},
+	/* 54 */{1, PRO_E_GENPAT_ALT_ORIG, {(ProValueDataType)-1}},
+	/* 55 */{2, PRO_E_GENPAT_ALT_ORG_OPT, {PRO_VALUE_TYPE_INT, 0}},
+	/* 56 */{1, PRO_E_GENPAT_CRV_OR_TYPE, {PRO_VALUE_TYPE_INT, 1}},
+<a name="anchor-315"></a>	/* 57 */{1, PRO_E_GENPAT_POINT, {(ProValueDataType)-1}},
+	/* 58 */{2, PRO_E_GENPAT_POINT_REF_TYPE, {PRO_VALUE_TYPE_INT, 0}},
+	/* 59 */{1, PRO_E_GENPAT_OFFSET_FROM_SKET, {PRO_VALUE_TYPE_INT, 0}},
+	/* 60 */{1, PRO_E_PAT_APPLICATIONS, {(ProValueDataType)-1}},
+	/* 61 */{2, PRO_E_PAT_MFG_TOOL_PATH, {(ProValueDataType)-1}},
+<a name="anchor-316"></a>	/* 62 */{3, PRO_E_PAT_MFG_ORD_LEADER, {PRO_VALUE_TYPE_INT, 0}},
+	/* 63 */{3, PRO_E_PAT_MFG_ORDER_OPT, {PRO_VALUE_TYPE_INT, 0}},
+	/* 64 */{3, PRO_E_PAT_MFG_ORD_REVERSE, {PRO_VALUE_TYPE_INT, 0}},
+	/* 65 */{3, PRO_E_PAT_MFG_ORD_ALT_ROWS, {PRO_VALUE_TYPE_INT, 0}},
+	/* 66 */{3, PRO_E_PAT_MFG_ORD_ALT_DIR, {PRO_VALUE_TYPE_INT, 0}},
+<a name="anchor-317"></a>	/* 67 */{3, PRO_E_PAT_MFG_ORD_SHARED, {PRO_VALUE_TYPE_INT, 0}},
+	/* 68 */{3, PRO_E_PAT_MFG_FIX_OFFSET, {PRO_VALUE_TYPE_INT, 0}},
+	/* 69 */{3, PRO_E_PAT_MFG_FIX_OFF_INIT, {PRO_VALUE_TYPE_INT, 0}},
+	/* 70 */{3, PRO_E_PAT_MFG_FIX_OFF_INCR, {PRO_VALUE_TYPE_INT, 0}}	
+    };    
+<a name="anchor-318"></a>    int n_dims, ret, *p_dim_ids, *p_feat_ids, *p_tooth_ids, i, n_feats;
+    int n_tooth_feats, axis_id;
+    ProFeature feature, feature_disk;
+    ProLayerItem layer_item;
+    ProLayer layer;
+<a name="anchor-319"></a>    ProCharName str;
+    ProName     w_str;
+    ProElement elem_tree;
+    ProModelitem modelitem, modelitem_disk;
+    ProError status;
+<a name="anchor-320"></a>    
+    ProSelection featsel;
+
+    if (!g_ptr->tooth_created)
+      return (-1);
+<a name="anchor-321"></a>
+
+  /*=====================================================================*/
+
+    status = ProUtilFeatsByName(g_ptr->model, feat_disk, 1);
+<a name="anchor-322"></a>    PT_TEST_LOG_SUCC(&quot;ProUtilFeatsByName.......ProUserCreateTeeth&quot;);
+    
+    if (status != PRO_TK_NO_ERROR || feat_disk[0].id == -1)
+	return (status);
+
+<a name="anchor-323"></a>    status = ProFeatureInit(g_ptr->model, feat_disk[0].id, &amp;feature_disk);
+    PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+    
+    status = ProUtilFeatFirstGeomitem(&amp;feature_disk, PRO_AXIS, &amp;axis_id);    
+    PT_TEST_LOG_SUCC(&quot;ProUtilFeatFirstGeomitem&quot;);
+<a name="anchor-324"></a>    
+    if (status != PRO_TK_NO_ERROR)
+	return (status);
+
+    status = ProModelitemInit(g_ptr->model, axis_id, PRO_AXIS, &amp;modelitem_disk);
+<a name="anchor-325"></a>    PT_TEST_LOG_SUCC(&quot;ProModelitemInit&quot;);
+    
+    if (status!=PRO_TK_NO_ERROR) 
+	return (status);
+
+<a name="anchor-326"></a>
+  /*-----------------------------------------------------------------*\
+    Preparation of feature data
+  \*-----------------------------------------------------------------*/
+    status = ProUtilFeatsByName(g_ptr->model, tooth_datum, 1);
+<a name="anchor-327"></a>    PT_TEST_LOG_SUCC(&quot;ProUtilFeatsByName&quot;);
+    
+    if (status != PRO_TK_NO_ERROR || tooth_datum[0].id == -1)
+	return (status);
+
+<a name="anchor-328"></a>    status = ProFeatureInit(g_ptr->model, tooth_datum[0].id, &amp;feature);
+    PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+
+    status = ProUtilSelectionFromAxisId(g_ptr->model, axis_id, &amp;tree[36].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromAxisId&quot;);
+<a name="anchor-329"></a>
+    tree[42].data.v.i = g_ptr->n_of_teeth;
+
+    tree[37].data.v.d = (float)360.00 / g_ptr->n_of_teeth;
+
+<a name="anchor-330"></a>    status = ProUtilElemtreeCreate(tree, SIZEOFARR(tree), NULL, &amp;elem_tree);
+    PT_TEST_LOG_SUCC(&quot;ProUtilElemtreeCreate&quot;);
+
+    status = ProPatternCreate(&amp;feature, PRO_FEAT_PATTERN, elem_tree);
+    PT_TEST_LOG_SUCC(&quot;ProPatternCreate&quot;);
+<a name="anchor-331"></a>
+   return (status); 
+
+  }
+
+<a name="anchor-332"></a>  /*=============================================================*\
+  Function: 	ProUserCreateHub
+  Purpose:	create inner support hub
+\*=============================================================*/
+int ProUserCreateHub(GearParam *g_ptr)
+<a name="anchor-333"></a>{
+    ElemTreeData tree[]={
+	{0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_PROTRUSION}},
+	{1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+<a name="anchor-334"></a>
+	{1, PRO_E_EXT_SURF_CUT_SOLID_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_TYPE_SOLID}},
+	{1, PRO_E_REMOVE_MATERIAL, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_ADD}},
+	{1, PRO_E_STD_SECTION,  {(ProValueDataType)-1}},
+	{2, PRO_E_STD_SEC_SETUP_PLANE,  {(ProValueDataType)-1}},
+<a name="anchor-335"></a>	{3, PRO_E_STD_SEC_PLANE, {PRO_VALUE_TYPE_SELECTION}},
+	{3, PRO_E_STD_SEC_PLANE_VIEW_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_VIEW_DIR_SIDE_ONE}},
+	{3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_ORIENT_DIR_LEFT}},
+	{3, PRO_E_STD_SEC_PLANE_ORIENT_REF, {PRO_VALUE_TYPE_SELECTION}},
+	{1, PRO_E_FEAT_FORM_IS_THIN, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_FORM_NO_THIN}},
+<a name="anchor-336"></a>	{1, PRO_E_STD_DIRECTION, {PRO_VALUE_TYPE_INT, PRO_EXT_CR_IN_SIDE_TWO}},
+	{1, PRO_E_STD_EXT_DEPTH, {(ProValueDataType)-1}},
+	{2, PRO_E_EXT_DEPTH_FROM, {(ProValueDataType)-1}},
+	{3, PRO_E_EXT_DEPTH_FROM_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_FROM_NONE}},
+	{2, PRO_E_EXT_DEPTH_TO, {(ProValueDataType)-1}},
+<a name="anchor-337"></a>	{3, PRO_E_EXT_DEPTH_TO_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_TO_BLIND}},
+	{3, PRO_E_EXT_DEPTH_TO_VALUE, {PRO_VALUE_TYPE_DOUBLE}},
+    };
+    
+    FeatureDef feat_def;
+<a name="anchor-338"></a>    ProFeature feature;
+    Pro3dPnt pnt;
+    ProModelitem modelitem;
+    ProError status;
+
+<a name="anchor-339"></a>    if (g_ptr->hub_out_diam == 0.0 || g_ptr->hub_depth == 0.0)
+      return 1;
+
+/*-----------------------------------------------------------------*\
+    Preparation of feature data
+<a name="anchor-340"></a>\*-----------------------------------------------------------------*/
+    memset(&amp;feat_def, 0, sizeof(feat_def));
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->gear_type == SPUR_GEAR ?
+	g_ptr->disk_front_surf_id : g_ptr->backplate_back_surf_id, 
+	&amp;tree[7].data.v.r);
+<a name="anchor-341"></a>    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId........ProUserCreateHub&quot;);
+    
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->side_surface_id, &amp;tree[10].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+    
+<a name="anchor-342"></a>    tree[18].data.v.d = g_ptr->hub_depth; 
+
+    feat_def.tree = tree;
+    feat_def.sizeof_tree = SIZEOFARR(tree);
+
+<a name="anchor-343"></a>    feat_def.params[0].d = g_ptr->hub_out_diam;
+    feat_def.params[1].r = tree[10].data.v.r;
+    
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->bottom_surface_id, &amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+<a name="anchor-344"></a>    
+    feat_def.section_create_func = ProUtilCreateCircleSection;
+
+    feat_def.feat_name  = &quot;Hub&quot;;
+
+<a name="anchor-345"></a>/*-----------------------------------------------------------------*\
+    Create new feature
+\*-----------------------------------------------------------------*/
+    status  = ProUtilCreateSketchedFeature(g_ptr, &amp;feat_def, &amp;feature);
+    PT_TEST_LOG_SUCC(&quot;ProUtilCreateSketchedFeature&quot;);
+<a name="anchor-346"></a>    
+    if (status == PRO_TK_NO_ERROR)
+    {
+	g_ptr->hub_created = 1;
+	
+<a name="anchor-347"></a>	ProUserFeatsReorder(g_ptr);
+	
+/*-----------------------------------------------------------------*\
+    Find and name required surfaces
+\*-----------------------------------------------------------------*/
+<a name="anchor-348"></a>	pnt[0] = g_ptr->datum_x_offset;
+	pnt[1] = g_ptr->datum_y_offset + (g_ptr->inner_diam + g_ptr->hub_out_diam)/4; /* This point is located on flat surface of hub away from gear */
+	if (g_ptr->gear_type == SPUR_GEAR || g_ptr->gear_type == HELICAL_GEAR)
+	  pnt[2] = g_ptr->datum_z_offset + g_ptr->gear_depth + g_ptr->hub_depth;  /* For spur and helical gear hub is in positive direction of z-axis */
+	else
+<a name="anchor-349"></a>	    pnt[2] = g_ptr->datum_z_offset - g_ptr->backplate_depth - g_ptr->hub_depth; /* For ring gear hub is in negative direction of z-axis */
+	ProUtilGeometryAtPointFind((ProPart)g_ptr->model, pnt, &amp;modelitem);
+
+	g_ptr->hub_front_surf_id = modelitem.id;
+
+<a name="anchor-350"></a>	status = ProUtilModelitemNameSet(&amp;modelitem, &quot;HUB_FRONT&quot;);
+        PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+
+	pnt[0] = g_ptr->datum_x_offset;
+	pnt[1] = g_ptr->datum_y_offset + g_ptr->hub_out_diam/2; /* This point is located on circular surface of hub (Along the depth)*/
+<a name="anchor-351"></a>	
+	if (g_ptr->gear_type == SPUR_GEAR || g_ptr->gear_type == HELICAL_GEAR)
+	    pnt[2] = g_ptr->datum_z_offset + g_ptr->gear_depth + g_ptr->hub_depth/2;
+	else
+	    pnt[2] = g_ptr->datum_z_offset - g_ptr->backplate_depth - g_ptr->hub_depth/2;
+<a name="anchor-352"></a>	
+	status = ProUtilGeometryAtPointFind((ProPart)g_ptr->model, pnt, &amp;modelitem);
+        PT_TEST_LOG_SUCC(&quot;ProUtilGeometryAtPointFind&quot;);
+
+	g_ptr->hub_side_surf_id = modelitem.id;
+<a name="anchor-353"></a>
+	status = ProUtilModelitemNameSet(&amp;modelitem, &quot;HUB_SIDE&quot;);
+        PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+    }
+/*-----------------------------------------------------------------*\
+<a name="anchor-354"></a>    Free allocated memory
+\*-----------------------------------------------------------------*/
+    status = ProSelectionFree(&amp;tree[7].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+<a name="anchor-355"></a>    status = ProSelectionFree(&amp;tree[10].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    status = ProSelectionFree(&amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+<a name="anchor-356"></a>    
+    return (status);
+}
+
+/*=============================================================*\
+<a name="anchor-357"></a>  Function: 	ProUserCreateBackPlate
+  Purpose:	create first gear tooth
+\*=============================================================*/
+int ProUserCreateBackPlate(GearParam *g_ptr)
+{
+<a name="anchor-358"></a>    ElemTreeData tree[]={
+	{0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_PROTRUSION}},
+	{1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+	{1, PRO_E_EXT_SURF_CUT_SOLID_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_TYPE_SOLID}},
+<a name="anchor-359"></a>	{1, PRO_E_REMOVE_MATERIAL, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_ADD}},
+	{1, PRO_E_STD_SECTION,  {(ProValueDataType)-1}},
+	{2, PRO_E_STD_SEC_SETUP_PLANE, {(ProValueDataType)-1}},
+	{3, PRO_E_STD_SEC_PLANE, {PRO_VALUE_TYPE_SELECTION}},
+	{3, PRO_E_STD_SEC_PLANE_VIEW_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_VIEW_DIR_SIDE_TWO}},
+<a name="anchor-360"></a>	{3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_ORIENT_DIR_LEFT}},
+	{3, PRO_E_STD_SEC_PLANE_ORIENT_REF, {PRO_VALUE_TYPE_SELECTION}},
+	{1, PRO_E_FEAT_FORM_IS_THIN, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_FORM_NO_THIN}},
+	{1, PRO_E_STD_DIRECTION, {PRO_VALUE_TYPE_INT, PRO_EXT_CR_IN_SIDE_TWO}},
+	{1, PRO_E_STD_EXT_DEPTH, {(ProValueDataType)-1}},
+<a name="anchor-361"></a>	{2, PRO_E_EXT_DEPTH_FROM, {(ProValueDataType)-1}},
+	{3, PRO_E_EXT_DEPTH_FROM_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_FROM_NONE}},
+	{2, PRO_E_EXT_DEPTH_TO, {(ProValueDataType)-1}},
+	{3, PRO_E_EXT_DEPTH_TO_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_TO_BLIND}},
+	{3, PRO_E_EXT_DEPTH_TO_VALUE, {PRO_VALUE_TYPE_DOUBLE}},
+<a name="anchor-362"></a>    };
+    
+    FeatureDef feat_def;
+    ProFeature feature;
+    Pro3dPnt pnt;
+<a name="anchor-363"></a>    ProModelitem modelitem;
+    ProError status;
+    
+    if (g_ptr->backplate_diam == 0.0 || g_ptr->backplate_depth == 0.0)
+      return 1;
+<a name="anchor-364"></a>    
+/*-----------------------------------------------------------------*\
+    Preparation of feature data
+\*-----------------------------------------------------------------*/
+    memset(&amp;feat_def, 0, sizeof(feat_def));
+<a name="anchor-365"></a>    
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->front_surface_id, &amp;tree[7].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId......ProUserCreateBackPlate&quot;);
+    
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->side_surface_id, &amp;tree[10].data.v.r);
+<a name="anchor-366"></a>    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+    
+    tree[18].data.v.d = g_ptr->backplate_depth; 
+
+    feat_def.tree = tree;
+<a name="anchor-367"></a>    feat_def.sizeof_tree = SIZEOFARR(tree);
+
+    feat_def.params[0].d = g_ptr->backplate_diam;
+    feat_def.params[1].r = tree[10].data.v.r;
+    
+<a name="anchor-368"></a>    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->bottom_surface_id, &amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+    
+    feat_def.section_create_func = ProUtilCreateCircleSection;
+
+<a name="anchor-369"></a>    feat_def.feat_name  = &quot;Back_Plate&quot;;
+
+/*-----------------------------------------------------------------*\
+    Create new feature
+\*-----------------------------------------------------------------*/
+<a name="anchor-370"></a>    status  = ProUtilCreateSketchedFeature(g_ptr, &amp;feat_def, &amp;feature);
+    PT_TEST_LOG_SUCC(&quot;ProUtilCreateSketchedFeature&quot;);
+    
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-371"></a>	g_ptr->backplate_created = 1;
+	
+	ProUserFeatsReorder(g_ptr);
+	
+/*-----------------------------------------------------------------*\
+<a name="anchor-372"></a>    Find and name required surfaces
+\*-----------------------------------------------------------------*/
+	pnt[0] = g_ptr->datum_x_offset + (g_ptr->backplate_diam - g_ptr->inner_diam)/2;
+	pnt[1] = g_ptr->datum_y_offset; 
+	pnt[2] = g_ptr->datum_z_offset - g_ptr->backplate_depth;
+<a name="anchor-373"></a>	
+	status = ProUtilGeometryAtPointFind((ProPart)g_ptr->model, pnt, &amp;modelitem);
+	PT_TEST_LOG_SUCC(&quot;ProUtilGeometryAtPointFind&quot;);
+	
+	g_ptr->backplate_back_surf_id = modelitem.id;
+<a name="anchor-374"></a>	
+	status = ProUtilModelitemNameSet(&amp;modelitem, &quot;BACKPLATE_BACK&quot;);
+	PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+
+	pnt[0] = g_ptr->datum_x_offset;
+<a name="anchor-375"></a>	pnt[1] = g_ptr->datum_y_offset + g_ptr->backplate_diam/2; 
+	pnt[2] = g_ptr->datum_z_offset - g_ptr->backplate_depth/2;
+	
+	status = ProUtilGeometryAtPointFind((ProPart)g_ptr->model, pnt, &amp;modelitem);
+	PT_TEST_LOG_SUCC(&quot;ProUtilGeometryAtPointFind&quot;);
+<a name="anchor-376"></a>	
+	g_ptr->backplate_side_surf_id = modelitem.id;
+	
+	status = ProUtilModelitemNameSet(&amp;modelitem, &quot;BACKPLATE_SIDE&quot;);
+	PT_TEST_LOG_SUCC(&quot;ProUtilModelitemNameSet&quot;);
+<a name="anchor-377"></a>	
+    }
+/*-----------------------------------------------------------------*\
+    Free allocated memory
+\*-----------------------------------------------------------------*/
+<a name="anchor-378"></a>    status = ProSelectionFree(&amp;tree[7].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    status = ProSelectionFree(&amp;tree[10].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+<a name="anchor-379"></a>    
+    status = ProSelectionFree(&amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    return (status);
+<a name="anchor-380"></a>}
+
+/*=============================================================*\
+  Function: 	ProUserCreateKeyway
+  Purpose:	create keyway inner
+<a name="anchor-381"></a>\*=============================================================*/
+int ProUserCreateKeyway(GearParam *g_ptr)
+{
+    ElemTreeData tree[]= {
+	{0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+<a name="anchor-382"></a>	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_CUT}},
+	{1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+	{1, PRO_E_EXT_SURF_CUT_SOLID_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_TYPE_SOLID}},
+	{1, PRO_E_REMOVE_MATERIAL, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_REMOVE}},
+	{1, PRO_E_STD_SECTION,  {(ProValueDataType)-1}},
+<a name="anchor-383"></a>	{2, PRO_E_STD_SEC_SETUP_PLANE,  {(ProValueDataType)-1}},
+	{3, PRO_E_STD_SEC_PLANE, {PRO_VALUE_TYPE_SELECTION}},
+	{3, PRO_E_STD_SEC_PLANE_VIEW_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_VIEW_DIR_SIDE_ONE}},
+	{3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_ORIENT_DIR_RIGHT}},
+	{3, PRO_E_STD_SEC_PLANE_ORIENT_REF, {PRO_VALUE_TYPE_SELECTION}},
+<a name="anchor-384"></a>	{1, PRO_E_FEAT_FORM_IS_THIN, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_FORM_NO_THIN}},
+	{1, PRO_E_STD_DIRECTION, {PRO_VALUE_TYPE_INT, PRO_EXT_CR_IN_SIDE_TWO}},
+	{1, PRO_E_STD_MATRLSIDE, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_SIDE_TWO}},
+	{1, PRO_E_STD_EXT_DEPTH, {(ProValueDataType)-1}},
+	{2, PRO_E_EXT_DEPTH_FROM, {(ProValueDataType)-1}},
+<a name="anchor-385"></a>	{3, PRO_E_EXT_DEPTH_FROM_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_FROM_NONE}},
+	{2, PRO_E_EXT_DEPTH_TO, {(ProValueDataType)-1}},
+	{3, PRO_E_EXT_DEPTH_TO_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_TO_ALL}}
+    };
+    
+<a name="anchor-386"></a>    FeatureDef feat_def;
+    ProFeature feature;
+    ProError status;
+
+    if (g_ptr->keyway_in_width == 0.0 || g_ptr->keyway_in_height == 0.0)
+<a name="anchor-387"></a>      return 1;
+
+/*-----------------------------------------------------------------*\
+    Preparation of feature data
+\*-----------------------------------------------------------------*/
+<a name="anchor-388"></a>    memset(&amp;feat_def, 0, sizeof(feat_def));
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->disk_front_surf_id, &amp;tree[7].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId........ProUserCreateKeyway&quot;);
+    
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->side_surface_id, &amp;tree[10].data.v.r);
+<a name="anchor-389"></a>    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+    
+    tree[12].data.v.i = g_ptr->gear_type == RING_GEAR ?
+      PRO_EXT_CR_IN_SIDE_ONE : PRO_EXT_CR_IN_SIDE_TWO;
+  
+<a name="anchor-390"></a>    feat_def.tree = tree;
+    feat_def.sizeof_tree = SIZEOFARR(tree);
+
+    feat_def.params[0].d = g_ptr->keyway_in_width;
+    feat_def.params[1].d = g_ptr->keyway_in_height;
+<a name="anchor-391"></a>    
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->hole_side_surf_id, &amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+
+    feat_def.section_create_func = ProUtilCreateKeySection;
+<a name="anchor-392"></a>
+    feat_def.feat_name  = &quot;Keyway&quot;;
+
+/*-----------------------------------------------------------------*\
+    Create new feature
+<a name="anchor-393"></a>\*-----------------------------------------------------------------*/
+    status  = ProUtilCreateSketchedFeature(g_ptr, &amp;feat_def, &amp;feature);
+    PT_TEST_LOG_SUCC(&quot;ProUtilCreateSketchedFeature&quot;);
+    
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-394"></a>    {
+	g_ptr->keyway_created = 1;
+    }
+/*-----------------------------------------------------------------*\
+    Free allocated memory
+<a name="anchor-395"></a>\*-----------------------------------------------------------------*/
+    status = ProSelectionFree(&amp;tree[7].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    status = ProSelectionFree(&amp;tree[10].data.v.r);
+<a name="anchor-396"></a>    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    status = ProSelectionFree(&amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+
+<a name="anchor-397"></a>    return (status);
+}
+
+/*=============================================================*\
+  Function: 	ProUserCreateKey
+<a name="anchor-398"></a>  Purpose:	create keyway outer
+\*=============================================================*/
+int ProUserCreateKey(GearParam *g_ptr)
+{
+    ElemTreeData tree[]= {
+<a name="anchor-399"></a>	{0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_PROTRUSION}},
+	{1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+	{1, PRO_E_EXT_SURF_CUT_SOLID_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_TYPE_SOLID}},
+	{1, PRO_E_REMOVE_MATERIAL, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_ADD}},
+<a name="anchor-400"></a>	{1, PRO_E_STD_SECTION,  {(ProValueDataType)-1}},
+	{2, PRO_E_STD_SEC_SETUP_PLANE,  {(ProValueDataType)-1}},
+	{3, PRO_E_STD_SEC_PLANE, {PRO_VALUE_TYPE_SELECTION}},
+	{3, PRO_E_STD_SEC_PLANE_VIEW_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_VIEW_DIR_SIDE_ONE}},
+	{3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_ORIENT_DIR_RIGHT}},
+<a name="anchor-401"></a>	{3, PRO_E_STD_SEC_PLANE_ORIENT_REF, {PRO_VALUE_TYPE_SELECTION}},
+	{1, PRO_E_FEAT_FORM_IS_THIN, {PRO_VALUE_TYPE_INT, 0}},
+	{1, PRO_E_STD_DIRECTION, {PRO_VALUE_TYPE_INT, PRO_EXT_CR_IN_SIDE_ONE}},
+	{1, PRO_E_STD_MATRLSIDE, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_SIDE_TWO}},	
+	{1, PRO_E_STD_EXT_DEPTH, {(ProValueDataType)-1}},
+<a name="anchor-402"></a>	{2, PRO_E_EXT_DEPTH_FROM, {(ProValueDataType)-1}},
+	{3, PRO_E_EXT_DEPTH_FROM_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_FROM_NONE}},
+	{2, PRO_E_EXT_DEPTH_TO, {(ProValueDataType)-1}},
+	{3, PRO_E_EXT_DEPTH_TO_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_TO_NEXT}}
+   };
+<a name="anchor-403"></a>    
+    FeatureDef feat_def;
+    ProFeature feature;
+    ProError status;
+
+<a name="anchor-404"></a>    if (g_ptr->keyway_out_width == 0.0 || g_ptr->keyway_out_height == 0.0)
+      return 1;
+
+/*-----------------------------------------------------------------*\
+    Preparation of feature data
+<a name="anchor-405"></a>\*-----------------------------------------------------------------*/
+    memset(&amp;feat_def, 0, sizeof(feat_def));
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->hub_front_surf_id, &amp;tree[7].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId.........ProUserCreateKey&quot;);
+    
+<a name="anchor-406"></a>    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->side_surface_id, &amp;tree[10].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+    
+    tree[9].data.v.i = g_ptr->gear_type == RING_GEAR ?
+      PRO_SEC_ORIENT_DIR_LEFT : PRO_SEC_ORIENT_DIR_RIGHT;
+<a name="anchor-407"></a>  
+    feat_def.tree = tree;
+    feat_def.sizeof_tree = SIZEOFARR(tree);
+
+    feat_def.params[0].d = g_ptr->keyway_out_width;
+<a name="anchor-408"></a>    feat_def.params[1].d = g_ptr->keyway_out_height;
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->hub_side_surf_id, &amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+
+    feat_def.section_create_func = ProUtilCreateKeySection;
+<a name="anchor-409"></a>
+    feat_def.feat_name  = &quot;Key&quot;;
+
+/*-----------------------------------------------------------------*\
+    Create new feature
+<a name="anchor-410"></a>\*-----------------------------------------------------------------*/
+    status  = ProUtilCreateSketchedFeature(g_ptr, &amp;feat_def, &amp;feature);
+    PT_TEST_LOG_SUCC(&quot;ProUtilCreateSketchedFeature&quot;);
+    
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-411"></a>    {
+	g_ptr->key_created = 1;
+    }
+/*-----------------------------------------------------------------*\
+    Free allocated memory
+<a name="anchor-412"></a>\*-----------------------------------------------------------------*/
+    status = ProSelectionFree(&amp;tree[7].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    status = ProSelectionFree(&amp;tree[10].data.v.r);
+<a name="anchor-413"></a>    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    status = ProSelectionFree(&amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+<a name="anchor-414"></a>    return (status);
+}
+
+/*=============================================================*\
+  Function: 	ProUserCreateBackNotch
+<a name="anchor-415"></a>  Purpose:	create a notch on the Back Plate
+\*=============================================================*/
+int ProUserCreateBackNotch(GearParam *g_ptr)
+{
+    ElemTreeData tree[]={
+<a name="anchor-416"></a>	{0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, PRO_FEAT_CUT}},
+	{1, PRO_E_FEATURE_FORM, {PRO_VALUE_TYPE_INT, PRO_EXTRUDE}},
+	{1, PRO_E_EXT_SURF_CUT_SOLID_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_TYPE_SOLID}},
+	{1, PRO_E_REMOVE_MATERIAL, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_REMOVE}},
+<a name="anchor-417"></a>	{1, PRO_E_STD_SECTION,  {(ProValueDataType)-1}},
+	{2, PRO_E_STD_SEC_SETUP_PLANE,  {(ProValueDataType)-1}},
+	{3, PRO_E_STD_SEC_PLANE, {PRO_VALUE_TYPE_SELECTION}},
+	{3, PRO_E_STD_SEC_PLANE_VIEW_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_VIEW_DIR_SIDE_ONE}},
+	{3, PRO_E_STD_SEC_PLANE_ORIENT_DIR, {PRO_VALUE_TYPE_INT, PRO_SEC_ORIENT_DIR_RIGHT}},
+<a name="anchor-418"></a>	{3, PRO_E_STD_SEC_PLANE_ORIENT_REF, {PRO_VALUE_TYPE_SELECTION}},
+	{1, PRO_E_FEAT_FORM_IS_THIN, {PRO_VALUE_TYPE_INT, PRO_EXT_FEAT_FORM_NO_THIN}},
+	{1, PRO_E_STD_DIRECTION, {PRO_VALUE_TYPE_INT, PRO_EXT_CR_IN_SIDE_ONE}},
+	{1, PRO_E_STD_MATRLSIDE, {PRO_VALUE_TYPE_INT, PRO_EXT_MATERIAL_SIDE_TWO}},	
+	{1, PRO_E_STD_EXT_DEPTH, {(ProValueDataType)-1}},
+<a name="anchor-419"></a>	{2, PRO_E_EXT_DEPTH_FROM, {(ProValueDataType)-1}},
+	{3, PRO_E_EXT_DEPTH_FROM_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_FROM_NONE}},
+	{2, PRO_E_EXT_DEPTH_TO, {(ProValueDataType)-1}},
+	{3, PRO_E_EXT_DEPTH_TO_TYPE, {PRO_VALUE_TYPE_INT, PRO_EXT_DEPTH_TO_NEXT}}
+    };
+<a name="anchor-420"></a>    
+    FeatureDef feat_def;
+    ProFeature feature;
+    ProError status;
+
+<a name="anchor-421"></a>    if (g_ptr->backnotch_rad == 0.0 || g_ptr->backplate_diam == 0.0)
+      return 1;
+
+/*-----------------------------------------------------------------*\
+    Preparation of feature data
+<a name="anchor-422"></a>\*-----------------------------------------------------------------*/
+    memset(&amp;feat_def, 0, sizeof(feat_def));
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->front_surface_id, &amp;tree[7].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId...........ProUserCreateBackNotch&quot;);
+    
+<a name="anchor-423"></a>    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->side_surface_id, &amp;tree[10].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+
+    feat_def.tree = tree;
+    feat_def.sizeof_tree = SIZEOFARR(tree);
+<a name="anchor-424"></a>
+    feat_def.params[0].d = g_ptr->backplate_diam;
+    feat_def.params[1].d = g_ptr->backnotch_rad;
+    status = ProUtilSelectionFromSurfaceId(g_ptr->model, g_ptr->backplate_side_surf_id, &amp;feat_def.params[2].r);
+    PT_TEST_LOG_SUCC(&quot;ProUtilSelectionFromSurfaceId&quot;);
+<a name="anchor-425"></a>
+    feat_def.section_create_func = ProUtilCreateNotchSection;
+
+    feat_def.feat_name  = &quot;Back_Notch&quot;;
+
+<a name="anchor-426"></a>/*-----------------------------------------------------------------*\
+    Create new feature
+\*-----------------------------------------------------------------*/
+    status  = ProUtilCreateSketchedFeature(g_ptr, &amp;feat_def, &amp;feature);
+    PT_TEST_LOG_SUCC(&quot;ProUtilCreateSketchedFeature&quot;);
+<a name="anchor-427"></a>    
+    if (status == PRO_TK_NO_ERROR)
+    {
+	g_ptr->backnotch_created = 1;
+    }
+<a name="anchor-428"></a>/*-----------------------------------------------------------------*\
+    Free allocated memory
+\*-----------------------------------------------------------------*/
+    status = ProSelectionFree(&amp;tree[7].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+<a name="anchor-429"></a>    
+    status = ProSelectionFree(&amp;tree[10].data.v.r);
+    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    status = ProSelectionFree(&amp;feat_def.params[2].r);
+<a name="anchor-430"></a>    PT_TEST_LOG_SUCC(&quot;ProSelectionFree&quot;);
+    
+    return (status);
+}
+
+<a name="anchor-431"></a>/*=============================================================*\
+  Function: 	ProUserFeatsReorder
+  Purpose:	move hole and keyslot to end 
+  Return :      0 if successfull, -1 otherwise
+\*=============================================================*/
+<a name="anchor-432"></a>int ProUserFeatsReorder(GearParam *g_ptr)
+{
+    
+    int *p_feat_id_ar, n_features, ids[2], n = 0;
+    ProFeatStatus *p_status_ar;
+<a name="anchor-433"></a>    ProError status;
+    FeatByName feats[2];
+
+    feats [0].name = &quot;GEAR_HOLE&quot;;
+    feats [1].name = &quot;KEYWAY&quot;;
+<a name="anchor-434"></a>
+    if (g_ptr->hole_created == 0) 
+	return (0);
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-435"></a>    Find &quot;hole&quot; and &quot;keyway&quot; features
+\*-----------------------------------------------------------------*/
+    status = ProUtilFeatsByName((ProSolid)g_ptr->model, feats, 2);
+    PT_TEST_LOG_SUCC(&quot;ProUtilFeatsByName...........ProUserFeatsReorder&quot;);
+    
+<a name="anchor-436"></a>    if (status != PRO_TK_NO_ERROR)
+	return (status);
+
+    status = ProArrayAlloc(0, sizeof(int), 1, (ProArray*)&amp;p_feat_id_ar);
+    PT_TEST_LOG_SUCC(&quot;ProArrayAlloc&quot;);
+<a name="anchor-437"></a>    
+    status = ProArrayAlloc(0, sizeof(ProFeatStatus), 1, (ProArray*)&amp;p_status_ar);
+    PT_TEST_LOG_SUCC(&quot;ProArrayAlloc&quot;);
+
+    status = ProSolidFeatstatusGet((ProSolid)g_ptr->model, &amp;p_feat_id_ar, &amp;p_status_ar, &amp;n_features);
+<a name="anchor-438"></a>    PT_TEST_LOG_SUCC(&quot;ProSolidFeatstatusGet&quot;);
+
+    if (g_ptr->hole_created) 
+	ids[n++] = feats[0].id;
+    if (g_ptr->keyway_created) 
+<a name="anchor-439"></a>	ids[n++] = feats[1].id;
+/*-----------------------------------------------------------------*\
+    Set changed order of features
+\*-----------------------------------------------------------------*/
+    if (n)
+<a name="anchor-440"></a>      status = ProFeatureReorder((ProSolid)g_ptr->model, ids, n, n_features); 
+      PT_TEST_LOG_SUCC(&quot;ProFeatureReorder&quot;);
+/*-----------------------------------------------------------------*\
+    Free allocated memory
+\*-----------------------------------------------------------------*/
+<a name="anchor-441"></a>    status = ProArrayFree((ProArray*)&amp;p_feat_id_ar);
+    PT_TEST_LOG_SUCC(&quot;ProArrayFree&quot;);
+    
+    status = ProArrayFree((ProArray*)&amp;p_status_ar);
+    PT_TEST_LOG_SUCC(&quot;ProArrayFree&quot;);
+<a name="anchor-442"></a>
+/*-----------------------------------------------------------------*\
+    Redisplay model
+\*-----------------------------------------------------------------*/
+    status = ProSolidDisplay((ProSolid)g_ptr->model);
+<a name="anchor-443"></a>    PT_TEST_LOG_SUCC(&quot;ProSolidDisplay&quot;);
+    
+    status = ProTreetoolRefresh(g_ptr->model);
+    PT_TEST_LOG_SUCC(&quot;ProTreetoolRefresh&quot;);
+    
+<a name="anchor-444"></a>    return (0);
+}
+
+typedef struct
+{
+<a name="anchor-445"></a>  double*  value;
+  int find_index;
+  int index;
+} ProUserDimensionFinddata;
+
+<a name="anchor-446"></a>
+/*=============================================================*\
+  Function: 	ProUserGetDimensionValue
+  Purpose:	find first dimension; store value 
+\*=============================================================*/
+<a name="anchor-447"></a>ProError   ProUserGetDimensionValue (ProDimension* dim, 
+				 ProError status, 
+				 ProAppData data)
+{
+  ProUserDimensionFinddata* find_data = (ProUserDimensionFinddata*) data;
+<a name="anchor-448"></a>
+  status = ProDimensionValueGet (dim, find_data->value);
+  PT_TEST_LOG_SUCC(&quot;ProDimensionValueGet........ProUserGetDimensionValue&quot;);
+
+  return PRO_TK_ABORT;
+<a name="anchor-449"></a>}
+
+/*=============================================================*\
+  Function: 	ProUserFindDiameterDimension
+  Purpose:	find diameter dimension
+<a name="anchor-450"></a>\*=============================================================*/
+ProError   ProUserFindDiameterDimension (ProDimension* dim, 
+				 ProAppData data)
+{
+  ProDimensiontype type;
+<a name="anchor-451"></a>  ProError status;
+
+  ProDimensionTypeGet (dim, &amp;type);
+
+  if (type == PRODIMTYPE_DIAMETER)
+<a name="anchor-452"></a>    return PRO_TK_NO_ERROR;
+  else
+    return PRO_TK_CONTINUE;
+}
+
+<a name="anchor-453"></a>/*=============================================================*\
+  Function: 	ProUserFindDiameterDimension
+  Purpose:	find non-diameter dimension
+\*=============================================================*/
+ProError   ProUserFindNondiameterDimension (ProDimension* dim, 
+<a name="anchor-454"></a>				 ProAppData data)
+{
+  ProDimensiontype type;
+  double value;
+  ProError status;
+<a name="anchor-455"></a>
+  ProDimensionTypeGet (dim, &amp;type);
+
+  if (type == PRODIMTYPE_DIAMETER || type == PRODIMTYPE_UNKNOWN)
+    return PRO_TK_CONTINUE;
+<a name="anchor-456"></a>  else
+    return PRO_TK_NO_ERROR;
+}
+
+/*=============================================================*\
+<a name="anchor-457"></a>  Function: 	ProUserFindDiameterDimension
+  Purpose:	find nth dimension in the visit
+\*=============================================================*/
+ProError   ProUserFindDimensionByIndex (ProDimension* dim, 
+					ProAppData data)
+<a name="anchor-458"></a>{
+   ProUserDimensionFinddata* find_data = (ProUserDimensionFinddata*) data;
+
+   ProDimensiontype type;
+   ProError status;
+<a name="anchor-459"></a>   ProDimensionTypeGet (dim, &amp;type);
+   if (type == PRODIMTYPE_UNKNOWN)
+     return PRO_TK_CONTINUE;
+
+   find_data->index ++;
+<a name="anchor-460"></a>   
+   if (find_data->index == find_data->find_index)
+     return PRO_TK_NO_ERROR;
+   else
+     return PRO_TK_CONTINUE;
+<a name="anchor-461"></a>}
+
+/*=============================================================*\
+  Function: 	ProUserCheckFeatures
+  Purpose:	to check models features
+<a name="anchor-462"></a>  Return :      0 if successfull, PRO_TK_E_NOT_FOUND if no 
+		default csys or datum planes found, 
+		PRO_TK_GENERAL_ERROR otherwise
+\*=============================================================*/
+ProError ProUserCheckFeatures(GearParam *g_ptr)
+<a name="anchor-463"></a>{
+    static FeatByName feats[] = {
+	{&quot;GD_FRONT&quot;},		/*  0 */
+	{&quot;GD_SIDE&quot;},		/*  1 */
+	{&quot;GD_BOTTOM&quot;},		/*  2 */
+<a name="anchor-464"></a>	{&quot;GEAR_DISK&quot;},		/*  3 */
+	{&quot;GEAR_HOLE&quot;},		/*  4 */
+	{&quot;KEYWAY&quot;},		/*  5 */
+	{&quot;TOOTH_1&quot;},		/*  6 */
+	{&quot;TOOTH_2&quot;},		/*  7 */
+<a name="anchor-465"></a>	{&quot;HUB&quot;},		/*  8 */
+	{&quot;KEY&quot;},		/*  9 */
+	{&quot;BACK_PLATE&quot;},		/* 10 */
+	{&quot;BACK_NOTCH&quot;},		/* 11 */
+	{&quot;TOOTH_SURF&quot;}		/* 12 */
+<a name="anchor-466"></a>    };
+    int feat_num = SIZEOFARR(feats), b;
+    ProFeature f, feature;
+    ProGeomitem geomitem;
+    ProSolid solid = (ProSolid)g_ptr->model;
+<a name="anchor-467"></a>    
+    ProName w_name;
+    ProUserDimensionFinddata find_data;
+    ProError status;
+
+<a name="anchor-468"></a>    status = ProUtilFeatsByName(solid, feats, feat_num);
+    PT_TEST_LOG_SUCC(&quot;ProUtilFeatsByName.........ProUserCheckFeatures&quot;);
+    
+    b =(feats[0].id!=-1) || (feats[1].id!=-1) || (feats[2].id!=-1);
+    if (b)
+<a name="anchor-469"></a>    {
+	if (!g_ptr->datum_created)
+	{
+/*-----------------------------------------------------------------*\
+    Find datum planes surfaces
+<a name="anchor-470"></a>\*-----------------------------------------------------------------*/
+	    status = ProFeatureInit(solid, feats[0].id, &amp;f);
+	    PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+	    
+	    status = ProUtilFeatFirstGeomitem(&amp;f, PRO_SURFACE, &amp;g_ptr->front_surface_id);
+<a name="anchor-471"></a>	    PT_TEST_LOG_SUCC(&quot;ProUtilFeatFirstGeomitem&quot;);
+	    
+	    if (status != PRO_TK_NO_ERROR)
+		return (PRO_TK_GENERAL_ERROR);
+	    
+<a name="anchor-472"></a>	    find_data.value = &amp;g_ptr->datum_z_offset;
+	    status = ProFeatureDimensionVisit (&amp;f, ProUserGetDimensionValue, NULL, (ProAppData)&amp;find_data);
+	    PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+	    
+
+<a name="anchor-473"></a>	    status = ProFeatureInit(solid, feats[1].id, &amp;f);
+	    PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+	    
+	    status = ProUtilFeatFirstGeomitem(&amp;f, PRO_SURFACE, &amp;g_ptr->side_surface_id);
+	    PT_TEST_LOG_SUCC(&quot;ProUtilFeatFirstGeomitem&quot;);
+<a name="anchor-474"></a>	    
+	    if (status != PRO_TK_NO_ERROR)
+		return (PRO_TK_GENERAL_ERROR);
+
+	    find_data.value = &amp;g_ptr->datum_x_offset;
+<a name="anchor-475"></a>	    status = ProFeatureDimensionVisit (&amp;f, ProUserGetDimensionValue, NULL, (ProAppData)&amp;find_data);
+	    PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+
+	    status = ProFeatureInit(solid, feats[2].id, &amp;f);
+	    PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+<a name="anchor-476"></a>	    
+	    status =ProUtilFeatFirstGeomitem(&amp;f, PRO_SURFACE, &amp;g_ptr->bottom_surface_id);
+	    PT_TEST_LOG_SUCC(&quot;ProUtilFeatFirstGeomitem&quot;);
+	    
+	    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-477"></a>		return (PRO_TK_GENERAL_ERROR);
+
+	    find_data.value = &amp;g_ptr->datum_y_offset;
+	    
+	    status = ProFeatureDimensionVisit (&amp;f, ProUserGetDimensionValue, NULL, (ProAppData)&amp;find_data);
+<a name="anchor-478"></a>	    PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+	}
+    }
+    g_ptr->datum_created = b;
+    if ((feats[3].id!=-1) &amp;&amp; (g_ptr->disk_created==0)) 
+<a name="anchor-479"></a>    {
+/*-----------------------------------------------------------------*\
+    Find gear disk surfaces
+\*-----------------------------------------------------------------*/
+        status = ProFeatureInit(solid, feats[3].id, &amp;feature);
+<a name="anchor-480"></a>	PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+	
+        ProStringToWstring(w_name, &quot;DISK_FRONT&quot;);
+	
+        status = ProUtilFindFeatureGeomitemByName(&amp;feature, PRO_SURFACE, w_name, &amp;geomitem);
+<a name="anchor-481"></a>	PT_TEST_LOG_SUCC(&quot;ProUtilFindFeatureGeomitemByName&quot;);
+	
+	if (status != PRO_TK_NO_ERROR)
+	    return (PRO_TK_GENERAL_ERROR);
+	g_ptr->disk_front_surf_id = geomitem.id;
+<a name="anchor-482"></a>        
+	ProStringToWstring(w_name, &quot;DISK_SIDE&quot;);
+	
+        status = ProUtilFindFeatureGeomitemByName(&amp;feature, PRO_SURFACE, w_name, &amp;geomitem);
+	PT_TEST_LOG_SUCC(&quot;ProUtilFindFeatureGeomitemByName&quot;);
+<a name="anchor-483"></a>	
+	if (status != PRO_TK_NO_ERROR)
+	    return (PRO_TK_GENERAL_ERROR);
+	g_ptr->disk_side_surf_id = geomitem.id;
+
+<a name="anchor-484"></a>	find_data.value = &amp;g_ptr->gear_diam;
+	
+	status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindDiameterDimension, (ProAppData)&amp;find_data);
+	PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+
+<a name="anchor-485"></a>	find_data.value = &amp;g_ptr->gear_depth;
+	
+	status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindNondiameterDimension, (ProAppData)&amp;find_data);
+	PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+    }
+<a name="anchor-486"></a>    g_ptr->disk_created = feats[3].id!=-1;	    
+    if ((feats[4].id!=-1) &amp;&amp; (g_ptr->hole_created==0)) 
+    {
+      g_ptr->hole_created = 1;
+/*-----------------------------------------------------------------*\
+<a name="anchor-487"></a>    Find hole surfaces
+\*-----------------------------------------------------------------*/
+        status = ProFeatureInit(solid, feats[4].id, &amp;feature);
+	PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+	
+<a name="anchor-488"></a>        ProStringToWstring(w_name, &quot;HOLE_SIDE&quot;);
+	
+        ProUtilFindFeatureGeomitemByName(&amp;feature, PRO_SURFACE, w_name, &amp;geomitem);
+	
+	if (status != PRO_TK_NO_ERROR)
+<a name="anchor-489"></a>	    return (PRO_TK_GENERAL_ERROR);
+	g_ptr->hole_side_surf_id = geomitem.id;
+
+	find_data.value = &amp;g_ptr->inner_diam;
+	status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindDiameterDimension, (ProAppData)&amp;find_data);
+<a name="anchor-490"></a>	PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+	
+    }    
+    if (g_ptr->keyway_created = (feats[5].id!=-1))
+      {
+<a name="anchor-491"></a>	status = ProFeatureInit(solid, feats[5].id, &amp;feature);
+	PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+	
+	find_data.value = &amp;g_ptr->keyway_out_width;
+	find_data.find_index = 1;
+<a name="anchor-492"></a>	find_data.index = 0;
+	
+	status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindDimensionByIndex, (ProAppData)&amp;find_data);
+	PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+	
+<a name="anchor-493"></a>	find_data.value = &amp;g_ptr->keyway_out_height;
+	find_data.find_index = 2;
+	find_data.index = 0;
+
+	status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindDimensionByIndex, (ProAppData)&amp;find_data);
+<a name="anchor-494"></a>	PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+	
+      }
+    g_ptr->tooth_created = feats[6].id!=-1;	    
+    g_ptr->teeth_created = feats[7].id!=-1;	    
+<a name="anchor-495"></a>    if ((feats[8].id!=-1) &amp;&amp; (g_ptr->hub_created==0)) 
+    {
+      g_ptr->hub_created = 1;
+/*-----------------------------------------------------------------*\
+    Find hub surfaces
+<a name="anchor-496"></a>\*-----------------------------------------------------------------*/
+        status = ProFeatureInit(solid, feats[8].id, &amp;feature);
+	PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+	
+        ProStringToWstring(w_name, &quot;HUB_FRONT&quot;);
+<a name="anchor-497"></a>	
+        ProUtilFindFeatureGeomitemByName(&amp;feature, PRO_SURFACE, w_name, &amp;geomitem);
+	
+	if (status != PRO_TK_NO_ERROR)
+	    return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-498"></a>	g_ptr->hub_front_surf_id = geomitem.id;
+        
+	ProStringToWstring(w_name, &quot;HUB_SIDE&quot;);
+	
+        status = ProUtilFindFeatureGeomitemByName(&amp;feature, PRO_SURFACE, w_name, &amp;geomitem);
+<a name="anchor-499"></a>	PT_TEST_LOG_SUCC(&quot;ProUtilFindFeatureGeomitemByName&quot;);
+	
+	if (status != PRO_TK_NO_ERROR)
+	    return (PRO_TK_GENERAL_ERROR);
+	g_ptr->hub_side_surf_id = geomitem.id;
+<a name="anchor-500"></a>
+	find_data.value = &amp;g_ptr->hub_out_diam;
+	
+	status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindDiameterDimension, (ProAppData)&amp;find_data);
+	PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+<a name="anchor-501"></a>
+	find_data.value = &amp;g_ptr->hub_depth;
+	
+	status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindNondiameterDimension, (ProAppData)&amp;find_data);
+	PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+<a name="anchor-502"></a>    }
+    if (g_ptr->key_created = (feats[9].id!=-1))
+    {
+      status = ProFeatureInit(solid, feats[9].id, &amp;feature);
+      PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+<a name="anchor-503"></a>      
+      find_data.value = &amp;g_ptr->keyway_in_width;
+      find_data.find_index = 1;
+      find_data.index = 0;
+      
+<a name="anchor-504"></a>      status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindDimensionByIndex, (ProAppData)&amp;find_data);
+      PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+            
+      find_data.value = &amp;g_ptr->keyway_in_height;
+      find_data.find_index = 2;
+<a name="anchor-505"></a>      find_data.index = 0;
+      
+      status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindDimensionByIndex, (ProAppData)&amp;find_data);
+      PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+      
+<a name="anchor-506"></a>    }
+    if ((feats[10].id!=-1) &amp;&amp; (g_ptr->backplate_created==0)) 
+    {
+      g_ptr->backplate_created = 1;
+/*-----------------------------------------------------------------*\
+<a name="anchor-507"></a>    Find backplate surfaces
+\*-----------------------------------------------------------------*/
+        status = ProFeatureInit(solid, feats[10].id, &amp;feature);
+	PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+	
+<a name="anchor-508"></a>        ProStringToWstring(w_name, &quot;BACKPLATE_SIDE&quot;);
+	
+        status = ProUtilFindFeatureGeomitemByName(&amp;feature, PRO_SURFACE, w_name, &amp;geomitem);
+	PT_TEST_LOG_SUCC(&quot;ProUtilFindFeatureGeomitemByName&quot;);
+	
+<a name="anchor-509"></a>	if (status != PRO_TK_NO_ERROR)
+	    return (PRO_TK_GENERAL_ERROR);
+	g_ptr->backplate_side_surf_id = geomitem.id;
+
+        ProStringToWstring(w_name, &quot;BACKPLATE_BACK&quot;);
+<a name="anchor-510"></a>	
+        status = ProUtilFindFeatureGeomitemByName(&amp;feature, PRO_SURFACE, w_name, &amp;geomitem);
+	PT_TEST_LOG_SUCC(&quot;ProUtilFindFeatureGeomitemByName&quot;);
+	
+	if (status != PRO_TK_NO_ERROR)
+<a name="anchor-511"></a>	    return (PRO_TK_GENERAL_ERROR);
+	g_ptr->backplate_back_surf_id = geomitem.id;
+
+	find_data.value = &amp;g_ptr->backplate_diam;
+	status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindDiameterDimension, (ProAppData)&amp;find_data);
+<a name="anchor-512"></a>	PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+	
+	find_data.value = &amp;g_ptr->backplate_depth;
+	
+	status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindNondiameterDimension, (ProAppData)&amp;find_data);
+<a name="anchor-513"></a>	PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+    }
+    if (g_ptr->backnotch_created = (feats[11].id!=-1))
+      {
+	status = ProFeatureInit(solid, feats[11].id, &amp;feature);
+<a name="anchor-514"></a>	PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+	
+	find_data.value = &amp;g_ptr->backnotch_rad;
+	
+	status = ProFeatureDimensionVisit (&amp;feature, ProUserGetDimensionValue, ProUserFindNondiameterDimension, (ProAppData)&amp;find_data);
+<a name="anchor-515"></a>	PT_TEST_LOG_SUCC(&quot;ProFeatureDimensionVisit&quot;);
+	
+      }
+    if ((feats[12].id!=-1) &amp;&amp; (g_ptr->tooth_surf_created==0)) 
+    {
+<a name="anchor-516"></a>/*-----------------------------------------------------------------*\
+    Find tooth surface feature surfaces
+\*-----------------------------------------------------------------*/
+        status = ProFeatureInit(solid, feats[12].id, &amp;feature);
+	PT_TEST_LOG_SUCC(&quot;ProFeatureInit&quot;);
+<a name="anchor-517"></a>	
+        ProStringToWstring(w_name, &quot;TOOTH_SURF_SIDE&quot;);
+	
+        status = ProUtilFindFeatureGeomitemByName(&amp;feature, PRO_SURFACE, w_name, &amp;geomitem);
+	PT_TEST_LOG_SUCC(&quot;ProUtilFindFeatureGeomitemByName&quot;);
+<a name="anchor-518"></a>	
+
+	if (status != PRO_TK_NO_ERROR)
+	    return (PRO_TK_GENERAL_ERROR);
+	g_ptr->tooth_surf_side_surf_id = geomitem.id;
+<a name="anchor-519"></a>    }
+    g_ptr->tooth_surf_created = feats[12].id!=-1;	    
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-520"></a>/*=============================================================*\
+  Function: 	ProUserAssignParamDef
+  Purpose:	assign default gear parameters
+\*=============================================================*/
+int ProUserAssignParamDef (GearParam *g_ptr)
+<a name="anchor-521"></a>{
+  int i = 0;
+  int table_size = sizeof (param_def);
+
+    param_def[i++].value =  g_ptr->name;
+<a name="anchor-522"></a>    param_def[i++].value = &amp;g_ptr->units;
+    param_def[i++].value =  g_ptr->material; 
+    param_def[i++].value = &amp;g_ptr->gear_type;
+    param_def[i++].value = &amp;g_ptr->datum_x_offset;
+    param_def[i++].value = &amp;g_ptr->datum_y_offset;
+<a name="anchor-523"></a>    param_def[i++].value = &amp;g_ptr->datum_z_offset;
+    param_def[i++].value = &amp;g_ptr->gear_diam; 
+    param_def[i++].value = &amp;g_ptr->gear_depth; 
+    param_def[i++].value = &amp;g_ptr->helix_angle; 
+    param_def[i++].value = &amp;g_ptr->backplate_diam;
+<a name="anchor-524"></a>    param_def[i++].value = &amp;g_ptr->backplate_depth;
+    param_def[i++].value = &amp;g_ptr->hub_out_diam;
+    param_def[i++].value = &amp;g_ptr->hub_depth;
+    param_def[i++].value = &amp;g_ptr->inner_diam;
+    param_def[i++].value = &amp;g_ptr->n_of_teeth;
+<a name="anchor-525"></a>    param_def[i++].value = &amp;g_ptr->keyway_in_width;
+    param_def[i++].value = &amp;g_ptr->keyway_in_height;
+    param_def[i++].value = &amp;g_ptr->keyway_out_width;
+    param_def[i++].value = &amp;g_ptr->keyway_out_height;
+    param_def[i++].value = &amp;g_ptr->tooth_par1;
+<a name="anchor-526"></a>    param_def[i++].value = &amp;g_ptr->backnotch_rad;
+    param_def[i++].value = &amp;g_ptr->Pressure_angle;
+
+    return 0;
+} 
+<a name="anchor-527"></a>    
+
+/*=============================================================*\
+  Function: 	ProUserReadParamFile
+  Purpose:	read gear parameter file
+<a name="anchor-528"></a>  Return :      0 if successfull, -1 otherwise
+\*=============================================================*/
+int ProUserReadParamFile(char *filename, GearParam *g_ptr)
+{
+    ProCharLine line, str1, str2;
+<a name="anchor-529"></a>    FILE *fp;
+    int i=0, j, table_size=SIZEOFARR(param_def);
+    ProParameter param;
+    ProParamvalue parvalue;
+    ProModelitem modelitem;
+<a name="anchor-530"></a>    ProName w_name;
+    ProError status;
+    
+
+    fp = PTApplsUnicodeFopen(filename, &quot;r&quot;);
+<a name="anchor-531"></a>    if (fp == NULL)
+    {
+	status = ProMessageDisplay(MSGFIL, &quot;PROTKGD Unable to open parameter file %0s&quot;,  filename);
+	PT_TEST_LOG_SUCC(&quot;ProMessageDisplay........ProUserReadParamFile&quot;);
+	
+<a name="anchor-532"></a>	return (-1);
+    }
+
+    for (i=0; i&lt;table_size; i++)
+        param_def[i].set = PRO_B_FALSE;   
+<a name="anchor-533"></a>
+    while (!feof(fp))
+    {
+	if (fgets(line, PRO_LINE_SIZE-1, fp)==NULL)
+	    break;
+<a name="anchor-534"></a>	if (line[0]=='!' || line[0]=='/') 
+	    continue;
+	if (sscanf(line, &quot;%s %s&quot;, str1, str2)!=2)
+	    continue;
+	for (i=0; i&lt;table_size; i++)
+<a name="anchor-535"></a>	{
+	    if (ProUtilStrcmp(param_def[i].param_name, str1)==0)
+	    {
+		switch (param_def[i].type)
+		{
+<a name="anchor-536"></a>		case STR_PARAM: /* string */
+		    strncpy((char *)param_def[i].value, str2, 
+			param_def[i].length);
+		    *(((char*)param_def[i].value)+param_def[i].length)='\0';
+
+<a name="anchor-537"></a>		    ProStringToWstring(w_name, str2);
+		    
+		    status = ProParamvalueSet(&amp;parvalue, (void *)w_name, PRO_PARAM_STRING);
+		    PT_TEST_LOG_SUCC(&quot;ProParamvalueSet&quot;);
+		    
+<a name="anchor-538"></a>		    break;
+		
+		case INT_PARAM: /* int */
+		    sscanf(str2, &quot;%d&quot;, param_def[i].value);
+		    
+<a name="anchor-539"></a>		    status = ProParamvalueSet(&amp;parvalue, param_def[i].value, PRO_PARAM_INTEGER);
+		    PT_TEST_LOG_SUCC(&quot;ProParamvalueSet&quot;);
+		    
+		    break;
+		
+<a name="anchor-540"></a>		case DOUB_PARAM: /* double */
+		    sscanf(str2, &quot;%lf&quot;, param_def[i].value);
+		    
+		    status = ProParamvalueSet(&amp;parvalue, param_def[i].value, PRO_PARAM_DOUBLE);
+		    PT_TEST_LOG_SUCC(&quot;ProParamvalueSet&quot;);
+<a name="anchor-541"></a>		    
+		    break;
+		    
+		case TAB_PARAM: /* table */
+		    for (j=0; j&lt;param_def[i].tablesize; j++)
+<a name="anchor-542"></a>			if (!ProUtilStrcmp(param_def[i].table[j].string_val,
+			    str2))
+			{
+			    *((int*)param_def[i].value) = 
+				param_def[i].table[j].int_val;
+<a name="anchor-543"></a>			    break;
+			}
+		    if (j==param_def[i].tablesize)
+			status = ProMessageDisplay(MSGFIL, 
+    			    &quot;PROTKGD Bad value \&quot;%0s\&quot; for param \&quot;%1s\&quot;&quot;, 
+<a name="anchor-544"></a>			    str2, str1);
+			PT_TEST_LOG_SUCC(&quot;ProMessageDisplay&quot;);
+		    break;
+		}
+		param_def[i].set = PRO_B_TRUE;
+<a name="anchor-545"></a>/*--------------------------------------------------------------------------*\
+    Create parameter or change value
+\*--------------------------------------------------------------------------*/
+		if (param_def[i].type != TAB_PARAM)
+		{
+<a name="anchor-546"></a>		    status = ProMdlToModelitem(g_ptr->model, &amp;modelitem);
+		    PT_TEST_LOG_SUCC(&quot;ProMdlToModelitem&quot;);
+		    
+		    ProStringToWstring(w_name, str1);
+		    
+<a name="anchor-547"></a>		    status = ProParameterInit(&amp;modelitem, w_name, &amp;param);
+		    PT_TEST_LOG_SUCC(&quot;ProParameterInit&quot;);
+		    
+		    if (status != PRO_TK_NO_ERROR)
+		    {
+<a name="anchor-548"></a>			status = ProParameterCreate(&amp;modelitem, w_name, &amp;parvalue, &amp;param);
+			PT_TEST_LOG_SUCC(&quot;ProParameterCreate&quot;);
+		    }
+		    else
+		    {
+<a name="anchor-549"></a>			status = ProParameterValueSet(&amp;param, &amp;parvalue);
+			PT_TEST_LOG_SUCC(&quot;ProParameterValueSet&quot;);
+		    }
+		}
+		break;
+<a name="anchor-550"></a>    	    }
+	}
+	if (i == table_size)
+	{
+    	    status = ProMessageDisplay(MSGFIL, &quot;PROTKGD Unknown parameter %0s&quot;, str1); 
+<a name="anchor-551"></a>	    PT_TEST_LOG_SUCC(&quot;ProMessageDisplay&quot;);
+	}
+    }
+    fclose (fp);
+/*-----------------------------------------------------------------*\
+<a name="anchor-552"></a>    Check all required parameters
+\*-----------------------------------------------------------------*/
+    for (i=0; i&lt;table_size; i++)
+    {
+	if ((param_def[i].required == PRO_B_TRUE) &amp;&amp; 
+<a name="anchor-553"></a>	    (param_def[i].set == PRO_B_FALSE))
+	{
+	    status = ProMessageDisplay(MSGFIL, 
+    		&quot;PROTKGD Required parameter \&quot;%0s\&quot; missing&quot;, 
+		param_def[i].param_name);
+<a name="anchor-554"></a>            PT_TEST_LOG_SUCC(&quot;ProMessageDisplay&quot;);
+	    
+	    return (-1);
+	}
+    }
+<a name="anchor-555"></a>    return (0);
+}
+
+
+
+<a name="anchor-556"></a>/*=============================================================*\
+  Function: 	ProTKGDAccess
+  Purpose:	Determine if gear design should be accessible from menus
+\*=============================================================*/
+static uiCmdAccessState ProTKGDAccess (uiCmdAccessMode access_mode)
+<a name="anchor-557"></a>{
+  ProMdl current;
+  ProMdlType type;
+  ProError status;
+
+<a name="anchor-558"></a>  status = ProMdlCurrentGet (&amp;current);
+  PT_TEST_LOG_SUCC(&quot;ProMdlCurrentGet...........uiCmdAccessState&quot;);
+
+  if (status != PRO_TK_NO_ERROR)
+    return ACCESS_INVISIBLE;
+<a name="anchor-559"></a>
+  status = ProMdlTypeGet (current, &amp;type);
+  PT_TEST_LOG_SUCC(&quot;ProMdlTypeGet&quot;);
+  
+  if (status != PRO_TK_NO_ERROR || type != PRO_MDL_PART)
+<a name="anchor-560"></a>    return ACCESS_INVISIBLE;
+
+  return (ACCESS_AVAILABLE);
+}
+
+<a name="anchor-561"></a>/*=============================================================*\
+  Function: 	user_initialize
+  Purpose:	Create menu button
+\*=============================================================*/
+int user_initialize(
+<a name="anchor-562"></a>int	argc,			 /* Inp: Pro/E arg count */
+char	*argv[],		 /* Inp: Pro/E args	 */
+char	*version,		 /* Inp: Pro/E version	 */
+char	*build, 		 /* Inp: Pro/E build date code */
+wchar_t errbuf[80])		 /* Out: error message (opt)   */
+<a name="anchor-563"></a>{
+		/* Declare external functions */
+    int m_id, wchar_size;
+    ProError status;
+    
+<a name="anchor-564"></a>    int ProUserNewgearMenu();
+    uiCmdCmdId cmd_id;
+    
+    errlog_fp = fopen(&quot;GearDesign.log&quot;, &quot;w&quot;);
+    
+<a name="anchor-565"></a>    if	(ProWcharSizeVerify(sizeof (wchar_t), &amp;wchar_size)!=PRO_TK_NO_ERROR)
+    {
+	ProMessageDisplay(MSGFIL, &quot;PROTKGD %0s&quot;, &quot;Incorrect size of 'wchar_t'.&quot;); 
+	return(-1); 
+    }
+<a name="anchor-566"></a>    
+    status = ProCmdActionAdd(&quot;ProTKGearDesign&quot;,
+			     (uiCmdCmdActFn)ProUserNewgearUI,
+			     uiProe2ndImmediate, ProTKGDAccess,
+			     PRO_B_FALSE, PRO_B_FALSE, &amp;cmd_id);
+<a name="anchor-567"></a>    PT_TEST_LOG_SUCC(&quot;ProCmdActionAdd.........user_initialize&quot;);
+
+    status = ProMenubarmenuPushbuttonAdd(
+        &quot;Applications&quot;, &quot;-ProTKGD&quot;, &quot;-ProTKGD&quot;, &quot;-ProTKGDHelp&quot;,
+	NULL, PRO_B_TRUE, cmd_id, MSGFIL);
+<a name="anchor-568"></a>    PT_TEST_LOG_SUCC(&quot;ProMenubarmenuPushbuttonAdd&quot;);
+
+    return (0);
+}
+
+<a name="anchor-569"></a>
+
+/*=============================================================*\
+  Function: 	user_terminate
+  Purpose:	To handle any termination actions
+<a name="anchor-570"></a>\*=============================================================*/
+void user_terminate()
+{
+    ProTKPrintf(&quot;\tEnd of Application\n&quot;);
+    fclose(errlog_fp);
+<a name="anchor-571"></a>
+}
+</pre>
+</body>
+</html>

@@ -1,0 +1,485 @@
+<html>
+<head>
+<title>TestDrwInfo.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProDrawing.h>
+#include &lt;ProMessage.h>
+#include &lt;ProMdl.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProWindows.h>
+<a name="anchor-2"></a>#include &lt;ProDwgtable.h>
+
+#include &quot;UtilString.h&quot;
+#include &quot;UtilFiles.h&quot;
+#include &lt;ProTKRunTime.h>
+<a name="anchor-3"></a>#include &lt;UtilMessage.h>
+#include &lt;PTApplsUnicodeUtils.h>
+
+/*--------------------------------------------------------------------*\
+  Function prototypes
+<a name="anchor-4"></a>\*--------------------------------------------------------------------*/
+typedef struct tag_TestViewVisitData
+{
+    FILE        *fp;
+    ProDrawing  drawing;
+<a name="anchor-5"></a>    int         count;
+}ProTestViewVisitData;
+
+/*===========================================================================*\
+  FUNCTION: ProTestViewFilterAction
+<a name="anchor-6"></a>  PURPOSE:  
+\*===========================================================================*/
+ProError ProTestViewFilterAction (
+    ProDrawing  drawing,
+    ProView     view,
+<a name="anchor-7"></a>    ProAppData  data)
+{
+    TEST_CALL_REPORT (&quot;ProViewFilterAction()&quot;, &quot;ProTestViewFilterAction()&quot;,
+        PRO_TK_NO_ERROR, 0);
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-8"></a>}
+
+/*===========================================================================*\
+  FUNCTION: ProTestSolidFilterAction
+  PURPOSE:  
+<a name="anchor-9"></a>\*===========================================================================*/
+ProError ProTestSolidFilterAction (
+    ProSolid    solid,
+    ProAppData  data)
+{
+<a name="anchor-10"></a>    TEST_CALL_REPORT (&quot;ProSolidFilterAction()&quot;, &quot;ProTestSolidFilterAction()&quot;,
+        PRO_TK_NO_ERROR, 0);
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-11"></a>/*===========================================================================*\
+  FUNCTION: ProTestDwgtableFilterAction
+  PURPOSE:  
+\*===========================================================================*/
+ProError ProTestDwgtableFilterAction (
+<a name="anchor-12"></a>    ProDwgtable *table,
+    ProAppData  data)
+{
+    TEST_CALL_REPORT (&quot;ProDwgtableFilterAction()&quot;,
+        &quot;ProTestDwgtableFilterAction()&quot;, PRO_TK_NO_ERROR, 0);
+<a name="anchor-13"></a>    return(PRO_TK_NO_ERROR);
+}
+
+/*===========================================================================*\
+  FUNCTION: ProTestViewVisitAction
+<a name="anchor-14"></a>  PURPOSE:  
+\*===========================================================================*/
+ProError ProTestViewVisitAction (
+    ProDrawing  drawing,
+    ProView     view, 
+<a name="anchor-15"></a>    ProError    filter_status, 
+    ProAppData  data)
+{
+    int                     id;
+    char                    c_name[PRO_MDLNAME_SIZE];
+<a name="anchor-16"></a>    double                  scale;
+    ProError                status;
+    ProMdldata              mdldata;
+    ProSolid                solid;
+	ProMdlName              modelName;
+<a name="anchor-17"></a>	ProMdlExtension         modelExtension;
+    ProTestViewVisitData   *data_ptr = (ProTestViewVisitData*)data;
+
+    data_ptr->count++;
+
+<a name="anchor-18"></a>    status = ProDrawingViewScaleGet (drawing, view, &amp;scale);
+    TEST_CALL_REPORT (&quot;ProDrawingViewScaleGet()&quot;,
+        &quot;ProTestViewVisitAction()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    status = ProDrawingViewSolidGet (drawing, view, &amp;solid);
+<a name="anchor-19"></a>    TEST_CALL_REPORT (&quot;ProDrawingViewSolidGet()&quot;,
+        &quot;ProTestViewVisitAction()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    status = ProMdlMdlnameGet (solid, modelName);
+    TEST_CALL_REPORT (&quot;ProMdlMdlnameGet()&quot;,
+<a name="anchor-20"></a>        &quot;ProTestViewVisitAction()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    status = ProMdlExtensionGet (solid, modelExtension);
+    TEST_CALL_REPORT (&quot;ProMdlExtensionGet()&quot;,
+        &quot;ProTestViewVisitAction()&quot;, status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>
+    status = ProMdlIdGet (solid, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMdlIdGet()&quot;,
+        &quot;ProTestViewVisitAction()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+<a name="anchor-22"></a>    if (solid != NULL)
+    {
+        ProTKFprintf (data_ptr->fp,
+            &quot;[%d] Solid name: %s; solid type: %s;\n&quot;
+            &quot;     solid id: %d; view scale: %3.3f;\n&quot;,
+<a name="anchor-23"></a>            data_ptr->count,
+            ProWstringToString (c_name, modelName),
+            ProWstringToString (c_name, modelExtension),
+            id,
+            scale);
+<a name="anchor-24"></a>    }
+    else
+    {
+        ProTKFprintf(data_ptr->fp,
+            &quot;[%d] view scale: %3.3f;\n&quot;, data_ptr->count, scale);
+<a name="anchor-25"></a>    }
+    return(PRO_TK_NO_ERROR);
+}
+
+/*===========================================================================*\
+<a name="anchor-26"></a>  FUNCTION: ProTestSolidVisitAction
+  PURPOSE:  
+\*===========================================================================*/
+ProError ProTestSolidVisitAction (
+    ProSolid   solid,
+<a name="anchor-27"></a>    ProError   filter_status,  
+    ProAppData data)
+{
+    int                     i, num, id;
+    char                    c_name[PRO_MDLNAME_SIZE];
+<a name="anchor-28"></a>    ProError                status;
+    ProMdldata              mdl_data;
+	ProMdlName              modelName;
+	ProMdlExtension         modelExtension;
+    ProTestViewVisitData   *data_ptr       = (ProTestViewVisitData*)data;
+<a name="anchor-29"></a>    ProSimprep             *simpreps       = NULL;
+    
+    data_ptr->count++;
+        
+    status = ProMdlMdlnameGet (solid, modelName);
+<a name="anchor-30"></a>    TEST_CALL_REPORT (&quot;ProMdlMdlnameGet()&quot;, &quot;ProTestSolidVisitAction()&quot;,
+        status, status!=PRO_TK_NO_ERROR);
+
+	status = ProMdlExtensionGet (solid, modelExtension);
+    TEST_CALL_REPORT (&quot;ProMdlExtensionGet()&quot;, &quot;ProTestSolidVisitAction()&quot;,
+<a name="anchor-31"></a>        status, status!=PRO_TK_NO_ERROR);
+
+    if (status != PRO_TK_NO_ERROR)
+        return(PRO_TK_NO_ERROR);
+
+<a name="anchor-32"></a>    status = ProMdlIdGet(solid, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMdlIdGet()&quot;, &quot;ProTestSolidVisitAction()&quot;,
+        status, status!=PRO_TK_NO_ERROR);
+
+    ProTKFprintf (data_ptr->fp,
+<a name="anchor-33"></a>        &quot;[%d] Name: %s; type: %s; id: %d;\n&quot;,
+        data_ptr->count,
+        ProWstringToString (c_name, modelName),
+        ProWstringToString (c_name, modelExtension),
+        id);
+<a name="anchor-34"></a>
+/*--------------------------------------------------------------------*\
+        Simp reps
+\*--------------------------------------------------------------------*/
+    status = ProDrawingSimprepsCollect (data_ptr->drawing,
+<a name="anchor-35"></a>        solid, &amp;simpreps);
+    TEST_CALL_REPORT (&quot;ProDrawingSimprepsCollect()&quot;,
+        &quot;ProTestSolidVisitAction()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-36"></a>    {
+        ProTKFprintf (data_ptr->fp, &quot;\tSimpreps:\n&quot;);
+        status = ProArraySizeGet ((ProArray)simpreps, &amp;num);
+        TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;, &quot;ProTestSolidVisitAction()&quot;,
+            status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-37"></a>
+        for (i=0; i&lt;num; i++)
+        {                    
+            ProTKFprintf (data_ptr->fp, &quot;\t[%d] Id: %d.\n&quot;,
+                i+1, simpreps[i].id);
+<a name="anchor-38"></a>        }
+
+        status = ProArrayFree ((ProArray*)&amp;simpreps);
+        TEST_CALL_REPORT (&quot;ProArrayFree()&quot;, &quot;ProTestSolidVisitAction()&quot;,
+            status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-39"></a>    }
+    return(PRO_TK_NO_ERROR);
+}
+
+/*===========================================================================*\
+<a name="anchor-40"></a>  FUNCTION: ProTestDwgtableVisitAction
+  PURPOSE:  
+\*===========================================================================*/
+ProError ProTestDwgtableVisitAction (
+    ProDwgtable *table,
+<a name="anchor-41"></a>    ProError    filter_status,
+    ProAppData  data)
+{
+    int                     n_col, n_row;
+    ProError                status;
+<a name="anchor-42"></a>    ProBoolean              from_frm;
+    ProTestViewVisitData   *data_ptr = (ProTestViewVisitData*)data;
+
+    data_ptr->count++;
+        
+<a name="anchor-43"></a>    status = ProDwgtableColumnsCount(table, &amp;n_col);
+    TEST_CALL_REPORT (&quot;ProDwgtableColumnsCount()&quot;,
+        &quot;ProTestDwgtableVisitAction()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    status = ProDwgtableRowsCount(table, &amp;n_row);
+<a name="anchor-44"></a>    TEST_CALL_REPORT (&quot;ProDwgtableRowsCount()&quot;,
+        &quot;ProTestDwgtableVisitAction()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    status = ProDwgtableIsFromFormat(table, &amp;from_frm);
+    TEST_CALL_REPORT (&quot;ProDwgtableIsFromFormat()&quot;,
+<a name="anchor-45"></a>        &quot;ProTestDwgtableVisitAction()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    ProTKFprintf (data_ptr->fp,
+        &quot;[%d] columns: %d; rows: %d;%s associated with the format.\n&quot;,
+        data_ptr->count,
+<a name="anchor-46"></a>        n_col,
+        n_row,
+        (from_frm)?(&quot;&quot;):(&quot;Not &quot;));
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-47"></a>}
+
+/*===========================================================================*\
+  Function : ProTestDrwGetPlotSize
+  Purpose  : To get size of sheet 
+<a name="anchor-48"></a>\*===========================================================================*/
+char* ProTestDrwGetPlotSize (ProPlotPaperSize type)
+{
+    switch (type)
+    {
+<a name="anchor-49"></a>       case A_SIZE_PLOT         : return (char*)&quot;A&quot;;
+       case B_SIZE_PLOT         : return (char*)&quot;B&quot;;
+       case C_SIZE_PLOT         : return (char*)&quot;C&quot;;
+       case D_SIZE_PLOT         : return (char*)&quot;D&quot;;
+       case E_SIZE_PLOT         : return (char*)&quot;E&quot;;
+<a name="anchor-50"></a>       case A4_SIZE_PLOT        : return (char*)&quot;A4&quot;;
+       case A3_SIZE_PLOT        : return (char*)&quot;A3&quot;;
+       case A2_SIZE_PLOT        : return (char*)&quot;A2&quot;;
+       case A1_SIZE_PLOT        : return (char*)&quot;A1&quot;;
+       case A0_SIZE_PLOT        : return (char*)&quot;A0&quot;;
+<a name="anchor-51"></a>       case F_SIZE_PLOT         : return (char*)&quot;F&quot;;
+       case VARIABLE_SIZE_PLOT  : return (char*)&quot;VARIABLE SIZE&quot;;
+       default                  : return (char*)&quot;Unknown&quot;;
+    }
+}
+<a name="anchor-52"></a>
+/*===========================================================================*\
+  Function : ProTestDrwGetSheetOrient
+  Purpose  : To get orientation of sheet 
+\*===========================================================================*/
+<a name="anchor-53"></a>char* ProTestDrwGetSheetOrient (ProSheetOrientation orient)
+{
+    switch (orient)
+    {
+       case PRO_ORIENTATION_UNDEFINED  : return (char*)&quot;Undefined&quot;;
+<a name="anchor-54"></a>       case PRO_ORIENTATION_LANDSCAPE   : return (char*)&quot;Landscape&quot;;
+       case PRO_ORIENTATION_PORTRAIT   : return (char*)&quot;Portrait&quot;;
+       default  : return (char*)&quot;Unknown&quot;;
+    }
+}
+<a name="anchor-55"></a>
+/*===========================================================================*\
+  FUNCTION: ProTestDrawingInfo
+  PURPOSE:  
+\*===========================================================================*/
+<a name="anchor-56"></a>ProError ProTestDrawingInfo ()
+{
+    char                    file_name [PRO_PATH_SIZE+1];
+    int                     n_sheets, i, num;
+    ProError                status;
+<a name="anchor-57"></a>    ProTestViewVisitData    visit_data ={NULL, 0};
+    FILE                   *info_file  = NULL;
+    ProPath                 w_path;
+    ProDrawing              drawing;
+    ProPlotPaperSize        size_type;
+<a name="anchor-58"></a>    double                  width;
+    double                  height;
+    ProUnititem             units;
+    char                    unit_name [PRO_NAME_SIZE];
+    ProSheetOrientation     orientation;
+<a name="anchor-59"></a>    ProSolid                *solids    = NULL;
+    ProView                 *views     = NULL;
+    ProDwgtable             *tables    = NULL;
+
+    status = ProMdlCurrentGet ((ProMdl*)&amp;drawing);
+<a name="anchor-60"></a>
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter name of file:&quot;);
+    status = ProMessageStringRead (PRO_PATH_SIZE, w_path);
+    
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-61"></a>        return PRO_TK_GENERAL_ERROR;
+    
+    ProWstringToString (file_name, w_path);
+
+    if ((info_file=PTApplsUnicodeFopen(file_name, &quot;w&quot;)) == NULL)
+<a name="anchor-62"></a>    {
+        ProTKPrintf (&quot;Cannot open output file.\n&quot;);
+        return (PRO_TK_GENERAL_ERROR);
+    }
+    
+<a name="anchor-63"></a>    visit_data.fp = info_file;
+    visit_data.drawing = drawing;
+
+    ProTKFprintf (info_file,
+        &quot;-------------------Drawing information------------------\n\n&quot;);
+<a name="anchor-64"></a>
+/*--------------------------------------------------------------------*\
+    Sheets
+\*--------------------------------------------------------------------*/
+    ProTKFprintf(info_file, &quot;Sheets:\n&quot;);
+<a name="anchor-65"></a>    status = ProDrawingSheetsCount (drawing, &amp;n_sheets);
+    TEST_CALL_REPORT (&quot;ProDrawingSheetsCount()&quot;, &quot;ProTestDrawingInfo()&quot;,
+        status, status!=PRO_TK_NO_ERROR);
+    
+    for (i=1; i &lt; n_sheets + 1; i++)
+<a name="anchor-66"></a>    {
+        status = ProDrawingSheetSizeGet (drawing, i, &amp;size_type, 
+					 &amp;width, &amp;height);
+        TEST_CALL_REPORT (&quot;ProDrawingSheetSizeGet()&quot;,
+            &quot;ProTestDrawingInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-67"></a>
+	status = ProDrawingSheetUnitsGet (drawing, i, &amp;units);
+        TEST_CALL_REPORT (&quot;ProDrawingSheetUnitsGet()&quot;,
+            &quot;ProTestDrawingInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-68"></a>	status = ProDrawingSheetOrientationGet (drawing, i, &amp;orientation);
+        TEST_CALL_REPORT (&quot;ProDrawingSheetOrientationGet()&quot;,
+            &quot;ProTestDrawingInfo()&quot;, status, status != PRO_TK_NO_ERROR);	
+    
+	ProWstringToString (unit_name, units.name);
+<a name="anchor-69"></a>
+        ProTKFprintf(info_file, 
+            &quot;[%d] DwgSize: %s; width:%lf; height:%lf; units:%s; orientation: %s\n&quot;,
+            i, 
+            ProTestDrwGetPlotSize (size_type),
+<a name="anchor-70"></a>            width, 
+            height, 
+            unit_name, 
+            ProTestDrwGetSheetOrient (orientation));
+    }
+<a name="anchor-71"></a>
+/*--------------------------------------------------------------------*\
+    Solids
+\*--------------------------------------------------------------------*/
+    ProTKFprintf(info_file, &quot;Solids:\n&quot;);
+<a name="anchor-72"></a>    visit_data.count = 0;
+#if 0
+    status = ProDrawingSolidsVisit (drawing,
+                (ProSolidVisitAction)ProTestSolidVisitAction,
+                (ProSolidFilterAction)ProTestSolidFilterAction,
+<a name="anchor-73"></a>                (ProAppData)&amp;visit_data);
+    TEST_CALL_REPORT (&quot;ProDrawingSolidsVisit()&quot;,
+        &quot;ProTestDrawingInfo()&quot;, status, status!=PRO_TK_NO_ERROR);
+#else
+    status = ProDrawingSolidsCollect (drawing, &amp;solids);
+<a name="anchor-74"></a>    TEST_CALL_REPORT (&quot;ProDrawingSolidsCollect()&quot;, &quot;ProTestDrawingInfo()&quot;,
+        status, status!=PRO_TK_NO_ERROR);
+        
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-75"></a>        /*status!=PRO_TK_GENERAL_ERROR until solids cotrrupt.*/
+        
+        status = ProArraySizeGet ((ProArray)solids, &amp;num);
+        TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;, &quot;ProTestDrawingInfo()&quot;,
+            status, status!=PRO_TK_NO_ERROR &amp;&amp; status!=PRO_TK_BAD_INPUTS);
+<a name="anchor-76"></a>            
+        for (i=0; i&lt;num; i++)
+        {
+            status = ProTestSolidVisitAction (
+                        solids[i], PRO_TK_NO_ERROR, &amp;visit_data);
+<a name="anchor-77"></a>        }
+        
+        status = ProArrayFree ((ProArray*)&amp;solids);
+        TEST_CALL_REPORT (&quot;ProArrayFree()&quot;, &quot;ProTestDrawingInfo()&quot;,
+            status, status!=PRO_TK_NO_ERROR &amp;&amp; status!=PRO_TK_BAD_INPUTS);
+<a name="anchor-78"></a>    }
+#endif
+    
+/*--------------------------------------------------------------------*\
+    Views
+<a name="anchor-79"></a>\*--------------------------------------------------------------------*/
+    ProTKFprintf(info_file, &quot;Views:\n&quot;);
+
+    visit_data.count = 0;
+#if 0
+<a name="anchor-80"></a>    status = ProDrawingViewVisit (drawing,
+                (ProViewVisitAction)ProTestViewVisitAction,
+                (ProViewFilterAction)ProTestViewFilterAction,
+                (ProAppData)&amp;visit_data);
+    TEST_CALL_REPORT (&quot;ProDrawingViewVisit()&quot;, &quot;ProTestDrawingInfo()&quot;,
+<a name="anchor-81"></a>        status, status!=PRO_TK_NO_ERROR);
+#else
+    status = ProDrawingViewsCollect (drawing, &amp;views);
+    TEST_CALL_REPORT (&quot;ProDrawingViewsCollect()&quot;, &quot;ProTestDrawingInfo()&quot;,
+        status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-82"></a>        
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)views, &amp;num);
+        TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;, &quot;ProTestDrawingInfo()&quot;,
+<a name="anchor-83"></a>            status, status!=PRO_TK_NO_ERROR);
+            
+        for (i=0; i&lt;num; i++)
+        {
+            status = ProTestViewVisitAction (drawing,
+<a name="anchor-84"></a>                        views[i], PRO_TK_NO_ERROR, &amp;visit_data);
+        }
+        
+        status = ProArrayFree ((ProArray*)&amp;views);
+        TEST_CALL_REPORT (&quot;ProArrayFree()&quot;, &quot;ProTestDrawingInfo()&quot;,
+<a name="anchor-85"></a>            status, status!=PRO_TK_NO_ERROR);
+    }
+#endif
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-86"></a>    Tables
+\*--------------------------------------------------------------------*/
+    ProTKFprintf(info_file,&quot;Tables:\n&quot;);
+    visit_data.count = 0;
+#if 0
+<a name="anchor-87"></a>    status = ProDrawingTableVisit (drawing,
+                (ProDwgtableVisitAction)ProTestDwgtableVisitAction,
+                (ProDwgtableFilterAction)ProTestDwgtableFilterAction,
+                (ProAppData)&amp;visit_data);
+    TEST_CALL_REPORT (&quot;ProDrawingTableVisit()&quot;, &quot;ProTestDrawingInfo()&quot;,
+<a name="anchor-88"></a>        status, status!=PRO_TK_NO_ERROR);
+#else
+    status = ProDrawingTablesCollect (drawing, &amp;tables);
+    TEST_CALL_REPORT (&quot;ProDrawingTablesCollect()&quot;, &quot;ProTestDrawingInfo()&quot;,
+        status, status!=PRO_TK_NO_ERROR &amp;&amp; status!=PRO_TK_E_NOT_FOUND);
+<a name="anchor-89"></a>        
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)tables, &amp;num);
+        TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;, &quot;ProTestDrawingInfo()&quot;,
+<a name="anchor-90"></a>            status, status!=PRO_TK_NO_ERROR);
+            
+        for (i=0; i&lt;num; i++)
+        {
+            status = ProTestDwgtableVisitAction (
+<a name="anchor-91"></a>                        &amp;tables[i], PRO_TK_NO_ERROR, &amp;visit_data);
+        }
+        
+        status = ProArrayFree ((ProArray*)&amp;tables);
+        TEST_CALL_REPORT (&quot;ProArrayFree()&quot;, &quot;ProTestDrawingInfo()&quot;,
+<a name="anchor-92"></a>            status, status!=PRO_TK_NO_ERROR);
+    }
+#endif
+    ProTKFprintf (info_file,
+        &quot;--------------------------------------------------------\n&quot;);
+<a name="anchor-93"></a>
+    fclose(info_file);
+
+#if 0
+    status = ProInfoWindowDisplay (
+<a name="anchor-94"></a>                ProStringToWstring(wstr, file_name), NULL, NULL);
+    TEST_CALL_REPORT (&quot;ProInfoWindowDisplay()&quot;, &quot;ProTestDrawingInfo()&quot;,
+        status, status!=PRO_TK_NO_ERROR);
+#endif
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-95"></a>}
+
+</pre>
+</body>
+</html>

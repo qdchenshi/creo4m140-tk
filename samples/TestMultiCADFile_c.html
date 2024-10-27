@@ -1,0 +1,284 @@
+<html>
+<head>
+<title>TestMultiCADFile.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*----------------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*----------------------------------------------------------------------------*/
+<a name="anchor-2"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMdl.h>
+#include &lt;ProArray.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>#include &lt;ProWindows.h>
+#include &lt;ProArray.h>
+#include &lt;ProNotify.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProSolid.h>
+<a name="anchor-4"></a>
+/*----------------------------------------------------------------------------*\
+C System includes
+\*----------------------------------------------------------------------------*/
+
+<a name="anchor-5"></a>/*----------------------------------------------------------------------------*\
+Application includes
+\*----------------------------------------------------------------------------*/
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilMenu.h&quot;
+<a name="anchor-6"></a>#include &quot;PTApplsUnicodeUtils.h&quot;
+#include &lt;UtilFiles.h>
+#include &lt;UtilVisit.h>
+#include &lt;TestError.h>
+#include &lt;TestMisc.h>
+<a name="anchor-7"></a>
+/*----------------------------------------------------------------------------*\
+Application macros
+\*----------------------------------------------------------------------------*/
+
+<a name="anchor-8"></a>/*----------------------------------------------------------------------------*\
+Application prototypes
+\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-9"></a>Application global/external data
+\*----------------------------------------------------------------------------*/
+
+    FUNCTION : ProTestMultiCADFile	
+    PURPOSE  : Setup menu for testing
+<a name="anchor-10"></a>
+
+ProError ProMultiCADRetrievePreAction (ProMdl p_retrieved_mdl);
+ProError ProMultiCADSavePreAction (ProPath r_model_path);
+ProError ProMultiCADSavePostAction (ProPath r_model_path);
+<a name="anchor-11"></a>
+ProError ProTestMultiCADFile()
+{
+    ProError status;
+    int menu_id, menu_action;
+<a name="anchor-12"></a>	FILE *MultiCAD_fp;
+  
+    status = ProMenuFileRegister((char *)&quot;MULTI-CAD&quot;,(char *)&quot;tkmulticad.mnu&quot;, &amp;menu_id);
+
+    status = ProMenubuttonActionSet((char *)&quot;MULTI-CAD&quot;, (char *)&quot;Retrieve&quot;,
+<a name="anchor-13"></a>	(ProMenubuttonAction)ProMultiCADFileRetrieve, NULL, 0);
+
+	status = ProMenubuttonActionSet((char *)&quot;MULTI-CAD&quot;, (char *)&quot;Info&quot;,
+	(ProMenubuttonAction)ProMultiCADFileInfo, NULL, 0);
+	
+<a name="anchor-14"></a>    status = ProMenubuttonActionSet((char *)&quot;MULTI-CAD&quot;,(char *)&quot;Done/Return&quot;,
+		(ProMenubuttonAction)ProMenuDelete,NULL,0);
+	
+    status = ProMenubuttonActionSet((char *)&quot;MULTI-CAD&quot;,(char *)&quot;MULTI-CAD&quot;,
+		(ProMenubuttonAction)ProMenuDelete,NULL,0);
+<a name="anchor-15"></a>	
+/*--------------------------------------------------------------------*\
+    Make main menu visible
+\*--------------------------------------------------------------------*/
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;MULTI-CAD&quot;, &amp;menu_id );
+<a name="anchor-16"></a>    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestMultiCADFile()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+	status = ProMenuProcess( (char *)&quot;MULTI-CAD&quot;, &amp;menu_action );
+<a name="anchor-17"></a>	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestMultiCADFile()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+   
+	MultiCAD_fp = PTApplsUnicodeFopen (&quot;MultiCAD_Notifications.inf&quot;, &quot;w&quot;);
+<a name="anchor-18"></a>
+	/* Sets notification PRO_MODEL_SAVE_PRE */
+    status = ProNotificationSet(PRO_MODEL_SAVE_PRE, ProMultiCADSavePreAction);
+	TEST_CALL_REPORT( &quot;ProNotificationSet()&quot;, &quot;ProTestMultiCADFile()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-19"></a>
+	/* Sets notification PRO_MODEL_SAVE_POST */
+    status = ProNotificationSet(PRO_MODEL_SAVE_POST, ProMultiCADSavePostAction);
+	TEST_CALL_REPORT( &quot;ProNotificationSet()&quot;, &quot;ProTestMultiCADFile()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-20"></a>
+	/* Sets notification PRO_MODEL_SAVE_POST_ALL */
+    status = ProNotificationSet(PRO_MODEL_SAVE_POST_ALL, ProMultiCADSavePostAction);
+	TEST_CALL_REPORT( &quot;ProNotificationSet()&quot;, &quot;ProTestMultiCADFile()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-21"></a>	
+	fclose(MultiCAD_fp);
+
+    return (status);
+}
+<a name="anchor-22"></a>
+
+    FUNCTION : ProMultiCADSavePreAction	
+    PURPOSE  : Callback function for notification PRO_MODEL_SAVE_PRE
+ProError ProMultiCADSavePreAction (ProPath r_model_path)
+<a name="anchor-23"></a>{
+	FILE *MultiCAD_fp;
+
+	MultiCAD_fp = PTApplsUnicodeFopen (&quot;MultiCAD_Notifications.inf&quot;, &quot;a&quot;);
+
+<a name="anchor-24"></a>	ProTKFprintf ( MultiCAD_fp, &quot;Called Notification PRO_MODEL_SAVE_PRE. \n&quot;);
+	
+	fclose(MultiCAD_fp);
+
+	return (PRO_TK_NO_ERROR);
+<a name="anchor-25"></a>}
+
+    FUNCTION : ProMultiCADSavePostAction	
+    PURPOSE  : Callback function for notification PRO_MODEL_SAVE_POST
+ProError ProMultiCADSavePostAction (ProPath r_model_path)
+<a name="anchor-26"></a>{
+	FILE *MultiCAD_fp;
+
+	MultiCAD_fp = PTApplsUnicodeFopen (&quot;MultiCAD_Notifications.inf&quot;, &quot;a&quot;);
+
+<a name="anchor-27"></a>	ProTKFprintf ( MultiCAD_fp, &quot;Called Notification PRO_MODEL_SAVE_POST. \n&quot;);
+	
+	fclose(MultiCAD_fp);
+
+	return (PRO_TK_NO_ERROR);
+<a name="anchor-28"></a>}
+
+    FUNCTION : ProMultiCADSavePostAction	
+    PURPOSE  : Callback function for notification PRO_MODEL_SAVE_POST_ALL
+ProError ProMultiCADSavePostAllAction (ProPath r_model_path)
+<a name="anchor-29"></a>{
+	FILE *MultiCAD_fp;
+
+	MultiCAD_fp = PTApplsUnicodeFopen (&quot;MultiCAD_Notifications.inf&quot;, &quot;a&quot;);
+
+<a name="anchor-30"></a>	ProTKFprintf ( MultiCAD_fp, &quot;Called Notification PRO_MODEL_SAVE_POST_ALL. \n&quot;);
+	
+	fclose(MultiCAD_fp);
+
+	return (PRO_TK_NO_ERROR);
+<a name="anchor-31"></a>}
+
+
+
+    FUNCTION : TkMultiCADFileRetrieve 	
+<a name="anchor-32"></a>    PURPOSE  : Action function for Retrieve	 (main->MULTI-CAD->Retreive)
+ProError ProMultiCADFileRetrieve ()
+{
+    ProError status;
+	ProMdlfileType *fileTypeArray, fileType;
+<a name="anchor-33"></a>	ProPath filePath;
+	ProMdl mdlHandle;
+	int i, winId;
+
+	ProMdlfileType retrieveFileType;
+<a name="anchor-34"></a>	ProMdlName fileName;
+
+	/* File types allowed/shown in toolkits file open dialog. */
+	int multiCADTypes[9] = {PRO_MDLFILE_PART, PRO_MDLFILE_ASSEMBLY,
+				PRO_MDLFILE_UG, PRO_MDLFILE_SW_PART, PRO_MDLFILE_SW_ASSEM,
+<a name="anchor-35"></a>				PRO_MDLFILE_CATIA_MODEL, PRO_MDLFILE_CATIA_CGR,
+				PRO_MDLFILE_CATIA_PART, PRO_MDLFILE_CATIA_PRODUCT};
+				
+	status = ProArrayAlloc(0, sizeof(ProMdlfileType), 1, (ProArray*)&amp;fileTypeArray);
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;TkMultiCADFileRetrieve()&quot;, 
+<a name="anchor-36"></a>		status, status != PRO_TK_NO_ERROR);
+
+	for (i = 0; i &lt; 9; i++)
+	{
+		fileType = multiCADTypes[i];
+<a name="anchor-37"></a>		status = ProArrayObjectAdd ((ProArray*)&amp;fileTypeArray, PRO_VALUE_UNUSED, 1, &amp;fileType);
+		TEST_CALL_REPORT( &quot;ProArrayObjectAdd()&quot;, &quot;TkMultiCADFileRetrieve()&quot;, 
+			status, status != PRO_TK_NO_ERROR);
+	}
+
+<a name="anchor-38"></a>	/* Opens toolkit's file open Dialog */
+	status = ProFileMdlfiletypeOpen(L&quot;TKMultiCAD Open&quot;, fileTypeArray, NULL, NULL, NULL, NULL, filePath);
+    TEST_CALL_REPORT( &quot;ProFileMdlfiletypeOpen()&quot;, &quot;TkMultiCADFileRetrieve()&quot;, 
+		status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_USER_ABORT);
+
+<a name="anchor-39"></a>	if(status == PRO_TK_NO_ERROR)
+	{
+		/* Gets file type from input file path */
+		status = ProFileSubtypeGet(filePath, &amp;retrieveFileType, NULL, NULL);
+		TEST_CALL_REPORT( &quot;ProFileSubtypeGet()&quot;, &quot;TkMultiCADFileRetrieve()&quot;, 
+<a name="anchor-40"></a>			status, status != PRO_TK_NO_ERROR);
+
+		/* Gets file name from input file path */
+		status = ProFileMdlnameParse(filePath, NULL, fileName, NULL, NULL);
+		TEST_CALL_REPORT( &quot;ProFileMdlnameParse()&quot;, &quot;TkMultiCADFileRetrieve()&quot;, 
+<a name="anchor-41"></a>			status, status != PRO_TK_NO_ERROR);
+
+		/* File names having more than 80 chars are not supported in Creo3 */
+		status = ProMdlnameRetrieve(fileName, retrieveFileType, &amp;mdlHandle);
+		TEST_CALL_REPORT( &quot;ProMdlnameRetrieve()&quot;, &quot;TkMultiCADFileRetrieve()&quot;, 
+<a name="anchor-42"></a>			status, status != PRO_TK_NO_ERROR);
+
+		status = ProMdlDisplay(mdlHandle);
+		TEST_CALL_REPORT( &quot;ProMdlFiletypeLoad()&quot;, &quot;TkMultiCADFileRetrieve()&quot;, 
+			status, status != PRO_TK_NO_ERROR);
+<a name="anchor-43"></a>
+
+		/* Gets window ID for retreived model */
+		status = ProMdlWindowGet(mdlHandle, &amp;winId);
+		TEST_CALL_REPORT( &quot;ProMdlWindowGet()&quot;, &quot;TkMultiCADFileRetrieve()&quot;, 
+<a name="anchor-44"></a>			status, status != PRO_TK_NO_ERROR);
+
+		/* Activates model window  */
+		status = ProWindowActivate(winId);
+		TEST_CALL_REPORT( &quot;ProWindowActivate()&quot;, &quot;TkMultiCADFileRetrieve()&quot;, 
+<a name="anchor-45"></a>			status, status != PRO_TK_NO_ERROR);
+	}
+
+    return (status);
+}
+<a name="anchor-46"></a>
+
+    FUNCTION : TkMultiCADFileInfo	
+    PURPOSE  : Action function for Info	 (main->MULTI-CAD->Info)
+ProError ProMultiCADFileInfo (ProMdl model)
+<a name="anchor-47"></a>{
+    ProError status;
+	ProPath file_name;
+	char file_cname[PRO_NAME_SIZE];
+
+<a name="anchor-48"></a>	FILE *MultiCADInfo_fp;
+
+	strcpy(file_cname, &quot;MultiCAD_Info.inf&quot;);
+	ProStringToWstring (file_name, file_cname);
+	MultiCADInfo_fp = PTApplsUnicodeFopen (file_cname, &quot;w&quot;);
+<a name="anchor-49"></a>
+	/* Gets current model handle */
+	status = ProMdlCurrentGet (&amp;model);
+	TEST_CALL_REPORT( &quot;ProMdlCurrentGet()&quot;, &quot;ProMultiCADFileInfo()&quot;, 
+			status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_BAD_CONTEXT);
+<a name="anchor-50"></a>	if(status != PRO_TK_NO_ERROR)
+		return (status);
+
+	ProTKFprintf (MultiCADInfo_fp,&quot;*********************************** \n&quot;);
+	ProTKFprintf (MultiCADInfo_fp,&quot;       -MULTI-CAD File info \n&quot;);
+<a name="anchor-51"></a>	ProTKFprintf (MultiCADInfo_fp,&quot;*********************************** \n&quot;);
+
+	/* Utility to write current model info */
+	status = ProUtilMultiCADFileInfo(model, MultiCADInfo_fp);
+	TEST_CALL_REPORT( &quot;ProUtilMultiCADFileInfo()&quot;, &quot;ProMultiCADFileInfo()&quot;, 
+<a name="anchor-52"></a>			status, status != PRO_TK_NO_ERROR );
+
+	fclose(MultiCADInfo_fp);
+
+	status = ProInfoWindowDisplay(file_name, NULL, NULL);
+<a name="anchor-53"></a>	TEST_CALL_REPORT( &quot;ProInfoWindowDisplay()&quot;, &quot;ProMultiCADFileInfo()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    return (status);
+}
+<a name="anchor-54"></a>
+
+
+
+
+<a name="anchor-55"></a>
+</pre>
+</body>
+</html>

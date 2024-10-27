@@ -1,0 +1,244 @@
+<html>
+<head>
+<title>UgXMLFeat.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMenuBar.h>
+#include &lt;ProMdl.h>
+#include &lt;ProSelection.h>
+#include &lt;ProFeature.h>
+#include &lt;ProWstring.h>
+<a name="anchor-3"></a>/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+static wchar_t  MSGFIL[] = {'u','t','i','l','i','t','i','e','s','.','t','x','t','\0'};
+
+<a name="anchor-4"></a>/*=====================================================================*\
+FUNCTION: PTUtilElemtreeXMLShow
+PURPOSE:  Show an XML file in the embedded browser.
+Note: native XML support in the browser is only available in Microsoft
+Internet Explorer.	
+<a name="anchor-5"></a>\*=====================================================================*/
+ProError PTUtilElemtreeXMLShow (ProFileName filename)
+{
+	ProPath win_url;
+	ProPath current_dir;
+<a name="anchor-6"></a>	int win_id;
+
+	ProStringToWstring (win_url, &quot;file://&quot;);
+
+	status = ProDirectoryCurrentGet (current_dir);
+<a name="anchor-7"></a>	
+	status = ProWstringConcatenate (current_dir, win_url, PRO_VALUE_UNUSED);
+
+	status = ProWstringConcatenate (filename, win_url, PRO_VALUE_UNUSED);
+
+<a name="anchor-8"></a>	status = ProWindowCurrentGet (&amp;win_id);
+
+	status = ProWindowURLShow (win_id, win_url);
+
+	return PRO_TK_NO_ERROR;
+<a name="anchor-9"></a>}
+
+/*=====================================================================*\
+FUNCTION: UserFeatXMLWrite
+PURPOSE:  Write a feature's element tree to an XML file.	
+<a name="anchor-10"></a>\*=====================================================================*/
+int UserFeatXMLWrite (ProFeature* feat)
+{
+  ProElement elemtree;
+  wchar_t wFilename [PRO_FILE_NAME_SIZE];
+<a name="anchor-11"></a>
+/*--------------------------------------------------------------------*\
+Prompt for the filename
+\*--------------------------------------------------------------------*/
+  ProMessageDisplay ( MSGFIL, &quot;USER Enter the XML file name:&quot;);
+<a name="anchor-12"></a>
+  if (ProMessageStringRead (PRO_FILE_NAME_SIZE, wFilename) != PRO_TK_NO_ERROR)
+    return (0);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-13"></a>Extract the element tree and convert it to XML
+\*--------------------------------------------------------------------*/
+  status = ProFeatureElemtreeExtract (feat,NULL,PRO_FEAT_EXTRACT_NO_OPTS,&amp;elemtree);
+
+  if ( status == PRO_TK_NO_ERROR )
+<a name="anchor-14"></a>  {
+    status = ProElemtreeWrite (elemtree, PRO_ELEMTREE_XML, wFilename);
+
+   ProFeatureElemtreeFree(feat, elemtree);
+  }
+<a name="anchor-15"></a>
+  if (status == PRO_TK_NO_ERROR )
+  {
+	  PTUtilElemtreeXMLShow(wFilename);
+  }
+<a name="anchor-16"></a>
+  return status;
+}
+
+/*=====================================================================*\
+<a name="anchor-17"></a>FUNCTION: UserFeatXMLWrite_AO
+PURPOSE:  Action/Object callback for feature export to XML.	
+\*=====================================================================*/
+static int UserFeatXMLWrite_AO()
+{
+<a name="anchor-18"></a>  ProError status;
+  ProSelection* sel_array;
+  int n_sels;
+  ProFeature feat;
+
+<a name="anchor-19"></a>/*--------------------------------------------------------------------*\
+Select the feature for XML info
+\*--------------------------------------------------------------------*/
+  ProMessageDisplay ( MSGFIL, &quot;USER Select feature:&quot;);
+  
+<a name="anchor-20"></a>  status = ProSelect (&quot;feature,membfeat&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel_array, &amp;n_sels);
+  if (status != PRO_TK_NO_ERROR)
+    return (0);
+
+  status = ProSelectionModelitemGet (sel_array [0], &amp;feat);
+<a name="anchor-21"></a>
+  UserFeatXMLWrite (&amp;feat);
+
+  return (1);
+}
+<a name="anchor-22"></a>
+/*=====================================================================*\
+FUNCTION: UserFeatXMLWrite_OA
+PURPOSE:  Object/Action callback for feature export to XML.	
+\*=====================================================================*/
+<a name="anchor-23"></a>int UserFeatXMLWrite_OA()
+{
+  ProError status; 
+  ProSelection* sel_array;
+  ProFeature feat;
+<a name="anchor-24"></a>
+/*--------------------------------------------------------------------*\
+Extract the current selected feature
+\*--------------------------------------------------------------------*/
+  status = ProSelbufferSelectionsGet (&amp;sel_array);
+<a name="anchor-25"></a>
+  status = ProSelectionModelitemGet (sel_array [0], &amp;feat);
+
+  UserFeatXMLWrite (&amp;feat);
+
+<a name="anchor-26"></a>  ProSelectionarrayFree (sel_array);
+
+  return (1);
+}
+
+<a name="anchor-27"></a>#define OA 1  /* Standard OA in the menu system, typically gray out 
+		 the button when not usable*/
+#define PM 2 /* OA in a popup menu, typically remove the button when 
+	         not usable */
+
+<a name="anchor-28"></a>/*=====================================================================*\
+FUNCTION: UserFeatXMLWrite_TestLow
+PURPOSE:  Access function for the button for feature export to XML.	
+\*=====================================================================*/
+static uiCmdAccessState UserFeatXMLWrite_TestLow (ProSelection* sels, int mode)
+<a name="anchor-29"></a>{
+  uiCmdAccessState access_result;
+  ProBoolean should_free = PRO_B_FALSE;
+  ProError status;
+  int size;
+<a name="anchor-30"></a>
+/*-----------------------------------------------------------------*\
+  Set the default return if the button is unusable.
+\*-----------------------------------------------------------------*/  
+  if (mode == OA)
+<a name="anchor-31"></a>    access_result = ACCESS_UNAVAILABLE;
+  else 
+    access_result = ACCESS_REMOVE;
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-32"></a>  If called without selections, extract the current selections from
+  the buffer.
+\*-----------------------------------------------------------------*/ 
+  if (sels == NULL)
+    {   
+<a name="anchor-33"></a>      status = ProSelbufferSelectionsGet (&amp;sels);
+      
+      if (status != PRO_TK_NO_ERROR)
+	return access_result;
+
+<a name="anchor-34"></a>      if (sels == NULL)
+	return access_result;
+
+      should_free = PRO_B_TRUE;
+    }
+<a name="anchor-35"></a>
+/*-----------------------------------------------------------------*\
+  This command allows only one selection.
+\*-----------------------------------------------------------------*/   
+  status = ProArraySizeGet (sels, &amp;size);
+<a name="anchor-36"></a>  
+  if (status != PRO_TK_NO_ERROR)
+    return access_result;
+
+  if (size == 1)
+<a name="anchor-37"></a>    {
+      ProFeature feature;
+
+      status = ProSelectionModelitemGet (sels [0], &amp;feature);
+
+<a name="anchor-38"></a>/*-----------------------------------------------------------------*\
+  If the selected type is feature, its element tree must be extractable.
+\*-----------------------------------------------------------------*/   
+      if (feature.type == PRO_FEATURE)
+	{
+<a name="anchor-39"></a>	  ProElement element;
+
+          status = ProFeatureElemtreeExtract (&amp;feature, NULL, PRO_FEAT_EXTRACT_NO_OPTS,
+			&amp;element);
+      
+<a name="anchor-40"></a>	  if (status == PRO_TK_NO_ERROR)
+	    {
+	      ProFeatureElemtreeFree (&amp;feature, element);
+	      access_result = ACCESS_AVAILABLE;
+	    }	  
+<a name="anchor-41"></a>	}
+    }
+
+  if (should_free)
+    ProSelectionarrayFree (sels);
+<a name="anchor-42"></a>  
+  return access_result;
+}
+
+/*=====================================================================*\
+<a name="anchor-43"></a>FUNCTION: UserFeatXMLWrite_TestMdlTree
+PURPOSE:  Access function for the model tree popup menu button.	
+\*=====================================================================*/
+uiCmdAccessState UserFeatXMLWrite_TestMdlTree (uiCmdAccessMode mode)
+{ 
+<a name="anchor-44"></a>  return UserFeatXMLWrite_TestLow (NULL, PM);
+}
+
+/*=====================================================================*\
+FUNCTION: UserFeatXMLWrite_TestPM
+<a name="anchor-45"></a>PURPOSE:  Access function for the graphics window popup menu button.	
+\*=====================================================================*/
+uiCmdAccessState UserFeatXMLWrite_TestPM (uiCmdCmdId id,
+				      ProAppData data,
+				      ProSelection* sels)
+<a name="anchor-46"></a>{ 
+  return UserFeatXMLWrite_TestLow (sels, PM);
+}
+
+#undef OA
+<a name="anchor-47"></a>#undef PM
+</pre>
+</body>
+</html>

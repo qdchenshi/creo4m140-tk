@@ -1,0 +1,639 @@
+<html>
+<head>
+<title>TestRule.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+    Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMdl.h>
+#include &lt;ProFeature.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProArray.h>
+#include &lt;ProMenu.h>
+<a name="anchor-3"></a>#include &lt;ProMessage.h>
+#include &lt;ProGraphic.h>
+#include &lt;ProSimprep.h>
+#include &lt;ProUtil.h>
+
+<a name="anchor-4"></a>/*--------------------------------------------------------------------*\
+    Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;UtilMessage.h&quot;
+<a name="anchor-5"></a>#include &quot;TestRule.h&quot;
+
+/*--------------------------------------------------------------------*\
+    Macros
+\*--------------------------------------------------------------------*/
+<a name="anchor-6"></a>#define SIZE_GREATER		1
+#define SIZE_LESS            	2
+#define SIZE_ABSOLUTE           3
+#define SIZE_RELATIVE           4
+#define SIZE_QUIT		5
+<a name="anchor-7"></a>#define SIZE_DONE		6
+
+/*--------------------------------------------------------------------*\
+    Data types
+\*--------------------------------------------------------------------*/
+<a name="anchor-8"></a>
+
+/*--------------------------------------------------------------------*\
+    Application global/external data
+\*--------------------------------------------------------------------*/
+<a name="anchor-9"></a>static ProSolid		solid;
+
+
+/*---------------------------------------------------------------------*\
+    Functions declaration
+<a name="anchor-10"></a>\*---------------------------------------------------------------------*/
+int	    ProTestRuleSizeDataInit( ProRuleSize*, int );
+
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-11"></a>    Function:	ProTestRules()
+    Purpose:	Create and run TkRules menu to init the structure ProRule. 
+		The use this structure to get a list of components.
+    Returns:	0 - success; -1 - error. Now ignored.
+\*---------------------------------------------------------------------*/
+<a name="anchor-12"></a>int ProTestRules( AsmcomppathList* p_list )
+{
+#ifndef PT_PRODUCTS_BUILD
+    ProError		status;
+    int			menu_id;    /* The identifier of the created menu */
+<a name="anchor-13"></a>    int			menu_action;
+    ProRule		rule;
+
+
+    rule.type = PRO_RULE_NONE;
+<a name="anchor-14"></a>
+    /* Init AsmcomppathList */
+    p_list->p_comp_path_list = NULL;
+    p_list->size = 0;
+
+<a name="anchor-15"></a>    /* Get current model */
+    status = ProMdlCurrentGet( (ProMdl *)&amp;solid );
+    TEST_CALL_REPORT( &quot;ProMdlCurrentGet()&quot;, &quot;ProTestRules()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-16"></a>    /* Load menu from file */
+    status = ProMenuFileRegister((char *) &quot;TkRules&quot;,(char *) &quot;tkrule.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestRules()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-17"></a>    /* Define menu buttons */
+    ProMenubuttonActionSet( (char *)&quot;TkRules&quot;, (char *)&quot;Use Name&quot;, 
+	(ProMenubuttonAction)ProTestRuleInitName, &amp;rule, 0 );
+    ProMenubuttonActionSet( (char *)&quot;TkRules&quot;, (char *)&quot;Use Expr&quot;, 
+	(ProMenubuttonAction)ProTestRuleInitExpr, &amp;rule, 0 );
+<a name="anchor-18"></a>    ProMenubuttonActionSet( (char *)&quot;TkRules&quot;, (char *)&quot;Use Zone&quot;, 
+	(ProMenubuttonAction)ProTestRuleInitZone, &amp;rule, 0 );
+    ProMenubuttonActionSet((char *) &quot;TkRules&quot;, (char *)&quot;Use Dist&quot;, 
+	(ProMenubuttonAction)ProTestRuleInitDist, &amp;rule, 0 );
+    ProMenubuttonActionSet( (char *)&quot;TkRules&quot;, (char *)&quot;Use Size&quot;, 
+<a name="anchor-19"></a>	(ProMenubuttonAction)ProTestRuleInitSize, &amp;rule, 0 );
+    ProMenubuttonActionSet( (char *)&quot;TkRules&quot;,(char *) &quot;Use Rep&quot;, 
+	(ProMenubuttonAction)ProTestRuleInitRep, NULL, 0 );
+    ProMenubuttonActionSet( (char *)&quot;TkRules&quot;,(char *) &quot;Done/Return&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL,0 );
+<a name="anchor-20"></a>    ProMenubuttonActionSet((char *) &quot;TkRules&quot;, (char *)&quot;TkRules&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+
+    /* Run menu */
+<a name="anchor-21"></a>    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;TkRules&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestRules()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-22"></a>	status = ProMenuProcess((char *) &quot;TkRules&quot;, &amp;menu_action );
+	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestRules()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+
+<a name="anchor-23"></a>    if( rule.type == PRO_RULE_NONE )
+	return -1;
+
+    status = ProRuleEval( solid, &amp;rule, 
+			    &amp;(p_list->p_comp_path_list), 
+<a name="anchor-24"></a>			    &amp;(p_list->size) );
+    TEST_CALL_REPORT( &quot;ProRuleEval()&quot;, &quot;ProTestRules()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+/*
+    if( status != PRO_TK_NO_ERROR )
+<a name="anchor-25"></a>	return -1;
+*/
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+
+
+<a name="anchor-26"></a>    return 0;
+}
+
+
+#ifndef PT_PRODUCTS_BUILD
+<a name="anchor-27"></a>
+/*---------------------------------------------------------------------*\
+    Function:	ProTestRuleInitName()
+    Purpose:	On-buton function. Init a rule by name.
+    Returns:	0 - success; -1 - error. Now ignored.
+<a name="anchor-28"></a>\*---------------------------------------------------------------------*/
+int ProTestRuleInitName( ProRule* p_rule, int int_dummy )
+{
+    ProError		status;
+    ProName		w_name;
+<a name="anchor-29"></a>
+
+    /* Get name wildcard */
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter name wildcard: &quot; );
+    if( !ProUtilStringGet( w_name, NULL, PRO_NAME_SIZE ) )
+<a name="anchor-30"></a>	return -1;
+
+    status = ProRuleInitName( w_name, p_rule );
+    TEST_CALL_REPORT( &quot;ProRuleInitName()&quot;, &quot;ProTestRuleInitName()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-31"></a>
+    if( status != PRO_TK_NO_ERROR )
+	p_rule->type = PRO_RULE_NONE;
+
+
+<a name="anchor-32"></a>    return 0;
+}
+
+
+
+<a name="anchor-33"></a>/*---------------------------------------------------------------------*\
+    Function:	ProTestRuleInitExpr()
+    Purpose:	On-buton function. Init a rule by expression.
+    Returns:	0 - success; -1 - error. Now ignored.
+\*---------------------------------------------------------------------*/
+<a name="anchor-34"></a>int ProTestRuleInitExpr( ProRule* p_rule, int int_dummy )
+{
+    ProError		status;
+    ProLine		w_expression;
+    ProExpression	expressions;
+<a name="anchor-35"></a>
+
+    /* Allocate ProExpression object as array of ProLines */
+    status = ProArrayAlloc( 0, sizeof(ProLine), 1, (ProArray*)&amp;expressions );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc&quot;, &quot;ProTestRuleInitExpression()&quot;,
+<a name="anchor-36"></a>	status, status != PRO_TK_NO_ERROR );
+
+    do
+    {
+    	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter expression: &quot; );
+<a name="anchor-37"></a>    	status = ProMessageStringRead( PRO_LINE_SIZE, w_expression );
+    	TEST_CALL_REPORT( &quot;ProMessageStringRead()&quot;, 
+		&quot;ProTestRuleInitExpression()&quot;, 
+		status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-38"></a>	/* If user enters empty line stop prompting and evaluate expr */
+ 	if( status == PRO_TK_GENERAL_ERROR )
+	{
+	    status = PRO_TK_NO_ERROR;
+	    break;
+<a name="anchor-39"></a>	}
+
+	if( status == PRO_TK_NO_ERROR )
+	{
+	    status = ProArrayObjectAdd( (ProArray*)&amp;expressions, 
+<a name="anchor-40"></a>		PRO_VALUE_UNUSED, 1, w_expression );
+	    TEST_CALL_REPORT( &quot;ProArrayObjectAdd&quot;, 
+		&quot;ProTestRuleInitExpression()&quot;, status,status!=PRO_TK_NO_ERROR);
+	}    
+    }
+<a name="anchor-41"></a>    while( status == PRO_TK_NO_ERROR );
+
+    if( status == PRO_TK_NO_ERROR )
+    {
+    	status = ProRuleInitExpr( expressions, p_rule );
+<a name="anchor-42"></a>    	TEST_CALL_REPORT( &quot;ProRuleInitExpression()&quot;, 
+		&quot;ProTestRuleInitExpression()&quot;, 
+		status, status != PRO_TK_NO_ERROR );
+    }
+
+<a name="anchor-43"></a>    if( status != PRO_TK_NO_ERROR )
+	p_rule->type = PRO_RULE_NONE;
+
+
+    return 0;
+<a name="anchor-44"></a>}
+
+
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-45"></a>    Function:	ProTestRuleInitZone()
+    Purpose:	On-buton function. Init a rule by zone.
+    Returns:	0 - success; -1 - error. Now ignored.
+\*---------------------------------------------------------------------*/
+int ProTestRuleInitZone( ProRule* p_rule, int int_dummy )
+<a name="anchor-46"></a>{
+    ProError		status;
+    ProSelection*	p_selection;
+    int			n_selected;
+    ProModelitem	model_item;
+<a name="anchor-47"></a>    ProFeattype		feat_type;
+
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select zone&quot; );
+
+<a name="anchor-48"></a>    /* Select a modelitem */
+    status = ProSelect( (char *)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, 
+			&amp;p_selection, &amp;n_selected );
+    TEST_CALL_REPORT( &quot;ProSelect()&quot;, &quot;ProTestRuleInitZone()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-49"></a>    if( (status != PRO_TK_NO_ERROR) || (n_selected &lt; 1) )
+	return -1;
+
+    /* Get the feature item from a selection object */
+    status = ProSelectionModelitemGet( p_selection[0], &amp;model_item );
+<a name="anchor-50"></a>    TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, &quot;ProTestRuleInitZone()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+    if( (status != PRO_TK_NO_ERROR) || (model_item.type != PRO_FEATURE) )
+	return -1;
+
+<a name="anchor-51"></a>    /* Retrieve the type of the specified feature */
+    status = ProFeatureTypeGet( &amp;model_item, &amp;feat_type );
+    TEST_CALL_REPORT( &quot;ProFeatureTypeGet()&quot;, &quot;ProTestRuleInitZone()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+    if( (status != PRO_TK_NO_ERROR) || (feat_type != PRO_FEAT_ZONE) )
+<a name="anchor-52"></a>	return -1;
+
+    status = ProRuleInitZone( &amp;model_item, p_rule );
+    TEST_CALL_REPORT( &quot;ProRuleInitZone()&quot;, &quot;ProTestRuleInitZone()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-53"></a>
+    if( status != PRO_TK_NO_ERROR )
+	p_rule->type = PRO_RULE_NONE;
+
+    return 0;
+<a name="anchor-54"></a>}
+
+
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-55"></a>    Function:	ProTestRuleInitDist()
+    Purpose:	On-buton function. Init a rule by distance.
+    Returns:	0 - success; -1 - error. Now ignored.
+\*---------------------------------------------------------------------*/
+int ProTestRuleInitDist( ProRule* p_rule, int int_dummy )
+<a name="anchor-56"></a>{
+    ProError		status;
+    ProRuleDist		rule_distance;
+    ProSelection	*p_selection;
+    int			n_selected;
+<a name="anchor-57"></a>    ProAsmcomppath	comp_path;
+    ProMatrix		transformation;
+
+
+    p_rule->type = PRO_RULE_NONE;
+<a name="anchor-58"></a>
+    /* Pick the center point by mouse */
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, 
+	&quot;Specify point, vertex or csys to evaluate distance from&quot; );
+    status = ProSelect( (char *)&quot;point,csys&quot;, 1, NULL, NULL, NULL, NULL,
+<a name="anchor-59"></a>                        &amp;p_selection, &amp;n_selected );
+    TEST_CALL_REPORT( &quot;ProSelect()&quot;, &quot;ProTestRuleInitZone()&quot;,
+                        status, status != PRO_TK_NO_ERROR );
+    if( (status != PRO_TK_NO_ERROR) || (n_selected &lt; 1) )
+        return -1;
+<a name="anchor-60"></a>
+    status = ProSelectionPoint3dGet( p_selection[0], rule_distance.center );
+    TEST_CALL_REPORT( &quot;ProSelectionPoint3dGet()&quot;, &quot;ProTestRuleInitZone()&quot;,
+                        status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-61"></a>    status = ProSelectionAsmcomppathGet( p_selection[0], &amp;comp_path );
+    TEST_CALL_REPORT( &quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProTestRuleInitZone()&quot;,
+                        status, status != PRO_TK_NO_ERROR );
+
+    status = ProAsmcomppathTrfGet( &amp;comp_path, PRO_B_TRUE, transformation );
+<a name="anchor-62"></a>    TEST_CALL_REPORT( &quot;ProAsmcomppathTrfGet()&quot;, &quot;ProTestRuleInitZone()&quot;,
+                        status, status != PRO_TK_NO_ERROR );
+
+
+    status = ProVectorTrfEval( rule_distance.center, transformation, 
+<a name="anchor-63"></a>	rule_distance.center );
+    TEST_CALL_REPORT( &quot;ProVectorTrfEval()&quot;, &quot;ProTestRuleInitZone()&quot;,
+                        status, status != PRO_TK_NO_ERROR );
+
+    /* Get distance */
+<a name="anchor-64"></a>    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter distance: &quot; );
+    if( !ProUtilDoubleGet( NULL, NULL, &amp;(rule_distance.distance) ) )
+	return -1;
+
+    status = ProRuleInitDist( &amp;rule_distance, p_rule );
+<a name="anchor-65"></a>    TEST_CALL_REPORT( &quot;ProRuleInitDist()&quot;, &quot;ProTestRuleInitDist()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    if( status != PRO_TK_NO_ERROR )
+	p_rule->type = PRO_RULE_NONE;
+<a name="anchor-66"></a>
+
+    return 0;
+}
+
+<a name="anchor-67"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProTestRuleInitSize()
+    Purpose:	On-buton function. Init a rule by size.
+<a name="anchor-68"></a>    Returns:	0 - success; -1 - error. Now ignored.
+\*---------------------------------------------------------------------*/
+int ProTestRuleInitSize( ProRule* p_rule, int int_dummy )
+{
+    ProError		status;
+<a name="anchor-69"></a>    int			menu_id;    /* The identifier of the created menu */
+    int			menu_action;
+    ProRuleSize		rule_size;
+    char		*p_menus[] = { &quot;Set Size&quot;, &quot;Set Size2&quot;, &quot;DONE QUIT&quot;, 
+					&quot;&quot; };
+<a name="anchor-70"></a>    double		range[ 2 ];
+    double		*p_range;
+    double		value;
+
+
+<a name="anchor-71"></a>    /*---------------------*\
+        Define Set Size
+    \*---------------------*/
+    status = ProMenuFileRegister( (char *)&quot;Set Size&quot;, (char *)&quot;tkrulesz.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestRuleInitSize()&quot;, 
+<a name="anchor-72"></a>			status, status != PRO_TK_NO_ERROR );
+
+    ProMenubuttonActionSet( (char *)&quot;Set Size&quot;, (char *)&quot;Absolute&quot;, 
+	(ProMenubuttonAction)ProTestRuleSizeDataInit, 
+	&amp;rule_size, SIZE_ABSOLUTE );
+<a name="anchor-73"></a>    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRuleInitSize&quot;,
+                                    status , status != PRO_TK_NO_ERROR);
+    ProMenubuttonActionSet( (char *)&quot;Set Size&quot;, (char *)&quot;Relative&quot;,
+        (ProMenubuttonAction)ProTestRuleSizeDataInit,
+        &amp;rule_size, SIZE_RELATIVE );
+<a name="anchor-74"></a>    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRuleInitSize&quot;,
+                                    status , status != PRO_TK_NO_ERROR);
+    ProMenubuttonActionSet( (char *)&quot;Set Size&quot;, (char *)&quot;Set Size&quot;,
+        (ProMenubuttonAction)ProMenuHold, NULL, 0 );
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRuleInitSize&quot;,
+<a name="anchor-75"></a>                                    status , status != PRO_TK_NO_ERROR);
+
+    /*---------------------*\
+        Define Set Size2
+    \*---------------------*/
+<a name="anchor-76"></a>    status = ProMenuFileRegister( (char *)&quot;Set Size2&quot;,(char *) &quot;tkrulesz2.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestRuleInitSize()&quot;,
+                        status, status != PRO_TK_NO_ERROR );
+
+    ProMenubuttonActionSet( (char *)&quot;Set Size2&quot;,(char *) &quot;Greater Than&quot;, 
+<a name="anchor-77"></a>	(ProMenubuttonAction)ProTestRuleSizeDataInit, 
+	&amp;rule_size, SIZE_GREATER );
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRuleInitSize&quot;,
+                                    status , status != PRO_TK_NO_ERROR);
+    ProMenubuttonActionSet((char *) &quot;Set Size2&quot;, (char *)&quot;Less Than&quot;, 
+<a name="anchor-78"></a>	(ProMenubuttonAction)ProTestRuleSizeDataInit, 
+	&amp;rule_size, SIZE_LESS );
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRuleInitSize&quot;,
+                                    status , status != PRO_TK_NO_ERROR);
+    ProMenubuttonActionSet( (char *)&quot;Set Size2&quot;, (char *)&quot;Set Size2&quot;, 
+<a name="anchor-79"></a>	(ProMenubuttonAction)ProMenuHold, NULL, 0 );
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRuleInitSize&quot;,
+                                    status , status != PRO_TK_NO_ERROR);
+
+    /*---------------------*\
+<a name="anchor-80"></a>        Define DONE QUIT
+    \*---------------------*/
+    status = ProMenuFileRegister( (char *)&quot;DONE QUIT&quot;,(char *)&quot;tkdonequit.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, &quot;ProTestRuleInitSize&quot;,
+                                    status , status != PRO_TK_NO_ERROR);
+<a name="anchor-81"></a>    status = ProMenubuttonActionSet((char *)&quot;DONE QUIT&quot;,(char *)&quot;-Done&quot;,
+    (ProMenubuttonAction)ProTestRuleSizeDataInit, &amp;rule_size, SIZE_DONE );
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRuleInitSize&quot;,
+                                    status , status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char *)&quot;DONE QUIT&quot;,(char *)&quot;-Quit&quot;,
+<a name="anchor-82"></a>    (ProMenubuttonAction)ProTestRuleSizeDataInit, &amp;rule_size, SIZE_QUIT );
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRuleInitSize&quot;,
+                                    status , status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char *)&quot;DONE QUIT&quot;,(char *)&quot;DONE QUIT&quot;,
+                            (ProMenubuttonAction)ProMenuHold,NULL,0);
+<a name="anchor-83"></a>    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRuleInitSize&quot;,
+                                    status , status != PRO_TK_NO_ERROR);
+
+    /* Run menu */
+    status = ProCompoundmenuCreate( p_menus,  &amp;menu_id );
+<a name="anchor-84"></a>    TEST_CALL_REPORT( &quot;ProMenuCompoundCreate()&quot;, &quot;ProTestRuleInitSize()&quot;,
+                        status, status != PRO_TK_NO_ERROR );
+
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-85"></a>	menu_action = SIZE_QUIT;
+
+	status = ProMenuProcess( (char *)&quot;Set Size&quot;, &amp;menu_action );
+	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestRuleInitSize()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-86"></a>    }
+
+    if( menu_action == SIZE_DONE )
+    {
+        if( rule_size.absolute == PRO_B_FALSE )
+<a name="anchor-87"></a>	{ 
+	    range[0] = 0.0;
+            range[1] = 1.0;
+	    p_range = range;
+	}
+<a name="anchor-88"></a>	else
+	    p_range = NULL;
+
+    	/* Get value */
+        ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter value: &quot; );
+<a name="anchor-89"></a>        status = ProMessageDoubleRead( p_range, &amp;value );
+        TEST_CALL_REPORT( &quot;ProMessageDoubleRead()&quot;, &quot;ProTestRuleInitSize()&quot;,    
+                        status, status != PRO_TK_NO_ERROR );
+
+	if( status == PRO_TK_NO_ERROR )
+<a name="anchor-90"></a>	{
+	    rule_size.value = value;
+    	    status = ProRuleInitSize( &amp;rule_size, p_rule );
+    	    TEST_CALL_REPORT( &quot;ProRuleInitSize()&quot;, &quot;ProTestRuleInitSize()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-91"></a>    	}
+    }
+    else
+	status = PRO_TK_USER_ABORT;
+
+<a name="anchor-92"></a>    if( status != PRO_TK_NO_ERROR )
+	p_rule->type = PRO_RULE_NONE;
+
+
+    return 0;
+<a name="anchor-93"></a>}
+
+
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-94"></a>    Function:	ProTestRuleSizeDataInit()
+    Purpose:	On-buton function. Init the structure ProRuleSize.
+    Returns:	0 - success; -1 - error. Now ignored.
+\*---------------------------------------------------------------------*/
+int ProTestRuleSizeDataInit( ProRuleSize* p_rule_size, int option )
+<a name="anchor-95"></a>{
+    ProError		status;
+
+
+    switch( option )
+<a name="anchor-96"></a>    {
+      case SIZE_ABSOLUTE:
+        p_rule_size->absolute = PRO_B_TRUE;
+	break;
+
+<a name="anchor-97"></a>      case SIZE_RELATIVE:
+        p_rule_size->absolute = PRO_B_FALSE;
+        break;
+
+      case SIZE_GREATER:
+<a name="anchor-98"></a>        p_rule_size->greater = PRO_B_TRUE;
+        break;
+
+      case SIZE_LESS:
+        p_rule_size->greater = PRO_B_FALSE;
+<a name="anchor-99"></a>        break;
+
+      case SIZE_QUIT:
+        status = ProMenuDelete();
+        TEST_CALL_REPORT( &quot;ProMenuDelete()&quot;, &quot;ProTestRuleInitSize()&quot;,
+<a name="anchor-100"></a>                status, status != PRO_TK_NO_ERROR );
+        status = ProMenuDelete();
+        TEST_CALL_REPORT( &quot;ProMenuDelete()&quot;, &quot;ProTestRuleInitSize()&quot;,
+                status, status != PRO_TK_NO_ERROR );
+        status = ProMenuDeleteWithStatus( SIZE_QUIT );
+<a name="anchor-101"></a>    	TEST_CALL_REPORT( &quot;ProMenuDeleteWithStatus()&quot;, &quot;ProTestRuleInitSize()&quot;,
+        	status, status != PRO_TK_NO_ERROR );
+        break;
+
+      case SIZE_DONE:
+<a name="anchor-102"></a>        status = ProMenuDelete();
+        TEST_CALL_REPORT( &quot;ProMenuDelete()&quot;, &quot;ProTestRuleInitSize()&quot;,
+                status, status != PRO_TK_NO_ERROR );
+        status = ProMenuDelete();
+        TEST_CALL_REPORT( &quot;ProMenuDelete()&quot;, &quot;ProTestRuleInitSize()&quot;,
+<a name="anchor-103"></a>                status, status != PRO_TK_NO_ERROR );
+        status = ProMenuDeleteWithStatus( SIZE_DONE );
+        TEST_CALL_REPORT( &quot;ProMenuDeleteWithStatus()&quot;, &quot;ProTestRuleInitSize()&quot;,
+                status, status != PRO_TK_NO_ERROR );
+        break;
+<a name="anchor-104"></a>
+      default:
+	break;
+    }
+
+<a name="anchor-105"></a>
+    return 0;
+}
+
+
+<a name="anchor-106"></a>
+/*---------------------------------------------------------------------*\
+    Function:	ProTestRuleInitSize()
+    Purpose:	On-buton function. Init a rule by simp rep.
+    Returns:	0 - success; -1 - error. Now ignored.
+<a name="anchor-107"></a>\*---------------------------------------------------------------------*/
+int ProTestRuleInitRep( ProRule* p_rule, int int_dummy )
+{
+    ProError		status;
+    ProSimprep		simp_rep;
+<a name="anchor-108"></a>
+
+    /* Select simp rep in the current model 
+	(model handle is inited in ProTestRules() ) */
+    status = ProSimprepSelect( solid, &amp;simp_rep );
+<a name="anchor-109"></a>    TEST_CALL_REPORT( &quot;ProSimprepSelect()&quot;, &quot;ProTestRuleInitRep()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+
+<a name="anchor-110"></a>    status = ProRuleInitRep( &amp;simp_rep, p_rule );
+    TEST_CALL_REPORT( &quot;ProRuleInitRep()&quot;, &quot;ProTestRuleInitRep()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    if( status != PRO_TK_NO_ERROR )
+<a name="anchor-111"></a>	p_rule->type = PRO_RULE_NONE;
+
+
+    return 0;
+}
+<a name="anchor-112"></a>
+
+
+/*---------------------------------------------------------------------*\
+    Function:	ProSelectWithRules()
+<a name="anchor-113"></a>    Purpose:	On-buton function. 
+    Returns:
+      PRO_TK_NO_ERROR   - Selection was made or user hit &quot;Done&quot;.
+      PRO_TK_USER_ABORT - User  hit &quot;Quit&quot;.
+      PRO_TK_PICK_ABOVE - Selection was interrupted by a user's pick on
+<a name="anchor-114"></a>                          any button from above menus.
+\*---------------------------------------------------------------------*/
+ProError ProSelectWithRules( char option[],
+				int max_count,
+				ProSelection *p_in_sel, /* Ignored */
+<a name="anchor-115"></a>				ProSelFunctions *sel_func, /* Ignored */
+				ProSelectionEnv sel_env, /* Ignored */
+				ProSelAppAction appl_act_data, /* Ignored */
+				ProSelection **p_sel_array,
+				int *p_n_sels )
+<a name="anchor-116"></a>{
+    ProError		status;
+    AsmcomppathList	comp_path_list;
+    ProMdl		model;
+    ProModelitem	model_item;
+<a name="anchor-117"></a>    int			i;
+
+    /* Init AsmcomppathList */
+    comp_path_list.p_comp_path_list = NULL;
+    comp_path_list.size = 0;
+<a name="anchor-118"></a>
+    if( ProTestRules( &amp;comp_path_list ) == -1 )
+	return PRO_TK_USER_ABORT;
+
+    if( comp_path_list.size &lt; 1 )
+<a name="anchor-119"></a>	return PRO_TK_USER_ABORT;
+
+    status = ProArrayAlloc( comp_path_list.size, sizeof(ProSelection), 1, 
+			    (ProArray*)p_sel_array );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProSelectWithRules()&quot;,
+<a name="anchor-120"></a>                      status, status != PRO_TK_NO_ERROR );
+
+    *p_n_sels = 0;
+    for( i=0; i&lt;comp_path_list.size; i++, (*p_n_sels)++ )
+    {
+<a name="anchor-121"></a>	status = ProAsmcomppathMdlGet( &amp;(comp_path_list.p_comp_path_list[i] ), 
+					&amp;model );
+	TEST_CALL_REPORT( &quot;ProAsmcomppathMdlGet()&quot;, &quot;ProSelectWithRules()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	if( status != PRO_TK_NO_ERROR )
+<a name="anchor-122"></a>	    return PRO_TK_USER_ABORT;
+
+	status = ProMdlToModelitem( model, &amp;model_item );
+	TEST_CALL_REPORT( &quot;ProMdlToModelitem()&quot;, &quot;ProSelectWithRules()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-123"></a>
+	status = ProSelectionAlloc( &amp;(comp_path_list.p_comp_path_list[i]), 
+				    &amp;model_item, (*p_sel_array) + i );
+	TEST_CALL_REPORT( &quot;ProSelectionAlloc()&quot;, &quot;ProSelectWithRules()&quot;,
+			    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-124"></a>
+	status = ProSelectionHighlight( (*p_sel_array)[i], PRO_COLOR_ERROR );
+	TEST_CALL_REPORT( &quot;ProSelectionHighlight()&quot;, &quot;ProSelectWithRules()&quot;,
+			    status, status == PRO_TK_COMM_ERROR);
+    }
+<a name="anchor-125"></a>
+
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-126"></a>#endif /* #ifndef PT_PRODUCTS_BUILD */
+</pre>
+</body>
+</html>

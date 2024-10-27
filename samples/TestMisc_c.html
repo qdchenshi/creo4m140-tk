@@ -1,0 +1,794 @@
+<html>
+<head>
+<title>TestMisc.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMdl.h>
+#include &lt;ProFeature.h>
+#include &lt;ProSolid.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProGeomitem.h>
+<a name="anchor-3"></a>#include &lt;ProEdge.h>
+#include &lt;ProAxis.h>
+#include &lt;ProCsys.h>
+#include &lt;ProSurface.h>
+#include &lt;ProFeatType.h>
+<a name="anchor-4"></a>#include &lt;ProPoint.h>
+#include &lt;ProCurve.h>
+#include &lt;ProQuilt.h>
+#include &lt;ProArray.h>
+#include &lt;ProSelection.h>
+<a name="anchor-5"></a>#include &lt;ProMenu.h>
+#include &lt;ProUtil.h>
+
+#include &quot;UtilGeom.h&quot;
+#include &quot;UtilColor.h&quot;
+<a name="anchor-6"></a>#include &quot;TestConsts.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;TestMisc.h&quot;
+#include &quot;UtilVisit.h&quot;
+#include &quot;UtilCollect.h&quot;
+<a name="anchor-7"></a>#include &quot;UtilTypes.h&quot;
+#include &lt;PTApplsUnicodeUtils.h>
+#include &quot;ProNotify.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilFiles.h&quot;
+<a name="anchor-8"></a>#include &quot;UtilFeats.h&quot;
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+/*--------------------------------------------------------------------*\
+<a name="anchor-9"></a>Application data types
+\*--------------------------------------------------------------------*/
+#define FEAT_LIST	1
+typedef struct testfeatdata
+{
+<a name="anchor-10"></a>    unsigned int action; /* Bit map of FEAT_... */
+    void *data;
+} ProTestFeatData;
+
+
+<a name="anchor-11"></a>typedef struct {    /* added due to change to ProQuilt */
+    ProMdl owner;
+    FILE *fp;
+} TestAppdata;
+
+<a name="anchor-12"></a>typedef struct {
+    ProFeattype feat_type;
+    ProType     geom_type;
+    char        name_pref[11];
+} GeomLookup ;
+<a name="anchor-13"></a>
+static GeomLookup lookup_table[] = {
+{ PRO_FEAT_HOLE, PRO_AXIS, &quot;tk_axis&quot; },
+{ PRO_FEAT_FIRST_FEAT, PRO_EDGE, &quot;tk_edge&quot; },
+{ PRO_FEAT_PROTRUSION, PRO_EDGE, &quot;tk_edge&quot; },
+<a name="anchor-14"></a>{ PRO_FEAT_ROUND, PRO_SURFACE, &quot;tk_surf&quot; },
+{ PRO_FEAT_CSYS, PRO_CSYS, &quot;tk_csys&quot; },
+{ PRO_FEAT_CURVE, PRO_CURVE, &quot;tk_curve&quot; },
+{ PRO_FEAT_DATUM_SURF, PRO_QUILT, &quot;tk_surface&quot; },
+{ PRO_FEAT_DATUM_QUILT, PRO_SURFACE, &quot;tk_surface&quot; },
+<a name="anchor-15"></a>{ PRO_FEAT_DATUM_POINT, PRO_POINT, &quot;tk_point&quot; },
+{ PRO_TK_NOT_USED,  PRO_FEATURE, &quot;tk_feat&quot; }};
+
+static int table_size = sizeof(lookup_table)/sizeof(GeomLookup);
+static int suff_num = 1;
+<a name="anchor-16"></a>static int feature_number = 0;
+static ProError ProTestCustomFileOpen();
+static ProError ProTestCustomFileSave();
+ProBoolean PTTestOpenAccessFunction (wchar_t* file_type, ProAppData app_data );
+ProError PTTestOpenOperationAction (wchar_t* file_type, ProPath file_path, ProAppData app_data );
+<a name="anchor-17"></a>ProBoolean PTTestSaveAccessFunction (wchar_t* file_type, ProMdl model,  ProAppData app_data );
+ProError PTTestSaveOperationAction (wchar_t* file_type, ProMdl model, ProPath file_path, ProAppData app_data );
+ProError ProSampCustomFileOpen();
+ProError ProOpenOk(ProMdlType mdl_type, int sub_type, ProName model_name);
+ProError ProTestFeatureInfoAct(ProModelitem *feature, ProError instatus, ProAppData appdata);
+<a name="anchor-18"></a>int ProTestFeatureInfoGeom(ProModelitem *feature, FILE *fp);
+ProError ProTestGeomitemInfoAct(ProGeomitem *item, ProError instatus, ProAppData appdata); 
+/*====================================================================*\
+FUNCTION : ProTestMisc
+PURPOSE  : 
+<a name="anchor-19"></a>\*====================================================================*/
+int ProTestMisc(ProSolid* p_solid)
+{
+    ProError status;
+    ProMdl   model;
+<a name="anchor-20"></a>    MafpInfo mafpinf;
+    int      id;
+
+
+    if ((mafpinf.fp = PTApplsUnicodeFopen(&quot;misc_test.inf&quot;, &quot;w&quot;)) == NULL)
+<a name="anchor-21"></a>        return PRO_TK_GENERAL_ERROR;
+
+    status = ProMdlCurrentGet(&amp;model);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, 
+	&quot;ProTestMiscMenu()&quot;, status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-22"></a>
+  
+    mafpinf.p_model = &amp;model;
+
+    status = ProMenuFileRegister((char*)&quot;tk_misc&quot;, (char*)&quot;tk_misc.mnu&quot;, &amp;id);
+<a name="anchor-23"></a>    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestMiscMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+        
+    status = ProMenubuttonActionSet((char*)&quot;tk_misc&quot;,(char*)&quot;-Init Test&quot;,
+	(ProMenubuttonAction)ProTestFuncInit, (void *) &amp;mafpinf,0);
+<a name="anchor-24"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMiscMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+        
+    status = ProMenubuttonActionSet((char*)&quot;tk_misc&quot;,(char*)&quot;-Name Get&quot;,
+	(ProMenubuttonAction)ProTestMdlNameGet, (void *) mafpinf.fp,0);
+<a name="anchor-25"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMiscMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+      /*  Example added from the project 13014507 */  
+    status = ProMenubuttonActionSet((char*)&quot;tk_misc&quot;,(char*)&quot;-Custom File Open&quot;,
+	(ProMenubuttonAction)ProTestCustomFileOpen, (void *) mafpinf.fp,0);
+<a name="anchor-26"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMiscMenu&quot;,
+        status, status != PRO_TK_NO_ERROR); 
+        
+    status = ProMenubuttonActionSet((char*)&quot;tk_misc&quot;,(char*)&quot;-Custom File Save&quot;,
+	(ProMenubuttonAction)ProTestCustomFileSave, (void *) mafpinf.fp,0);
+<a name="anchor-27"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMiscMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);        
+         
+    status = ProMenubuttonActionSet((char*)&quot;tk_misc&quot;,(char*)&quot;tk_misc&quot;,
+	(ProMenubuttonAction)ProTestMiscFpClose, (void *) mafpinf.fp,0);
+<a name="anchor-28"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMiscMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*)&quot;tk_misc&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate&quot;, &quot;ProTestMiscMenu&quot;,
+<a name="anchor-29"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess((char*)&quot;tk_misk&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProTestMiscMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    return PRO_TK_NO_ERROR;
+<a name="anchor-30"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestMiscFpClose
+PURPOSE  : Close file pointer opened
+<a name="anchor-31"></a>\*====================================================================*/
+int ProTestMiscFpClose (FILE *fp)
+{
+    ProError status;
+    fclose(fp);
+<a name="anchor-32"></a>    status = ProMenuDelete();
+    TEST_CALL_REPORT (&quot;ProMenuDelete&quot;, &quot;ProTestMiscFpClose&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    return 0;
+}
+<a name="anchor-33"></a>
+
+/*====================================================================*\
+FUNCTION : ProTestFuncInit
+PURPOSE  : Top level test
+<a name="anchor-34"></a>\*====================================================================*/
+int ProTestFuncInit (MafpInfo *p_mafpinf)
+{
+    ProError status;
+    
+<a name="anchor-35"></a>    status = ProUtilFeatvisVisit((ProSolid)p_mafpinf->p_model[0], 
+	(ProFunction)ProTestFeatAct, (ProAppData)p_mafpinf->fp);
+        
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-36"></a>
+/*====================================================================*\
+FUNCTION : ProTestFeatAct
+PURPOSE  : 
+\*====================================================================*/
+<a name="anchor-37"></a>ProError ProTestFeatAct (
+    ProFeature *p_feature,
+    ProError err,
+    ProAppData tmp_fp)
+{
+<a name="anchor-38"></a>    ProError status;
+    ProFeattype feat_type;
+    ProFeature new_feat;
+    int         i;
+    ProSolid   owner;
+<a name="anchor-39"></a>    wchar_t    feat_name[PRO_NAME_SIZE];
+    char       name[PRO_NAME_SIZE];
+    ProBoolean visited = PRO_B_FALSE;
+    FILE *fp = (FILE *) tmp_fp;
+
+<a name="anchor-40"></a>    ProError ProTestQuiltVisAct(ProGeomitem *p_geom_item, 
+   		 ProError err,  FILE *fp);
+/*--------------------------------------------------------------------*\
+    An unnecessary ammount of function calls!!
+\*--------------------------------------------------------------------*/
+<a name="anchor-41"></a>    status = ProFeatureSolidGet(p_feature, &amp;owner);
+    TEST_CALL_REPORT(&quot;ProFeatureSolidGet()&quot;, 
+	    &quot;ProTestFeatAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    status = ProModelitemNameGet(p_feature, feat_name);
+<a name="anchor-42"></a>    TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, 
+	    &quot;ProTestFeatAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    status = ProFeatureInit(owner, p_feature->id, &amp;new_feat);
+    TEST_CALL_REPORT(&quot;ProFeatureInit()&quot;, 
+<a name="anchor-43"></a>	    &quot;ProTestFeatAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    status = ProFeatureTypeGet(&amp;new_feat, &amp;feat_type);
+    TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;, 
+	    &quot;ProTestFeatAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-44"></a>
+    if ( status == PRO_TK_NO_ERROR)
+    {
+	ProTKFprintf(fp, &quot;Feature Name before rename : %s\n&quot;, 
+				    ProWstringToString(name, feat_name));
+<a name="anchor-45"></a>	status = ProTestNameGen((ProType)feat_type, feat_name);   
+	if (status == PRO_TK_NO_ERROR)
+	{
+	    status = ProModelitemNameSet(p_feature, feat_name);
+	    TEST_CALL_REPORT(&quot;ProModelitemNameSet()&quot;, 
+<a name="anchor-46"></a>		    &quot;ProTestFeatAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+	    ProTKFprintf(fp, &quot;Feature Name after rename  : %s\n&quot;, 
+					ProWstringToString(name, feat_name));
+	}
+    }
+<a name="anchor-47"></a>    else
+    {
+	ProTKFprintf(fp,&quot;No rename occured\n&quot;);
+    }
+
+<a name="anchor-48"></a>
+/*--------------------------------------------------------------------*\
+    Depending on feature type visit a different geometry item
+\*--------------------------------------------------------------------*/
+    for (i=0; i &lt; table_size; i++)
+<a name="anchor-49"></a>    {
+	if (lookup_table[i].feat_type == feat_type)
+	{
+	    ProTKFprintf(fp, &quot;Found feature, visiting %s\n&quot;, lookup_table[i].name_pref);
+	    if ( lookup_table[i].geom_type == PRO_QUILT)
+<a name="anchor-50"></a>	    {
+#ifndef PT_PRODUCTS_BUILD
+		status = ProUtilGeomitemactiveVisit(&amp;new_feat, PRO_QUILT,
+			    (ProFunction) ProTestQuiltVisAct, 
+			    (ProAppData) fp);
+<a name="anchor-51"></a>#endif /* #ifndef PT_PRODUCTS_BUILD */
+	    }
+	    else
+	    {
+		status = ProUtilGeomitemactiveVisit(&amp;new_feat, 
+<a name="anchor-52"></a>			    lookup_table[i].geom_type,
+			    (ProFunction) ProTestGeomitemVisAct, 
+			    (ProAppData) fp);
+	    }
+	    visited = PRO_B_TRUE;
+<a name="anchor-53"></a>	}
+    }
+
+    if ( visited == PRO_B_FALSE )
+    {
+<a name="anchor-54"></a>	ProTKFprintf(fp, &quot;Feature skipped\n&quot;);
+	ProTKFprintf(fp, &quot;Feature skipped\n&quot;);
+    }
+	ProTKFprintf(fp, &quot;-------------------------------------------------\n&quot;);
+	ProTKFprintf(fp, &quot;-------------------------------------------------\n&quot;);
+<a name="anchor-55"></a>	
+    return PRO_TK_NO_ERROR;
+}
+
+#ifndef PT_PRODUCTS_BUILD
+<a name="anchor-56"></a>/*====================================================================*\
+FUNCTION :  ProTestQuiltSurfVisAct
+PURPOSE  : Visit function for ProQuiltSurfaceVisit
+\*====================================================================*/
+ProError ProTestQuiltSurfVisAct(
+<a name="anchor-57"></a>    ProSurface surface, 
+    ProError err,
+    ProAppData app_data)
+{
+    ProGeomitem geom_item;
+<a name="anchor-58"></a>    ProError status;
+    TestAppdata *tmp_appdata = (TestAppdata*)app_data;
+
+    status = ProSurfaceIdGet(surface, &amp;geom_item.id);
+    TEST_CALL_REPORT(&quot;ProSurfaceIdGet()&quot;, 
+<a name="anchor-59"></a>	    &quot;ProTestQuiltSurfVisAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    geom_item.type = ProSurfaceDatatypeGet();
+    geom_item.owner = tmp_appdata->owner;
+
+<a name="anchor-60"></a>    status = ProTestGeomitemVisAct(&amp;geom_item, err, tmp_appdata->fp);
+
+    return (status);
+}
+
+<a name="anchor-61"></a>
+/*====================================================================*\
+FUNCTION :  ProTestQuiltVisAct
+PURPOSE  :  Visit function for ProFeatgeomitemVisit 
+\*====================================================================*/
+<a name="anchor-62"></a>ProError ProTestQuiltVisAct(
+    ProGeomitem *p_geom_item, 
+    ProError err, 
+    FILE *fp)
+{
+<a name="anchor-63"></a>    ProError status;
+    ProQuilt quilt;
+    TestAppdata t_appdata;
+    ProSurface *surfaces;
+    int surfaces_num, i;
+<a name="anchor-64"></a>
+    ProTKFprintf(fp, &quot;Doing quilt! Visiting quilt surfaces\n&quot;);
+    status = ProQuiltInit((ProSolid)p_geom_item->owner, p_geom_item->id, &amp;quilt);
+    TEST_CALL_REPORT(&quot;ProQuiltInit()&quot;, 
+	&quot;ProTestQuiltVisAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-65"></a>
+    status = ProQuiltToGeomitem((ProSolid)p_geom_item->owner, quilt, p_geom_item);
+    TEST_CALL_REPORT(&quot;ProQuiltToGeomitem()&quot;, 
+	&quot;ProTestQuiltVisAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+<a name="anchor-66"></a>    status = ProGeomitemToQuilt(p_geom_item, &amp;quilt);
+    TEST_CALL_REPORT(&quot;ProGeomitemToQuilt()&quot;, 
+	&quot;ProTestQuiltVisAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    t_appdata.owner = p_geom_item->owner;
+<a name="anchor-67"></a>    t_appdata.fp = fp;
+	
+    status = ProUtilCollectQuiltSurfaces (quilt, &amp;surfaces);
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-68"></a>        status = ProArraySizeGet ((ProArray)surfaces, &amp;surfaces_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestQuiltVisAct()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; surfaces_num; i++)
+        {
+<a name="anchor-69"></a>            status = ProTestQuiltSurfVisAct (surfaces[i],
+	        PRO_TK_NO_ERROR, (ProAppData)&amp;t_appdata);
+        }
+        status = ProArrayFree ((ProArray*)&amp;surfaces);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestQuiltVisAct()&quot;, 
+<a name="anchor-70"></a>            status, status != PRO_TK_NO_ERROR );
+    }
+    return (status);
+}
+
+<a name="anchor-71"></a>#endif /* #ifndef PT_PRODUCTS_BUILD */
+
+/*====================================================================*\
+FUNCTION : ProTestGeomitemVisAct
+PURPOSE  : 
+<a name="anchor-72"></a>\*====================================================================*/
+ProError ProTestGeomitemVisAct ( 
+    ProGeomitem *p_geom_item, 
+    ProError err, 
+    FILE *fp)
+<a name="anchor-73"></a>{
+    ProError status;
+    ProFeature  parent;
+    ProSelection selection;
+    ProCharName type_str;
+<a name="anchor-74"></a>
+    status = ProGeomitemFeatureGet(p_geom_item, &amp;parent);
+    TEST_CALL_REPORT(&quot;ProGeomitemFeatureGet()&quot;, 
+	    &quot;ProTestGeomitemVisAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+	    
+<a name="anchor-75"></a>    status = ProSelectionAlloc(NULL, &amp;parent, &amp;selection);
+    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;, 
+	    &quot;ProTestGeomitemVisAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    status = ProSelectionHighlight(selection, CYAN);
+<a name="anchor-76"></a>
+    ProUtilObjtypeStr(p_geom_item->type, type_str);
+
+    ProTKFprintf(fp, &quot;Visiting %s id %d. Parent feature is %d\n&quot;, 
+	type_str, p_geom_item->id, parent.id);
+<a name="anchor-77"></a>
+    status = ProSelectionUnhighlight(selection);
+    
+    status = ProSelectionFree(&amp;selection);
+    TEST_CALL_REPORT(&quot;ProSelectionFree()&quot;, 
+<a name="anchor-78"></a>	    &quot;ProTestGeomitemVisAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-79"></a>
+/*====================================================================*\
+FUNCTION : ProTestNameGen
+PURPOSE  : Generate a uniqe model item name
+\*====================================================================*/
+<a name="anchor-80"></a>ProError ProTestNameGen(ProType type, wchar_t *new_name)   
+{
+    ProError status = PRO_TK_BAD_INPUTS;
+    char new_string[PRO_NAME_SIZE];
+    int i;
+<a name="anchor-81"></a>    
+    for (i=0; i &lt; table_size; i++)
+    {
+	if (lookup_table[i].feat_type == type)
+	{
+<a name="anchor-82"></a>	    ProTKSprintf(new_string, &quot;%s%04d&quot;,lookup_table[i].name_pref,
+		suff_num++);
+	    ProStringToWstring(new_name, new_string);
+	    status = PRO_TK_NO_ERROR;
+	    break;
+<a name="anchor-83"></a>	}
+    }
+	
+    return status;
+}
+<a name="anchor-84"></a>
+
+/*====================================================================*\
+FUNCTION : ProTestMdlNameGet
+PURPOSE  : Retrieves the name of the selected model
+<a name="anchor-85"></a>\*====================================================================*/
+int ProTestMdlNameGet(FILE *fp)
+{
+    ProError status;
+    wchar_t wname[PRO_MDLNAME_SIZE];
+<a name="anchor-86"></a>    char    name[PRO_MDLNAME_SIZE];
+    ProSelection *sels = NULL;
+    int num;
+    char option[] = &quot;part&quot;;
+    ProMdl model;
+<a name="anchor-87"></a>    ProModelitem model_item;
+
+    status = ProSelect(option, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;num);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestMdlNameGet()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+<a name="anchor-88"></a>    if (status != PRO_TK_NO_ERROR || sels == NULL)
+       return status;
+    
+    status = ProSelectionModelitemGet(sels[0], &amp;model_item); 
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+<a name="anchor-89"></a>	    &quot;ProTestMdlNameGet()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+    status = ProModelitemMdlGet(&amp;model_item, &amp;model); 
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+	    &quot;ProTestMdlNameGet()&quot;, status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-90"></a>
+    status = ProMdlMdlnameGet(model, wname); 
+    TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, 
+	    &quot;ProTestMdlNameGet()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+<a name="anchor-91"></a>    ProTKFprintf(fp, &quot;Selected model name        : %s\n&quot;,
+	status != PRO_TK_NO_ERROR ? &quot;Unknown&quot; : ProWstringToString(name, wname));
+
+    return status; 
+}
+<a name="anchor-92"></a>
+/*====================================================================*\
+FUNCTION : ProTestCustomFileOpen
+PURPOSE  : Registers the specified type for opening.
+\*====================================================================*/
+<a name="anchor-93"></a>ProError ProTestCustomFileOpen()
+{
+	ProError status;
+        char ftype[] = &quot;samp&quot;;
+	char fdesc[] = &quot;CustSampUsrDefFType&quot;;
+<a name="anchor-94"></a>	ProName w_ftype;
+	ProName w_fdesc;
+
+	ProStringToWstring(w_ftype, ftype);
+	ProStringToWstring(w_fdesc, fdesc);
+<a name="anchor-95"></a>
+	status = ProFileOpenRegister(w_ftype, w_fdesc, (ProFileOpenAccessFunction)PTTestOpenAccessFunction,
+						(ProFileOpenOperationAction)PTTestOpenOperationAction, NULL );
+        TEST_CALL_REPORT(&quot;ProFileOpenRegister()&quot;, &quot;ProTestCustomFileOpen()&quot;, status, status!=PRO_TK_NO_ERROR);                                                
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;The new type registered successfully.&quot;);
+<a name="anchor-96"></a>        
+        return (status);
+}
+
+/*====================================================================*\
+<a name="anchor-97"></a>FUNCTION : ProTestCustomFileSave
+PURPOSE  : Registers the specified type for saving.
+\*====================================================================*/
+ProError ProTestCustomFileSave()
+{
+<a name="anchor-98"></a>	ProError status;
+        char ftype[] = &quot;samp&quot;;
+	char fdesc[] = &quot;CustSampUsrDefFType&quot;;
+	ProName w_ftype;
+	ProName w_fdesc;
+<a name="anchor-99"></a>
+	ProStringToWstring(w_ftype, ftype);
+	ProStringToWstring(w_fdesc, fdesc);
+		
+	status = ProFileSaveRegister(w_ftype, w_fdesc, (ProFileSaveAccessFunction)PTTestSaveAccessFunction,
+<a name="anchor-100"></a>						(ProFileSaveOperationAction)PTTestSaveOperationAction, NULL); 
+        TEST_CALL_REPORT(&quot;ProFileSaveRegister()&quot;, &quot;ProTestCustomFileSave()&quot;, status, status!=PRO_TK_NO_ERROR);
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;The new type registered successfully.&quot;);
+                                                      
+        return (status);
+<a name="anchor-101"></a>
+}
+
+/*====================================================================*\
+FUNCTION : PTTestOpenAccessFunction
+<a name="anchor-102"></a>PURPOSE  : Callback function to select the file type in the file-open dialog box.
+\*====================================================================*/
+ProBoolean PTTestOpenAccessFunction (wchar_t* file_type, ProAppData app_data )  
+{
+         ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;The type registered successfully for opening.&quot;);
+<a name="anchor-103"></a>		
+       	 return (PRO_B_TRUE);  
+}
+                                    
+/*====================================================================*\
+<a name="anchor-104"></a>FUNCTION : PTTestOpenOperationAction
+PURPOSE  : Callback action on pressing open button for new registered type.
+\*====================================================================*/
+ProError PTTestOpenOperationAction (wchar_t* file_type, ProPath file_path, ProAppData app_data )
+{
+<a name="anchor-105"></a>        ProError status;
+        
+        status = ProSampCustomFileOpen();              
+	TEST_CALL_REPORT (&quot;ProSampCustomFileOpen()&quot;, &quot;PTTestOpenAccessFunction&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-106"></a>        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;The operation performed successfully.&quot;);
+
+  	return (PRO_TK_NO_ERROR);  
+}
+
+<a name="anchor-107"></a>/*====================================================================*\
+FUNCTION : PTTestSaveAccessFunction
+PURPOSE  : Callback function to select the file type in the file-save a copy dialog box.
+\*====================================================================*/
+ProBoolean PTTestSaveAccessFunction (wchar_t* file_type, ProMdl model,  ProAppData app_data )
+<a name="anchor-108"></a>{         
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;The type  registered successfully for saving.&quot;);
+       		
+      	return (PRO_B_TRUE);  
+}                          
+<a name="anchor-109"></a>
+/*====================================================================*\
+FUNCTION : PTTestSaveOperationAction
+PURPOSE  : Callback action on pressing ok button in save a copy for new registered type.
+\*====================================================================*/
+<a name="anchor-110"></a>ProError PTTestSaveOperationAction (wchar_t* file_type, ProMdl model, ProPath file_path, ProAppData app_data )
+{
+
+        ProError status;
+        char filename[PRO_PATH_SIZE];
+<a name="anchor-111"></a>        FILE *fp;
+
+	status = ProMdlCurrentGet(&amp;model);
+        TEST_CALL_REPORT (&quot;ProMdlCurrentGet()&quot; ,&quot;PTTestSaveOperationAction()&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-112"></a>        ProTestQcrName (&amp;model, (char*)&quot;.samp&quot;, filename);  
+        fp = PTApplsUnicodeFopen (filename, &quot;w&quot;);
+                
+        status = ProMdlSave(model);
+        TEST_CALL_REPORT (&quot;ProMdlSave()&quot; ,&quot;PTTestSaveOperationAction()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-113"></a>        
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;The model saved successfully.&quot;);
+		
+	return (PRO_TK_NO_ERROR);  
+}
+<a name="anchor-114"></a>
+/*====================================================================*\
+FUNCTION : ProSampCustomFileOpen
+PURPOSE  : Function called in the callback function with specified type for open operation.
+\*====================================================================*/
+<a name="anchor-115"></a>ProError ProSampCustomFileOpen()
+{
+    ProError status;
+    char str[500];
+    ProMdl model, mdl_handle;
+<a name="anchor-116"></a>    ProMdlName m_name;
+    char filename[PRO_PATH_SIZE];
+    ProPath name;
+    ProFeature *feature;
+    FILE *fp;
+<a name="anchor-117"></a>    ProMdlType type;
+    int i = 0, data = 0;
+    ProTestFeatData appdata;
+                   
+	status = ProNotificationSet(PRO_FILE_OPEN_OK, (ProFunction)ProOpenOk);
+<a name="anchor-118"></a>        TEST_CALL_REPORT (&quot;ProNotificationSet()&quot; ,&quot;ProSampCustomFileOpen()&quot;, status, status != PRO_TK_NO_ERROR);
+        
+	sprintf(str, &quot;ProNotificationSet : %d\n&quot;,(int)status);
+/*--------------------------------------------------------------------------------*\
+	Prompts to open the selected model using Open dialog box.
+<a name="anchor-119"></a>\*--------------------------------------------------------------------------------*/
+        status = ProMdlCurrentGet(&amp;model);  
+        TEST_CALL_REPORT (&quot;ProMdlCurrentGet()&quot; ,&quot;ProSampCustomFileOpen()&quot;, status, status != PRO_TK_NO_ERROR);
+
+        status = ProMdlTypeGet(model, &amp;type);  
+<a name="anchor-120"></a>        TEST_CALL_REPORT (&quot;ProMdlTypeGet()&quot; ,&quot;ProSampCustomFileOpen()&quot;, status, status != PRO_TK_NO_ERROR);
+            
+        status = ProMdlnameInit(m_name, (ProMdlfileType)type, &amp;mdl_handle);
+        TEST_CALL_REPORT (&quot;(ProMdlnameInit)&quot; ,&quot;ProSampCustomFileOpen()&quot;, status, status != PRO_TK_NO_ERROR);
+       
+<a name="anchor-121"></a>        ProTestQcrName (&amp;model, (char*)&quot;.samp&quot;, filename);  
+        fp = PTApplsUnicodeFopen (filename, &quot;w&quot;);
+        appdata.data = fp;   
+          if (fp == NULL)
+            return (PRO_TK_GENERAL_ERROR);  
+<a name="anchor-122"></a>/*-------------------------------------------------------------------------------*\
+	Collect all the features into an array from the current model 
+\*-------------------------------------------------------------------------------*/  
+           
+        status = ProUtilCollectSolidFeatures((ProSolid)model, &amp;feature); 
+<a name="anchor-123"></a>        TEST_CALL_REPORT (&quot;ProUtilCollectSolidFeatures()&quot; ,&quot;ProSampCustomFileOpen()&quot;, status, status != PRO_TK_NO_ERROR);
+       
+        ProTKFprintf(fp,&quot;--------------- User defined file type info --------------\n&quot;); 
+        status = ProTestFeatureInfoAct (&amp;feature[i], PRO_TK_NO_ERROR, (ProAppData)&amp;appdata);  
+        TEST_CALL_REPORT (&quot;ProTestFeatureInfoAct()&quot; ,&quot;ProSampCustomFileOpen()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-124"></a>
+        status = ProArrayFree((ProArray*)&amp;feature);            
+        fclose(fp);             
+        ProStringToWstring (name, filename);  
+/*------------------------------------------------------------------------------*\
+<a name="anchor-125"></a>	Display the information window
+\*------------------------------------------------------------------------------*/           
+        status = ProInfoWindowDisplay( name, NULL, NULL);
+        TEST_CALL_REPORT (&quot;ProInfoWindowDisplay()&quot; ,&quot;ProSampCustomFileOpen()&quot;, status, status != PRO_TK_NO_ERROR);
+         
+<a name="anchor-126"></a>           return PRO_TK_NO_ERROR;       
+}
+
+ProError ProOpenOk(ProMdlType mdl_type, int sub_type, ProName model_name)
+{
+<a name="anchor-127"></a>        return PRO_TK_NO_ERROR;
+}
+/*====================================================================*\
+    FUNCTION :	ProTestFeatureInfoAct()
+    PURPOSE  :	Generalized action function for visiting features
+<a name="anchor-128"></a>\*====================================================================*/
+ProError ProTestFeatureInfoAct(
+    ProModelitem *feature,
+    ProError instatus,
+    ProAppData appdata)
+<a name="anchor-129"></a>{
+    ProError status;
+    int action;
+    FILE *fp;
+    ProFeattype ftype;
+<a name="anchor-130"></a>    char ftype_str[PRO_NAME_SIZE];
+    ProBoolean visible, geomchk, read_on;
+    ProFeatStatus stat;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-131"></a>    Get the action type and file pointer.
+\*--------------------------------------------------------------------*/
+    action = ((ProTestFeatData*)appdata)->action;
+    fp = (FILE*)((ProTestFeatData*)appdata)->data;
+
+<a name="anchor-132"></a>    feature_number++;
+
+/*--------------------------------------------------------------------*\
+    Get the feature type
+\*--------------------------------------------------------------------*/
+<a name="anchor-133"></a>    status = ProFeatureTypeGet(feature, &amp;ftype);
+    TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;, &quot;ProTestFeatureInfoAct()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+    ProUtilFeattypeStr(ftype, ftype_str);
+
+<a name="anchor-134"></a>/*--------------------------------------------------------------------*\
+    Get the feature visibility
+\*--------------------------------------------------------------------*/
+    status = ProFeatureVisibilityGet(feature, &amp;visible);
+    TEST_CALL_REPORT(&quot;ProFeatureVisibilityGet()&quot;, &quot;ProTestFeatureInfoAct()&quot;,
+<a name="anchor-135"></a>					status, status != PRO_TK_NO_ERROR);
+
+    status = ProFeatureHasGeomchks(feature, &amp;geomchk);
+    TEST_CALL_REPORT(&quot;ProFeatureHasGeomchks()&quot;, &quot;ProTestFeatureInfoAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-136"></a>
+    status = ProFeatureIsReadonly(feature, &amp;read_on);
+    TEST_CALL_REPORT(&quot;ProFeatureIsReadonly()&quot;, &quot;ProTestFeatureInfoAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-137"></a>    if(action == FEAT_LIST)
+    {
+/*--------------------------------------------------------------------*\
+	Report the feature id, type and visibility as a list entry
+\*--------------------------------------------------------------------*/
+<a name="anchor-138"></a>	ProTKFprintf(fp, &quot;%-6d%-6d%-20s%-10s%-15s%-10s\n&quot;,
+			feature_number, feature->id, ftype_str,
+			visible == PRO_B_TRUE ? &quot;&quot; : &quot;INTERNAL&quot;,
+			geomchk == PRO_B_TRUE ? &quot;Has geom cheks&quot; : &quot;&quot;,
+			read_on == PRO_B_TRUE ? &quot;Yes&quot; : &quot;&quot;
+<a name="anchor-139"></a>			);
+	return(PRO_TK_NO_ERROR);
+    }
+    else
+    {
+<a name="anchor-140"></a>/*--------------------------------------------------------------------*\
+	Report the feature id and type as a header 
+\*--------------------------------------------------------------------*/
+	ProTKFprintf(fp,&quot;**********************************************************\n&quot;);
+	if(visible == PRO_B_TRUE)
+<a name="anchor-141"></a>	    ProTKFprintf(fp,&quot;USER FEATURE         %-d\n&quot;, feature_number);
+	else
+	    ProTKFprintf(fp,&quot;INTERNAL FEATURE     %-d\n&quot;, feature_number);
+	ProTKFprintf(fp,&quot;INTERNAL ID          %-d\n&quot;, feature->id);
+	ProTKFprintf(fp,&quot;TYPE                 %s\n&quot;,  ftype_str);
+<a name="anchor-142"></a>
+/*--------------------------------------------------------------------*\
+	Report everything else we know about the feature
+\*--------------------------------------------------------------------*/
+	ProUtilFeatureDump(feature, fp);
+<a name="anchor-143"></a>
+/*--------------------------------------------------------------------*\
+	Report feature geometry
+\*--------------------------------------------------------------------*/
+        status = ProFeatureStatusGet(feature, &amp;stat);
+<a name="anchor-144"></a>        TEST_CALL_REPORT(&quot;ProFeatureStatusGet()&quot;, &quot;ProTestFeatureInfoAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+	if ((ftype!=PRO_FEAT_COMPONENT)&amp;&amp;
+            ((stat==PRO_FEAT_ACTIVE)||
+<a name="anchor-145"></a>             (stat==PRO_FEAT_UNREGENERATED)||
+             (stat==PRO_FEAT_INACTIVE))) 
+                ProTestFeatureInfoGeom(feature, fp); 
+     }
+
+<a name="anchor-146"></a>    return(PRO_TK_NO_ERROR);
+}
+/*====================================================================*\
+    FUNCTION :	ProTestFeatureInfoGeom()
+    PURPOSE  :	Function for reporting feature geometry items
+<a name="anchor-147"></a>\*====================================================================*/
+int ProTestFeatureInfoGeom(
+    ProModelitem *feature,
+    FILE *fp)
+{
+<a name="anchor-148"></a>    ProError status;
+    ProTestFeatData appdata;
+    ProGeomitem	    *geomitems;
+    int geomitems_num, i;
+
+<a name="anchor-149"></a>    appdata.data = fp;
+
+    ProTKFprintf(fp, &quot;Geometry items..\n&quot;);
+    
+    status = ProUtilCollectFeatureGeomitems (feature, PRO_TYPE_UNUSED, &amp;geomitems);
+<a name="anchor-150"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)geomitems, &amp;geomitems_num);
+        for (i = 0; i &lt; geomitems_num; i++)
+        {
+<a name="anchor-151"></a>            status = ProTestGeomitemInfoAct (&amp;geomitems[i],
+	        PRO_TK_NO_ERROR, (ProAppData)&amp;appdata);
+        }
+        status = ProArrayFree ((ProArray*)&amp;geomitems);
+        
+<a name="anchor-152"></a>    }
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-153"></a>    FUNCTION :	ProTestGeomitemInfoAct()
+    PURPOSE  :	Action function for visiting geometry items
+\*====================================================================*/
+ProError ProTestGeomitemInfoAct(
+    ProGeomitem *item,
+<a name="anchor-154"></a>    ProError instatus,
+    ProAppData appdata)
+{
+    FILE *fp;
+    char item_type[PRO_NAME_SIZE];
+<a name="anchor-155"></a>
+    fp = (FILE*)((ProTestFeatData*)appdata)->data;
+
+/*--------------------------------------------------------------------*\
+    Report the type and id
+<a name="anchor-156"></a>\*--------------------------------------------------------------------*/
+    ProUtilObjtypeStr(item->type, item_type);
+    ProTKFprintf(fp,&quot;    %-15s %2d\n&quot;, item_type, item->id);
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-157"></a>}
+</pre>
+</body>
+</html>

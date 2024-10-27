@@ -1,0 +1,1107 @@
+<html>
+<head>
+<title>TestLayer.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProLayer.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMessage.h>
+#include &lt;ProModelitem.h>
+<a name="anchor-3"></a>#include &lt;ProWindows.h>
+#include &lt;ProUtil.h>
+#include &lt;ProFeatType.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-4"></a>C System includes
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-5"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;UtilFiles.h&quot;
+#include &quot;UtilMatrix.h&quot;
+#include &quot;TestMenu.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-7"></a>#include &lt;UtilMenu.h>
+
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+<a name="anchor-8"></a>
+
+#define PRO_TEST_LAYER_SETUP_LAYER	1
+#define PRO_TEST_LAYER_SET_ITEM		2
+#define PRO_TEST_LAYER_SET_DISPLAY	3
+<a name="anchor-9"></a>#define PRO_TEST_LAYER_SETDEFLAYER	4
+#define PRO_TEST_LAYER_INFO		5
+#define PRO_TEST_LAYER_SAVE_DISP_STAT	6
+#define PRO_TEST_LAYER_DEPENDENCY       7
+
+<a name="anchor-10"></a>#define PRO_TEST_LAYER_CREATE		10
+#define PRO_TEST_LAYER_DELETE		11
+
+#define PRO_TEST_ITEM_ADD		20
+#define PRO_TEST_ITEM_REMOVE		21
+<a name="anchor-11"></a>#define PRO_TEST_ITEM_COPY		22
+
+#define PRO_TEST_INFO_LAYER_ITEMS	30
+#define PRO_TEST_INFO_DISP_STATUS	31
+
+<a name="anchor-12"></a>#define PRO_TEST_OBJ_COMP	40
+#define PRO_TEST_OBJ_FEAT	41
+#define PRO_TEST_OBJ_CURVE	42
+#define PRO_TEST_OBJ_QUILT	43
+#define PRO_TEST_OBJ_2DITEM	44
+<a name="anchor-13"></a>#define PRO_TEST_OBJ_TEXT	45
+#define PRO_TEST_OBJ_POINT	46
+#define PRO_TEST_OBJ_DTMPLN	47
+#define PRO_TEST_OBJ_LAYER	48
+#define PRO_TEST_OBJ_DWGTABLE	49
+<a name="anchor-14"></a>#define PRO_TEST_DIAGRAM 50
+
+#define LAYER_FILE &quot;.lrf&quot;
+
+#define PRO_NO_TYPE 0
+<a name="anchor-15"></a>
+typedef struct {
+    ProMdl  model;
+    FILE *fp;
+} AppStruct;
+<a name="anchor-16"></a>
+typedef struct {
+    ProDefLayerType type;
+    char *name;
+    } DefLayerTypes;    
+<a name="anchor-17"></a>
+
+static char *ProUtilLayerStatusString(ProLayerDisplay  display_status);
+ProError ProUtilLayerSelect(ProMdl   model, ProLayer *layer);
+void ProTestDefLayerMenu (int *type);
+<a name="anchor-18"></a>void ProTestDispStatusMenu (ProLayerDisplay old_status, 
+    ProLayerDisplay *new_status);
+ProError ProTestModelInfoMenu (ProMdlType type, ProMdl *model);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-19"></a>Application global/external data
+\*--------------------------------------------------------------------*/
+DefLayerTypes def_layer_types[] = {
+    {PRO_DEFLAYER_ASSEM_MEMBER,		(char*)&quot;ASSMMEMBER&quot;},
+    {PRO_DEFLAYER_COMP_DESIGN_MODEL,	(char*)&quot;DESIGNMODEL&quot;},
+<a name="anchor-20"></a>    {PRO_DEFLAYER_COMP_WORKPIECE,	(char*)&quot;WORKPIECE&quot;},
+    {PRO_DEFLAYER_COMP_FIXTURE,		(char*)&quot;FIXTURE&quot;},
+    {PRO_DEFLAYER_GEOM_FEAT,		(char*)&quot;GEOMFEAT&quot;},
+    {PRO_DEFLAYER_NOGEOM_FEAT,		(char*)&quot;NOGEOMFEAT&quot;},
+    {PRO_DEFLAYER_COSM_SKETCH,		(char*)&quot;COSMSKETCH&quot;},
+<a name="anchor-21"></a>    {PRO_DEFLAYER_AXIS,			(char*)&quot;AXIS&quot;},
+    {PRO_DEFLAYER_SURFACE,		(char*)&quot;SURFACE&quot;},
+    {PRO_DEFLAYER_DATUM,		(char*)&quot;DATUM&quot;},
+    {PRO_DEFLAYER_POINT,		(char*)&quot;POINT&quot;},
+    {PRO_DEFLAYER_CURVE,		(char*)&quot;CURVE&quot;},
+<a name="anchor-22"></a>    {PRO_DEFLAYER_CSYS,			(char*)&quot;CSYS&quot;},
+    {PRO_DEFLAYER_FEATURE,		(char*)&quot;FEATURE&quot;},
+    {PRO_DEFLAYER_HOLE_FEAT,		(char*)&quot;HOLEFEAT&quot;},
+    {PRO_DEFLAYER_ROUND_FEAT,		(char*)&quot;ROUNDFEAT&quot;},
+    {PRO_DEFLAYER_CHAMFER_FEAT,		(char*)&quot;CHAMFERFEAT&quot;},
+<a name="anchor-23"></a>    {PRO_DEFLAYER_SLOT_FEAT,		(char*)&quot;SLOTFEAT&quot;},
+    {PRO_DEFLAYER_CUT_FEAT,		(char*)&quot;CUTFEAT&quot;},
+    {PRO_DEFLAYER_PROTRUSION_FEAT,	(char*)&quot;PROTRUSION&quot;},
+    {PRO_DEFLAYER_RIB_FEAT,		(char*)&quot;RIBFEAT&quot;},
+    {PRO_DEFLAYER_DRAFT_FEAT,		(char*)&quot;DRAFTFEAT&quot;},
+<a name="anchor-24"></a>    {PRO_DEFLAYER_SHELL_FEAT,		(char*)&quot;SHELLFEAT&quot;},
+    {PRO_DEFLAYER_CORN_CHAMF_FEAT,	(char*)&quot;CORNCHAMF&quot;},
+    {PRO_DEFLAYER_ASSY_CUT_FEAT,	(char*)&quot;ASSYCUTFEAT&quot;},
+    {PRO_DEFLAYER_TRIM_LINE_FEAT,	(char*)&quot;TRIMLINE&quot;},
+    {PRO_DEFLAYER_COSM_ROUND_FEAT,	(char*)&quot;COSMROUND&quot;},
+<a name="anchor-25"></a>    {PRO_DEFLAYER_DIM,			(char*)&quot;DIM&quot;},
+    {PRO_DEFLAYER_PARAMETER_DIM,	(char*)&quot;PEREMETERDIM&quot;},
+    {PRO_DEFLAYER_DRIVEN_DIM,		(char*)&quot;DRIVENDIM&quot;},
+    {PRO_DEFLAYER_DRAFT_DIM,		(char*)&quot;DRAFTDIM&quot;},
+    {PRO_DEFLAYER_REFDIM,		(char*)&quot;REFDIM&quot;},
+<a name="anchor-26"></a>    {PRO_DEFLAYER_PART_REFDIM,		(char*)&quot;PARTREFDIM&quot;},
+    {PRO_DEFLAYER_DRAFT_REFDIM,		(char*)&quot;DRAFTREFDIM&quot;},
+    {PRO_DEFLAYER_CURVE_ENT,		(char*)&quot;CURVEENT&quot;},
+    {PRO_DEFLAYER_NOTE,			(char*)&quot;NOTE&quot;},
+    {PRO_DEFLAYER_GTOL,			(char*)&quot;GTOL&quot;},
+<a name="anchor-27"></a>    {PRO_DEFLAYER_SYMBOL,		(char*)&quot;SYMBOL&quot;},
+    {PRO_DEFLAYER_SFIN,			(char*)&quot;SFIN&quot;},
+    {PRO_DEFLAYER_DRAFT_ENTITY,		(char*)&quot;DREFTENTITY&quot;},
+    {PRO_DEFLAYER_DRAFT_CONSTR,		(char*)&quot;DRAFTCONSRT&quot;},
+    {PRO_DEFLAYER_DRAFT_GEOM,		(char*)&quot;DREFTGEOM&quot;},
+<a name="anchor-28"></a>    {PRO_DEFLAYER_DRAFT_HIDDEN,		(char*)&quot;DRAFTHIDDEN&quot;},
+    {PRO_DEFLAYER_DRAFT_OTHERS,		(char*)&quot;DRAFTOTHERS&quot;},
+    {PRO_DEFLAYER_DRAFT_GRP,		(char*)&quot;DRAFTGPR&quot;},
+    {PRO_DEFLAYER_DRAFT_DTM,		(char*)&quot;DRAFTDTM&quot;},
+    {PRO_DEFLAYER_QUILT,		(char*)&quot;QUILT&quot;},
+<a name="anchor-29"></a>    {PRO_DEFLAYER_DGM_WIRE,		(char*)&quot;DGMWIRE&quot;},
+    {PRO_DEFLAYER_DGM_CONN_COMP,	(char*)&quot;DGMCONNCOMP&quot;},
+    {PRO_DEFLAYER_DGM_RAIL,		(char*)&quot;DGMRAIL&quot;},
+    {PRO_DEFLAYER_DGM_HIGHWAY,		(char*)&quot;DGMHIGHWAY&quot;},
+    {PRO_DEFLAYER_DETAIL_ITEM,		(char*)&quot;DETAILITEM&quot;},
+<a name="anchor-30"></a>    {PRO_DEFLAYER_DATUM_POINT,		(char*)&quot;DATUMPOINT&quot;},
+    {PRO_DEFLAYER_DATUM_PLANE,		(char*)&quot;DATUMPLANE&quot;},
+    {PRO_DEFLAYER_SNAP_LINE,		(char*)&quot;SNAPLINE&quot;},
+    {PRO_DEFLAYER_DWG_TABLE,		(char*)&quot;DWGTABLE&quot;},
+    {PRO_DEFLAYER_THREAD_FEAT,          (char*)&quot;THREADFEAT&quot;},
+<a name="anchor-31"></a>    {PRO_DEFLAYER_SOLID_GEOM,           (char*)&quot;SOLIDGEOM&quot;},
+    {PRO_DEFLAYER_EXT_GCPY_FEAT,        (char*)&quot;EXTGCPYFEAT&quot;},
+    {PRO_DEFLAYER_SKELETON,             (char*)&quot;SKELETON&quot;},
+    {PRO_DEFLAYER_ANNOT_ELEM,           (char*)&quot;ANNOTATIONELEMENT&quot;},
+    };
+<a name="anchor-32"></a>    
+static int type_num = sizeof (def_layer_types) / sizeof (DefLayerTypes);
+
+
+
+<a name="anchor-33"></a>
+
+/*==============================================================*\
+ Function:  ProUtilLayerStatusString()
+ Purpose:   Return sting status by int
+<a name="anchor-34"></a>\*==============================================================*/
+static char *ProUtilLayerStatusString(
+    ProLayerDisplay  display_status)
+{
+    switch (display_status)
+<a name="anchor-35"></a>    {
+	case PRO_LAYER_TYPE_NORMAL:
+	    return ((char*)&quot;PRO_LAYER_TYPE_NORMAL&quot;);
+	case PRO_LAYER_TYPE_DISPLAY:
+	    return ((char*)&quot;PRO_LAYER_TYPE_DISPLAY&quot;);
+<a name="anchor-36"></a>	case PRO_LAYER_TYPE_BLANK:
+	    return ((char*)&quot;PRO_LAYER_TYPE_BLANK&quot;);
+	case PRO_LAYER_TYPE_HIDDEN:
+	    return ((char*)&quot;PRO_LAYER_TYPE_HIDDEN&quot;);
+	
+<a name="anchor-37"></a>    }
+    return ((char*)&quot;Invalid status&quot;);
+}
+
+
+<a name="anchor-38"></a>/*==============================================================*\
+ Function:  ProTestLayerDeleteWithStatus()
+ Purpose:   Action function for def layer types menu
+\*==============================================================*/
+int ProTestLayerDeleteWithStatus(ProAppData app_data, int option)
+<a name="anchor-39"></a>{
+    ProMenuDeleteWithStatus (option);
+    return (1);
+}
+
+<a name="anchor-40"></a>// Action function for ProMdlLayerVisit
+ProError PTUtilLayerNameAction(ProLayer* layer, ProAppData app_data)
+{
+	ProError status;
+	ProName** layer_name_array = (ProName **) app_data;
+<a name="anchor-41"></a>	ProName layer_name;
+
+	status = ProModelitemNameGet((ProModelitem*) layer, layer_name);
+	TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, &quot;PTUtilLayerNameAction()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-42"></a>
+	if(status == PRO_TK_NO_ERROR)
+	{
+		status = ProArrayObjectAdd( (ProArray *)layer_name_array, PRO_VALUE_UNUSED, 1, &amp;layer_name);
+		TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;PTUtilLayerNameAction()&quot;,
+<a name="anchor-43"></a>                status, status != PRO_TK_NO_ERROR);
+	}
+
+	return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-44"></a>
+// Returns ProArray of layer names in the model
+ProError PTUtilMdlLayerNamesGet(ProMdl mdl, ProName** layer_name_array)
+{
+	ProError status;
+<a name="anchor-45"></a>
+	status = ProArrayAlloc( 0, sizeof( ProName ), 1,
+		(ProArray *)layer_name_array );
+	TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;PTUtilMdlLayerNamesGet()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-46"></a>
+	if( status == PRO_TK_NO_ERROR )
+	{
+		status = ProMdlLayerVisit(mdl, PTUtilLayerNameAction, NULL, layer_name_array);
+		TEST_CALL_REPORT(&quot;ProMdlLayerVisit()&quot;, &quot;PTUtilMdlLayerNamesGet()&quot;,
+<a name="anchor-47"></a>                status, status != PRO_TK_NO_ERROR);
+	}
+
+	return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-48"></a>
+/*==============================================================*\
+ Function:  ProTestLayerMenu()
+ Purpose:   The user's layer menu
+\*==============================================================*/
+<a name="anchor-49"></a>int ProTestLayerMenu(ProMdl *mod)
+{
+    int ProTestSelLevelAction(ProAppData app_data, int option), action, menu_id;
+    ProError status;
+    AppStruct st;
+<a name="anchor-50"></a>    ProCharLine string;
+
+    ProTestQcrName(mod, (char*)LAYER_FILE, (char*)string);
+
+    st.model = *mod;
+<a name="anchor-51"></a>    st.fp = PTApplsUnicodeFopen(string,&quot;w&quot;);
+
+    /*  Set-up the menu. */
+    
+    status = ProMenuFileRegister((char*)&quot;TkSelLevel&quot;,(char*) &quot;tksellevel.mnu&quot;, &amp;menu_id);
+<a name="anchor-52"></a>    status = ProMenubuttonActionSet((char*)&quot;TkSelLevel&quot;,(char*) &quot;Sel level&quot;, 
+		    (ProMenubuttonAction)ProTestSelLevelAction, &amp;st, 0);
+    status = ProMenubuttonActionSet((char*)&quot;TkSelLevel&quot;,(char*) &quot;Done/Return&quot;, 
+		    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    status = ProMenubuttonActionSet((char*)&quot;TkSelLevel&quot;,(char*) &quot;TkSelLevel&quot;,
+<a name="anchor-53"></a>		    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+		    
+    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*) &quot;TkSelLevel&quot;, &amp;menu_id);
+		   
+    status = ProMenuProcess((char*)&quot;TkSelLevel&quot;, &amp;action);
+<a name="anchor-54"></a>    
+    fclose(st.fp);
+    return(1);
+}
+
+<a name="anchor-55"></a>/*==============================================================*\
+ Function:  ProTestSelLevelAction()
+ Purpose:   Perform the action for layers menu
+\*==============================================================*/
+int ProTestSelLevelAction(ProAppData app_data, int option)
+<a name="anchor-56"></a>{
+    int ProTestLayerAction(ProAppData app_data, int option), action, menu_id;
+    ProError status;
+    ProMdl model = ((AppStruct*)app_data)->model;
+    ProMdlType type;
+<a name="anchor-57"></a>    
+    status = ProMdlTypeGet (model, &amp;type);
+    if (type != PRO_MDL_PART)
+    {
+        status = ProTestModelInfoMenu (type, &amp;model);     
+<a name="anchor-58"></a>        if (status == PRO_TK_NO_ERROR)
+            ((AppStruct*)app_data)->model = model;
+        else if (status == PRO_TK_GENERAL_ERROR)
+            return (1);
+    }
+<a name="anchor-59"></a>    
+    status = ProMenuFileRegister((char*)&quot;TkLayers&quot;,(char*) &quot;tklayers.mnu&quot;, &amp;menu_id);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayers&quot;,(char*) &quot;Setup Layer&quot;, 
+		    (ProMenubuttonAction)ProTestLayerAction, app_data,
+		    PRO_TEST_LAYER_SETUP_LAYER);
+<a name="anchor-60"></a>    status = ProMenubuttonActionSet((char*)&quot;TkLayers&quot;,(char*) &quot;Set Item&quot;, 
+		    (ProMenubuttonAction)ProTestLayerAction, app_data,
+		    PRO_TEST_LAYER_SET_ITEM);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayers&quot;,(char*) &quot;Set Display&quot;, 
+		    (ProMenubuttonAction)ProTestLayerAction, app_data,
+<a name="anchor-61"></a>		    PRO_TEST_LAYER_SET_DISPLAY);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayers&quot;,(char*) &quot;SetDefLayer&quot;, 
+		    (ProMenubuttonAction)ProTestLayerAction, app_data,
+		    PRO_TEST_LAYER_SETDEFLAYER);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayers&quot;,(char*) &quot;Save disp stat&quot;, 
+<a name="anchor-62"></a>		    (ProMenubuttonAction)ProTestLayerAction, app_data,
+		    PRO_TEST_LAYER_SAVE_DISP_STAT);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayers&quot;,(char*) &quot;Info&quot;, 
+		    (ProMenubuttonAction)ProTestLayerAction, app_data,
+		    PRO_TEST_LAYER_INFO);
+<a name="anchor-63"></a>    status = ProMenubuttonActionSet((char*)&quot;TkLayers&quot;,(char*) &quot;Dependency&quot;, 
+		    (ProMenubuttonAction)ProTestLayerAction, app_data,
+		    PRO_TEST_LAYER_DEPENDENCY);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayers&quot;,(char*) &quot;Done/Return&quot;, 
+		    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-64"></a>    status = ProMenubuttonActionSet((char*)&quot;TkLayers&quot;,(char*) &quot;TkLayers&quot;,
+		    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+		    
+    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*) &quot;TkLayers&quot;, &amp;menu_id);
+		   
+<a name="anchor-65"></a>    status = ProMenuProcess((char*)&quot;TkLayers&quot;, &amp;action);
+    return (PRO_TK_NO_ERROR);
+}
+
+/*==============================================================*\
+<a name="anchor-66"></a> Function:  ProTestLayerAction()
+ Purpose:   Perform the action for layers
+\*==============================================================*/
+int ProTestLayerAction(ProAppData app_data, int option)
+{
+<a name="anchor-67"></a>    ProError status;
+    int menu_id, action;
+    ProMdl model = ((AppStruct*)app_data)->model;
+    FILE *fp = ((AppStruct*)app_data)->fp;
+    ProMdlType type;
+<a name="anchor-68"></a>    ProLayerDisplay display_status, new_display_status;
+    ProLayer layer;
+    ProSelection *sel;
+    int n_sel;
+    ProView view;
+<a name="anchor-69"></a>    ProDefLayerType layer_type;
+    ProName w_name;
+    int i;
+    ProCharLine	string;
+    ProBoolean dep;
+<a name="anchor-70"></a>    char c_name[PRO_NAME_SIZE];
+    int ProTestSetupLayerAction(ProAppData app_data, int option);
+    int ProTestSetItemAction(ProAppData app_data, int option);
+    int ProTestLayerInfoAction(ProAppData app_data, int option);
+
+<a name="anchor-71"></a>    switch(option)
+    {
+    case PRO_TEST_LAYER_SETUP_LAYER:
+        status = ProMenuFileRegister((char*)&quot;TkSetupLayer&quot;,(char*) &quot;tksetuplayer.mnu&quot;, &amp;menu_id);
+        status = ProMenubuttonActionSet((char*)&quot;TkSetupLayer&quot;,(char*) &quot;Create&quot;, 
+<a name="anchor-72"></a>	    (ProMenubuttonAction)ProTestSetupLayerAction, app_data,
+	    PRO_TEST_LAYER_CREATE);
+        status = ProMenubuttonActionSet((char*)&quot;TkSetupLayer&quot;,(char*) &quot;Delete&quot;, 
+	    (ProMenubuttonAction)ProTestSetupLayerAction, app_data,
+	    PRO_TEST_LAYER_DELETE);
+<a name="anchor-73"></a>        status = ProMenubuttonActionSet((char*)&quot;TkSetupLayer&quot;,(char*) &quot;Done/Return&quot;, 
+	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+        status = ProMenubuttonActionSet((char*)&quot;TkSetupLayer&quot;,(char*) &quot;TkSetupLayer&quot;,
+	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+  		    
+<a name="anchor-74"></a>        status = ProMenuCreate(PROMENUTYPE_MAIN,(char*) &quot;TkSetupLayer&quot;, &amp;menu_id);		   
+        status = ProMenuProcess((char*)&quot;TkSetupLayer&quot;, &amp;action);
+        break;
+
+    case PRO_TEST_LAYER_SET_ITEM:
+<a name="anchor-75"></a>        status = ProMenuFileRegister((char*)&quot;TkSetItem&quot;,(char*) &quot;tksetitem.mnu&quot;, &amp;menu_id);
+        status = ProMenubuttonActionSet((char*)&quot;TkSetItem&quot;,(char*) &quot;Add item&quot;, 
+	    (ProMenubuttonAction)ProTestSetItemAction, app_data,
+	    PRO_TEST_ITEM_ADD);
+        status = ProMenubuttonActionSet((char*)&quot;TkSetItem&quot;,(char*) &quot;Remove item&quot;, 
+<a name="anchor-76"></a>	    (ProMenubuttonAction)ProTestSetItemAction, app_data,
+	    PRO_TEST_ITEM_REMOVE);
+        status = ProMenubuttonActionSet((char*)&quot;TkSetItem&quot;,(char*) &quot;Done/Return&quot;, 
+	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+        status = ProMenubuttonActionSet((char*)&quot;TkSetItem&quot;,(char*) &quot;TkSetItem&quot;,
+<a name="anchor-77"></a>	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+  		    
+        status = ProMenuCreate(PROMENUTYPE_MAIN,(char*) &quot;TkSetItem&quot;, &amp;menu_id);		   
+        status = ProMenuProcess((char*)&quot;TkSetItem&quot;, &amp;action);
+        break;
+<a name="anchor-78"></a>        
+    case PRO_TEST_LAYER_SET_DISPLAY:
+        status = ProMdlTypeGet (model, &amp;type);
+        if (type != PRO_MDL_DRAWING)
+        {
+<a name="anchor-79"></a>            status = ProUtilLayerSelect(model, &amp;layer);
+            if (status != PRO_TK_NO_ERROR)
+	        break;
+	    status = ProLayerDisplaystatusGet (&amp;layer, &amp;display_status);
+	    TEST_CALL_REPORT(&quot;ProLayerDisplaystatusGet()&quot;, &quot;ProTestLayerAction()&quot;,
+<a name="anchor-80"></a>                status, status != PRO_TK_NO_ERROR);
+            ProTestDispStatusMenu (display_status, &amp;new_display_status);
+            
+	    status = ProLayerDisplaystatusSet(&amp;layer, new_display_status);
+            TEST_CALL_REPORT(&quot;ProLayerDisplaystatusSet()&quot;, &quot;ProTestLayerAction()&quot;,
+<a name="anchor-81"></a>                status, status != PRO_TK_NO_ERROR);
+            status = ProWindowRepaint(PRO_VALUE_UNUSED);
+            TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;, &quot;ProTestLayerAction()&quot;,
+	        status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+	}
+<a name="anchor-82"></a>        else
+        {
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select view&quot;);
+            status = ProSelect ((char*)&quot;prt_or_asm&quot;, 1, NULL, NULL, NULL, NULL,
+                &amp;sel, &amp;n_sel);
+<a name="anchor-83"></a>            if (status != PRO_TK_NO_ERROR || n_sel != 1)
+                break;
+            status = ProSelectionViewGet (sel[0], &amp;view);
+            TEST_CALL_REPORT(&quot;ProSelectionViewGet()&quot;, &quot;ProTestLayerAction()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-84"></a>            status = ProUtilLayerSelect(model, &amp;layer);
+            if (status != PRO_TK_NO_ERROR)
+                break;
+            status = ProDwgLayerDisplaystatusGet (&amp;layer, view, &amp;display_status);
+            TEST_CALL_REPORT(&quot;ProDwgLayerDisplaystatusGet()&quot;, &quot;ProTestLayerAction()&quot;,
+<a name="anchor-85"></a>                status, status != PRO_TK_NO_ERROR);
+            ProTestDispStatusMenu (display_status, &amp;new_display_status);
+            status = ProDwgLayerDisplaystatusSet (&amp;layer, view, new_display_status);
+            TEST_CALL_REPORT(&quot;ProDwgLayerDisplaystatusSet()&quot;, &quot;ProTestLayerAction()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-86"></a>            status = ProWindowRepaint(PRO_VALUE_UNUSED);
+            TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;, &quot;ProTestLayerAction()&quot;,
+                status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+        }
+        break;
+<a name="anchor-87"></a>    case PRO_TEST_LAYER_SETDEFLAYER:
+        ProTestDefLayerMenu ((int*)&amp;layer_type);
+        for (i = 0; i &lt; type_num; i++)
+        {
+            if (def_layer_types[i].type == layer_type)
+<a name="anchor-88"></a>            	break;
+        }
+        status = ProLayerDefLayerGet (layer_type, w_name);
+        TEST_CALL_REPORT(&quot;ProLayerDefLayerGet()&quot;, &quot;ProTestLayerAction()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-89"></a>        ProTKSprintf (string, &quot;Set the name of the default %s layer[%s]:&quot;,
+            def_layer_types[i].name, ProWstringToString (c_name, w_name));
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, string);
+        status = ProMessageStringRead (PRO_NAME_SIZE, w_name);
+        if (status != PRO_TK_NO_ERROR)
+<a name="anchor-90"></a>            break;
+        status = ProLayerDefLayerSet (layer_type, w_name);
+        TEST_CALL_REPORT(&quot;ProLayerDefLayerSet()&quot;, &quot;ProTestLayerAction()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+        status = ProLayerDefLayerGet (layer_type, w_name);
+<a name="anchor-91"></a>        TEST_CALL_REPORT(&quot;ProLayerDefLayerGet()&quot;, &quot;ProTestLayerAction()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+        ProTKSprintf (string, &quot;Name of the default %s layer: %s.&quot;,
+            def_layer_types[i].name, ProWstringToString (c_name, w_name));
+        ProTKFprintf (fp, &quot;%s\n&quot;, string);
+<a name="anchor-92"></a>        
+        break;
+    case PRO_TEST_LAYER_SAVE_DISP_STAT:
+        status = ProMdlCurrentGet (&amp;model);
+        TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestLayerAction()&quot;,
+<a name="anchor-93"></a>                          status, status != PRO_TK_NO_ERROR);
+        status = ProLayerDisplaystatusSave (model);
+        TEST_CALL_REPORT(&quot;ProLayerDisplaystatusSave()&quot;, &quot;ProTestLayerAction()&quot;,
+                          status, status != PRO_TK_NO_ERROR &amp;&amp;
+                          status != PRO_TK_NO_CHANGE); 
+<a name="anchor-94"></a>        if (status != PRO_TK_NO_ERROR)
+        {
+            if (status != PRO_TK_NO_CHANGE)
+            {
+                ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, 
+<a name="anchor-95"></a>                    &quot;A model cannot have layers.&quot;);
+                break;
+            }
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, 
+                &quot;No layers have been changed since the last save.&quot;);
+<a name="anchor-96"></a>        }
+        break;
+    case PRO_TEST_LAYER_INFO:
+        status = ProMenuFileRegister((char*)&quot;TkLayerInfo&quot;,(char*) &quot;tklayerinfo.mnu&quot;, &amp;menu_id);
+        status = ProMenubuttonActionSet((char*)&quot;TkLayerInfo&quot;,(char*) &quot;Disp Status&quot;, 
+<a name="anchor-97"></a>	    (ProMenubuttonAction)ProTestLayerInfoAction, app_data,
+	    PRO_TEST_INFO_DISP_STATUS);
+        status = ProMenubuttonActionSet((char*)&quot;TkLayerInfo&quot;,(char*) &quot;Layer Items&quot;, 
+	    (ProMenubuttonAction)ProTestLayerInfoAction, app_data,
+	    PRO_TEST_INFO_LAYER_ITEMS);
+<a name="anchor-98"></a>        status = ProMenubuttonActionSet((char*)&quot;TkLayerInfo&quot;,(char*) &quot;Done/Return&quot;, 
+	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+        status = ProMenubuttonActionSet((char*)&quot;TkLayerInfo&quot;,(char*) &quot;TkLayerInfo&quot;,
+	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+  		    
+<a name="anchor-99"></a>        status = ProMenuCreate(PROMENUTYPE_MAIN,(char*) &quot;TkLayerInfo&quot;, &amp;menu_id);		   
+        status = ProMenuProcess((char*)&quot;TkLayerInfo&quot;, &amp;action);
+        break;
+    case PRO_TEST_LAYER_DEPENDENCY:
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select view&quot;);
+<a name="anchor-100"></a>        status = ProSelect ((char*)&quot;prt_or_asm&quot;, 1, NULL, NULL, NULL, NULL,
+            &amp;sel, &amp;n_sel);
+        if (status != PRO_TK_NO_ERROR || n_sel != 1)
+            break;
+        status = ProSelectionViewGet (sel[0], &amp;view);
+<a name="anchor-101"></a>        TEST_CALL_REPORT(&quot;ProSelectionViewGet()&quot;, &quot;ProTestLayerAction()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProLayerViewDependencyGet (view, &amp;dep);
+        TEST_CALL_REPORT(&quot;ProLayerViewDependencyGet()&quot;, &quot;ProTestLayerAction()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-102"></a>        ProTKSprintf (c_name, &quot;Dependency YES/NO[%s]:\n&quot;,
+            dep ? &quot;YES&quot; : &quot;NO&quot;);
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, c_name);
+        status = ProMessageStringRead (3, w_name);
+        if (status != PRO_TK_NO_ERROR)
+<a name="anchor-103"></a>            break;
+        ProWstringToString (c_name, w_name);
+        if (strncmp (&quot;y&quot;, c_name, 1) == 0 ||
+            strncmp (&quot;Y&quot;, c_name, 1) == 0)
+            dep = PRO_B_TRUE;
+<a name="anchor-104"></a>        else
+            dep = PRO_B_FALSE;
+        status = ProLayerViewDependencySet (view, dep);
+        TEST_CALL_REPORT(&quot;ProLayerViewDependencySet()&quot;, &quot;ProTestLayerAction()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-105"></a>        break;
+    default:
+        break;
+    }
+
+<a name="anchor-106"></a>    return(1);
+}
+
+#define PRO_TEXT_SEL_OPTION &quot;point,axis,csys,datum&quot;
+
+<a name="anchor-107"></a>/*==============================================================*\
+ Function:  ProTestSetupLayerAction()
+ Purpose:   Action function for setup layers
+\*==============================================================*/
+int ProTestSetupLayerAction(ProAppData app_data, int option)
+<a name="anchor-108"></a>{
+    ProError status;
+    ProPath file_name;
+    ProMdl model = ((AppStruct*)app_data)->model;
+    FILE *fp = ((AppStruct*)app_data)->fp;
+<a name="anchor-109"></a>    ProLayer layer;
+    char c_name[PRO_COMMENT_SIZE];
+    
+    switch (option)
+    {
+<a name="anchor-110"></a>    case PRO_TEST_LAYER_CREATE:
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter name of layer to create:&quot;);
+	
+	status = ProMessageStringRead( PRO_NAME_SIZE, file_name);
+        TEST_CALL_REPORT(&quot;ProMessageStringRead()&quot;, &quot;ProTestSetupLayerAction()&quot;,
+<a name="anchor-111"></a>                          status, status != PRO_TK_NO_ERROR);
+
+	status = ProLayerCreate(model, file_name, &amp;layer);
+        TEST_CALL_REPORT(&quot;ProLayerCreate()&quot;, &quot;ProTestSetupLayerAction()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-112"></a>
+        if (status == PRO_TK_NO_ERROR)
+        {
+            ProTKSprintf(c_name, &quot;Layer &lt;%d> created successfully&quot;,layer.id); 
+    	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, c_name);
+<a name="anchor-113"></a>	    ProTKFprintf(fp, &quot;Layer %d created\n&quot;, layer.id);
+        }
+        else
+        {
+            ProTKSprintf(c_name, &quot;Error - %d&quot;, status);
+<a name="anchor-114"></a>    	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, c_name);
+        }
+        break;
+    case PRO_TEST_LAYER_DELETE:
+        status = ProUtilLayerSelect(model, &amp;layer);
+<a name="anchor-115"></a>	if (status != PRO_TK_NO_ERROR)
+	    break;
+
+	status = ProLayerDelete(&amp;layer);
+        TEST_CALL_REPORT(&quot;ProLayerDelete()&quot;, &quot;ProTestSetupLayerAction()&quot;,
+<a name="anchor-116"></a>                          status, status != PRO_TK_NO_ERROR);
+        if (status == PRO_TK_NO_ERROR)
+        {
+            ProTKSprintf(c_name, &quot;Layer &lt;%d> deleted successfully&quot;, layer.id); 
+    	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, c_name);
+<a name="anchor-117"></a>	    ProTKFprintf(fp, &quot;Layer %d deleted\n&quot;, layer.id);
+        }
+        else
+        {
+            ProTKSprintf(c_name, &quot;Error - %d&quot;, status);
+<a name="anchor-118"></a>       	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, c_name);
+        }
+        break;
+    }
+    return (1);
+<a name="anchor-119"></a>}
+
+/*==============================================================*\
+ Function:  ProTestLayerObjSelect()
+ Purpose:   Function for select layer object
+<a name="anchor-120"></a>\*==============================================================*/
+void ProTestLayerObjSelect (ProMdlType type, char *sel_option)
+{
+    ProError status;
+    int menu_id, action;
+<a name="anchor-121"></a>    
+    status = ProMenuFileRegister((char*)&quot;TkLayerObj&quot;,(char*) &quot;tklayerobj.mnu&quot;, &amp;menu_id);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;Component&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL,
+		    PRO_TEST_OBJ_COMP);
+<a name="anchor-122"></a>    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;Feature&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL,
+		    PRO_TEST_OBJ_FEAT);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;Curve&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL,
+<a name="anchor-123"></a>		    PRO_TEST_OBJ_CURVE);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;Quilt&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL,
+		    PRO_TEST_OBJ_QUILT);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;2D items&quot;, 
+<a name="anchor-124"></a>		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL,
+		    PRO_TEST_OBJ_2DITEM);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;Text&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL,
+		    PRO_TEST_OBJ_TEXT);
+<a name="anchor-125"></a>    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;Point&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL,
+		    PRO_TEST_OBJ_POINT);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;Datum Plane&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL,
+<a name="anchor-126"></a>		    PRO_TEST_OBJ_DTMPLN);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;Layer&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL,
+		    PRO_TEST_OBJ_LAYER);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;Dwg Table&quot;, 
+<a name="anchor-127"></a>		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL,
+		    PRO_TEST_OBJ_DWGTABLE);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;Diagramsel&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL,
+		    PRO_TEST_DIAGRAM);
+<a name="anchor-128"></a>    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;Done/Return&quot;, 
+		    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    status = ProMenubuttonActionSet((char*)&quot;TkLayerObj&quot;,(char*) &quot;TkLayerObj&quot;,
+		    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+		    
+<a name="anchor-129"></a>    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*) &quot;TkLayerObj&quot;, &amp;menu_id);
+
+    if (type != PRO_MDL_DRAWING &amp;&amp; type != PRO_MDL_DIAGRAM)
+    {
+         status = ProMenubuttonDeactivate ((char*)&quot;TkLayerObj&quot;,(char*) &quot;Component&quot;);
+<a name="anchor-130"></a>         TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, &quot;ProTestLayerObjSelect&quot;,
+             status, status != PRO_TK_NO_ERROR);
+         status = ProMenubuttonDeactivate ((char*)&quot;TkLayerObj&quot;,(char*) &quot;Dwg Table&quot;);
+         TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, &quot;ProTestLayerObjSelect&quot;,
+             status, status != PRO_TK_NO_ERROR);
+<a name="anchor-131"></a>    }
+		   
+    status = ProMenuProcess((char*)&quot;TkLayerObj&quot;, &amp;action);
+    switch (action)
+    {
+<a name="anchor-132"></a>    case PRO_TEST_OBJ_COMP:
+        ProTKSprintf (sel_option, &quot;prt_or_asm&quot;);
+        break;
+    case PRO_TEST_OBJ_FEAT:
+        ProTKSprintf (sel_option, &quot;feature&quot;);
+<a name="anchor-133"></a>        break;
+    case PRO_TEST_OBJ_CURVE:
+        ProTKSprintf (sel_option, &quot;curve&quot;);
+        break;
+    case PRO_TEST_OBJ_QUILT:
+<a name="anchor-134"></a>        ProTKSprintf (sel_option, &quot;dtmqlt&quot;);
+        break;
+    case PRO_TEST_OBJ_2DITEM:
+        ProTKSprintf (sel_option, &quot;any_note,draft_ent&quot;);
+        break;
+<a name="anchor-135"></a>    case PRO_TEST_OBJ_POINT:
+        ProTKSprintf (sel_option, &quot;point&quot;);
+        break;
+    case PRO_TEST_OBJ_DTMPLN:
+        ProTKSprintf (sel_option, &quot;datum&quot;);
+<a name="anchor-136"></a>        break;
+    case PRO_TEST_OBJ_LAYER:
+        ProTKSprintf (sel_option, &quot;layer&quot;);
+        break;
+    case PRO_TEST_OBJ_TEXT:
+<a name="anchor-137"></a>        ProTKSprintf (sel_option, PRO_TEXT_SEL_OPTION);
+        break;
+	case PRO_TEST_DIAGRAM:
+        ProTKSprintf (sel_option, &quot;dgm_obj,dgm_non_cable_wire,dgm_cable&quot;);
+        break;
+<a name="anchor-138"></a>    case PRO_TEST_OBJ_DWGTABLE:
+    default:
+        ProTKSprintf (sel_option, &quot;&quot;);
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Not implemented&quot;);
+        break;
+<a name="anchor-139"></a>    }
+}
+
+
+
+<a name="anchor-140"></a>/*==============================================================*\
+ Function:  ProTestSetItemAction()
+ Purpose:   Action function for set item
+\*==============================================================*/
+int ProTestSetItemAction(ProAppData app_data, int option)
+<a name="anchor-141"></a>{
+    ProError status;
+    ProMdl model = ((AppStruct*)app_data)->model;
+    FILE *fp = ((AppStruct*)app_data)->fp;
+    ProLayer layer, layer_add;
+<a name="anchor-142"></a>    char sel_option[PRO_PATH_SIZE];
+    ProMdlType type;
+    void ProTestLayerObjSelect (ProMdlType type, char *sel_option);
+    ProSelection *sel;
+    int n_sel;
+<a name="anchor-143"></a>    ProModelitem model_item;
+    ProAsmcomppath comp_path;
+    ProLayerItem layer_item;
+
+    status = ProMdlTypeGet (model, &amp;type);
+<a name="anchor-144"></a>    status = ProUtilLayerSelect(model, &amp;layer);
+    if (status != PRO_TK_NO_ERROR)
+        return (1);
+    ProTestLayerObjSelect (type, sel_option);
+    if (sel_option[0] == '\0')
+<a name="anchor-145"></a>        return (1);
+    if (strcmp (sel_option, &quot;layer&quot;) == 0)
+    {
+        status = ProUtilLayerSelect (model, &amp;layer_add);
+        if (layer_add.id == layer.id)
+<a name="anchor-146"></a>        {
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Can't add layer in itself&quot;);
+            return (1);
+        }
+        status = ProModelitemInit (layer.owner, layer.id, layer.type, &amp;model_item);
+<a name="anchor-147"></a>    }
+    else
+    {
+        status = ProSelect(sel_option, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+        if (status != PRO_TK_NO_ERROR || n_sel != 1)
+<a name="anchor-148"></a>            return (1);
+        status = ProSelectionModelitemGet(sel[0], &amp;model_item);
+
+	if (strcmp (sel_option, PRO_TEXT_SEL_OPTION) == 0)
+	  {
+<a name="anchor-149"></a>	    switch (model_item.type)
+	      {
+	      case PRO_CSYS:
+	      case PRO_AXIS:
+	      case PRO_POINT:
+<a name="anchor-150"></a>		model_item.type = PRO_ENTITY_TEXT;
+		break;
+	      case PRO_SURFACE:
+		{
+		  ProFeature feat;
+<a name="anchor-151"></a>		  
+		  status = ProGeomitemFeatureGet (&amp;model_item, &amp;feat);
+		  model_item.id = feat.id;
+		  model_item.type = PRO_DATUM_TEXT;
+		  break;
+<a name="anchor-152"></a>		}
+	      default:
+		model_item.type = (ProType)PRO_NO_TYPE;
+		ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Not implemented&quot;);
+		return PRO_TK_GENERAL_ERROR;
+<a name="anchor-153"></a>		break;
+	      }
+	  }	
+	if (strcmp (sel_option, &quot;datum&quot;) == 0)
+	  {
+<a name="anchor-154"></a>	    if (model_item.type == PRO_SURFACE)
+	      model_item.type = PRO_DATUM_PLANE;
+	  }
+    }
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestSetItemAction()&quot;,
+<a name="anchor-155"></a>        status, status != PRO_TK_NO_ERROR);
+    if (type == PRO_MDL_DRAWING &amp;&amp;
+        model != model_item.owner &amp;&amp;
+        (model_item.type == PRO_MDL_ASSEMBLY || 
+         model_item.type == PRO_MDL_PART ||
+<a name="anchor-156"></a>         model_item.type == PRO_FEATURE))
+    {
+        status = ProSelectionAsmcomppathGet(sel[0], &amp;comp_path);
+        TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, 
+            &quot;ProTestSetItemAction()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-157"></a>        if (model_item.type == PRO_ASSEMBLY || model_item.type == PRO_PART)
+        {
+            model_item.type = PRO_FEATURE;
+            model_item.id = comp_path.comp_id_table[0];
+            model_item.owner =  comp_path.owner;
+<a name="anchor-158"></a>        }
+        status = ProDwgLayerItemInit ((ProLayerType)model_item.type, model_item.id,
+            &amp;comp_path, &amp;layer_item);
+        TEST_CALL_REPORT(&quot;ProDwgLayerItemInit()&quot;, &quot;ProTestSetItemAction()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-159"></a>    }  
+    else
+    {
+        status = ProLayerItemInit((ProLayerType)model_item.type, model_item.id,
+        model, &amp;layer_item);
+<a name="anchor-160"></a>        TEST_CALL_REPORT(&quot;ProLayerItemInit()&quot;, &quot;ProTestSetItemAction()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+    }
+    if (option == PRO_TEST_ITEM_ADD)
+    {
+<a name="anchor-161"></a>        status = ProLayerItemAdd(&amp;layer, &amp;layer_item);
+        TEST_CALL_REPORT(&quot;ProLayerItemAdd()&quot;, &quot;ProTestSetItemAction()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+    }
+    else
+<a name="anchor-162"></a>    {
+        status = ProLayerItemRemove(&amp;layer, &amp;layer_item);
+        TEST_CALL_REPORT(&quot;ProLayerItemRemove()&quot;, &quot;ProTestSetItemAction()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-163"></a>    ProTKFprintf(fp, &quot;Layer %d. Item id %d type %d %s\n&quot;, layer.id,
+        layer_item.id, layer_item.type,
+        option == PRO_TEST_ITEM_ADD ? &quot;added&quot; : &quot;removed&quot;);
+
+    return (1);
+<a name="anchor-164"></a>}
+
+/*==============================================================*\
+ Function:  ProTestLayerInfoAction()
+ Purpose:   Action function for layer info
+<a name="anchor-165"></a>\*==============================================================*/
+int ProTestLayerInfoAction(ProAppData app_data, int option)
+{
+    ProError status;
+    ProMdl model = ((AppStruct*)app_data)->model;
+<a name="anchor-166"></a>    FILE *fp = ((AppStruct*)app_data)->fp;
+    ProLayer *p_layer, layer;
+    ProLayerItem *layer_items = NULL;
+    int num_layer, i, n_item;
+    ProLayerDisplay action;
+<a name="anchor-167"></a>    char string[PRO_COMMENT_SIZE];
+    
+    switch (option)
+    {
+    case PRO_TEST_INFO_DISP_STATUS:
+<a name="anchor-168"></a>       	status = ProUtilCollectMdlLayers(model, &amp;p_layer);
+	if (status == PRO_TK_NO_ERROR)
+	{
+	    status = ProArraySizeGet((ProArray*)p_layer, &amp;num_layer);
+	    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestLayerInfoActionn()&quot;,
+<a name="anchor-169"></a>	        			    status, status != PRO_TK_NO_ERROR);
+	}
+	if (status != PRO_TK_NO_ERROR || num_layer&lt;=0)
+	    break;
+    
+<a name="anchor-170"></a>	for (i=0; i&lt;num_layer; i++)
+	{
+	    status = ProLayerDisplaystatusGet(p_layer+i, &amp;action);
+	    TEST_CALL_REPORT(&quot;ProLayerDisplaystatusGet()&quot;, 
+		&quot;ProTestLayerInfoAction()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-171"></a>
+	    ProTKFprintf(fp, &quot;Layer %d - Display_status[%d]: %s\n&quot;, p_layer[i].id,
+		    action, ProUtilLayerStatusString(action));
+		fflush (fp);
+	    
+<a name="anchor-172"></a>	}
+        break;
+    case PRO_TEST_INFO_LAYER_ITEMS:
+        status = ProUtilLayerSelect(model, &amp;layer);
+	if (status != PRO_TK_NO_ERROR)
+<a name="anchor-173"></a>	    break;
+
+	status = ProLayerItemsPopulate(&amp;layer, &amp;layer_items, &amp;n_item);
+        TEST_CALL_REPORT(&quot;ProLayerItemsPopulate()&quot;, &quot;ProTestLayerInfoAction()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-174"></a>
+        if (status != PRO_TK_NO_ERROR)
+        {
+            ProTKSprintf(string, &quot;Error - %d&quot;, status);
+       	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, string);
+<a name="anchor-175"></a>	    break;
+	}
+        ProTKSprintf(string, &quot;There are %d items in layer &lt;%d>&quot;, n_item, layer.id); 
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, string);
+
+<a name="anchor-176"></a>	ProTKFprintf(fp, &quot;%d Items found in Layer %d\n&quot;, n_item, layer.id);
+	for (i=0; i&lt;n_item; i++)
+	  ProTKFprintf(fp,&quot;\tType %d:\t ID: [%d]\n&quot;, layer_items[i].type, 
+			  layer_items[i].id);
+	fflush (fp);
+<a name="anchor-177"></a>        status = ProLayeritemarrayFree(&amp;layer_items);
+ 
+	break;
+    }
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-178"></a>}
+
+/*==============================================================*\
+ Function:  ProTestModelInfoMenu()
+ Purpose:   Select model type and sets model
+<a name="anchor-179"></a>\*==============================================================*/
+ProError ProTestModelInfoMenu (ProMdlType type, ProMdl *model)
+{
+    ProError status;
+    int dummy, info, n_sel, i;
+<a name="anchor-180"></a>    ProSelection *sel;
+    char c_str[PRO_NAME_SIZE];
+    char c_msg[PRO_NAME_SIZE];
+    ProModelitem model_item;
+    
+<a name="anchor-181"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select level&quot;);
+
+    status = ProMenuFileRegister((char*)&quot;TkModelInfo&quot;,(char*) &quot;tkmodelinf.mnu&quot;, &amp;dummy);
+    status = ProMenubuttonActionSet((char*)&quot;TkModelInfo&quot;,(char*) &quot;Drawing&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL, PRO_DRAWING);
+<a name="anchor-182"></a>    status = ProMenubuttonActionSet((char*)&quot;TkModelInfo&quot;,(char*) &quot;Assembly&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL, PRO_ASSEMBLY);
+    status = ProMenubuttonActionSet((char*)&quot;TkModelInfo&quot;,(char*) &quot;Part&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL, PRO_PART);
+    status = ProMenubuttonActionSet((char*)&quot;TkModelInfo&quot;,(char*) &quot;Diagram&quot;, 
+<a name="anchor-183"></a>		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL, PRO_DIAGRAM);
+    status = ProMenubuttonActionSet((char*)&quot;TkModelInfo&quot;,(char*) &quot;TkModelInfo&quot;,
+		    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    status = ProMenuCreate(PROMENUTYPE_SUB,(char*) &quot;TkModelInfo&quot;, &amp;dummy);
+    if (type != PRO_MDL_DRAWING)
+<a name="anchor-184"></a>    {
+        status = ProMenubuttonDeactivate ((char*)&quot;TkModelInfo&quot;,(char*) &quot;Drawing&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, &quot;ProTestModelInfoMenu&quot;,
+            status, status != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-185"></a>    if (type != PRO_MDL_DIAGRAM)
+    {
+        status = ProMenubuttonDeactivate ((char*)&quot;TkModelInfo&quot;,(char*) &quot;Diagram&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, &quot;ProTestModelInfoMenu&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-186"></a>    }
+    status = ProMenuProcess((char*)&quot;TkModelInfo&quot;, &amp;info);
+    if (info != PRO_DRAWING &amp;&amp; info != PRO_DIAGRAM)
+        {
+            if (info == PRO_PART)
+<a name="anchor-187"></a>            {
+                ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select a part&quot;);
+            }
+            else if (info == PRO_ASSEMBLY)
+            {
+<a name="anchor-188"></a>                ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select an assembly&quot;);
+            }
+            else 
+                return (PRO_TK_GENERAL_ERROR);
+            for(i = 0; ; i++)
+<a name="anchor-189"></a>            {
+                if (info == PRO_PART)
+                {
+                    ProTKSprintf (c_str, &quot;part&quot;);
+                }
+<a name="anchor-190"></a>                else if (info == PRO_ASSEMBLY)
+                {
+                    ProTKSprintf (c_str, &quot;prt_or_asm&quot;);
+                }
+                else 
+<a name="anchor-191"></a>                    return (PRO_TK_GENERAL_ERROR);
+                status = ProSelect (c_str, 1, NULL, NULL, NULL, NULL,
+                    &amp;sel, &amp;n_sel);
+                if (status != PRO_TK_NO_ERROR)
+                    return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-192"></a>                if ( n_sel &lt;= 0 )
+                    return (PRO_TK_GENERAL_ERROR);
+                status = ProSelectionModelitemGet(sel[0], &amp;model_item);
+                if (info != model_item.type) 
+                {
+<a name="anchor-193"></a>                    ProTKSprintf (c_msg, &quot;It isn't %s. Select again %d&quot;, info == PRO_PART ? &quot;a part&quot; : &quot;an assembly&quot;, i);
+                    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, c_msg);
+                }
+                else
+                {
+<a name="anchor-194"></a>                    *model = model_item.owner;
+                    return (PRO_TK_NO_ERROR);
+                }
+            }
+        }
+<a name="anchor-195"></a>    return (PRO_TK_USER_ABORT);    
+}
+
+/*==============================================================*\
+ Function:  ProTestDispStatusMenu()
+<a name="anchor-196"></a> Purpose:   Select display status 
+\*==============================================================*/
+void ProTestDispStatusMenu (ProLayerDisplay old_status, 
+    ProLayerDisplay *new_status)
+{
+<a name="anchor-197"></a>    ProError status;
+    int dummy, action;
+    char highlight[PRO_NAME_SIZE];
+    
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select display status&quot;);
+<a name="anchor-198"></a>
+    status = ProMenuFileRegister((char*)&quot;TkDisplayStat&quot;,(char*) &quot;tkdispstat.mnu&quot;, &amp;dummy);
+    status = ProMenubuttonActionSet((char*)&quot;TkDisplayStat&quot;,(char*) &quot;NORMAL&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL, PRO_LAYER_TYPE_NORMAL);
+    status = ProMenubuttonActionSet((char*)&quot;TkDisplayStat&quot;,(char*) &quot;DISPLAY&quot;, 
+<a name="anchor-199"></a>		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL, PRO_LAYER_TYPE_DISPLAY);
+    status = ProMenubuttonActionSet((char*)&quot;TkDisplayStat&quot;,(char*) &quot;BLANK&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL, PRO_LAYER_TYPE_BLANK);
+    status = ProMenubuttonActionSet((char*)&quot;TkDisplayStat&quot;,(char*) &quot;HIDDEN&quot;, 
+		    (ProMenubuttonAction)ProTestLayerDeleteWithStatus, NULL, PRO_LAYER_TYPE_HIDDEN);
+<a name="anchor-200"></a>    status = ProMenubuttonActionSet((char*)&quot;TkDisplayStat&quot;,(char*) &quot;TkDisplayStat&quot;,
+		    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    switch (old_status)
+    {
+    case PRO_LAYER_TYPE_NORMAL:
+<a name="anchor-201"></a>        ProUtilstrcpy (highlight, &quot;NORMAL&quot;);
+        break;
+    case PRO_LAYER_TYPE_DISPLAY:
+        ProUtilstrcpy (highlight, &quot;DISPLAY&quot;);
+        break;
+<a name="anchor-202"></a>    case PRO_LAYER_TYPE_BLANK:
+        ProUtilstrcpy (highlight, &quot;BLANK&quot;);
+        break;
+    case PRO_LAYER_TYPE_HIDDEN:
+        ProUtilstrcpy (highlight, &quot;HIDDEN&quot;);
+<a name="anchor-203"></a>        break;
+    }
+		    
+    status = ProMenuCreate(PROMENUTYPE_SUB,(char*) &quot;TkDisplayStat&quot;, &amp;dummy);
+    status = ProMenubuttonHighlight ((char*)&quot;TkDisplayStat&quot;, highlight);
+<a name="anchor-204"></a>		   
+    status = ProMenuProcess((char*)&quot;TkDisplayStat&quot;, &amp;action);
+    *new_status = (ProLayerDisplay)action;
+}
+
+<a name="anchor-205"></a>/*==============================================================*\
+ Function:  ProTestDefLayerMenu()
+ Purpose:   Process menu and return layer type
+\*==============================================================*/
+void ProTestDefLayerMenu(int *type)
+<a name="anchor-206"></a>{
+    ProError status;
+    int dummy, i;
+    
+    status = ProMenuFileRegister((char*)&quot;DefLayer&quot;,(char*) &quot;tkdeflayer.mnu&quot;, &amp;dummy);
+<a name="anchor-207"></a>    for (i = 0; i &lt; type_num; i++)
+    {
+        status = ProMenubuttonActionSet((char*)&quot;DefLayer&quot;,(char*) 
+            def_layer_types[i].name, 
+            (ProMenubuttonAction)ProTestLayerDeleteWithStatus, 
+<a name="anchor-208"></a>            NULL, def_layer_types[i].type);
+    }
+    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*) &quot;DefLayer&quot;, &amp;dummy);
+    status = ProMenuProcess((char*)&quot;DefLayer&quot;, type);
+}
+<a name="anchor-209"></a>
+/*==============================================================*\
+ Function:  ProUtilLayerSelect()
+ Purpose:   Select one layer from menu and fill ProLayer struct
+ Return:    PRO_TK_NO_ERROR if successfull, PRO_TK_E_NOT_FOUND otherwise
+<a name="anchor-210"></a>\*==============================================================*/
+ProError ProUtilLayerSelect(
+    ProMdl   model,	/* In : the Model */
+    ProLayer *layer)	/* Out: selected layer, user's memory */  
+{
+<a name="anchor-211"></a>    int num_layer, i, n_sel;
+    ProName *layer_names, title;
+    ProError status;
+    wchar_t **buttons, **selected;
+
+<a name="anchor-212"></a>	status = PTUtilMdlLayerNamesGet(model, &amp;layer_names);
+	TEST_CALL_REPORT(&quot;PTUtilMdlLayerNamesGet()&quot;, &quot;ProUtilLayerSelect()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+
+	status = ProArraySizeGet((ProArray) layer_names,&amp;num_layer);
+<a name="anchor-213"></a>	TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProUtilLayerSelect()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+
+    if (status != PRO_TK_NO_ERROR) 
+    {
+<a name="anchor-214"></a>  	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Unable select layer&quot;);
+	return (PRO_TK_E_NOT_FOUND);
+    }
+    
+    ProUtilMenuStringsAlloc(&amp;buttons);
+<a name="anchor-215"></a>    for (i=0; i&lt;num_layer; i++)
+            ProUtilMenuStringsWstrAdd( &amp;buttons, layer_names[i]);
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select layer&quot;);
+
+<a name="anchor-216"></a>    ProStringToWstring(title, (char*)&quot;Model Layers&quot;);
+    status = ProMenuStringsSelect(title, buttons, 1, NULL, &amp;selected, &amp;n_sel);
+    TEST_CALL_REPORT(&quot;ProMenuStringsSelect()&quot;, &quot;ProUtilLayerSelect()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+    if (status !=  PRO_TK_NO_ERROR || n_sel != 1)
+<a name="anchor-217"></a>	return  (PRO_TK_E_NOT_FOUND);
+    
+    status = ProMdlLayerGet(model, selected[0], layer);
+    TEST_CALL_REPORT(&quot;ProMdlLayerGet()&quot;, &quot;ProUtilLayerSelect()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+<a name="anchor-218"></a>    ProUtilMenuStringsFree(&amp;buttons);
+
+	status = ProArrayFree((ProArray *)&amp;layer_names);
+	TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProUtilLayerSelect()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+<a name="anchor-219"></a>
+    return  (status);
+}
+
+</pre>
+</body>
+</html>

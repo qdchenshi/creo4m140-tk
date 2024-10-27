@@ -1,0 +1,1281 @@
+<html>
+<head>
+<title>PTMechExItemInfo.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*====================================================================*\
+FILE    : PTMechExItemInfo.c
+PURPOSE : Writes info. for Mechanica items 
+\*====================================================================*/
+<a name="anchor-2"></a>
+/*--------------------------------------------------------------------*\
+  Pro/Toolkit includes -- include this first
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-3"></a>#include &lt;ProMenu.h>
+#include &lt;ProUtil.h>
+#include &lt;ProMessage.h>
+#include &lt;PTMechExamples.h>
+#include &lt;ProMechanica.h>
+<a name="anchor-4"></a>#include &lt;ProMechItem.h>
+#include &lt;ProMechWeld.h>
+#include &lt;ProMechLoad.h>
+
+int UserWeldInfoWrite();
+<a name="anchor-5"></a>int UserLoadInfoWrite();
+int UserMenuDeleteAndPop();
+
+/*---------------------- Function Prototypes -------------------------*/
+ProError PTExMechitemVisitWrite(ProMechItem* item,
+<a name="anchor-6"></a>                                  ProError filter_status,
+                                  ProAppData app_data);
+
+/* Functions for MechItem: Weld */
+ProError PTExMechweldWrite_low (ProMechItem* weld);
+<a name="anchor-7"></a>ProError PTExMechweldperimeterWrite_low (ProMechWeldPerimeter data);
+ProError PTExMechweldedgedataWrite_low (ProMechWeldEdgeData data);
+ProError PTExMechweldspotWrite_low (ProMechItem* item, ProMechWeldSpot data);
+ProError PTExMechweldfeatureWrite_low (ProMechWeldFeature welddata);
+ProError PTExMechweldEndWeldWrite_low ( ProMechWeldEnd EndWeld_data);
+<a name="anchor-8"></a>
+/* Functions for MechItem: Load */
+ProError PTExMechloadWrite_low (ProMechItem* load);
+ProError PTExMechforcedataWrite_low (ProMechForceData data);
+ProError PTExMechpressuredataWrite_low (ProMechPressureData data);
+<a name="anchor-9"></a>ProError PTExMechcentrifugaldataWrite_low (ProMechCentrifugalData data);
+ProError PTExMechgravitydataWrite_low (ProMechGravityData data);
+ProError PTGMechstructtempdataWrite_low (ProMechStructtempData data);
+ProError PTExMechmecttempdataWrite_low (ProMechMecttempData data);
+ProError PTExMechheatdataWrite_low (ProMechHeatData data);
+<a name="anchor-10"></a>ProError PTExMechbearingdataWrite_low (ProMechBearingData data);
+ProError PTExMechstructtempdataWrite_low (ProMechStructtempData data);
+
+/*Generic utilities */
+ProError PTExMechvectoredvalueWrite_low (ProMechVectoredValue value);
+<a name="anchor-11"></a>ProError PTExMechvariationWrite_low (ProMechVariation value);
+ProError PTExMechdirvectorWrite_low (ProMechDirectionVector value);
+ProError PTExMechinterpolationpntWrite_low (ProMechInterpolationPnt value);
+ProError PTExMechGeomrefWrite_low (ProMechGeomref Geomref);
+ProError PTExMechvalueWrite_low (ProMechValue value);
+<a name="anchor-12"></a>ProError PTExMechObjectrefWrite_low (ProMechObjectref Objectref);
+
+static ProFileName message_file;
+char fname[PRO_NAME_SIZE];
+FILE *fp;
+<a name="anchor-13"></a>/*=============================================================*\
+  FUNCTION: PTMechExItemInfo 
+  PURPOSE:   
+\*=============================================================*/
+  
+<a name="anchor-14"></a>ProError PTMechExItemInfo()
+  
+{
+  
+  int menu_id, action, status;
+<a name="anchor-15"></a>
+  status = ProMenuFileRegister(&quot;PTMechItemEx&quot;, &quot;pt_mechitem_example.mnu&quot;, &amp;menu_id);
+  PT_TEST_LOG_SUCC( &quot;ProMenuFileRegister&quot; );
+
+  status = ProMenubuttonActionSet(&quot;PTMechItemEx&quot;, &quot;-Weld Item Info&quot;,
+<a name="anchor-16"></a>     (ProMenubuttonAction)UserWeldInfoWrite, NULL, 0);
+  PT_TEST_LOG_SUCC(&quot;ProMenubuttonActionSet&quot; );
+
+  status = ProMenubuttonActionSet(&quot;PTMechItemEx&quot;, &quot;-Load Item Info&quot;,
+     (ProMenubuttonAction)UserLoadInfoWrite, NULL, 0);
+<a name="anchor-17"></a>  PT_TEST_LOG_SUCC(  &quot;ProMenubuttonActionSet&quot; );
+
+  status = ProMenubuttonActionSet(&quot;PTMechItemEx&quot;, &quot;-Done/Return&quot;,
+     (ProMenubuttonAction)UserMenuDeleteAndPop, NULL, 0);
+  PT_TEST_LOG_SUCC( &quot;ProMenubuttonActionSet&quot;);
+<a name="anchor-18"></a>
+  status = ProMenubuttonActionSet(&quot;PTMechItemEx&quot;, &quot;UGMechanica&quot;,
+     (ProMenubuttonAction)UserMenuDeleteAndPop, NULL, 0);
+  PT_TEST_LOG_SUCC( &quot;ProMenubuttonActionSet&quot; );
+
+<a name="anchor-19"></a>  status = ProMenuPush();
+  PT_TEST_LOG_SUCC( &quot;ProMenuPush&quot;);
+
+  status = ProMenuCreate(PROMENUTYPE_MAIN, &quot;PTMechItemEx&quot;, &amp;menu_id);
+  PT_TEST_LOG_SUCC( &quot;ProMenuCreate&quot; );
+<a name="anchor-20"></a>
+  status = ProMenuProcess(&quot;PTMechItemEx&quot;, &amp;action);
+  PT_TEST_LOG_SUCC(  &quot;ProMenuProcess&quot; );
+
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>  
+}
+
+/* Write Load info */
+int UserLoadInfoWrite()
+<a name="anchor-22"></a>{
+
+  ProMdl model;
+  ProError status;
+  ProMdlType mdl_type;
+<a name="anchor-23"></a>  ProBoolean is_active;
+
+  ProStringToWstring(message_file, &quot;msg_ugfund.txt&quot;);
+
+  strcpy (fname, &quot;mechanicaLoaddata.txt&quot;);
+<a name="anchor-24"></a>
+    if ((fp = fopen (fname, &quot;w&quot;)) == NULL)
+    {
+         ProMessageDisplay(message_file, &quot;USER %0s F&quot;,
+              &quot;Cannot open file for write&quot;);
+<a name="anchor-25"></a>         return (0);
+    }
+  ProTKFprintf (fp, &quot;\n&quot;);
+
+  status = ProMdlCurrentGet (&amp;model);
+<a name="anchor-26"></a>  PT_TEST_LOG_SUCC(&quot;ProMdlCurrentGet&quot; );
+  
+  if (status == PRO_TK_NO_ERROR)
+  {
+    status = ProMdlTypeGet (model, &amp;mdl_type);
+<a name="anchor-27"></a>
+    if(mdl_type == PRO_MDL_PART || mdl_type ==PRO_MDL_ASSEMBLY)
+    {  	
+    
+     /* Visiting mechanica item: PRO_SIMULATION_WELD */
+<a name="anchor-28"></a>     status = ProSolidMechitemVisit (model, PRO_SIMULATION_LOAD, 
+					PTExMechitemVisitWrite,	NULL, NULL);
+     PT_TEST_LOG_SUCC(&quot;ProSolidMechitemVisit&quot; );
+
+    }
+<a name="anchor-29"></a>  }
+  else
+  {
+	ProMessageDisplay (message_file, &quot;USER %0s F&quot;, &quot;There is no current model&quot;);
+	return status;
+<a name="anchor-30"></a>  }
+
+  return 0;
+}
+
+<a name="anchor-31"></a>/* Write Weld info */
+int UserWeldInfoWrite()
+{
+
+  ProMdl model;
+<a name="anchor-32"></a>  ProError status;
+  ProMdlType mdl_type;
+  ProBoolean is_active;
+
+  ProStringToWstring(message_file, &quot;pt_mech_examples.txt&quot;);
+<a name="anchor-33"></a>
+  strcpy (fname, &quot;mechanicaWelddata.txt&quot;);
+
+    if ((fp = fopen (fname, &quot;w&quot;)) == NULL)
+    {
+<a name="anchor-34"></a>         ProMessageDisplay(message_file, &quot;USER %0s F&quot;,
+              &quot;Cannot open file for write&quot;);
+         return (0);
+    }
+  ProTKFprintf (fp, &quot;\n&quot;);
+<a name="anchor-35"></a>
+  status = ProMdlCurrentGet (&amp;model);
+  PT_TEST_LOG_SUCC(&quot;ProMdlCurrentGet&quot; );
+  
+  if (status == PRO_TK_NO_ERROR)
+<a name="anchor-36"></a>  {
+    status = ProMdlTypeGet (model, &amp;mdl_type);
+
+    if(mdl_type == PRO_MDL_PART || mdl_type ==PRO_MDL_ASSEMBLY)
+    { 
+<a name="anchor-37"></a>
+     status = ProSolidMechitemVisit (model, PRO_SIMULATION_WELD, 
+				PTExMechitemVisitWrite,	NULL, NULL);
+     PT_TEST_LOG_SUCC(&quot;ProSolidMechitemVisit&quot; );
+     
+<a name="anchor-38"></a>    }
+  }
+  else
+  {
+	ProMessageDisplay (message_file, &quot;USER %0s F&quot;, &quot;There is no current model&quot;);
+<a name="anchor-39"></a>	return status;
+  }
+
+  return 0;
+}
+<a name="anchor-40"></a>
+/*====================================================================*
+Function : UserMenuDeleteAndPop()
+Purpose  : Deletes the current menu and pops up its parent
+\*====================================================================*/
+<a name="anchor-41"></a>int UserMenuDeleteAndPop()
+{
+  int status;
+
+  status = ProMenuDelete();
+<a name="anchor-42"></a>  PT_TEST_LOG_SUCC( &quot;ProMenuDelete&quot;);
+
+  status = ProMenuPop();
+  PT_TEST_LOG_SUCC( &quot;ProMenuPop&quot; );
+
+<a name="anchor-43"></a>  return (PRO_TK_NO_ERROR);
+}
+
+ProError PTExMechitemVisitWrite(ProMechItem* item,
+                                  ProError filter_status,
+<a name="anchor-44"></a>                                  ProAppData app_data)
+{
+  ProName item_proname;
+  char    item_name [PRO_NAME_SIZE];
+  ProError status;
+<a name="anchor-45"></a>
+  status = ProMechitemNameGet ( item, item_proname);
+  PT_TEST_LOG_SUCC(&quot;ProMechitemNameGet&quot; );
+
+  ProWstringToString (item_name, item_proname);
+<a name="anchor-46"></a>
+  ProTKFprintf (fp, &quot;     --------------------------- \n&quot;); 
+  ProTKFprintf (fp, &quot;     - Item name: %s \n&quot;, item_name);
+  ProTKFprintf (fp, &quot;     --------------------------- \n&quot;);
+
+<a name="anchor-47"></a>  switch (item->type)
+    {
+    case PRO_SIMULATION_WELD:
+      {
+	ProTKFprintf (fp, &quot;     - Item type: PRO_SIMULATION_WELD \n&quot;);
+<a name="anchor-48"></a>
+      	PTExMechweldWrite_low (item);
+      	break;
+      }
+    case PRO_SIMULATION_LOAD:
+<a name="anchor-49"></a>      {
+	ProTKFprintf (fp, &quot;     - Item type: PRO_SIMULATION_LOAD \n&quot;);
+
+      	PTExMechloadWrite_low (item);
+      	break;
+<a name="anchor-50"></a>      }
+    default:
+      break;
+    }
+
+<a name="anchor-51"></a>
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-52"></a>/*======================================================================*\
+				WELD
+\*======================================================================*/
+ProError PTExMechweldWrite_low (ProMechItem* weld)
+{
+<a name="anchor-53"></a>  ProMechGeomref* refs;
+  int refs_size, i;
+  ProMechWeldType type;
+  ProMechWeldEnd EndWeld_data;
+  ProMechWeldEndType Endtype;
+<a name="anchor-54"></a>  ProError status;
+
+  status = ProMechweldReferencesGet (weld, &amp;refs);  
+  PT_TEST_LOG_SUCC(&quot;ProMechweldReferencesGet&quot; );
+
+<a name="anchor-55"></a>  status = ProArraySizeGet (refs, &amp;refs_size);
+  PT_TEST_LOG_SUCC(&quot;ProArraySizeGet&quot; );
+
+  if (refs_size > 0)
+  {
+<a name="anchor-56"></a>    ProTKFprintf (fp, &quot;	- Number of references: %d\n&quot;, refs_size);
+  }
+
+  status = ProMechgeomrefProarrayFree (refs);
+  PT_TEST_LOG_SUCC(&quot;ProMechgeomrefProarrayFree&quot; );
+<a name="anchor-57"></a>
+  status = ProMechweldTypeGet (weld, &amp;type);
+  PT_TEST_LOG_SUCC(&quot;ProMechweldTypeGet&quot; );
+  
+  switch (type)
+<a name="anchor-58"></a>    {
+    case PRO_MECH_WELD_PERIMETER:
+      {
+        ProMechWeldPerimeter data;
+
+<a name="anchor-59"></a>	ProTKFprintf (fp, &quot;        - Weld type: PRO_MECH_WELD_PERIMETER \n&quot;);
+
+        status = ProMechweldPerimeterdataGet (weld, &amp;data);
+        PT_TEST_LOG_SUCC(&quot;ProMechweldPerimeterdataGet&quot; );
+
+<a name="anchor-60"></a>        PTExMechweldperimeterWrite_low (data);
+
+        status = ProMechweldperimeterFree (data);
+        PT_TEST_LOG_SUCC(&quot;ProMechweldperimeterFree&quot; );
+
+<a name="anchor-61"></a>        break;
+      }
+    case PRO_MECH_WELD_SPOT:
+      {
+        ProMechWeldSpot data;
+<a name="anchor-62"></a>
+	ProTKFprintf (fp, &quot;        - Weld type: PRO_MECH_WELD_SPOT \n&quot;);
+
+        status = ProMechweldSpotdataGet (weld, &amp;data);
+        PT_TEST_LOG_SUCC(&quot;ProMechweldSpotdataGet&quot; );
+<a name="anchor-63"></a>
+        PTExMechweldspotWrite_low (weld, data);
+
+        status = ProMechweldspotFree (data);
+        PT_TEST_LOG_SUCC(&quot;ProMechweldspotFree&quot; );
+<a name="anchor-64"></a>
+        break;
+      }
+
+      case PRO_MECH_WELD_FEAT:
+<a name="anchor-65"></a>      {
+        ProMechWeldFeature welddata;
+
+	ProTKFprintf (fp, &quot;        - Weld type: PRO_MECH_WELD_FEAT \n&quot;);
+
+<a name="anchor-66"></a>        status =ProMechweldFeaturedataGet(weld,&amp;welddata);
+        PT_TEST_LOG_SUCC(&quot;ProMechweldFeaturedataGet&quot; );
+
+        PTExMechweldfeatureWrite_low (welddata);
+
+<a name="anchor-67"></a>        status=ProMechweldfeatureFree(welddata);
+        PT_TEST_LOG_SUCC(&quot;ProMechweldfeatureFree&quot; );
+
+        break;
+      }
+<a name="anchor-68"></a>
+      case  PRO_MECH_WELD_END:
+      {
+        ProMechWeldEnd EndWeld_data;
+
+<a name="anchor-69"></a>	ProTKFprintf (fp, &quot;        - Weld type: PRO_MECH_WELD_END \n&quot;);
+
+        status =ProMechweldEnddataGet(weld,&amp;EndWeld_data);
+        PT_TEST_LOG_SUCC(&quot;ProMechweldEnddataGet&quot; );
+
+<a name="anchor-70"></a>        PTExMechweldEndWeldWrite_low (EndWeld_data);
+
+        status =ProMechweldendFree(EndWeld_data);
+        PT_TEST_LOG_SUCC(&quot;ProMechweldendFree&quot; );
+
+<a name="anchor-71"></a>        break;
+      }
+
+    }
+
+<a name="anchor-72"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*======================================================================*\
+	Info. for mech item: LOAD
+<a name="anchor-73"></a>\*======================================================================*/
+ProError PTExMechloadWrite_low (ProMechItem* load)
+{
+  ProMechGeomref* refs;
+  int i, gr_size;
+<a name="anchor-74"></a>  ProMechLoadType type;
+  ProError status;
+
+  status = ProMechloadReferencesGet (load, &amp;refs);
+  PT_TEST_LOG_SUCC(&quot;ProMechloadReferencesGet&quot; );
+<a name="anchor-75"></a>  
+  status = ProArraySizeGet (refs, &amp;gr_size);
+  
+  ProTKFprintf (fp, &quot;	- Number of references: %d \n&quot;, gr_size);
+
+<a name="anchor-76"></a>  status = ProMechgeomrefProarrayFree (refs);
+  PT_TEST_LOG_SUCC(&quot;ProMechgeomrefProarrayFree&quot; );
+  
+  status = ProMechloadTypeGet (load, &amp;type);
+  PT_TEST_LOG_SUCC(&quot;ProMechloadTypeGet&quot; );
+<a name="anchor-77"></a>  
+  ProTKFprintf (fp, &quot;     - Load type: %d \n&quot;, type);
+  
+  switch (type)
+    {
+<a name="anchor-78"></a>    case PRO_MECH_LOAD_FORCE:
+      {
+	ProMechForceData data;
+
+ 	ProTKFprintf (fp, &quot;	- Force data: \n&quot;);
+<a name="anchor-79"></a>
+	/* Writing force data */
+	status = ProMechloadForcedataGet (load, &amp;data);
+        PT_TEST_LOG_SUCC(&quot;ProMechloadForcedataGet&quot; );
+
+<a name="anchor-80"></a>	PTExMechforcedataWrite_low (data);
+
+	status = ProMechforcedataFree (data);
+        PT_TEST_LOG_SUCC(&quot;ProMechforcedataFree&quot; );
+
+<a name="anchor-81"></a>	break;
+      }
+    case PRO_MECH_LOAD_PRESSURE:
+      {
+	ProMechPressureData data;
+<a name="anchor-82"></a>
+	status = ProMechloadPressuredataGet (load, &amp;data);
+        PT_TEST_LOG_SUCC(&quot;ProMechloadPressuredataGet&quot; );
+
+	/* Writing pressure load data */
+<a name="anchor-83"></a>	PTExMechpressuredataWrite_low (data);
+
+	status = ProMechpressuredataFree (data);
+        PT_TEST_LOG_SUCC(&quot;ProMechpressuredataFree&quot; );
+
+<a name="anchor-84"></a>	break;
+      }
+   case PRO_MECH_LOAD_BEARING:
+      {
+	ProMechBearingData data;
+<a name="anchor-85"></a>
+	status = ProMechloadBearingdataGet (load, &amp;data);
+        PT_TEST_LOG_SUCC(&quot;ProMechloadBearingdataGet&quot; );
+	
+	/* Writing bearing load data */
+<a name="anchor-86"></a>	PTExMechbearingdataWrite_low (data);
+
+	status = ProMechbearingdataFree (data);
+        PT_TEST_LOG_SUCC(&quot;ProMechbearingdataFree&quot; );
+	
+<a name="anchor-87"></a>	break;
+      }
+   case PRO_MECH_LOAD_CENTRIFUGAL:
+      {
+	ProMechCentrifugalData data;
+<a name="anchor-88"></a>
+	status = ProMechloadCentrifugaldataGet (load, &amp;data);
+        PT_TEST_LOG_SUCC(&quot;ProMechloadCentrifugaldataGet&quot; );
+	
+	/*Writing centrifugal load data */
+<a name="anchor-89"></a>	PTExMechcentrifugaldataWrite_low (data);
+
+	status = ProMechcentrifugaldataFree (data);
+        PT_TEST_LOG_SUCC(&quot;ProMechcentrifugaldataFree&quot; );
+	
+<a name="anchor-90"></a>	break;
+      }
+   case PRO_MECH_LOAD_GRAVITY:
+      {
+	ProMechGravityData data;
+<a name="anchor-91"></a>
+	/* Writing gravity load data */
+	status = ProMechloadGravitydataGet (load, &amp;data);
+        PT_TEST_LOG_SUCC(&quot;ProMechloadGravitydataGet&quot; );
+	
+<a name="anchor-92"></a>	PTExMechgravitydataWrite_low (data);
+
+	status = ProMechgravitydataFree (data);
+        PT_TEST_LOG_SUCC(&quot;ProMechgravitydataFree&quot; );
+	
+<a name="anchor-93"></a>	break;
+      }
+    case PRO_MECH_LOAD_STRUCTURAL_TEMPERATURE:
+      {
+	ProMechStructtempData data;
+<a name="anchor-94"></a>
+	
+	status = ProMechloadStructtempdataGet (load, &amp;data);
+        PT_TEST_LOG_SUCC(&quot;ProMechloadStructtempdataGet&quot; );
+	
+<a name="anchor-95"></a>	/* Writing structural temperature data */
+	PTExMechstructtempdataWrite_low (data);
+
+	status = ProMechstructtempdataFree (data);
+        PT_TEST_LOG_SUCC(&quot;ProMechstructtempdataFree&quot; );
+<a name="anchor-96"></a>	
+	break;
+      }
+    case PRO_MECH_LOAD_MECT_TEMPERATURE:
+      {
+<a name="anchor-97"></a>	ProMechMecttempData data;
+
+	status = ProMechloadMecttempdataGet (load, &amp;data);
+        PT_TEST_LOG_SUCC(&quot;ProMechloadMecttempdataGet&quot; );
+	
+<a name="anchor-98"></a>	/* Writing MECT temperature data */
+	PTExMechmecttempdataWrite_low (data);
+
+	status = ProMechmecttempdataFree (data);
+        PT_TEST_LOG_SUCC(&quot;ProMechmecttempdataFree&quot; );
+<a name="anchor-99"></a>	
+	break;
+      }
+    case PRO_MECH_LOAD_HEAT:
+      {
+<a name="anchor-100"></a>	ProMechHeatData data;
+
+	status = ProMechloadHeatdataGet (load, &amp;data);
+        PT_TEST_LOG_SUCC(&quot;ProMechloadHeatdataGet&quot; );
+	
+<a name="anchor-101"></a>	/* Writing heat load data */
+	PTExMechheatdataWrite_low (data);
+
+	status = ProMechheatdataFree (data);
+        PT_TEST_LOG_SUCC(&quot;ProMechheatdataFree&quot; );
+<a name="anchor-102"></a>	
+	break;
+      }
+    }
+  
+<a name="anchor-103"></a>  return PRO_TK_NO_ERROR;
+}
+
+
+/*======================================================================*\
+<a name="anchor-104"></a>	Info. for perimeter weld
+\*======================================================================*/
+ProError PTExMechweldperimeterWrite_low (ProMechWeldPerimeter data)
+{
+  ProMechWeldEdgeData* edges;
+<a name="anchor-105"></a>  int i, edges_size;
+  ProError status;
+  
+  status = ProMechweldperimeterEdgesGet (data, &amp;edges);
+  PT_TEST_LOG_SUCC(&quot;ProMechweldperimeterEdgesGet&quot; );
+<a name="anchor-106"></a>  
+  status = ProArraySizeGet (edges, &amp;edges_size);
+  PT_TEST_LOG_SUCC(&quot;ProArraySizeGet&quot; );
+
+  ProTKFprintf (fp, &quot;        - Number of edges in the perimeter weld: %d \n&quot;,
+<a name="anchor-107"></a>								 edges_size);  
+
+  for (i = 0; i &lt; edges_size; i++)
+    {
+      PTExMechweldedgedataWrite_low (edges[i]);
+<a name="anchor-108"></a>      ProTKFprintf (fp, &quot;        --------------- \n&quot;);  
+    }
+
+  status = ProMechweldedgeProarrayFree (edges);
+  PT_TEST_LOG_SUCC(&quot;ProMechweldedgeProarrayFree&quot; );
+<a name="anchor-109"></a>
+  return PRO_TK_NO_ERROR;
+}
+
+/*======================================================================*\
+<a name="anchor-110"></a>	Info. for edge weld
+\*======================================================================*/
+ProError PTExMechweldedgedataWrite_low (ProMechWeldEdgeData data)
+{
+  int edge_id;
+<a name="anchor-111"></a>  ProMechExpression thickness;
+  ProCharLine c_thickness;
+  ProName material;
+  ProCharName c_material;
+  ProError status;
+<a name="anchor-112"></a>  
+  status = ProMechweldedgeEdgeGet (data, &amp;edge_id);
+  PT_TEST_LOG_SUCC(&quot;ProMechweldedgeEdgeGet&quot; );
+
+  ProTKFprintf (fp, &quot;        - Weld edge id: %d \n&quot;, edge_id); 
+<a name="anchor-113"></a>  
+  status = ProMechweldedgeThicknessGet (data, thickness);
+  PT_TEST_LOG_SUCC(&quot;ProMechweldedgeThicknessGet&quot; );
+
+  ProWstringToString (c_thickness, thickness);
+<a name="anchor-114"></a>  ProTKFprintf (fp, &quot;        + Thickness: %s \n&quot;, c_thickness); 
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-115"></a>/*======================================================================*\
+	Info. for spot weld
+\*======================================================================*/
+ProError PTExMechweldspotWrite_low (ProMechItem* item, ProMechWeldSpot data)
+{
+<a name="anchor-116"></a>    int i, points_size;
+    ProMechGeomref *points;
+    ProMechExpression dia;
+    ProCharName c_dia, mat_name;
+    int mat_id;
+<a name="anchor-117"></a>    ProName mat_pname;
+    ProModelitem material;
+    ProError status;
+
+    status = ProMechweldspotPointsGet (data, &amp;points);
+<a name="anchor-118"></a>    PT_TEST_LOG_SUCC(&quot;ProMechweldspotPointsGet&quot; );
+
+    status = ProArraySizeGet (points, &amp;points_size);
+
+    ProTKFprintf (fp, &quot;	- Number of weld spot points: %d \n&quot;, points_size);    
+<a name="anchor-119"></a>
+    status = ProMechgeomrefProarrayFree (points);
+    PT_TEST_LOG_SUCC(&quot;ProMechgeomrefProarrayFree&quot; );
+
+    status = ProMechweldspotDiameterGet (data, dia);
+<a name="anchor-120"></a>    PT_TEST_LOG_SUCC(&quot;ProMechweldspotDiameterGet&quot; );
+
+    ProWstringToString (c_dia, dia);
+    ProTKFprintf (fp, &quot;          + Diameter: %s \n&quot;, c_dia); 
+
+<a name="anchor-121"></a>    status = ProMechweldspotMaterialIdGet (data, &amp;mat_id);
+    PT_TEST_LOG_SUCC(&quot;ProMechweldspotMaterialIdGet&quot; );
+
+    if (mat_id != -1)
+    {
+<a name="anchor-122"></a>        status = ProModelitemInit ( item->owner, mat_id, 
+						PRO_RP_MATERIAL, &amp;material);
+
+        status = ProModelitemNameGet (&amp;material, mat_pname);
+
+<a name="anchor-123"></a>        ProWstringToString (mat_name, mat_pname); 
+        ProTKFprintf (fp, &quot;          + Material id: %d, name: %s \n&quot;,
+							 mat_id, mat_name); 
+    }
+    else
+<a name="anchor-124"></a>    {
+        ProTKFprintf (fp, &quot;          + Material not assigned \n&quot;); 
+    }
+
+    return PRO_TK_NO_ERROR;
+<a name="anchor-125"></a>}
+
+/*======================================================================*\
+	Info. for weld as feature
+\*======================================================================*/
+<a name="anchor-126"></a>ProError PTExMechweldfeatureWrite_low (ProMechWeldFeature welddata)
+{
+    ProCharLine thickval;
+    ProMechExpression thickness1;
+    ProBoolean  overrideflag;
+<a name="anchor-127"></a>    int matid;
+    ProError status;
+    
+    status = ProMechweldfeatureOverrideflagGet(welddata,&amp;overrideflag);
+    PT_TEST_LOG_SUCC(&quot;ProMechweldfeatureOverrideflagGet&quot; );
+<a name="anchor-128"></a>    
+    ProTKFprintf(fp,&quot;            +Overrideflag = %s \n&quot;,
+				(overrideflag == PRO_B_TRUE)?&quot;True&quot;:&quot;False&quot;);
+    
+    if (overrideflag == PRO_B_TRUE)
+<a name="anchor-129"></a>    {  
+    status =ProMechweldfeatureMaterialidGet(welddata,&amp;matid);
+    PT_TEST_LOG_SUCC(&quot;ProMechweldfeatureMaterialidGet&quot; );
+    
+    ProTKFprintf(fp,&quot;            +Material id= %d \n&quot;,matid);
+<a name="anchor-130"></a>    
+    status =ProMechweldfeatureThicknessGet(welddata,thickness1);
+    PT_TEST_LOG_SUCC(&quot;ProMechweldfeatureThicknessGet&quot; );
+    
+    ProWstringToString (thickval, thickness1);
+<a name="anchor-131"></a>    
+    ProTKFprintf (fp, &quot;            +Thickness: %s \n&quot;,thickval);  
+    }    
+   
+    return PRO_TK_NO_ERROR;
+<a name="anchor-132"></a>
+}
+
+/*======================================================================*\
+	Info. for end weld
+<a name="anchor-133"></a>\*======================================================================*/
+ProError PTExMechweldEndWeldWrite_low ( ProMechWeldEnd EndWeld_data)
+{ 
+   ProMechWeldEndType endweldtype;
+   ProBool  flag;
+<a name="anchor-134"></a>   ProError status; 
+
+   status =ProMechweldendTypeGet(EndWeld_data,&amp;endweldtype);
+   PT_TEST_LOG_SUCC(&quot;ProMechweldendTypeGet&quot; );
+   
+<a name="anchor-135"></a>   ProTKFprintf (fp, &quot;             + End Weld type: %d \n&quot;, endweldtype); 
+     
+   /*Checking if endweld type not PRO_MECH_WELD_END_SINGLE_TO_MANY, then only ProMechweldendExtendAdjacentSurfacesGet is called and Extend adjacent surfaces flag
+   is printed*/
+   
+<a name="anchor-136"></a>   if (endweldtype != PRO_MECH_WELD_END_SINGLE_TO_MANY)
+   {
+     status =ProMechweldendExtendAdjacentSurfacesGet(EndWeld_data,&amp;flag);
+     PT_TEST_LOG_SUCC(&quot;ProMechweldendExtendAdjacentSurfacesGet&quot; );
+	    
+<a name="anchor-137"></a>     ProTKFprintf(fp, &quot;             + Extend adjacent surfaces flag = %s \n&quot;,
+					(flag == PRO_B_TRUE)?&quot;True&quot;:&quot;False&quot;);
+   }    
+  
+  return PRO_TK_NO_ERROR;
+<a name="anchor-138"></a>}
+
+/*======================================================================*\
+	Info. for force data
+\*======================================================================*/
+<a name="anchor-139"></a>ProError PTExMechforcedataWrite_low (ProMechForceData data)
+{
+  ProMechForceType type;
+  ProMechVectoredValue force;
+  ProMechVectoredValue moment;
+<a name="anchor-140"></a>  ProMechGeomref ref_pnt;
+  ProBool ignore_force, ignore_moment;
+  ProError status;
+
+  status = ProMechforcedataTypeGet (data, &amp;type);
+<a name="anchor-141"></a>  PT_TEST_LOG_SUCC(&quot;ProMechforcedataTypeGet&quot; );
+
+  ProTKFprintf (fp, &quot;          + Force type: %d \n&quot;, type);	   
+
+  status = ProMechforcedataForceGet (data, &amp;force);
+<a name="anchor-142"></a>  PT_TEST_LOG_SUCC(&quot;ProMechforcedataForceGet&quot; );
+
+  ProTKFprintf (fp, &quot;          + Force: \n&quot; );
+
+  PTExMechvectoredvalueWrite_low (force);
+<a name="anchor-143"></a>
+  /* Free */
+  status = ProMechvectoredvalueFree (force);
+  PT_TEST_LOG_SUCC(&quot;ProMechvectoredvalueFree&quot; );
+
+<a name="anchor-144"></a>  status = ProMechforcedataMomentGet (data, &amp;moment);
+  PT_TEST_LOG_SUCC(&quot;ProMechforcedataMomentGet&quot; );
+  
+  ProTKFprintf (fp, &quot;          + Moment: \n&quot;);
+  
+<a name="anchor-145"></a>  PTExMechvectoredvalueWrite_low (moment);
+
+  /* Free */
+  status = ProMechvectoredvalueFree (moment);
+  PT_TEST_LOG_SUCC(&quot;ProMechvectoredvalueFree&quot; );
+<a name="anchor-146"></a>
+  if (type == PRO_MECH_FORCE_TOTAL_AT_POINT)
+    {
+      status = ProMechforcedataRefpntGet (data, &amp;ref_pnt);
+      PT_TEST_LOG_SUCC(&quot;ProMechforcedataRefpntGet&quot; );
+<a name="anchor-147"></a>
+      PTExMechGeomrefWrite_low (ref_pnt);
+      
+       /* Free */
+      status = ProMechgeomrefFree (ref_pnt);
+<a name="anchor-148"></a>      PT_TEST_LOG_SUCC(&quot;ProMechgeomrefFree&quot; );
+    }
+
+  if (type == PRO_MECH_FORCE_TBLAP)
+    {
+<a name="anchor-149"></a>	status = ProMechforcedataAxialForceIgnoreflagGet (data, &amp;ignore_force);
+        PT_TEST_LOG_SUCC(&quot;ProMechforcedataAxialForceIgnoreflagGet&quot; );
+
+	ProTKFprintf (fp, &quot;          + Axial force is: %s \n&quot;,
+		   (ignore_force == PRO_B_TRUE)?&quot;ignored&quot;:&quot;not ignored&quot;);
+<a name="anchor-150"></a>
+	status = ProMechforcedataAxialMomentIgnoreflagGet (data, &amp;ignore_moment);
+        PT_TEST_LOG_SUCC(&quot;ProMechforcedataAxialMomentIgnoreflagGet&quot; );
+
+	ProTKFprintf (fp, &quot;          + Axial moment is: %s \n&quot;,
+<a name="anchor-151"></a>		    (ignore_moment == PRO_B_TRUE)?&quot;ignored&quot;:&quot;not ignored&quot;);
+    }
+
+  return PRO_TK_NO_ERROR;
+}
+<a name="anchor-152"></a>
+/*======================================================================*\
+	Utility for ProMechVectoredValue
+\*======================================================================*/
+ProError PTExMechvectoredvalueWrite_low (ProMechVectoredValue value)
+<a name="anchor-153"></a>{
+  ProMechDirectionType type;
+  ProMechDirectionVector vector;
+  ProMechGeomref* points;
+  ProMechValue magnitude;
+<a name="anchor-154"></a>  int i, pnt_size;
+  ProError status;
+  
+  status = ProMechvectoredvalueDirectiontypeGet (value, &amp;type);
+  PT_TEST_LOG_SUCC(&quot;ProMechvectoredvalueDirectiontypeGet&quot; );
+<a name="anchor-155"></a>
+  ProTKFprintf (fp, &quot;            = Direction type: %d \n&quot;, type);
+
+  if (type == PRO_MECH_DIRECTION_BY_VECTOR)
+    {
+<a name="anchor-156"></a>      status = ProMechvectoredvalueDirectionvectorGet (value, &amp;vector);
+      PT_TEST_LOG_SUCC(&quot;ProMechvectoredvalueDirectionvectorGet&quot; );
+      
+      PTExMechdirvectorWrite_low (vector);
+
+<a name="anchor-157"></a>      /* Free */
+      status = ProMechdirvectorFree (vector);
+      PT_TEST_LOG_SUCC(&quot;ProMechdirvectorFree&quot; );
+    }
+  else if (type == PRO_MECH_DIRECTION_BY_2_POINTS)
+<a name="anchor-158"></a>    {
+      status = ProMechvectoredvaluePointsGet (value, &amp;points);
+      PT_TEST_LOG_SUCC(&quot;ProMechvectoredvaluePointsGet&quot; );
+
+      status = ProArraySizeGet (points, &amp;pnt_size);
+<a name="anchor-159"></a>      
+      for (i = 0; i &lt; pnt_size; i++)
+	{
+	  PTExMechGeomrefWrite_low (points [i]);
+	}
+<a name="anchor-160"></a>
+      /* Free */
+      status = ProMechgeomrefProarrayFree (points);
+      PT_TEST_LOG_SUCC(&quot;ProMechgeomrefProarrayFree&quot; );
+    }
+<a name="anchor-161"></a>  
+  status = ProMechvectoredvalueMagnitudeGet (value, &amp;magnitude);
+  PT_TEST_LOG_SUCC(&quot;ProMechvectoredvalueMagnitudeGet&quot; );
+
+  if (status == PRO_TK_NO_ERROR)
+<a name="anchor-162"></a>    {
+      PTExMechvalueWrite_low (magnitude);
+
+      /* Free */
+      status = ProMechvalueFree (magnitude);
+<a name="anchor-163"></a>     PT_TEST_LOG_SUCC(&quot;ProMechvalueFree&quot; );
+    }
+  else
+    ProTKFprintf (fp, &quot;          = No magnitude. \n&quot;);
+
+<a name="anchor-164"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*======================================================================*\
+	Utility for ProMechDirectionVector
+<a name="anchor-165"></a>\*======================================================================*/
+ProError PTExMechdirvectorWrite_low (ProMechDirectionVector value)
+{
+  ProMechValue* components;
+  int i, cmp_size;
+<a name="anchor-166"></a>  ProMechVariation variation;
+  ProMechGeomref csys;
+  ProError status;
+
+  ProTKFprintf (fp, &quot;            = Overall variation: \n&quot;);
+<a name="anchor-167"></a>  
+  status = ProMechdirvectorVariationGet (value, &amp;variation);
+  PT_TEST_LOG_SUCC(&quot;ProMechdirvectorVariationGet&quot; );
+
+  PTExMechvariationWrite_low (variation);
+<a name="anchor-168"></a>
+  ProTKFprintf (fp, &quot;            = Vector components: \n&quot;);
+
+  status = ProMechdirvectorComponentsGet (value, &amp;components);
+  PT_TEST_LOG_SUCC(&quot;ProMechdirvectorComponentsGet&quot; );
+<a name="anchor-169"></a>
+  status = ProArraySizeGet (components, &amp;cmp_size);
+
+  for (i = 0; i &lt; cmp_size; i++)
+    {
+<a name="anchor-170"></a>      PTExMechvalueWrite_low (components [i]);
+    }
+
+ /* Free */
+  status = ProMechvalueProarrayFree (components);
+<a name="anchor-171"></a>  PT_TEST_LOG_SUCC(&quot;ProMechvalueProarrayFree&quot; );
+
+ /* Free */
+  status = ProMechvariationFree (variation);
+  PT_TEST_LOG_SUCC(&quot;ProMechvariationFree&quot; );
+<a name="anchor-172"></a>
+  ProTKFprintf (fp, &quot;            = Vector csys: \n&quot;);
+
+  status = ProMechdirvectorCsysGet (value, &amp;csys);  
+  PT_TEST_LOG_SUCC(&quot;ProMechdirvectorCsysGet&quot; );
+<a name="anchor-173"></a>
+  PTExMechGeomrefWrite_low (csys);
+
+  /* Free */
+  status = ProMechgeomrefFree (csys);
+<a name="anchor-174"></a>  PT_TEST_LOG_SUCC(&quot;ProMechgeomrefFree&quot; );
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-175"></a>/*======================================================================*\
+	Utility for ProMechVariation
+\*======================================================================*/
+ProError PTExMechvariationWrite_low (ProMechVariation value)
+{
+<a name="anchor-176"></a>  ProMechVariationType type;
+  int function_id;
+  ProMechInterpolationPnt* pnts;
+  int i, pnt_size;
+  ProMechExternalFieldData external_field_data;
+<a name="anchor-177"></a>  ProCharPath c_fem_file;
+  ProMechGeomref csys;
+  ProPath data_file;
+  ProError status;
+
+<a name="anchor-178"></a>  status = ProMechvariationTypeGet (value, &amp;type);
+  PT_TEST_LOG_SUCC(&quot;ProMechvariationTypeGet&quot; );
+
+  ProTKFprintf (fp, &quot;              - Variation type: %d \n&quot;, type);
+
+<a name="anchor-179"></a>  if (type == PRO_MECH_VARIATION_FUNCTION)
+    {
+      status = ProMechvariationFunctionidGet (value, &amp;function_id); 
+      PT_TEST_LOG_SUCC(&quot;ProMechvariationFunctionidGet&quot; );
+
+<a name="anchor-180"></a>      ProTKFprintf (fp, &quot;            = Variation function id: %d \n&quot;, function_id);
+    }
+  else if (type == PRO_MECH_VARIATION_INTERPOLATION)
+    {
+      status = ProMechvariationInterpolationGet (value, &amp;pnts);
+<a name="anchor-181"></a>      PT_TEST_LOG_SUCC(&quot;ProMechvariationInterpolationGet&quot; );
+
+      status = ProArraySizeGet (pnts, &amp;pnt_size);
+
+      for (i = 0; i &lt; pnt_size; i++)
+<a name="anchor-182"></a>	{
+	  PTExMechinterpolationpntWrite_low (pnts[i]);
+	}
+
+      /* Free */
+<a name="anchor-183"></a>      status = ProMechinterpolationpntProarrayFree (pnts);
+      PT_TEST_LOG_SUCC(&quot;ProMechinterpolationpntProarrayFree&quot; );
+    }
+  else if (type == PRO_MECH_VARIATION_EXTERN_FIELD)
+    {
+<a name="anchor-184"></a>
+      status = ProMechvariationExternalfielddataGet (value, &amp;external_field_data);
+      PT_TEST_LOG_SUCC(&quot;ProMechvariationExternalfielddataGet&quot; );
+
+      status = ProMechexternalfielddataCsysGet (external_field_data, &amp;csys);
+<a name="anchor-185"></a>      PT_TEST_LOG_SUCC(&quot;ProMechexternalfielddataCsysGet&quot; );
+
+      if (status == PRO_TK_NO_ERROR)
+      {
+	ProTKFprintf (fp, &quot;       + Csys: \n&quot;);
+<a name="anchor-186"></a>
+      	PTExMechGeomrefWrite_low (csys);
+
+      }
+      else
+<a name="anchor-187"></a>    	ProTKFprintf (fp, &quot;       + Csys file not set \n&quot;);
+
+      ProMechexternalfielddataFileGet (external_field_data, data_file);
+      PT_TEST_LOG_SUCC(&quot;ProMechexternalfielddataFileGet&quot; );
+      
+<a name="anchor-188"></a>      if (status == PRO_TK_NO_ERROR)
+      {
+      	ProWstringToString (c_fem_file, data_file);
+
+      	ProTKFprintf (fp, &quot;       + External field data file: %s \n&quot;, c_fem_file);
+<a name="anchor-189"></a>      }
+      else
+    	ProTKFprintf (fp, &quot;       + External field data file not set \n&quot;);
+
+    }
+<a name="anchor-190"></a>
+  return PRO_TK_NO_ERROR;
+}
+
+/*======================================================================*\
+<a name="anchor-191"></a>	Utility for ProMechInterpolationPnt
+\*======================================================================*/
+ProError PTExMechinterpolationpntWrite_low (ProMechInterpolationPnt value)
+{
+  ProMechExpression expression;
+<a name="anchor-192"></a>  ProCharLine c_expression;
+  ProMechGeomref point;
+  ProError status;
+  
+  status = ProMechinterpolationpntMagnitudeGet (value, expression);
+<a name="anchor-193"></a>  PT_TEST_LOG_SUCC(&quot;ProMechinterpolationpntMagnitudeGet&quot; );
+
+  ProWstringToString (c_expression, expression);
+  ProTKFprintf (fp, &quot;            = Interpolation pnt magnitude: %s \n&quot;, 
+	   c_expression);
+<a name="anchor-194"></a>
+  status = ProMechinterpolationpntPointGet (value, &amp;point);
+  PT_TEST_LOG_SUCC(&quot;ProMechinterpolationpntPointGet&quot; );
+
+  PTExMechGeomrefWrite_low (point);
+<a name="anchor-195"></a>
+  /* Free */
+  status = ProMechgeomrefFree (point);
+
+  return PRO_TK_NO_ERROR;
+<a name="anchor-196"></a>}
+
+ProError PTExMechGeomrefWrite_low (ProMechGeomref Geomref)
+{
+  ProMechGeomrefType type;
+<a name="anchor-197"></a>  ProMechGeomrefSubType sub_type;
+  int id;
+  ProAsmcomppath path;
+  ProError status;
+
+<a name="anchor-198"></a>  ProTKFprintf (fp, &quot;        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \n&quot;);
+  
+  /* TYPE */
+  status = ProMechgeomrefTypeGet (Geomref, &amp;type);
+  PT_TEST_LOG_SUCC(&quot;ProMechgeomrefTypeGet&quot; );
+<a name="anchor-199"></a>
+  ProTKFprintf (fp, &quot;                   ~ Geomref type: %d \n&quot;,  type);
+  
+    /* SUBTYPE */
+  status = ProMechgeomrefSubtypeGet (Geomref, &amp;sub_type);
+<a name="anchor-200"></a>  PT_TEST_LOG_SUCC(&quot;ProMechgeomrefSubtypeGet&quot; );
+
+  ProTKFprintf (fp, &quot;                   ~ Geomref sub type: %d \n&quot;, type);
+
+  /* ID */
+<a name="anchor-201"></a>  status = ProMechgeomrefIdGet (Geomref, &amp;id);
+  PT_TEST_LOG_SUCC(&quot;ProMechgeomrefIdGet&quot; );
+
+  ProTKFprintf (fp, &quot;                   ~ Geomref id: %d \n&quot;, 
+	   id);
+<a name="anchor-202"></a>
+  /* PATH */
+  status = ProMechgeomrefPathGet (Geomref, &amp;path);
+  PT_TEST_LOG_SUCC(&quot;ProMechgeomrefPathGet&quot; );
+
+<a name="anchor-203"></a>  ProTKFprintf (fp, &quot;        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \n&quot;);
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-204"></a>/*======================================================================*\
+	Utility for ProMechValue
+\*======================================================================*/
+ProError PTExMechvalueWrite_low (ProMechValue value)
+{
+<a name="anchor-205"></a>  ProMechExpression expression;
+  ProMechVariation variation;
+  ProCharLine c_expression;
+  ProError status;
+  
+<a name="anchor-206"></a>  status = ProMechvalueValueGet (value, expression);
+  PT_TEST_LOG_SUCC(&quot;ProMechvalueValueGet&quot; );
+
+  ProWstringToString (c_expression, expression);
+  ProTKFprintf (fp, &quot;              - Value expression: %s \n&quot;, c_expression);
+<a name="anchor-207"></a>
+  status = ProMechvalueVariationGet (value, &amp;variation);  
+  PT_TEST_LOG_SUCC(&quot;ProMechvalueVariationGet&quot; );
+
+  PTExMechvariationWrite_low (variation);
+<a name="anchor-208"></a>
+  /* Free */
+  status = ProMechvariationFree (variation);
+  PT_TEST_LOG_SUCC(&quot;ProMechvariationFree&quot; );
+
+<a name="anchor-209"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*======================================================================*\
+	Utility for ProMechPressureData
+<a name="anchor-210"></a>\*======================================================================*/
+ProError PTExMechpressuredataWrite_low (ProMechPressureData data)
+{
+  ProMechValue value;
+  ProError status;
+<a name="anchor-211"></a>
+  status = ProMechpressuredataValueGet (data, &amp;value);
+  PT_TEST_LOG_SUCC(&quot;ProMechpressuredataValueGet&quot; );
+
+  PTExMechvalueWrite_low (value);
+<a name="anchor-212"></a>
+  status = ProMechvalueFree (value);
+  PT_TEST_LOG_SUCC(&quot;ProMechvalueFree&quot; );
+
+  return PRO_TK_NO_ERROR;
+<a name="anchor-213"></a>}
+
+/*======================================================================*\
+	Utility for ProMechCentrifugalData
+\*======================================================================*/
+<a name="anchor-214"></a>ProError PTExMechcentrifugaldataWrite_low (ProMechCentrifugalData data)
+{
+  ProMechVectoredValue velocity, acceleration;
+  ProError status;
+  
+<a name="anchor-215"></a>  ProTKFprintf (fp, &quot;       + Velocity: \n&quot;);
+  status = ProMechcentrifugaldataVelocityGet (data, &amp;velocity);
+  PT_TEST_LOG_SUCC(&quot;ProMechcentrifugaldataVelocityGet&quot; );
+  
+  PTExMechvectoredvalueWrite_low (velocity);
+<a name="anchor-216"></a>
+  status = ProMechvectoredvalueFree (velocity);
+  PT_TEST_LOG_SUCC(&quot;ProMechvectoredvalueFree&quot; );
+  
+  ProTKFprintf (fp,&quot;       + Acceleration: \n&quot;);
+<a name="anchor-217"></a>  status = ProMechcentrifugaldataAccelerationGet (data, &amp;acceleration);
+  PT_TEST_LOG_SUCC(&quot;ProMechcentrifugaldataAccelerationGet&quot; );
+  
+  PTExMechvectoredvalueWrite_low (acceleration);
+
+<a name="anchor-218"></a>  status = ProMechvectoredvalueFree (acceleration); 
+  PT_TEST_LOG_SUCC(&quot;ProMechvectoredvalueFree&quot; );
+  
+  return PRO_TK_NO_ERROR;
+}
+<a name="anchor-219"></a>
+/*======================================================================*\
+	Utility for ProMechGravityData
+\*======================================================================*/
+ProError PTExMechgravitydataWrite_low (ProMechGravityData data)
+<a name="anchor-220"></a>{
+  ProMechVectoredValue value;
+  ProError status;
+
+  status = ProMechgravitydataValueGet (data, &amp;value);
+<a name="anchor-221"></a>  PT_TEST_LOG_SUCC(&quot;ProMechgravitydataValueGet&quot; );
+
+  PTExMechvectoredvalueWrite_low (value);
+
+  status = ProMechvectoredvalueFree (value);
+<a name="anchor-222"></a>  PT_TEST_LOG_SUCC(&quot;ProMechvectoredvalueFree&quot; );
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-223"></a>/*======================================================================*\
+	Utility for ProMechMecttempData
+\*======================================================================*/
+ProError PTExMechmecttempdataWrite_low (ProMechMecttempData data)
+{
+<a name="anchor-224"></a>  ProMechObjectref load_set;
+  int analysis_id;
+  ProMechExpression ref_tmp;
+  ProName design_study;
+  ProCharLine c_ref_tmp;
+<a name="anchor-225"></a>  ProCharName c_design_stuty;
+  int timestep;
+  ProError status;
+
+  status = ProMechmecttempdataAnalysisidGet (data, &amp;analysis_id);
+<a name="anchor-226"></a>  PT_TEST_LOG_SUCC(&quot;ProMechmecttempdataAnalysisidGet&quot; );
+
+  ProTKFprintf (fp, &quot;       + Analysis id: %d \n&quot;, analysis_id);
+
+  status = ProMechmecttempdataLoadsetGet (data, &amp;load_set);
+<a name="anchor-227"></a>  PT_TEST_LOG_SUCC(&quot;ProMechmecttempdataLoadsetGet&quot; );
+
+  PTExMechObjectrefWrite_low (load_set);
+
+  status = ProMechmecttempdataReftempGet (data, ref_tmp);
+<a name="anchor-228"></a>  PT_TEST_LOG_SUCC(&quot;ProMechmecttempdataReftempGet&quot; );
+
+  ProWstringToString (c_ref_tmp, ref_tmp);
+  ProTKFprintf (fp, &quot;       + Reference temperature: %s \n&quot;,
+	   c_ref_tmp);
+<a name="anchor-229"></a>  
+  status = ProMechmecttempdataTimestepGet (data, &amp;timestep);
+  PT_TEST_LOG_SUCC(&quot;ProMechmecttempdataTimestepGet&quot; );
+
+  ProTKFprintf (fp, &quot;       + Time step: %d \n&quot;, timestep);
+<a name="anchor-230"></a>
+  status = ProMechmecttempdataDesignstudyGet (data, design_study);
+  PT_TEST_LOG_SUCC(&quot;ProMechmecttempdataDesignstudyGet&quot; );
+
+  ProWstringToString (c_design_stuty, design_study);
+<a name="anchor-231"></a>  ProTKFprintf (fp, &quot;       + Design study: %s \n&quot;,
+	   design_study);
+  
+  return PRO_TK_NO_ERROR;
+}
+<a name="anchor-232"></a>
+/*======================================================================*\
+	Utility for ProMechObjectref
+\*======================================================================*/
+ProError PTExMechObjectrefWrite_low (ProMechObjectref Objectref)
+<a name="anchor-233"></a>{
+  ProType type;
+  int id;
+  ProAsmcomppath path;
+  ProError status;
+<a name="anchor-234"></a>
+  ProTKFprintf (fp,&quot;        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \n&quot;);
+ 
+  /* TYPE */
+  status = ProMechobjectrefTypeGet (Objectref, &amp;type);
+<a name="anchor-235"></a>  PT_TEST_LOG_SUCC(&quot;ProMechobjectrefTypeGet&quot; )
+
+  ProTKFprintf (fp, &quot;                   ~ Objectref type: %d \n&quot;, type);
+ 
+  /* ID */
+<a name="anchor-236"></a>  status = ProMechobjectrefIdGet (Objectref, &amp;id);
+  PT_TEST_LOG_SUCC(&quot;ProMechobjectrefIdGet&quot; )
+
+  ProTKFprintf (fp, &quot;                   ~ Objectref id: %d \n&quot;,
+           id);
+<a name="anchor-237"></a>
+  /* PATH */
+  status = ProMechobjectrefPathGet (Objectref, &amp;path);
+  PT_TEST_LOG_SUCC(&quot;ProMechobjectrefPathGet&quot; )
+
+<a name="anchor-238"></a>  ProTKFprintf (fp,&quot;        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ \n&quot;);
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-239"></a>/*======================================================================*\
+	Utility for ProMechHeatData
+\*======================================================================*/
+ProError PTExMechheatdataWrite_low (ProMechHeatData data)
+{
+<a name="anchor-240"></a>  ProMechHeatType type;
+  ProMechValue value;
+  int time_func_id;
+  ProError status;
+
+<a name="anchor-241"></a>  status = ProMechheatdataTypeGet (data, &amp;type);
+  PT_TEST_LOG_SUCC(&quot;ProMechheatdataTypeGet&quot; );
+
+  ProTKFprintf (fp, &quot;       + Heat type: %d \n&quot;, type);
+
+<a name="anchor-242"></a>  status = ProMechheatdataValueGet (data, &amp;value);
+  PT_TEST_LOG_SUCC(&quot;ProMechheatdataValueGet&quot; );
+
+  PTExMechvalueWrite_low (value);
+
+<a name="anchor-243"></a>  status = ProMechvalueFree (value);
+  PT_TEST_LOG_SUCC(&quot;ProMechvalueFree&quot; );
+
+  status = ProMechheatdataTimefunctionidGet (data, &amp;time_func_id);
+  PT_TEST_LOG_SUCC(&quot;ProMechheatdataTimefunctionidGet&quot; );
+<a name="anchor-244"></a>
+  ProTKFprintf (fp, &quot;       + Time function id: %d \n&quot;, time_func_id);
+
+  return PRO_TK_NO_ERROR;
+}
+<a name="anchor-245"></a>
+/*======================================================================*\
+	Utility for ProMechStructtempData
+\*======================================================================*/
+ProError PTExMechstructtempdataWrite_low (ProMechStructtempData data)
+<a name="anchor-246"></a>{
+  ProMechValue value;
+  ProMechExpression ref_tmp;
+  ProCharLine c_ref_tmp;
+  ProError status;
+<a name="anchor-247"></a>
+  ProTKFprintf (fp, &quot;       + Structural temperature: \n&quot;);
+  ProTKFprintf (fp, &quot;       + Value: \n&quot;);
+  status = ProMechstructtempdataValueGet (data, &amp;value);
+  PT_TEST_LOG_SUCC (&quot;ProMechstructtempdataValueGet()&quot;);
+<a name="anchor-248"></a>
+  PTExMechvalueWrite_low (value);
+
+  status = ProMechvalueFree (value);
+  PT_TEST_LOG_SUCC (&quot;ProMechvalueFree()&quot;);
+<a name="anchor-249"></a>
+  status = ProMechstructtempdataReftempGet (data, ref_tmp);
+  PT_TEST_LOG_SUCC (&quot;ProMechstructtempdataReftempGet()&quot;);
+
+  ProWstringToString (c_ref_tmp, ref_tmp);
+<a name="anchor-250"></a>  ProTKFprintf (fp, &quot;       + Reference temperature: %s \n&quot;,
+	   c_ref_tmp);
+
+
+  return PRO_TK_NO_ERROR;
+<a name="anchor-251"></a>}
+
+/*======================================================================*\
+	Utility for ProMechBearingData
+\*======================================================================*/
+<a name="anchor-252"></a>ProError PTExMechbearingdataWrite_low (ProMechBearingData data)
+{
+  ProMechVectoredValue value;
+  ProError status;
+
+<a name="anchor-253"></a>  status = ProMechbearingdataValueGet (data, &amp;value);
+
+  PTExMechvectoredvalueWrite_low (value);
+
+  status = ProMechvectoredvalueFree (value);
+<a name="anchor-254"></a>
+  return PRO_TK_NO_ERROR;
+}
+</pre>
+</body>
+</html>

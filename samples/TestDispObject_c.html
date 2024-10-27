@@ -1,0 +1,787 @@
+<html>
+<head>
+<title>TestDispObject.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*
+
+This code creates display object on selected surface or curve.
+<a name="anchor-2"></a>
+To create display object on surface click on:
+TkPart/TkAsm->DisplayObj->Surface
+Select surface
+
+<a name="anchor-3"></a>To create display object on curve click on:
+TkPart/TkAsm->DisplayObj->Curve
+Select Curve 
+(it will create display object along selected curve and will streach it 
+ normal to curve plane by the distance which will be half of curve length).
+<a name="anchor-4"></a> 
+Currently display object API (from ProDispObject.h file) are supported in DLL
+mode only. So this file is used to build pt_examples.dll only.
+
+This code supports only two display objects at a time (one on surface and 
+<a name="anchor-5"></a> one on curve).
+
+*/
+
+
+<a name="anchor-6"></a>#include &quot;ProToolkit.h&quot;
+#include &quot;ProMdl.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProUtil.h&quot;
+#include &quot;ProColor.h&quot;
+<a name="anchor-7"></a>#include &quot;ProGraphic.h&quot;
+#include &quot;ProDispObject.h&quot;
+#include &quot;ProArray.h&quot;
+#include &quot;ProAsmcomp.h&quot;
+#include &quot;ProCsys.h&quot;
+<a name="anchor-8"></a>#include &quot;ProTKRunTime.h&quot;
+#include &quot;ProUIMessage.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;UtilString.h&quot;
+
+<a name="anchor-9"></a>ProDispObject surfDisp_obj = NULL;
+ProDispObject curveDisp_obj = NULL;
+int *dispobj_keylist1 = NULL, *dispobj_keylist2 = NULL;
+
+int	 ProDispObjectSelectEntitySet( ProLinestyle*, ProLinestyle );
+<a name="anchor-10"></a>
+
+//    Purpose:	On-button function.  Defines DispObject menu buttons.
+int ProTestDispObjectSetMenu( )
+{
+<a name="anchor-11"></a>    ProError		status;
+    int			menu_id;
+    int			action;
+    int			selectionType;
+	ProUIMessageButton* buttons;
+<a name="anchor-12"></a>	ProUIMessageButton result;
+
+    /* Load base menu from file */
+    status = ProMenuFileRegister((char*) &quot;DispObject&quot;,(char*) &quot;tkdispobject.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+<a name="anchor-13"></a>			status, status != PRO_TK_NO_ERROR );
+
+    /* Define menu buttons */
+    ProMenubuttonActionSet((char*) &quot;DispObject&quot;,(char*) &quot;Surface&quot;, 
+	(ProMenubuttonAction)ProDispObjectSelectEntitySet, &amp;selectionType, PRO_SURFACE );
+<a name="anchor-14"></a>    
+	ProMenubuttonActionSet((char*) &quot;DispObject&quot;,(char*) &quot;Curve&quot;,	
+	(ProMenubuttonAction)ProDispObjectSelectEntitySet, &amp;selectionType, PRO_CURVE );
+
+    ProMenubuttonActionSet((char*) &quot;DispObject&quot;,(char*)&quot;DispObject&quot;, 
+<a name="anchor-15"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+    status = ProMenuCreate( PROMENUTYPE_MAIN,(char*) &quot;DispObject&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-16"></a>
+    if( status == PRO_TK_NO_ERROR )
+    {
+		status = ProMenuProcess((char*) &quot;DispObject&quot;, &amp;action );
+		TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+<a name="anchor-17"></a>					status, status != PRO_TK_NO_ERROR );
+    }
+
+    return 0;
+}
+<a name="anchor-18"></a>
+
+// Creates display object on selected curve
+ProError PTTestDispObjectCurve()
+{
+<a name="anchor-19"></a>   ProError status = PRO_TK_NO_ERROR;
+   ProMdl model = NULL;
+   ProMatrix transform = {{ 1.0, 0.0, 0.0, 0.0},
+                             { 0.0, 1.0, 0.0, 0.0},
+                             { 0.0, 0.0, 1.0, 0.0},
+<a name="anchor-20"></a>                             { 0.0, 0.0, 0.0, 1.0}};
+	float normal[3] = {  0.0,   0.0, 1.0};
+	int *strip_size;
+	ProTriVertex **strip_arr = NULL;
+	ProTriVertex *strip = NULL;
+<a name="anchor-21"></a>	ProSelection *p_sel;
+	int i = -1, n_sel = -1, count_pnt = -1, j, offsetVal = 1;
+	ProMdl owner;
+	ProModelitem modelitem;
+	ProCurve curve;
+<a name="anchor-22"></a>	Pro3dPnt *p_points;
+	ProSurfaceAppearanceProps surf_appear;
+	ProTriVertex tempTriVertex;
+	float x_offset = 0.0, y_offset = 0.0, z_offset = 0.0;
+	double curveLen = 0.0, tolerance = 0.0;
+<a name="anchor-23"></a>	ProMdlType topMdlType;
+	ProAsmcomppath pCompPath;
+	int *cIdTablel, feat_id = 117;
+	ProBoolean isCompPath = PRO_B_FALSE;
+	ProModelitem sAsmComp;
+<a name="anchor-24"></a>	int disobj_winId;
+	ProUIMessageButton* buttons;
+	ProUIMessageButton result = PRO_UI_MESSAGE_NO;
+
+	if(curveDisp_obj != NULL) // If Display object exist then ask user to keep it or replace witn new one
+<a name="anchor-25"></a>	{
+		ProArrayAlloc (2, sizeof (ProUIMessageButton), 1, (ProArray*)&amp;buttons);
+		buttons[0] = PRO_UI_MESSAGE_YES;
+		buttons[1] = PRO_UI_MESSAGE_NO;
+
+<a name="anchor-26"></a>		status = ProUIMessageDialogDisplay (PROUIMESSAGE_QUESTION, L&quot;Delete existing curve display object&quot;,
+									L&quot;Code creates only one curve display object at a time. Do you want to delete existing curve display object?&quot;, 
+									buttons, buttons[1], &amp;result);
+		TEST_CALL_REPORT (&quot;ProUIMessageDialogDisplay&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-27"></a>
+		status = ProArrayFree( (ProArray *)&amp;buttons);
+		TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-28"></a>		if(result == PRO_UI_MESSAGE_NO)
+			return (PRO_TK_NO_ERROR);
+	}
+
+	//Select curve to created display object
+<a name="anchor-29"></a>	status = ProSelect ((char*)&quot;curve&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel,
+        &amp;n_sel);
+    TEST_CALL_REPORT (&quot;ProSelect&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-30"></a>	if(status != PRO_TK_NO_ERROR || n_sel &lt;1)
+		return status;
+		
+    status = ProSelectionModelitemGet (p_sel[0], &amp;modelitem);
+    TEST_CALL_REPORT (&quot;ProSelectionModelitemGet&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+<a name="anchor-31"></a>					status, status!=PRO_TK_NO_ERROR );
+
+	status = ProModelitemMdlGet (&amp;modelitem, &amp;owner);
+	TEST_CALL_REPORT (&quot;ProModelitemMdlGet&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-32"></a>
+	status = ProCurveInit ((ProSolid)owner, modelitem.id, &amp;curve);
+	TEST_CALL_REPORT (&quot;ProCurveInit&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-33"></a>	status = ProCurveLengthEval(curve, &amp;curveLen);
+	TEST_CALL_REPORT(&quot;ProCurveLengthEval&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+	offsetVal = curveLen/2;
+
+<a name="anchor-34"></a>	// If curve length is small (less than 10), then maximum distance between 
+	// the tessellation is reduced otherwise it will be 1.0 
+	if (offsetVal &lt; 5)
+		tolerance = offsetVal/10.0;
+	else
+<a name="anchor-35"></a>		tolerance = 1.0;
+
+	status = ProCurveTessellationGet (curve, tolerance, &amp;p_points, &amp;count_pnt);
+	TEST_CALL_REPORT (&quot;ProCurveTessellationGet&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+				status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-36"></a>
+	// Memory allocation for strip arrays
+	status = ProArrayAlloc( 1, sizeof(ProTriVertex *), 1, (ProArray *)&amp;strip_arr);
+	TEST_CALL_REPORT(&quot;ProArrayAlloc&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-37"></a>   
+	// Memory allocation for first strip array
+	status = ProArrayAlloc( 0, sizeof(ProTriVertex), 1, (ProArray *)&amp;(strip_arr[0]));
+	TEST_CALL_REPORT(&quot;ProArrayAlloc&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-38"></a>
+   // Memory allocation for strip size
+	status = ProArrayAlloc( 1, sizeof(int), 1, (ProArray *)&amp;strip_size);
+	TEST_CALL_REPORT(&quot;ProArrayAlloc&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-39"></a>
+	// checking for curve plane
+   	if(count_pnt &lt; 3)
+	{
+		if(p_points[0][2] == p_points[1][2])
+<a name="anchor-40"></a>			z_offset = offsetVal;
+
+		else if(p_points[0][1] == p_points[1][1])
+			y_offset = offsetVal;
+	
+<a name="anchor-41"></a>		else if(p_points[0][0] == p_points[1][0])
+			x_offset = offsetVal;
+		
+		else
+			z_offset = offsetVal;
+<a name="anchor-42"></a>	}
+
+	else if(count_pnt>=3)
+	{
+		// Checking Z coord of 3 points (of 1st, middle and last point on curve)
+<a name="anchor-43"></a>		if((p_points[0][2] == p_points[count_pnt/2][2]) &amp;&amp; (p_points[0][2] == p_points[count_pnt-1][2]))
+			z_offset = offsetVal;
+
+		// Checking z coord of Y points (of 1st, middle and last point on curve)
+		else if((p_points[0][1] == p_points[count_pnt/2][1]) &amp;&amp; (p_points[0][1] == p_points[count_pnt-1][1]))
+<a name="anchor-44"></a>			y_offset = offsetVal;
+	
+		// Checking X coord of 3 points (of 1st, middle and last point on curve)
+		else if((p_points[0][0] == p_points[count_pnt/2][0]) &amp;&amp; (p_points[0][0] == p_points[count_pnt-1][0]))
+			x_offset = offsetVal;
+<a name="anchor-45"></a>
+		else
+			z_offset = offsetVal;
+	}
+
+<a name="anchor-46"></a>	for (i = 0; i &lt;count_pnt; i++ )
+	{
+			tempTriVertex.pnt[0] = p_points[i][0];
+			tempTriVertex.pnt[1] = p_points[i][1];
+			tempTriVertex.pnt[2] = p_points[i][2];
+<a name="anchor-47"></a>
+			tempTriVertex.norm[0] = 0.0;
+			tempTriVertex.norm[1] = 0.0;
+			tempTriVertex.norm[2] = 1.0;
+
+<a name="anchor-48"></a>			// Adding curve point for dispobj
+			status = ProArrayObjectAdd ((ProArray*)&amp;(strip_arr[0]), PRO_VALUE_UNUSED, 1, &amp;tempTriVertex);
+			TEST_CALL_REPORT(&quot;ProArrayObjectAdd&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-49"></a>			// Following code is taking offset curve points at offsetVal distance which is 
+			// in normal direction to curve plane
+			tempTriVertex.pnt[0] = p_points[i][0] + x_offset;
+			tempTriVertex.pnt[1] = p_points[i][1] + y_offset;
+			tempTriVertex.pnt[2] = p_points[i][2] + z_offset;
+<a name="anchor-50"></a>
+			// Adding offset curve point for dispobj
+			status = ProArrayObjectAdd ((ProArray*)&amp;(strip_arr[0]), PRO_VALUE_UNUSED, 1, &amp;tempTriVertex);
+			TEST_CALL_REPORT(&quot;ProArrayObjectAdd&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-51"></a>	}
+
+	strip_size[0] = count_pnt*2;
+
+	status = ProMdlCurrentGet(&amp;model);
+<a name="anchor-52"></a>	TEST_CALL_REPORT(&quot;ProMdlCurrentGet&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+   
+	disobj_winId = 0;
+	status = ProMdlWindowGet(model, &amp;disobj_winId);
+<a name="anchor-53"></a>	TEST_CALL_REPORT(&quot;ProMdlWindowGet&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+
+	if(result == PRO_UI_MESSAGE_YES)  // Delete existing display object
+	{
+<a name="anchor-54"></a>		status = ProDispObjectDetach( disobj_winId, dispobj_keylist1);
+		TEST_CALL_REPORT(&quot;ProDispObjectDetach&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+
+		status =  ProDispObjectDelete( &amp;curveDisp_obj );
+<a name="anchor-55"></a>		TEST_CALL_REPORT(&quot;ProDispObjectDelete&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+
+		status = ProArrayFree( (ProArray *)&amp;dispobj_keylist1);
+		TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-56"></a>							status, status!=PRO_TK_NO_ERROR );
+
+		curveDisp_obj = NULL;
+	}
+
+<a name="anchor-57"></a>	status = ProDispObjectCreate(L&quot;test_curvedisp_obj&quot;, PRO_DISP_OBJECT_TWO_SIDED, 
+						1, strip_size, strip_arr, &amp;curveDisp_obj);
+	TEST_CALL_REPORT(&quot;ProDispObjectCreate&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-58"></a>	// Setting appearance porperties for display object
+	surf_appear.ambient = 0.5;
+	surf_appear.shininess = 0.2;
+	surf_appear.highlite = 0.1;
+	surf_appear.color_rgb[0] = 0.0;
+<a name="anchor-59"></a>	surf_appear.color_rgb[1] = 0.0;
+	surf_appear.color_rgb[2] = 1.0;
+	surf_appear.transparency = 0.3;
+	surf_appear.diffuse = 0.80;
+	surf_appear.highlight_color[0] = 0.10;
+<a name="anchor-60"></a>	surf_appear.highlight_color[1] = 0.20;
+	surf_appear.highlight_color[2] = 0.60;
+	surf_appear.reflection = 0.000000;
+
+	status = ProMdlTypeGet(model, &amp;topMdlType);
+<a name="anchor-61"></a>	TEST_CALL_REPORT(&quot;ProMdlTypeGet&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+
+	// For top model assembly, checking for selected entities component path
+	if(topMdlType == PRO_MDL_ASSEMBLY)
+<a name="anchor-62"></a>	{
+		status = ProSelectionAsmcomppathGet(p_sel[0], &amp;pCompPath);
+		TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-63"></a>		if (pCompPath.table_num> 0)
+		{
+			int arrayCount;
+
+			sAsmComp.type = PRO_FEATURE;
+<a name="anchor-64"></a>			sAsmComp.id = pCompPath.comp_id_table[pCompPath.table_num-1];
+			sAsmComp.owner = owner;
+
+			status = ProArrayAlloc (0, sizeof (int), 1, (ProArray*)&amp;cIdTablel);
+			TEST_CALL_REPORT(&quot;ProArrayAlloc&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+<a name="anchor-65"></a>						status, status!=PRO_TK_NO_ERROR );
+
+			for(arrayCount = 0; arrayCount &lt; pCompPath.table_num; arrayCount++)
+			{
+				status = ProArrayObjectAdd ((ProArray*)&amp;cIdTablel, 
+<a name="anchor-66"></a>					PRO_VALUE_UNUSED, 1, &amp;pCompPath.comp_id_table[arrayCount]);
+				TEST_CALL_REPORT(&quot;ProArrayObjectAdd&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+							status, status!=PRO_TK_NO_ERROR );
+			}
+			isCompPath = PRO_B_TRUE;
+<a name="anchor-67"></a>		}
+		else
+			isCompPath = PRO_B_FALSE;
+	}
+
+<a name="anchor-68"></a>   if(status == PRO_TK_NO_ERROR)
+   {
+	   // Attach display object 
+      status = ProDispObjectAttach((int)disobj_winId, curveDisp_obj, (isCompPath == PRO_B_TRUE?cIdTablel:NULL), feat_id, transform);
+	  TEST_CALL_REPORT(&quot;ProDispObjectAttach&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+<a name="anchor-69"></a>					status, status!=PRO_TK_NO_ERROR );
+  
+      surf_appear.color_rgb[0] = 0.0;
+      surf_appear.color_rgb[1] = 0.0;
+      surf_appear.color_rgb[2] = 1.0;
+<a name="anchor-70"></a>
+	status = ProArrayAlloc( 0, sizeof(int), 1, (ProArray *)&amp;dispobj_keylist1);
+	TEST_CALL_REPORT(&quot;ProArrayAlloc&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+	                 status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-71"></a>	  if(isCompPath == PRO_B_TRUE)
+	  {
+		  int arrayCount = -1, ii = -1;
+
+			status = ProArraySizeGet (cIdTablel, &amp;arrayCount);
+<a name="anchor-72"></a>    		TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+						status, status!=PRO_TK_NO_ERROR );
+
+			for(ii = 0; ii &lt; arrayCount; ii++)
+			{
+<a name="anchor-73"></a>				status = ProArrayObjectAdd ((ProArray*)&amp;dispobj_keylist1, 
+						                    PRO_VALUE_UNUSED, 1, &amp;cIdTablel[ii]);
+				TEST_CALL_REPORT(&quot;ProArrayObjectAdd&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+								  status, status!=PRO_TK_NO_ERROR );
+			}
+<a name="anchor-74"></a>	  }
+
+	  status = ProArrayObjectAdd ((ProArray*)&amp;dispobj_keylist1, 
+					PRO_VALUE_UNUSED, 1, &amp;feat_id);
+				TEST_CALL_REPORT(&quot;ProArrayObjectAdd&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+<a name="anchor-75"></a>							status, status!=PRO_TK_NO_ERROR );
+
+	  // Set appearance properties to display object 
+      status = ProDispObjectSetSurfaceAppearanceProps( (int)disobj_winId, dispobj_keylist1,surf_appear);
+	  TEST_CALL_REPORT(&quot;ProDispObjectSetSurfaceAppearanceProps&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+<a name="anchor-76"></a>					status, status!=PRO_TK_NO_ERROR );
+   }
+
+	/* Call repaint */
+	status = ProWindowRepaint( disobj_winId );
+<a name="anchor-77"></a>	TEST_CALL_REPORT(&quot;ProWindowRepaint&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+
+	status = ProArrayFree( (ProArray *)&amp;(strip_arr[0]));
+	TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+<a name="anchor-78"></a>					status, status!=PRO_TK_NO_ERROR );
+
+	status = ProArrayFree( (ProArray *)&amp;strip_arr);
+	TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-79"></a>   
+	status = ProArrayFree( (ProArray *)&amp;strip_size);
+	TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectCurve()&quot;, 
+					status, status!=PRO_TK_NO_ERROR );
+   
+<a name="anchor-80"></a>	if(isCompPath == PRO_B_TRUE)
+	{
+		status = ProArrayFree( (ProArray *)&amp;cIdTablel);
+		TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-81"></a>	}
+
+	return status;
+}
+
+<a name="anchor-82"></a>
+// Function to create display object on selected surface
+ProError PTTestDispObjectSurf()
+{
+   ProError status = PRO_TK_NO_ERROR;
+<a name="anchor-83"></a>   ProMdl model = NULL;
+   ProMatrix transform = {{ 1.0, 0.0, 0.0, 0.0},
+                             { 0.0, 1.0, 0.0, 0.0},
+                             { 0.0, 0.0, 1.0, 0.0},
+                             { 0.0, 0.0, 0.0, 1.0}};
+<a name="anchor-84"></a>	float spiralSurfPtsRem, normal[3] = {  0.0,   0.0, 1.0};
+	int *strip_size, spiralSurfPts, reminderVal, facetCount;
+	ProTriVertex **strip_arr = NULL;
+	ProSurfaceAppearanceProps surf_appear;
+	ProMatrix CompMatrix;
+<a name="anchor-85"></a>	ProSelection *p_sel;
+	int i = -1, n_sel = -1, j;
+	ProMdl owner;
+	ProModelitem modelitem;
+	ProCurve curve;
+<a name="anchor-86"></a>	Pro3dPnt *p_points;
+	ProSurface pSurface;
+	ProTessellation surfTessellation;
+	Pro3dPnt* surfVertices;
+	ProVector* surfNormals;
+<a name="anchor-87"></a>	ProSurfaceTessellationInput inputData;
+	ProTriVertex tempTriVertex;
+	ProTriangle* pFacets;
+	ProMdlType topMdlType;
+	ProAsmcomppath pCompPath;
+<a name="anchor-88"></a>	int *cIdTablel;
+	ProBoolean isCompPath = PRO_B_FALSE;
+	ProModelitem sAsmComp;
+	ProCsys csys;
+	ProGeomitemdata* pCsysDataPtr;
+<a name="anchor-89"></a>	int disobj_winId;
+	ProUIMessageButton* buttons2;
+	int feat_id = 118;
+	ProUIMessageButton result = PRO_UI_MESSAGE_NO;
+
+<a name="anchor-90"></a>	if(surfDisp_obj != NULL) // If Display object exist then ask user to keep it or replace witn new one
+	{
+		ProArrayAlloc (2, sizeof (ProUIMessageButton), 1, (ProArray*)&amp;buttons2);
+		buttons2[0] = PRO_UI_MESSAGE_YES;
+		buttons2[1] = PRO_UI_MESSAGE_NO;
+<a name="anchor-91"></a>
+		status = ProUIMessageDialogDisplay (PROUIMESSAGE_QUESTION, L&quot;Delete existing surface display object&quot;,
+									L&quot;Code creates only one surface display object at a time. Do you want to delete existing surface display object?&quot;, 
+									buttons2, buttons2[1], &amp;result);
+		TEST_CALL_REPORT (&quot;ProUIMessageDialogDisplay&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-92"></a>					status, status!=PRO_TK_NO_ERROR);
+
+		status = ProArrayFree( (ProArray *)&amp;buttons2);
+		TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-93"></a>
+		if(result == PRO_UI_MESSAGE_NO)
+			return (PRO_TK_NO_ERROR);
+	}
+
+<a name="anchor-94"></a>	//Select surface to created display object
+	status = ProSelect ((char*)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel,
+        &amp;n_sel);
+    TEST_CALL_REPORT (&quot;ProSelect&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-95"></a>
+	if(status != PRO_TK_NO_ERROR || n_sel &lt;1)
+		return status;
+		
+    status = ProSelectionModelitemGet (p_sel[0], &amp;modelitem);
+<a name="anchor-96"></a>    TEST_CALL_REPORT (&quot;ProSelectionModelitemGet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+
+	status = ProModelitemMdlGet (&amp;modelitem, &amp;owner);
+    TEST_CALL_REPORT (&quot;ProModelitemMdlGet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-97"></a>			status, status!=PRO_TK_NO_ERROR );
+    	
+	if(modelitem.type == PRO_SURFACE )
+	{
+		status = ProSurfaceInit((ProSolid)owner, modelitem.id, &amp;pSurface);
+<a name="anchor-98"></a>		TEST_CALL_REPORT (&quot;ProSurfaceInit&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+		
+		status = ProSurfacetessellationinputAlloc (&amp;inputData);
+    	TEST_CALL_REPORT(&quot;ProSurfacetessellationinputAlloc&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-99"></a>			status, status!=PRO_TK_NO_ERROR );
+
+		status = ProSurfacetessellationinputChordheightSet (inputData, PRO_SRFTESS_CHORD_HT_DEFAULT);
+    	TEST_CALL_REPORT(&quot;ProSurfacetessellationinputChordheightSet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-100"></a>
+		status = ProSurfacetessellationinputAnglecontrolSet (inputData, 1);
+    	TEST_CALL_REPORT(&quot;ProSurfacetessellationinputAnglecontrolSet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+		
+<a name="anchor-101"></a>		status = ProSurfacetessellationinputStepsizeSet (inputData, 1);
+    	TEST_CALL_REPORT(&quot;ProSurfacetessellationinputStepsizeSet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+
+			status = ProSurfacetessellationinputUvprojectionSet(inputData, PRO_SRFTESS_DEFAULT_PROJECTION, NULL);
+<a name="anchor-102"></a>			TEST_CALL_REPORT(&quot;ProSurfacetessellationinputUvprojectionSet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+				status, status!=PRO_TK_NO_ERROR );
+
+		// Getting surface tessellation data
+		status = ProSurfaceTessellationGet(pSurface, inputData, &amp;surfTessellation);
+<a name="anchor-103"></a>		TEST_CALL_REPORT (&quot;ProSurfaceTessellationGet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+		
+		status = ProTessellationVerticesGet(surfTessellation, &amp;surfVertices);
+		TEST_CALL_REPORT (&quot;ProTessellationVerticesGet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-104"></a>			status, status!=PRO_TK_NO_ERROR );
+		
+		status = ProTessellationNormalsGet(surfTessellation, &amp;surfNormals);
+		TEST_CALL_REPORT (&quot;ProTessellationNormalsGet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-105"></a>		
+		// Getting facets from surface tessellation
+		status = ProTessellationFacetsGet(surfTessellation, &amp;pFacets);
+		TEST_CALL_REPORT (&quot;ProTessellationNormalsGet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-106"></a>		
+		status = ProArraySizeGet (pFacets, &amp;facetCount);
+    	TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+	}
+<a name="anchor-107"></a>	else
+		return PRO_TK_BAD_INPUTS;
+
+   status = ProArrayAlloc( facetCount, sizeof(ProTriVertex *), 1, (ProArray *)&amp;strip_arr);
+   TEST_CALL_REPORT(&quot;ProArrayAlloc&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-108"></a>						status, status!=PRO_TK_NO_ERROR );
+
+   // Each facet is added as a seperate strip so, number of strip arrays (ie strips)
+   // is equal to number of facets
+   for (i = 0; i &lt; facetCount; i++)
+<a name="anchor-109"></a>   {
+   	   status = ProArrayAlloc( 0, sizeof(ProTriVertex), 1, (ProArray *)&amp;(strip_arr[i]));
+	   TEST_CALL_REPORT(&quot;ProArrayAlloc&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+   }
+<a name="anchor-110"></a>   
+   status = ProArrayAlloc( facetCount, sizeof(int), 1, (ProArray *)&amp;strip_size);
+   TEST_CALL_REPORT(&quot;ProArrayAlloc&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+						status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-111"></a>   for (i = 0; i &lt;facetCount; i++ )
+   {
+		strip_size[i] = 3;
+
+		for (j = 0; j &lt;3; j++)
+<a name="anchor-112"></a>		{
+			tempTriVertex.pnt[0] = surfVertices[ pFacets[i][j]][0];
+			tempTriVertex.pnt[1] = surfVertices[ pFacets[i][j]][1];
+			tempTriVertex.pnt[2] = surfVertices[ pFacets[i][j]][2];
+
+<a name="anchor-113"></a>			tempTriVertex.norm[0] = surfNormals[ pFacets[i][j]][0];
+			tempTriVertex.norm[1] = surfNormals[ pFacets[i][j]][1];
+			tempTriVertex.norm[2] = surfNormals[ pFacets[i][j]][2];
+
+			status = ProArrayObjectAdd ((ProArray*)&amp;(strip_arr[i]), PRO_VALUE_UNUSED, 1, &amp;tempTriVertex);
+<a name="anchor-114"></a>			TEST_CALL_REPORT(&quot;ProArrayObjectAdd&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+								status, status!=PRO_TK_NO_ERROR );
+		}
+	}		
+
+<a name="anchor-115"></a>   status = ProMdlCurrentGet(&amp;model);
+   TEST_CALL_REPORT(&quot;ProMdlCurrentGet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+   if(status != PRO_TK_NO_ERROR)
+      return status;
+<a name="anchor-116"></a>
+   disobj_winId = 0;
+   status = ProMdlWindowGet(model, &amp;disobj_winId);
+   TEST_CALL_REPORT(&quot;ProMdlWindowGet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-117"></a>
+   if(result == PRO_UI_MESSAGE_YES)  // Deletes existing display object
+	{
+		status = ProDispObjectDetach( disobj_winId, dispobj_keylist2);
+		TEST_CALL_REPORT(&quot;ProDispObjectDetach&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-118"></a>			status, status!=PRO_TK_NO_ERROR );
+
+		status =  ProDispObjectDelete( &amp;surfDisp_obj );
+		TEST_CALL_REPORT(&quot;ProDispObjectDelete&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-119"></a>
+		status = ProArrayFree( (ProArray *)&amp;dispobj_keylist2);
+		TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+							status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-120"></a>		surfDisp_obj = NULL;
+	}
+
+   // Creates new display object
+    status = ProDispObjectCreate(L&quot;test_disp_obj&quot;, PRO_DISP_OBJECT_TWO_SIDED, facetCount, strip_size,
+<a name="anchor-121"></a>                       strip_arr, &amp;surfDisp_obj);
+	TEST_CALL_REPORT(&quot;ProDispObjectCreate&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+
+   // setting appearance porperties for display object
+<a name="anchor-122"></a>   surf_appear.ambient = 0.5;
+   surf_appear.shininess = 0.2;
+   surf_appear.highlite = 0.1;
+   surf_appear.color_rgb[0] = 0.0;
+   surf_appear.color_rgb[1] = 0.0;
+<a name="anchor-123"></a>   surf_appear.color_rgb[2] = 1.0;
+   surf_appear.transparency = 0.5;
+   surf_appear.diffuse = 0.80;
+   surf_appear.highlight_color[0] = 0.10;
+   surf_appear.highlight_color[1] = 0.20;
+<a name="anchor-124"></a>   surf_appear.highlight_color[2] = 0.60;
+   surf_appear.reflection = 0.000000;
+
+   if(status == PRO_TK_NO_ERROR)
+   {
+<a name="anchor-125"></a>		status = ProMdlTypeGet(model, &amp;topMdlType);
+		TEST_CALL_REPORT(&quot;ProMdlTypeGet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+						status, status!=PRO_TK_NO_ERROR );
+
+		if(topMdlType == PRO_MDL_ASSEMBLY)
+<a name="anchor-126"></a>		{
+			// Getting component path
+			status = ProSelectionAsmcomppathGet(p_sel[0], &amp;pCompPath);
+			TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+						status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-127"></a>
+			if (pCompPath.table_num> 0)
+			{
+				int arrayCount;
+
+<a name="anchor-128"></a>				sAsmComp.type = PRO_FEATURE;
+				sAsmComp.id = pCompPath.comp_id_table[pCompPath.table_num-1];
+				sAsmComp.owner = owner;
+
+				status = ProArrayAlloc (0, sizeof (int), 1, (ProArray*)&amp;cIdTablel);
+<a name="anchor-129"></a>				TEST_CALL_REPORT(&quot;ProArrayAlloc&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+							status, status!=PRO_TK_NO_ERROR );
+
+				// Getting component ID table
+				for(arrayCount = 0; arrayCount &lt; pCompPath.table_num; arrayCount++)
+<a name="anchor-130"></a>				{
+					status = ProArrayObjectAdd ((ProArray*)&amp;cIdTablel, 
+						PRO_VALUE_UNUSED, 1, &amp;pCompPath.comp_id_table[arrayCount]);
+					TEST_CALL_REPORT(&quot;ProArrayObjectAdd&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+								status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-131"></a>				}
+				isCompPath = PRO_B_TRUE;
+			}
+			else
+				isCompPath = PRO_B_FALSE;
+<a name="anchor-132"></a>		}
+
+	  // Attaching display object
+      status = ProDispObjectAttach((int)disobj_winId, surfDisp_obj, (isCompPath == PRO_B_TRUE?cIdTablel:NULL), feat_id, transform);
+	  TEST_CALL_REPORT(&quot;ProDispObjectAttach&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-133"></a>			status, status!=PRO_TK_NO_ERROR );
+	  
+      surf_appear.color_rgb[0] = 0.0;
+      surf_appear.color_rgb[1] = 0.0;
+      surf_appear.color_rgb[2] = 1.0;
+<a name="anchor-134"></a>
+	  status = ProArrayAlloc( 0, sizeof(int), 1, (ProArray *)&amp;dispobj_keylist2);
+	  TEST_CALL_REPORT(&quot;ProArrayAlloc&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+						status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-135"></a>	  if(isCompPath == PRO_B_TRUE)
+	  {
+		  int arrayCount = -1, ii = -1;
+
+			status = ProArraySizeGet (cIdTablel, &amp;arrayCount);
+<a name="anchor-136"></a>    		TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+						status, status!=PRO_TK_NO_ERROR );
+
+			for(ii = 0; ii &lt; arrayCount; ii++)
+			{
+<a name="anchor-137"></a>				status = ProArrayObjectAdd ((ProArray*)&amp;dispobj_keylist2, 
+						                    PRO_VALUE_UNUSED, 1, &amp;cIdTablel[ii]);
+				TEST_CALL_REPORT(&quot;ProArrayObjectAdd&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+								  status, status!=PRO_TK_NO_ERROR );
+			}
+<a name="anchor-138"></a>	  }
+
+	  status = ProArrayObjectAdd ((ProArray*)&amp;dispobj_keylist2, 
+					PRO_VALUE_UNUSED, 1, &amp;feat_id);
+				TEST_CALL_REPORT(&quot;ProArrayObjectAdd&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-139"></a>							status, status!=PRO_TK_NO_ERROR );
+
+	  // Setting appearance properties on display object
+      status = ProDispObjectSetSurfaceAppearanceProps( (int)disobj_winId, dispobj_keylist2, surf_appear);
+	  TEST_CALL_REPORT(&quot;ProDispObjectSetSurfaceAppearanceProps&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-140"></a>			status, status!=PRO_TK_NO_ERROR );
+   }
+
+   // Call repaint 
+   status = ProWindowRepaint( disobj_winId);
+<a name="anchor-141"></a>   TEST_CALL_REPORT(&quot;ProWindowRepaint&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+ 
+    for(i =0; i &lt; facetCount; i++)
+   {
+<a name="anchor-142"></a>	   for (j= 0; j&lt;3; j++)
+	   {
+			status = ProArrayFree( (ProArray *)&amp;(strip_arr[i]));
+			TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-143"></a>		}
+   }	
+
+   status = ProArrayFree( (ProArray *)&amp;strip_arr);
+   TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-144"></a>			status, status!=PRO_TK_NO_ERROR );
+   
+   status = ProArrayFree( (ProArray *)&amp;strip_size);
+   TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-145"></a>   
+   if(modelitem.type == PRO_SURFACE)
+   {
+	   status = ProArrayFree( (ProArray *)&amp;surfVertices);
+	   TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+<a name="anchor-146"></a>			status, status!=PRO_TK_NO_ERROR );
+	   
+	   status = ProArrayFree( (ProArray *)&amp;surfNormals);
+	   TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+<a name="anchor-147"></a>	}
+
+	if(isCompPath == PRO_B_TRUE)
+	{
+		status = ProArrayFree( (ProArray *)&amp;cIdTablel);
+<a name="anchor-148"></a>		TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;PTTestDispObjectSurf()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+	}
+
+	return PRO_TK_NO_ERROR;
+<a name="anchor-149"></a>}
+
+
+// Creates display object on selected curve/surface
+int ProDispObjectSelectEntitySet( ProType* p_disobjSelEntity, ProType disobjSelEntity )
+<a name="anchor-150"></a>{
+    ProError		status;
+
+	// Create display object along selected curve
+	if(disobjSelEntity == PRO_CURVE)
+<a name="anchor-151"></a>	{
+		status =  PTTestDispObjectCurve();
+		TEST_CALL_REPORT(&quot;PTTestDispObjectCurve&quot;, &quot;ProDispObjectSelectEntitySet()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-152"></a>	    return 0;
+	}
+
+	// Create display object on selected surface
+	else if(disobjSelEntity == PRO_SURFACE)
+<a name="anchor-153"></a>	{
+		status =  PTTestDispObjectSurf();
+		TEST_CALL_REPORT(&quot;PTTestDispObjectSurf&quot;, &quot;ProDispObjectSelectEntitySet()&quot;, 
+			status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-154"></a>		return 0;
+	}
+
+    status = ProMenuDelete();
+    TEST_CALL_REPORT( &quot;ProMenuDelete()&quot;, &quot;ProDispObjectSelectEntitySet()&quot;, 
+<a name="anchor-155"></a>			status, status!=PRO_TK_NO_ERROR );
+
+    return 0;
+}
+</pre>
+</body>
+</html>

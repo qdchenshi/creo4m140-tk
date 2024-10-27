@@ -1,0 +1,567 @@
+<html>
+<head>
+<title>TestRay.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+<a name="anchor-2"></a>#include &quot;ProObjects.h&quot;
+
+#include &quot;ProAxis.h&quot;
+#include &quot;ProCsys.h&quot;
+#include &quot;ProGraphic.h&quot;
+<a name="anchor-3"></a>#include &quot;ProDisplist.h&quot;
+#include &quot;ProGeomitem.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProMessage.h&quot;
+#include &quot;ProPoint.h&quot;
+<a name="anchor-4"></a>#include &quot;ProSelection.h&quot;
+#include &quot;ProSolid.h&quot;
+#include &quot;ProUtil.h&quot;
+#include &quot;ProWindows.h&quot;
+#include &quot;ProEdge.h&quot;
+<a name="anchor-5"></a>
+/*--------------------------------------------------------------------*\
+System includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-6"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+/*--------------------------------------------------------------------*\
+<a name="anchor-7"></a>Application macros
+\*--------------------------------------------------------------------*/
+#define DSPL1_ID   115
+#define DSPL2_ID   (DSPL1_ID+1)
+
+<a name="anchor-8"></a>#ifdef  MSGFIL
+    #undef MSGFIL
+#endif
+
+#define MSGFIL msgfil
+<a name="anchor-9"></a>
+#define COPY3D(a, b) memcpy(a, b, 3*sizeof(double))
+/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+<a name="anchor-10"></a>typedef struct tag_hit_list
+{
+    Pro3dPnt origin;
+    int	    n_hits;	
+    Pro3dPnt *p_pnt;
+<a name="anchor-11"></a>    ProBoolean *to_front; 
+} Hit_list;
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+<a name="anchor-12"></a>\*--------------------------------------------------------------------*/
+static ProFileName msgfil; 
+
+/*--------------------------------------------------------------------*\
+Function prototypes
+<a name="anchor-13"></a>\*--------------------------------------------------------------------*/
+
+int ProTestSolidRay(ProAppData data, int value);
+int ProUtilDeleteRay(ProAppData data, int value);
+
+<a name="anchor-14"></a>static int CreateRays(ProModelitem *, ProRay *);
+static int CreateRaysFromPoint(ProModelitem *, ProRay *);
+static int CreateRaysFromEdgeEnd(ProModelitem *, ProRay *);
+static int CreateRaysFromCsys(ProModelitem *, ProRay *);
+static int CreateRaysFromAxis(ProModelitem *, ProRay *);
+<a name="anchor-15"></a>static int TransfRays(ProSelection, ProRay *, int);
+static int CreateHitList(ProSolid, ProRay*, Hit_list *);
+static int CreateDispList(Hit_list *, int *, int *);
+
+/*=============================================================*\
+<a name="anchor-16"></a>  Function: 	ProTestRay
+  Purpose:	To initiate the user's options
+\*=============================================================*/
+int ProTestRay (void *data, int dummy)
+{
+<a name="anchor-17"></a>		/* Declare external functions */
+    int m_id, action;
+    ProError status;
+    
+    ProStringToWstring (msgfil,(char*) &quot;gen_msg.txt&quot;);
+<a name="anchor-18"></a>    
+    status = ProMenuFileRegister((char*)&quot;TkRay&quot;,(char*) &quot;tkray.mnu&quot;, &amp;m_id);
+    TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, &quot;ProTestRay()&quot;, 
+				    status, status !=PRO_TK_NO_ERROR);
+    if (status != PRO_TK_NO_ERROR) return (-1);
+<a name="anchor-19"></a>    
+    status = ProMenubuttonActionSet((char*)&quot;TkRay&quot;,(char*) &quot;-Ray Inter Demo&quot;, 
+	    (ProMenubuttonAction)ProTestSolidRay, NULL, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRay()&quot;, 
+		status, status !=PRO_TK_NO_ERROR);
+<a name="anchor-20"></a>    if (status != PRO_TK_NO_ERROR) return (-1);
+    status = ProMenubuttonActionSet((char*)&quot;TkRay&quot;,(char*) &quot;-Ray Del&quot;, 
+	(ProMenubuttonAction)ProUtilDeleteRay, NULL, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRay()&quot;, 
+		status, status !=PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>    if (status != PRO_TK_NO_ERROR) return (-1);
+    status = ProMenubuttonActionSet((char*)&quot;TkRay&quot;,(char*) &quot;-Done&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRay()&quot;, 
+		status, status !=PRO_TK_NO_ERROR);
+<a name="anchor-22"></a>    if (status != PRO_TK_NO_ERROR) return (-1);
+    status = ProMenubuttonActionSet((char*)&quot;TkRay&quot;,(char*) &quot;TkRay&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestRay()&quot;, 
+		status, status !=PRO_TK_NO_ERROR);
+<a name="anchor-23"></a>    if (status != PRO_TK_NO_ERROR) return (-1);
+    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*) &quot;TkRay&quot;, NULL);
+    status = ProMenuProcess((char*)&quot;TkRay&quot;, &amp;action);
+
+    return(0);
+<a name="anchor-24"></a>}
+
+/*=============================================================*\
+  Function:	ProTestSolidRay    
+  Purpose:	main test ProSolidRayIntersectionCompute() function
+<a name="anchor-25"></a>\*=============================================================*/
+int ProTestSolidRay(ProAppData data, int value) 
+{
+    ProSelection *p_sel;
+    ProModelitem modelitem;    
+<a name="anchor-26"></a>    ProRay	 rays[3];
+    ProSolid model;
+    int n_ray, n_sel, i, mode;
+    ProError status;
+    Hit_list h_list[3];
+<a name="anchor-27"></a>    ProAsmcomppath comp_path;
+
+    ProMessageDisplay(MSGFIL, (char*)&quot;TEST %0s&quot;, &quot;Select Csys, Axis or Datum Point&quot;);
+    
+    status = ProSelect((char*)&quot;point,axis,csys,edge_end&quot;, 1, NULL, NULL, NULL, NULL, 
+<a name="anchor-28"></a>	 &amp;p_sel, &amp;n_sel);
+    if (status != PRO_TK_NO_ERROR)
+	return (0);
+    
+    status = ProSelectionModelitemGet(p_sel[0], &amp;modelitem);
+<a name="anchor-29"></a>    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestSolidRay()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+
+    status = ProSelectionModelitemGet(p_sel[0], &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestSolidRay()&quot;,
+<a name="anchor-30"></a>	status, status != PRO_TK_NO_ERROR);
+
+    status = ProSelectionAsmcomppathGet(p_sel[0], &amp;comp_path);
+    TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProTestSolidRay()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+<a name="anchor-31"></a>
+    model=(comp_path.owner)!=NULL?comp_path.owner:(ProSolid)modelitem.owner;
+
+    n_ray = CreateRays(&amp;modelitem, rays);
+    if (n_ray == -1) return (-1);
+<a name="anchor-32"></a>    
+    TransfRays(p_sel[0], rays, n_ray);
+
+    for (i=0; i&lt;n_ray; i++)
+    {
+<a name="anchor-33"></a>	CreateHitList(model, rays+i, h_list+i);
+    }
+
+    ProUtilDeleteRay(NULL, 0);
+
+<a name="anchor-34"></a>    mode=0;
+    status = ProDisplist3dCreate( DSPL1_ID,  (ProDisplistCallback)CreateDispList, (void *)h_list, 
+	(void *)&amp;n_ray, (void *)&amp;mode, NULL, NULL, NULL );
+    TEST_CALL_REPORT(&quot;ProDisplist3dCreate()&quot;, &quot;ProTestSolidRay()&quot;,
+	status, status != PRO_TK_NO_ERROR);
+<a name="anchor-35"></a>    
+    mode=1;	
+    status = ProDisplist3dCreate( DSPL2_ID,  (ProDisplistCallback)CreateDispList, (void *)h_list, 
+	(void *)&amp;n_ray, (void *)&amp;mode, NULL, NULL, NULL);
+    TEST_CALL_REPORT(&quot;ProDisplist3dCreate()&quot;, &quot;ProTestSolidRay()&quot;,
+<a name="anchor-36"></a>	status, status != PRO_TK_NO_ERROR);
+
+    for (i=0; i&lt;n_ray; i++)
+    {
+	free(h_list[i].p_pnt);	
+<a name="anchor-37"></a>	free(h_list[i].to_front);
+    }
+    
+    status = ProWindowRepaint(PRO_VALUE_UNUSED);
+    TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;, &quot;ProTestSolidRay()&quot;,
+<a name="anchor-38"></a>	status, status != PRO_TK_NO_ERROR);
+    return (0);
+
+}
+
+<a name="anchor-39"></a>/*=============================================================*\
+  Function:	ProUtilDeleteRay
+  Purpose:	to delete application's display list
+\*=============================================================*/
+int ProUtilDeleteRay(ProAppData data, int value)
+<a name="anchor-40"></a>{
+    ProError status;
+
+    status = ProDisplist3dDelete( DSPL1_ID );
+    TEST_CALL_REPORT(&quot;ProDisplist3dDelete()&quot;, &quot;ProUtilDeleteRay()&quot;,
+<a name="anchor-41"></a>	status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+    status = ProDisplist3dDelete( DSPL2_ID );
+    TEST_CALL_REPORT(&quot;ProDisplist3dDelete()&quot;, &quot;ProUtilDeleteRay()&quot;,
+	status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+    status = ProWindowRepaint(PRO_VALUE_UNUSED);
+<a name="anchor-42"></a>    TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;, &quot;ProUtilDeleteRay()&quot;,
+	status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+
+    return (0);
+}
+<a name="anchor-43"></a>
+
+/*=============================================================*\
+  Function:	CreateRays
+  Purpose:	to fill ProRays structure
+<a name="anchor-44"></a>  Return :	# of rays, -1 if unsuccessfull
+\*=============================================================*/
+static int CreateRays(
+    ProModelitem *mod_item,  /* In : user's selection */
+    ProRay *rays)	    /* Out: the filled ray structure */
+<a name="anchor-45"></a>{
+    int ret;
+
+    switch (mod_item->type)
+    {
+<a name="anchor-46"></a>	case PRO_EDGE_END:
+	case PRO_EDGE_START:
+	    ret = CreateRaysFromEdgeEnd (mod_item, rays) == 0 ? 3 : -1;
+	    break;
+	case PRO_POINT:
+<a name="anchor-47"></a>	    ret = CreateRaysFromPoint(mod_item, rays) == 0 ? 3 : -1;
+	    break;
+
+	case PRO_CSYS:
+	    ret = CreateRaysFromCsys(mod_item, rays) == 0 ? 3 : -1;
+<a name="anchor-48"></a>	    break;
+	    
+	case PRO_AXIS:
+	    ret = CreateRaysFromAxis(mod_item, rays) == 0 ? 1 : -1;
+	    break;
+<a name="anchor-49"></a>
+	default :
+	    ret =-1;	       
+    }
+    return (ret);
+<a name="anchor-50"></a>}
+
+/*=============================================================*\
+  Function:	CreateRaysFromEdgeEnd
+  Purpose:	to fill ProRays structure
+<a name="anchor-51"></a>  Return :	0 if successfull, -1 if unsuccessfull
+\*=============================================================*/
+static int CreateRaysFromEdgeEnd(
+    ProModelitem *mod_item,  /* In : user's selection */
+    ProRay *rays)	     /* Out: the filled ray structure */
+<a name="anchor-52"></a>{
+    ProEdge edge;
+    ProError status;
+    double edge_param;
+    ProVector xyz, der1, der2, dir;
+<a name="anchor-53"></a>   
+    rays[0].dir_vector[0] = rays[1].dir_vector[1] = 1.0;
+    rays[2].dir_vector[2] = 1.0;
+    rays[0].dir_vector[1] = rays[0].dir_vector[2] = 0.0;
+    rays[1].dir_vector[0] = rays[1].dir_vector[2] = 0.0;
+<a name="anchor-54"></a>    rays[2].dir_vector[0] = rays[2].dir_vector[1] = 0.0;
+	    
+    status = ProEdgeInit((ProSolid)mod_item->owner, mod_item->id, &amp;edge);
+    TEST_CALL_REPORT(&quot;ProEdgeInit()&quot;, &quot;CreateRaysFromEdgeEnd()&quot;, status, 
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-55"></a>    if (status!=PRO_TK_NO_ERROR) 
+	return (-1);
+
+    edge_param = 1.0 * (mod_item->type == PRO_EDGE_END);
+    
+<a name="anchor-56"></a>    ProEdgeXyzdataEval (edge, edge_param, xyz, der1, der2, dir);
+    COPY3D (rays[0].start_point, xyz);
+	    
+    COPY3D(rays[1].start_point, rays[0].start_point);
+    COPY3D(rays[2].start_point, rays[0].start_point);
+<a name="anchor-57"></a>    return (0);
+}
+
+/*=============================================================*\
+  Function:	CreateRaysFromPoint
+<a name="anchor-58"></a>  Purpose:	to fill ProRays structure
+  Return :	0 if successfull, -1 if unsuccessfull
+\*=============================================================*/
+static int CreateRaysFromPoint(
+    ProModelitem *mod_item,  /* In : user's selection */
+<a name="anchor-59"></a>    ProRay *rays)	     /* Out: the filled ray structure */
+{
+    ProPoint pnt;
+    ProError status;
+   
+<a name="anchor-60"></a>    rays[0].dir_vector[0] = rays[1].dir_vector[1] = 1.0;
+    rays[2].dir_vector[2] = 1.0;
+    rays[0].dir_vector[1] = rays[0].dir_vector[2] = 0.0;
+    rays[1].dir_vector[0] = rays[1].dir_vector[2] = 0.0;
+    rays[2].dir_vector[0] = rays[2].dir_vector[1] = 0.0;
+<a name="anchor-61"></a>	    
+    status = ProPointInit((ProSolid)mod_item->owner, mod_item->id, &amp;pnt);
+    TEST_CALL_REPORT(&quot;ProPointInit()&quot;, &quot;CreateRaysFromPoint()&quot;, status, 
+	status != PRO_TK_NO_ERROR);
+    if (status!=PRO_TK_NO_ERROR) 
+<a name="anchor-62"></a>	return (-1);
+
+    status = ProPointCoordGet(pnt, rays[0].start_point);
+    TEST_CALL_REPORT(&quot;ProPointCoordGet()&quot;, &quot;CreateRaysFromPoint()&quot;, status, 
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-63"></a>    if (status!=PRO_TK_NO_ERROR) 
+	return (-1);
+	    
+    COPY3D(rays[1].start_point, rays[0].start_point);
+    COPY3D(rays[2].start_point, rays[0].start_point);
+<a name="anchor-64"></a>    return (0);
+}
+
+/*=============================================================*\
+  Function:	CreateRaysFromCsys
+<a name="anchor-65"></a>  Purpose:	to fill ProRays structure
+  Return :	0 if successfull, -1 if unsuccessfull
+\*=============================================================*/
+static int CreateRaysFromCsys(
+    ProModelitem *mod_item,  /* In : user's selection */
+<a name="anchor-66"></a>    ProRay *rays)	    /* Out: the filled ray structure */
+{
+    ProError status;
+    ProCsys  csys;
+    ProGeomitemdata *geomdata;
+<a name="anchor-67"></a>
+    status = ProCsysInit((ProSolid)mod_item->owner, mod_item->id, &amp;csys);
+    TEST_CALL_REPORT(&quot;ProCsysInit()&quot;, &quot;CreateRaysFromCsys()&quot;, status, 
+	status != PRO_TK_NO_ERROR);
+    if (status!=PRO_TK_NO_ERROR) 
+<a name="anchor-68"></a>	return (-1);
+	    
+    status = ProCsysDataGet(csys, &amp;geomdata);
+    TEST_CALL_REPORT(&quot;ProCsysDataGet()&quot;, &quot;CreateRaysFromCsys()&quot;, status, 
+	status != PRO_TK_NO_ERROR);
+<a name="anchor-69"></a>    if (status!=PRO_TK_NO_ERROR) 
+	return (-1);
+
+    COPY3D(rays[0].start_point, geomdata->data.p_csys_data->origin);
+    COPY3D(rays[1].start_point, rays[0].start_point);
+<a name="anchor-70"></a>    COPY3D(rays[2].start_point, rays[0].start_point);
+    COPY3D(rays[0].dir_vector, geomdata->data.p_csys_data->x_vector);
+    COPY3D(rays[1].dir_vector, geomdata->data.p_csys_data->y_vector);
+    COPY3D(rays[2].dir_vector, geomdata->data.p_csys_data->z_vector);
+	    
+<a name="anchor-71"></a>    status = ProGeomitemdataFree(&amp;geomdata);
+    TEST_CALL_REPORT(&quot;ProGeomitemdataFree()&quot;, &quot;CreateRaysFromCsys()&quot;, status, 
+	status != PRO_TK_NO_ERROR);
+
+    return (0);
+<a name="anchor-72"></a>}
+
+/*=============================================================*\
+  Function:	CreateRaysFromAsys
+  Purpose:	to fill ProRays structure
+<a name="anchor-73"></a>  Return :	0 if successfull, -1 if unsuccessfull
+\*=============================================================*/
+static int CreateRaysFromAxis(
+    ProModelitem *mod_item,  /* In : user's selection */
+    ProRay *rays)	    /* Out: the filled ray structure */
+<a name="anchor-74"></a>{
+    ProError status;
+    ProAxis  axis;
+    ProGeomitemdata *geomdata;
+
+<a name="anchor-75"></a>    status = ProAxisInit((ProSolid)mod_item->owner, mod_item->id, &amp;axis);
+    TEST_CALL_REPORT(&quot;ProAxisInit()&quot;, &quot;CreateRaysFromAxis()&quot;, status, 
+	status != PRO_TK_NO_ERROR);
+    if (status!=PRO_TK_NO_ERROR) 
+	return (-1);
+<a name="anchor-76"></a>
+    status = ProAxisDataGet(axis, &amp;geomdata);
+    TEST_CALL_REPORT(&quot;ProAxisDataGet()&quot;, &quot;CreateRaysFromAxis()&quot;, status, 
+	status != PRO_TK_NO_ERROR);
+    if (status!=PRO_TK_NO_ERROR) 
+<a name="anchor-77"></a>	return (-1);
+
+    COPY3D(rays[0].start_point, geomdata->data.p_curve_data->line.end1);
+    COPY3D(rays[0].dir_vector, geomdata->data.p_curve_data->line.end2);
+    rays[0].dir_vector[0] -= rays[0].start_point[0]; 
+<a name="anchor-78"></a>    rays[0].dir_vector[1] -= rays[0].start_point[1]; 
+    rays[0].dir_vector[2] -= rays[0].start_point[2]; 
+
+    return (0);
+}
+<a name="anchor-79"></a>
+
+/*=============================================================*\
+  Function:	TransfRays
+  Purpose:	to transform ray's origin and direction to top
+<a name="anchor-80"></a>		level assembly csys
+\*=============================================================*/
+static int TransfRays(
+    ProSelection sel,   /* In : the user's selection structure */
+    ProRay *rays,	/* In, Out : the array of ProRay structures */
+<a name="anchor-81"></a>    int	n_ray)		/* In : # of rays*/
+{
+    ProMatrix trf;
+    ProError status;
+    ProAsmcomppath	comp_path;
+<a name="anchor-82"></a>    ProVector pnt;
+    int i;
+
+    status = ProSelectionAsmcomppathGet(sel, &amp;comp_path);
+    TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;TransfRays()&quot;,
+<a name="anchor-83"></a>	status, status != PRO_TK_NO_ERROR);
+    if (comp_path.owner==NULL) return (0);     
+    
+    status = ProAsmcomppathTrfGet(&amp;comp_path, PRO_B_TRUE, trf);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathTrfGet()&quot;, &quot;TransfRays()&quot;,
+<a name="anchor-84"></a>        status, status != PRO_TK_NO_ERROR);
+    for (i=0; i&lt;n_ray; i++)
+    {
+	status = ProPntTrfEval(rays[i].start_point, trf, pnt);    
+	TEST_CALL_REPORT(&quot;ProPntTrfEval()&quot;, &quot;TransfRays()&quot;,
+<a name="anchor-85"></a>	    status, status != PRO_TK_NO_ERROR);
+	COPY3D(rays[i].start_point, pnt);
+
+	status = ProVectorTrfEval(rays[i].dir_vector, trf, rays[i].dir_vector);
+	TEST_CALL_REPORT(&quot;ProVectorTrfEval()&quot;, &quot;TransfRays()&quot;,
+<a name="anchor-86"></a>	    status, status != PRO_TK_NO_ERROR);
+    }
+
+    return (0);
+}
+<a name="anchor-87"></a>
+/*=============================================================*\
+  Function:	CreateHitList
+  Purpose:	generate hit list for one ray
+\*=============================================================*/
+<a name="anchor-88"></a>static int CreateHitList(
+    ProSolid model,	    /* In : The  model */
+    ProRay* ray,	    /* In : ray */
+    Hit_list *h_list)       /* In : The hit list, user's memory */
+{
+<a name="anchor-89"></a>    
+    ProError status;
+    int	n_hits, i;
+    ProSelection *p_sel;
+    ProAsmcomppath	comp_path;
+<a name="anchor-90"></a>    double depth;
+    ProPoint3d pnt;
+    ProMode mode;
+    ProMatrix trf = { {1.0, 0.0, 0.0, 0.0},
+                      {0.0, 1.0, 0.0, 0.0},
+<a name="anchor-91"></a>                      {0.0, 0.0, 1.0, 0.0},
+                      {0.0, 0.0, 0.0, 1.0} };
+    
+    h_list->p_pnt = NULL;
+    h_list->to_front = NULL;
+<a name="anchor-92"></a>    h_list->n_hits =0;
+
+    status = ProSolidRayIntersectionCompute(model, -1, ray, &amp;p_sel, &amp;n_hits);
+    TEST_CALL_REPORT(&quot;ProSolidRayIntersectionCompute()&quot;, &quot;CreateHitList()&quot;,
+	status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+<a name="anchor-93"></a>
+    if (status != PRO_TK_NO_ERROR) 
+	return (-1);
+
+    COPY3D(h_list->origin, ray->start_point);   
+<a name="anchor-94"></a>    h_list->n_hits = n_hits;     
+    h_list->p_pnt = (Pro3dPnt *)calloc(n_hits, sizeof(Pro3dPnt));
+    h_list->to_front = (ProBoolean *)calloc(n_hits, sizeof(ProBoolean));
+    for (i=0; i&lt;n_hits; i++)
+    {
+<a name="anchor-95"></a>	status = ProSelectionDepthGet(p_sel[i], &amp;depth);
+	TEST_CALL_REPORT(&quot;ProSelectionDepthGet()&quot;, &quot;CreateHitList()&quot;,
+	    status, status != PRO_TK_NO_ERROR);
+
+	h_list->to_front[i] = (ProBoolean)(depth>=0);
+<a name="anchor-96"></a>	status = ProSelectionAsmcomppathGet(p_sel[i], &amp;comp_path);
+	TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;CreateHitList()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProModeCurrentGet(&amp;mode);
+	TEST_CALL_REPORT(&quot;ProModeCurrentGet()&quot;, &quot;CreateHitList()&quot;,
+<a name="anchor-97"></a>            status, status != PRO_TK_NO_ERROR);
+        if(mode == PRO_MODE_ASSEMBLY)
+        {
+            status = ProAsmcomppathTrfGet(&amp;comp_path, PRO_B_TRUE, trf);
+            TEST_CALL_REPORT(&quot;ProAsmcomppathTrfGet()&quot;, &quot;CreateHitList()&quot;,
+<a name="anchor-98"></a>	        status, status != PRO_TK_NO_ERROR);
+        }
+	status = ProSelectionPoint3dGet(p_sel[i], pnt);
+	TEST_CALL_REPORT(&quot;ProSelectionPoint3dGet()&quot;, &quot;CreateHitList()&quot;,
+	    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-99"></a>
+	status = ProPntTrfEval(pnt, trf, h_list->p_pnt[i]);    
+	TEST_CALL_REPORT(&quot;ProPntTrfEval()&quot;, &quot;CreateHitList()&quot;,
+	    status, status != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-100"></a>
+    return (0);
+}     
+
+/*=============================================================*\
+<a name="anchor-101"></a>  Function:	CreateDispList
+  Purpose:	generate display list
+\*=============================================================*/
+static int CreateDispList(
+    Hit_list *p_list,	    /*In : the hit list array */
+<a name="anchor-102"></a>    int *n_list,	    /*In :  n_list[0] contains number of lists in p_list */
+    int *mode)		    /*In :  mode[0]==0 behind origin 
+				    mode[0]==1 front origin */ 
+{
+    int i, l;
+<a name="anchor-103"></a>    ProError status;
+    ProColor keep_color, letter_color, highlite_color;
+    double radius;
+    ProMdl model;
+    Pro3dPnt points[2];
+<a name="anchor-104"></a>
+    TEST_CALL_REPORT(&quot;ProDisplistCallback()&quot;, &quot;CreateDispList()&quot;, (ProError)0, 0);   
+
+    status = ProMdlCurrentGet (&amp;model);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;CreateDispList()&quot;, status, 
+<a name="anchor-105"></a>	status != PRO_TK_NO_ERROR);
+    status = ProSolidOutlineGet ((ProSolid)model, points);
+    TEST_CALL_REPORT(&quot;ProSolidOutlineGet()&quot;, &quot;CreateDispList()&quot;, status, 
+	status != PRO_TK_NO_ERROR);
+	
+<a name="anchor-106"></a>    radius = 0.3*(points[1][0] - points[0][0])/100.0;
+	
+	highlite_color.method = PRO_COLOR_METHOD_TYPE;
+	highlite_color.value.type = PRO_COLOR_HIGHLITE;
+	
+<a name="anchor-107"></a>	letter_color.method = PRO_COLOR_METHOD_TYPE;
+	letter_color.value.type = PRO_COLOR_LETTER;
+	    
+    status = ProGraphicsColorModify(mode[0] ? &amp;letter_color : 
+		&amp;highlite_color, &amp;keep_color); 
+<a name="anchor-108"></a>    TEST_CALL_REPORT(&quot;ProGraphicsColorModify()&quot;, &quot;CreateDispList()&quot;, status, 
+	status != PRO_TK_NO_ERROR);
+
+    for (l=0; l&lt;n_list[0]; l++)
+    {   
+<a name="anchor-109"></a>	for (i=0; i&lt;p_list[l].n_hits; i++)
+	{
+	    if (mode[0] ^ (p_list[l].to_front[i]==PRO_B_TRUE)) continue;
+	    ProGraphicsPenPosition(p_list[l].origin);
+    	    ProGraphicsLineDraw(p_list[l].p_pnt[i]);
+<a name="anchor-110"></a>	    ProGraphicsCircleDraw(p_list[l].p_pnt[i], radius);
+	}
+    }
+    
+    status = ProGraphicsColorModify(&amp;keep_color, NULL); 
+<a name="anchor-111"></a>    TEST_CALL_REPORT(&quot;ProGraphicsColorModify()&quot;, &quot;CreateDispList()&quot;, status, 
+	status != PRO_TK_NO_ERROR);
+    return (0);
+}
+</pre>
+</body>
+</html>

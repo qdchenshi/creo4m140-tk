@@ -1,0 +1,184 @@
+<html>
+<head>
+<title>UgFamtabUse.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProFaminstance.h>
+#include &lt;ProFamtable.h>
+<a name="anchor-2"></a>#include &lt;ProDimension.h>
+#include &lt;ProAnnotation.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProUtil.h>
+#include &lt;ProMessage.h>
+<a name="anchor-3"></a>
+/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+
+#define EPSM6 1.0e-6
+<a name="anchor-4"></a>
+/*---------------------- Function Prototypes -------------------------*/
+ProError user_Family_Diffs();
+ProError user_family_diffs ();
+
+<a name="anchor-5"></a>/*------------------------- Global Data ------------------------------*/
+static ProFileName msgfil;
+ProError user_Family_Diffs()
+{
+    ProDrawing   drawing;
+<a name="anchor-6"></a>    ProSelection *sel;
+    ProError     err;
+    int          n_sel;
+
+    err = ProMdlCurrentGet((ProMdl*)&amp;drawing);
+<a name="anchor-7"></a>    ProStringToWstring( msgfil, &quot;msg_ugfamtab.txt&quot; );
+
+/*-----------------------------------------------------------*\
+    Ask the user to select a drawing view.
+\*-----------------------------------------------------------*/
+<a name="anchor-8"></a>    err = ProMessageDisplay (msgfil, &quot;USER Select the view&quot;);
+    while (ProSelect (&quot;dwg_view&quot;, 1, NULL, NULL, NULL,  NULL, &amp;sel, &amp;n_sel)== PRO_TK_NO_ERROR)
+    {
+      ProView view;
+
+<a name="anchor-9"></a>      if (n_sel &lt; 1) break;
+/*-----------------------------------------------------------*\
+        Call the function to display family differences for
+        this view.
+\*-----------------------------------------------------------*/
+<a name="anchor-10"></a>        err = ProSelectionViewGet(sel[0], &amp;view);
+        user_family_diffs (drawing, view);
+    }
+    
+    return ( PRO_TK_NO_ERROR );
+<a name="anchor-11"></a>}
+
+typedef struct user_fam_diff_data
+{
+   ProMdl gen_model;
+<a name="anchor-12"></a>   ProFaminstance *fam_instance;
+   ProMdl          inst_model;
+   ProView         view;
+} UserFamDiffData;
+
+<a name="anchor-13"></a>ProError user_fam_diff_action(ProFamtableItem   *famtable_item,
+                              ProError           status,
+                              ProAppData         app_data)
+{
+  ProParamvalue inst_value;
+<a name="anchor-14"></a>  ProParamvalueType val_type;
+  ProError err;
+  UserFamDiffData *p_diffdata = (UserFamDiffData*)app_data;
+  ProDimension dimension;
+  double       generic_val, instance_val, diff, diff1;
+<a name="anchor-15"></a>
+  ProFaminstance *fam_instance = p_diffdata->fam_instance;
+  ProMdl         gen_model = p_diffdata->gen_model;
+  ProMdl         inst_model = p_diffdata->inst_model;
+  ProView        view = p_diffdata->view;
+<a name="anchor-16"></a>
+  /*-----------------------------------------------------------*\
+         If the column is not a DIMENSION, skip it.
+  \*-----------------------------------------------------------*/
+  if (PRO_FAM_DIMENSION != famtable_item->type)
+<a name="anchor-17"></a>    return PRO_TK_NO_ERROR;
+
+  /*-----------------------------------------------------------*\
+         Read the values in this column for the generic
+         and for the instance. If they are the same, or the
+<a name="anchor-18"></a>         instance has an asterisk, skip it.
+  \*-----------------------------------------------------------*/
+  err = ProFamtableItemToModelitem(famtable_item, &amp;dimension);
+  dimension.owner = gen_model;
+  err = ProFaminstanceValueGet (fam_instance, famtable_item, &amp;inst_value);
+<a name="anchor-19"></a>
+  /*-----------------------------------------------------------*\
+         Skip non-double values.
+  \*-----------------------------------------------------------*/
+  if (PRO_PARAM_DOUBLE != inst_value.type)
+<a name="anchor-20"></a>    return PRO_TK_NO_ERROR;
+
+  err = ProDimensionValueGet(&amp;dimension, &amp;generic_val);
+  if (PRO_TK_NO_ERROR != err) return err;
+  err = ProParamvalueValueGet(&amp;inst_value, PRO_PARAM_DOUBLE, &amp;instance_val);
+<a name="anchor-21"></a>  if (PRO_TK_NO_ERROR != err) return err;
+
+  /*-----------------------------------------------------------*\
+         Read the values in this column for the generic
+         and for the instance. If they are the same, or the
+<a name="anchor-22"></a>         instance has an asterisk, skip it.
+  \*-----------------------------------------------------------*/
+  diff = instance_val - generic_val;
+  if (diff &lt; 0.) diff = -diff;
+  if (diff &lt; EPSM6)
+<a name="anchor-23"></a>    return PRO_TK_NO_ERROR;
+
+  dimension.owner = inst_model;
+  err = ProAnnotationDisplay(&amp;dimension, NULL, NULL, view);
+  
+<a name="anchor-24"></a>  /*-----------------------------------------------------------*\
+         If the dimension has already shown - no error. 
+  \*-----------------------------------------------------------*/
+  if (PRO_TK_NO_CHANGE == err)
+    err = PRO_TK_NO_ERROR;
+<a name="anchor-25"></a>
+  return err;
+}
+
+ProError user_family_diffs (drawing, view)
+<a name="anchor-26"></a> ProDrawing  drawing;
+ ProView  view;
+{
+
+    ProSolid          inst_model, gen_model;
+<a name="anchor-27"></a>    ProError          err;     
+    ProFamtable       famtable;
+    ProFaminstance    fam_instance;
+    UserFamDiffData   diffdata;
+	ProMdlName        modelName;
+<a name="anchor-28"></a>
+/*-----------------------------------------------------------*\
+    Get the model in the selected view.
+\*-----------------------------------------------------------*/
+    err = ProDrawingViewSolidGet(drawing, view, &amp;inst_model);
+<a name="anchor-29"></a>
+	err = ProMdlMdlnameGet(inst_model, modelName);
+    
+    
+
+<a name="anchor-30"></a>/*-----------------------------------------------------------*\
+    Get the generic model, and complain if there isn't one. 
+\*-----------------------------------------------------------*/
+
+    err = ProFaminstanceGenericGet(inst_model, PRO_B_TRUE, (ProMdl*)&amp;gen_model);
+<a name="anchor-31"></a>    if (PRO_TK_NO_ERROR != err)
+    {
+          ProMessageDisplay (msgfil, 
+           &quot;USER This view does not contain a family table instance&quot;);
+          return ( err );
+<a name="anchor-32"></a>    }
+
+    err = ProFamtableInit(gen_model, &amp;famtable);
+    err = ProFamtableCheck (&amp;famtable);
+
+<a name="anchor-33"></a>    err = ProFaminstanceInit(modelName, &amp;famtable, &amp;fam_instance);
+
+    diffdata.gen_model    = gen_model;
+    diffdata.fam_instance = &amp;fam_instance;
+    diffdata.inst_model   = inst_model;
+<a name="anchor-34"></a>    diffdata.view         = view;
+
+    err = ProFamtableItemVisit(&amp;famtable, (ProFamtableItemAction)user_fam_diff_action, 
+                               (ProFamtableItemFilter)NULL, (ProAppData)&amp;diffdata);
+    return ( PRO_TK_NO_ERROR );
+<a name="anchor-35"></a>}
+</pre>
+</body>
+</html>

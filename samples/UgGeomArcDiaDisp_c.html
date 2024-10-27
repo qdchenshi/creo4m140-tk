@@ -1,0 +1,80 @@
+<html>
+<head>
+<title>UgGeomArcDiaDisp.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProSelection.h>
+<a name="anchor-2"></a>#include &lt;ProGeomitem.h>
+#include &lt;ProUtil.h>
+#include &lt;ProMessage.h>
+#include &lt;ProEdge.h>
+/*---------------------- Application Includes ------------------------*/
+<a name="anchor-3"></a>#include &lt;TestError.h>
+
+/*---------------------- Function Prototypes -------------------------*/
+ProError UserArcDiaDisp();
+
+<a name="anchor-4"></a>
+/*============================================================================*\
+   Function: UserArcDiaDisp()
+   Purpose: Display Diameter of Selected Arc
+\*============================================================================*/
+<a name="anchor-5"></a>ProError UserArcDiaDisp()
+{
+    int sel_count;
+    double diameter;
+    ProError status;
+<a name="anchor-6"></a>    ProModelitem p_mdl_item;
+    ProFileName msgfile;
+    ProGeomitemdata *geom_data=NULL;
+    ProArcdata *p_arc=NULL;
+    ProEdge edge;
+<a name="anchor-7"></a>    ProEnttype edge_type;
+    ProSelection *psels=NULL;
+
+/*----------------------------------------------------------------------------*\
+	Prompt user for selection of arc
+<a name="anchor-8"></a>\*----------------------------------------------------------------------------*/
+    ProStringToWstring(msgfile,&quot;msg_uggeom.txt&quot;);
+    status = ProMessageDisplay(msgfile,&quot;USER Select Arc to Evaluate:&quot;);
+    ERROR_CHECK(&quot;UserArcDiaDisp&quot;,&quot;ProMessageDisplay(Select Arc)&quot;,status);
+    if((ProSelect(&quot;edge&quot;,1,NULL,NULL,NULL,NULL,&amp;psels, &amp;sel_count) != 
+<a name="anchor-9"></a>       PRO_TK_NO_ERROR) || (sel_count &lt; 1))
+       return((int)PRO_TK_GENERAL_ERROR);
+
+    status = ProSelectionModelitemGet(psels[0],&amp;p_mdl_item);
+    ERROR_CHECK( &quot;UserArcDiaDisp&quot;, &quot;ProSelectionModelitemGet&quot;, status );
+<a name="anchor-10"></a>    
+    status = ProGeomitemToEdge(&amp;p_mdl_item,&amp;edge);
+    ERROR_CHECK(&quot;UserArcDiaDisp&quot;,&quot;ProGeomitemToEdge&quot;,status);
+    status = ProEdgeTypeGet(edge,&amp;edge_type);
+    ERROR_CHECK(&quot;UserArcDiaDisp&quot;,&quot;ProEdgeTypeGet&quot;,status);
+<a name="anchor-11"></a>    if((edge_type != PRO_ENT_ARC) &amp;&amp; (edge_type != PRO_ENT_CIRCLE))
+    {
+        status = ProMessageDisplay(msgfile,&quot;USER Invalid Arc Selection&quot;);
+        ERROR_CHECK(&quot;UserArcDiaDisp&quot;,&quot;ProMessageDisplay(Invalid Arc)&quot;,status);
+        return((int)PRO_TK_GENERAL_ERROR);
+<a name="anchor-12"></a>    }
+
+    status = ProGeomitemdataGet(&amp;p_mdl_item,&amp;geom_data);
+    ERROR_CHECK(&quot;UserArcDiaDisp&quot;,&quot;ProGeomitemdataGet&quot;,status);
+    diameter = geom_data->data.p_curve_data->arc.radius*2.0;
+<a name="anchor-13"></a>
+    status = ProMessageDisplay(msgfile,&quot;USER Arc Diameter =  %0f&quot;,&amp;diameter);
+    ERROR_CHECK(&quot;UserArcDiaDisp&quot;,&quot;ProMessageDisplay(Arc Diameter)&quot;,status);
+
+    ProGeomitemdataFree(&amp;geom_data);
+<a name="anchor-14"></a>    return((int)status);
+}
+</pre>
+</body>
+</html>

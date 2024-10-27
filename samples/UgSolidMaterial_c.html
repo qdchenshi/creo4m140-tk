@@ -1,0 +1,356 @@
+<html>
+<head>
+<title>UgSolidMaterial.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMdl.h>
+#include &lt;ProMaterial.h>
+#include &lt;ProSolid.h>
+#include &lt;ProModelitem.h>
+
+<a name="anchor-3"></a>/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+
+/*=========================================================================*\
+<a name="anchor-4"></a>  The structure contains the material properties required for non-linear 
+  material definition. Other properties can be added from ProMaterial.h as
+  required. 
+\*=========================================================================*/
+
+<a name="anchor-5"></a>typedef struct matl_proprty_data {
+
+  wchar_t* model;              /*PRO_MATPROP_MODEL,               String*/
+  wchar_t* sub_type;           /*PRO_MATPROP_SUB_TYPE             String*/
+  ProBool model_def_by_tests;  /*PRO_MATPROP_MODEL_DEF_BY_TESTS,  Boolean*/
+<a name="anchor-6"></a>  double model_coeff_mu;       /*PRO_MATPROP_MODEL_COEF_MU,       Double*/
+  double model_coeff_lm;       /*PRO_MATPROP_MODEL_COEF_LM,       Double*/
+  double model_coeff_c01;      /*PRO_MATPROP_MODEL_COEF_C01,      Double*/
+  double model_coeff_c02;      /*PRO_MATPROP_MODEL_COEF_C02,      Double*/
+  double model_coeff_c10;      /*PRO_MATPROP_MODEL_COEF_C10,      Double*/
+<a name="anchor-7"></a>  double model_coeff_c11;      /*PRO_MATPROP_MODEL_COEF_C11,      Double*/
+  double model_coeff_c20;      /*PRO_MATPROP_MODEL_COEF_C20,      Double*/
+  double model_coeff_c30;      /*PRO_MATPROP_MODEL_COEF_C30,      Double*/
+  double model_coeff_d;        /*PRO_MATPROP_MODEL_COEF_D,        Double*/
+  double model_coeff_d1;       /*PRO_MATPROP_MODEL_COEF_D1,       Double*/
+<a name="anchor-8"></a>  double model_coeff_d2;       /*PRO_MATPROP_MODEL_COEF_D2,       Double*/
+  double model_coeff_d3;       /*PRO_MATPROP_MODEL_COEF_D3,       Double*/
+
+  int type;                             /*PRO_MATPROP_TYPE    
+					  Integer*/
+<a name="anchor-9"></a>  wchar_t* material_description;        /*PRO_MATPROP_MATERIAL_DESCRIPTION
+					  WString*/
+  wchar_t* failure_criterion_type;      /*PRO_MATPROP_FAILURE_CRITERION_TYPE  
+					  WString*/
+  wchar_t* fatigue_type;                /*PRO_MATPROP_FATIGUE_TYPE         
+<a name="anchor-10"></a>					  wString*/
+  double thermal_expansion_coefficient; 
+                               /*PRO_MATPROP_THERMAL_EXPANSION_COEFFICIENT
+				       Double*/
+  double specific_heat;                 /*PRO_MATPROP_SPECIFIC_HEAT              
+<a name="anchor-11"></a>					  Double*/
+  double thermal_conductivity;          /*PRO_MATPROP_THERMAL_CONDUCTIVITY       
+					  Double*/
+  double mass_density;                  /*PRO_MATPROP_MASS_DENSITY               
+					  Double*/
+<a name="anchor-12"></a>  wchar_t* xhatch_file;                 /*PRO_MATPROP_XHATCH_FILE                 
+					  WString*/
+  double tensile_yield_stress;          /*PRO_MATPROP_TENSILE_YIELD_STRESS        
+					  Double*/
+
+<a name="anchor-13"></a>}MatrlPropData;
+
+/*---------------------- Function Prototypes -------------------------*/
+
+ProError UsrMaterialItemIntPropertySet (ProMaterialItem* mat_item,
+<a name="anchor-14"></a>					   ProMaterialPropertyType type,
+					   int i_val);
+
+ProError UsrMaterialItemDoublePropertySet (ProMaterialItem* mat_item,
+					   ProMaterialPropertyType type,
+<a name="anchor-15"></a>					   double d_val);
+
+ProError UsrMaterialItemStringPropertySet (ProMaterialItem* mat_item,
+					   ProMaterialPropertyType type,
+					   wchar_t* s_val);
+<a name="anchor-16"></a>
+ProError UsrMaterialItemBoolPropertySet (ProMaterialItem* mat_item,
+					 ProMaterialPropertyType type,
+					 short l_val);
+
+<a name="anchor-17"></a>ProError UsrNonlinMaterialCreate (ProMdl Mdl, MatrlPropData data, 
+				  ProName name);
+
+
+/*====================================================================*\
+<a name="anchor-18"></a>FUNCTION : UsrNonlinMaterialCreateWrapper
+PURPOSE  : To set the new material properties.
+\*====================================================================*/
+int UsrNonlinMaterialCreateWrapper()
+{
+<a name="anchor-19"></a>  ProMdl mdl;
+  MatrlPropData data;
+  ProMaterialItem mat_item;
+  ProName name;
+  int status;
+<a name="anchor-20"></a>
+/*--------------------------------------------------------------------*\ 
+  Set the new material name 
+\*--------------------------------------------------------------------*/ 
+  ProStringToWstring (name, &quot;matl_poly2&quot;);
+<a name="anchor-21"></a>
+  status = ProMdlCurrentGet (&amp;mdl);
+  if(status != PRO_TK_NO_ERROR)
+    return 0;
+  
+<a name="anchor-22"></a>/*--------------------------------------------------------------------*\ 
+  Set the new material properties  
+\*--------------------------------------------------------------------*/       
+  data.type = PRO_MATERIAL_TYPE_STRUCTURAL_ISOTROPIC | 
+    PRO_MATERIAL_TYPE_THERMAL_ISOTROPIC;
+<a name="anchor-23"></a>  data.material_description = L&quot;taken from spec&quot;;
+
+  data.failure_criterion_type = PRO_MATERIAL_FAILURE_DISTORTION_ENERGY;
+  data.fatigue_type = PRO_MATERIAL_FATIGUE_TYPE_NONE;
+  data.sub_type = PRO_MATERIAL_SUB_TYPE_HYPERELASTIC;
+<a name="anchor-24"></a>
+  data.thermal_expansion_coefficient = 4.444000e-05;
+  data.specific_heat = 1.444000e+06;
+  data.thermal_conductivity = 1.182589e+01;
+  data.mass_density = 4.335775e-02;
+<a name="anchor-25"></a>  data.xhatch_file = L&quot;&quot;;
+
+  data.model_def_by_tests = PRO_B_FALSE;
+
+  data.model = PRO_MATERIAL_MODEL_POLYNOMIAL;              
+<a name="anchor-26"></a>
+  data.model_coeff_c10 = 8.809880e-01;
+  data.model_coeff_c20 = 1.116500e-02;
+  data.model_coeff_c01 = 3.780000e-04;
+  data.model_coeff_c02 = 1.000000e+00;
+<a name="anchor-27"></a>  data.model_coeff_c11 = -1.620000e-04;
+
+  data.model_coeff_d1 = 0.00;
+  data.model_coeff_d2 = 0.00;
+
+<a name="anchor-28"></a>  data.tensile_yield_stress = 2.519884e+06;
+
+/*--------------------------------------------------------------------*\ 
+  Call the material create function 
+\*--------------------------------------------------------------------*/     
+<a name="anchor-29"></a>  UsrNonlinMaterialCreate(mdl, data, name);
+
+  return 0;
+}
+
+<a name="anchor-30"></a>/*====================================================================*\
+FUNCTION : UsrNonlinMaterialCreate()
+PURPOSE  : To create the new non linear material.
+\*====================================================================*/
+ProError UsrNonlinMaterialCreate(ProMdl Mdl, MatrlPropData data, 
+<a name="anchor-31"></a>				 ProName name)
+{
+
+  ProMaterialItem mat_item;
+  ProMaterial material;
+<a name="anchor-32"></a>
+  ProMaterialCreate (Mdl, name,
+		     NULL, &amp;material);
+ 
+  ProModelitemByNameInit (Mdl, PRO_RP_MATERIAL, name,
+<a name="anchor-33"></a>                                   &amp;mat_item);
+	
+/*--------------------------------------------------------------------*\ 
+  Set material properties
+\*--------------------------------------------------------------------*/     
+<a name="anchor-34"></a>
+  UsrMaterialItemIntPropertySet (&amp;mat_item,
+				    PRO_MATPROP_TYPE,
+				    data.type);
+						
+<a name="anchor-35"></a>  UsrMaterialItemStringPropertySet (&amp;mat_item,
+				    PRO_MATPROP_MATERIAL_DESCRIPTION, 
+				    data.material_description);
+
+  UsrMaterialItemStringPropertySet (&amp;mat_item,
+<a name="anchor-36"></a>				    PRO_MATPROP_FAILURE_CRITERION_TYPE, 
+				    data.failure_criterion_type);
+
+  UsrMaterialItemStringPropertySet (&amp;mat_item,
+				    PRO_MATPROP_FATIGUE_TYPE, 
+<a name="anchor-37"></a>				    data.fatigue_type);
+
+  UsrMaterialItemStringPropertySet (&amp;mat_item,
+				    PRO_MATPROP_SUB_TYPE, 
+				    data.sub_type);
+<a name="anchor-38"></a>
+  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+				    PRO_MATPROP_THERMAL_EXPANSION_COEFFICIENT, 
+				    data.thermal_expansion_coefficient);
+
+<a name="anchor-39"></a>  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+				    PRO_MATPROP_SPECIFIC_HEAT, 
+				    data.specific_heat);
+
+  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+<a name="anchor-40"></a>				    PRO_MATPROP_THERMAL_CONDUCTIVITY, 
+				    data.thermal_conductivity);
+
+  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+				    PRO_MATPROP_MASS_DENSITY, 
+<a name="anchor-41"></a>				    data.mass_density);
+
+  UsrMaterialItemStringPropertySet (&amp;mat_item,
+				    PRO_MATPROP_XHATCH_FILE, 
+				    data.xhatch_file);
+<a name="anchor-42"></a> 
+  UsrMaterialItemBoolPropertySet (&amp;mat_item,
+				  PRO_MATPROP_MODEL_DEF_BY_TESTS, 
+				  data.model_def_by_tests);
+
+<a name="anchor-43"></a>  UsrMaterialItemStringPropertySet (&amp;mat_item,
+				    PRO_MATPROP_MODEL, 
+				    data.model);
+
+  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+<a name="anchor-44"></a>				    PRO_MATPROP_MODEL_COEF_C10, 
+				    data.model_coeff_c10);
+
+  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+				    PRO_MATPROP_MODEL_COEF_C01, 
+<a name="anchor-45"></a>				    data.model_coeff_c01);
+						
+  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+				    PRO_MATPROP_MODEL_COEF_C20, 
+				    data.model_coeff_c20);
+<a name="anchor-46"></a>  
+  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+				    PRO_MATPROP_MODEL_COEF_C02, 
+				    data.model_coeff_c02);
+
+<a name="anchor-47"></a>  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+				    PRO_MATPROP_MODEL_COEF_C11, 
+				    data.model_coeff_c11);
+
+  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+<a name="anchor-48"></a>				    PRO_MATPROP_MODEL_COEF_D1, 
+				    data.model_coeff_d1);
+
+  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+				    PRO_MATPROP_MODEL_COEF_D2, 
+<a name="anchor-49"></a>				    data.model_coeff_d2);
+
+  UsrMaterialItemDoublePropertySet (&amp;mat_item,
+				    PRO_MATPROP_TENSILE_YIELD_STRESS, 
+				    data.tensile_yield_stress);
+<a name="anchor-50"></a>
+  return PRO_TK_NO_ERROR;
+}
+
+
+<a name="anchor-51"></a>/*====================================================================*\
+FUNCTION : UsrMaterialItemBoolPropertySet()
+PURPOSE  : To set material property of type ProBool.
+\*====================================================================*/
+
+<a name="anchor-52"></a>ProError UsrMaterialItemBoolPropertySet (ProMaterialItem* mat_item,
+					   ProMaterialPropertyType type,
+					   short l_val)
+{
+  ProParamvalue value;
+<a name="anchor-53"></a>  
+  value.type = PRO_PARAM_BOOLEAN;
+  value.value.l_val = l_val;
+
+  ProMaterialPropertySet (mat_item, type, &amp;value, NULL);
+<a name="anchor-54"></a>
+  return PRO_TK_NO_ERROR;
+
+}
+
+<a name="anchor-55"></a>
+/*====================================================================*\
+FUNCTION : UsrMaterialItemIntPropertySet()
+PURPOSE  : To set material property of type integer.
+\*====================================================================*/
+<a name="anchor-56"></a>
+ProError UsrMaterialItemIntPropertySet (ProMaterialItem* mat_item,
+					   ProMaterialPropertyType type,
+					   int i_val)
+{
+<a name="anchor-57"></a>  ProParamvalue value;
+  
+  value.type = PRO_PARAM_INTEGER;
+  value.value.i_val = i_val;
+
+<a name="anchor-58"></a>  ProMaterialPropertySet  (mat_item, type, &amp;value, NULL);
+
+  return PRO_TK_NO_ERROR;
+
+}
+<a name="anchor-59"></a>
+
+/*====================================================================*\
+FUNCTION : UsrMaterialItemDoublePropertySet()
+PURPOSE  : To set material property of type double.
+<a name="anchor-60"></a>\*====================================================================*/
+
+ProError UsrMaterialItemDoublePropertySet (ProMaterialItem* mat_item,
+					   ProMaterialPropertyType type,
+					   double d_val)
+<a name="anchor-61"></a>{
+  ProParamvalue value;
+  ProUnititem units;
+  ProParamvalue old_val;
+  int err;
+<a name="anchor-62"></a>  
+  value.type = PRO_PARAM_DOUBLE;
+  value.value.d_val = d_val;
+
+  err = ProMaterialPropertyGet (mat_item, type, &amp;old_val, &amp;units);
+<a name="anchor-63"></a>
+  if (err == PRO_TK_E_NOT_FOUND)
+    ProMaterialPropertySet  (mat_item, type, &amp;value, NULL);
+  else
+    ProMaterialPropertySet  (mat_item, type, &amp;value, &amp;units);
+<a name="anchor-64"></a>
+  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+<a name="anchor-65"></a>FUNCTION : UsrMaterialItemStringPropertySet()
+PURPOSE  : To set material property of type string
+\*====================================================================*/
+
+ProError UsrMaterialItemStringPropertySet (ProMaterialItem* mat_item,
+<a name="anchor-66"></a>					   ProMaterialPropertyType type,
+					   wchar_t* s_val)
+{
+  ProParamvalue value;
+  
+<a name="anchor-67"></a>  value.type = PRO_PARAM_STRING;
+  ProWstringCopy (s_val, value.value.s_val, PRO_VALUE_UNUSED);
+
+  ProMaterialPropertySet  (mat_item, type, &amp;value, NULL);
+
+<a name="anchor-68"></a>  return PRO_TK_NO_ERROR;
+
+}
+
+
+<a name="anchor-69"></a>
+
+
+</pre>
+</body>
+</html>

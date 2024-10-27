@@ -1,0 +1,1366 @@
+<html>
+<head>
+<title>Ug3DSection.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProElement.h>
+#include &lt;ProFeature.h>
+#include &lt;ProFeatType.h>
+<a name="anchor-2"></a>#include &lt;ProFeatForm.h>
+#include &lt;ProModFeat.h>
+#include &lt;ProExtrude.h>
+#include &lt;ProSection.h>
+#include &lt;ProSelection.h>
+<a name="anchor-3"></a>#include &lt;ProStdSection.h>
+#include &lt;ProSecdim.h>
+#include &lt;ProUtil.h>
+#include &lt;TestError.h>
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-4"></a>#include &lt;math.h>
+#include &lt;UtilMath.h>
+#include &lt;UtilMatrix.h>
+#include &lt;ProMessage.h>
+#include &lt;ProSurface.h>
+<a name="anchor-5"></a>#include &lt;ProSolid.h>
+
+/*---------------------------External Functions------------------------------*/
+extern void ProUtil2DPointTrans();
+extern double *ProUtilLineLineX();
+<a name="anchor-6"></a>
+/*--------------------------Globlal Definition ------------------------------*/
+typedef struct mtrx_data{ 
+	ProVector x_axis[2];
+	ProVector y_axis[2];
+<a name="anchor-7"></a>	ProMatrix sec_trf; 
+	ProMatrix sk_mtrx; 
+	ProSelection sk_plane;
+	double angle;
+}Matrix_data;
+<a name="anchor-8"></a>
+static wchar_t msgfile[PRO_NAME_SIZE];
+
+ProSelection *temp2 = NULL;
+ProSelection *temp1 = NULL;
+<a name="anchor-9"></a>
+#ifndef PI
+# define PI 3.141592
+#endif
+/* --------------------------Function Prototypes ----------------------------*/
+<a name="anchor-10"></a>ProError UserSelectSketchPlaneRefs(ProSelection **sketch_refs);
+ProError UserSelectProjectionEntities(ProSelection **proj_refs);
+ProError UserSelectOffsetDistances(double *offset_vals);
+ProError UserCreateTrfMatrix(Matrix_data *m_data);
+ProError UserSecerrorPrint ( ProWSecerror *section_errors ); 
+<a name="anchor-11"></a>ProError UserSweepSectionAdd ( ProSection ); 
+ProError UserSweepSpineAdd ( ProSection , ProSelection * ); 
+ProError UserSectionCircleToEllipseReplace (ProSection sect_handle);
+
+/* =============================================================== *\
+<a name="anchor-12"></a>   Function: UsetUtilItemSelect
+   Purpose: Selection utility for feature create examples
+\* =============================================================== */
+ProError UserUtilItemSelect (char* filter_string, char* message,
+								int* id, ProType* type)
+<a name="anchor-13"></a>{
+	ProError err;
+	ProSelection* sels;
+	ProModelitem item;
+	int n_sels;
+<a name="anchor-14"></a>
+	err = PRO_TK_GENERAL_ERROR;
+    do 
+	{
+		ProMessageDisplay (msgfile, message);
+<a name="anchor-15"></a>
+		err = ProSelect (filter_string, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+
+		if (err == PRO_TK_USER_ABORT || err == PRO_TK_PICK_ABOVE)
+				return err;
+<a name="anchor-16"></a>	} while (err != PRO_TK_NO_ERROR);
+
+	err = ProSelectionModelitemGet (sels[0], &amp;item);
+
+	*id = item.id;
+<a name="anchor-17"></a>	*type = item.type;
+
+	return PRO_TK_NO_ERROR;	
+}
+
+<a name="anchor-18"></a>/* =============================================================== *\
+   Function: UserSectionBuild(ProSection section, ProSelection *sketch_refs)
+   Purpose: Creates 3D section 
+\* =============================================================== */
+ProError UserSectionBuild(ProSection section, ProSelection *sketch_refs)
+<a name="anchor-19"></a>{
+
+  ProSelection *proj_ents;
+  int status, i, num_errors, err_counter, proj_ids[2];
+  int ctr_line_id, rt_line_id, lt_line_id, top_line_id, btm_line_id;
+<a name="anchor-20"></a>  int upper_arc_id, lower_arc_id, ent_id[1], c_ent_id[2], proj_ent_id[2];
+  int ll_dim_id, tl_dim_id, ua_dim_id, la_dim_id, cl_dim_id, proj_dim_id[2];
+  ProWSecerror sec_errors;
+  Pro2dLinedef line;
+  Pro2dClinedef c_line;
+<a name="anchor-21"></a>  Pro2dLinedef *left_linedef, *btm_linedef;
+  ProSectionPointType pt_type[1], proj_pt_type[2];
+  Pro2dArcdef arc;
+  Pro2dPnt place_pnt;
+  ProMsg wmsg;
+<a name="anchor-22"></a>  char msg[PRO_PATH_SIZE];
+  double offsets[2];
+  Matrix_data matrix_data;
+
+  ProStringToWstring(msgfile, &quot;msg_ug3dsketch.txt&quot;);
+<a name="anchor-23"></a>
+
+/* =============================================================== *\
+   	Obtain projection entity handles as ProSelection structures
+\* =============================================================== */
+<a name="anchor-24"></a>
+  status = UserSelectProjectionEntities(&amp;proj_ents);
+  ERROR_CHECK(&quot;UserSelectrojectionEntities&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-25"></a>/* =============================================================== *\
+    Project reference edges onto section
+\* =============================================================== */
+
+  for (i = 0; i &lt; 2; i++)
+<a name="anchor-26"></a>    {
+      status = ProSectionEntityFromProjection(section, proj_ents[i], &amp;proj_ids[i]);
+      ERROR_CHECK(&quot;ProSectionEntityFromProjection&quot;, &quot;UserSectionBuild&quot;, status);
+      if (status != PRO_TK_NO_ERROR) return status;
+    }
+<a name="anchor-27"></a>
+/* =============================================================== *\
+    Create section csys from edges, and obtion transformation 
+	matrix between sketch plane csys and section csys
+\* =============================================================== */
+<a name="anchor-28"></a>
+  status = ProSectionEntityGet(section, proj_ids[0], (Pro2dEntdef **)&amp;btm_linedef);
+  ERROR_CHECK(&quot;ProSectionEntityGet&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-29"></a>  for (i = 0; i &lt; 2; i++)
+    {
+      matrix_data.x_axis[0][i] = btm_linedef->end1[i];
+      matrix_data.x_axis[1][i] = btm_linedef->end2[i];
+      matrix_data.x_axis[i][2] = 0.0; 
+<a name="anchor-30"></a>    }
+	
+  status = ProSectionEntityGet(section, proj_ids[1], (Pro2dEntdef **)&amp;left_linedef);
+  ERROR_CHECK(&quot;ProSectionEntityGet&quot;, &quot;UserSectionBuild&quot;, status);
+  if ( status != PRO_TK_NO_ERROR )
+<a name="anchor-31"></a>    return status; 
+	
+  for (i = 0; i &lt; 2; i++)
+    {
+      matrix_data.y_axis[0][i] = left_linedef->end1[i]; 
+<a name="anchor-32"></a>      matrix_data.y_axis[1][i] = left_linedef->end2[i];
+      matrix_data.y_axis[i][2] = 0.0; 
+    }
+
+
+<a name="anchor-33"></a>  status = ProSectionLocationGet(section, matrix_data.sk_mtrx);
+  ERROR_CHECK(&quot;ProSectionLocationGet&quot;, &quot;UserCreateTrfMatrix&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+  status = ProSelectionCopy(sketch_refs[0], &amp;(matrix_data.sk_plane));
+<a name="anchor-34"></a>  ERROR_CHECK(&quot;ProSelectionCopy&quot;, &quot;UserSectionBuild&quot;, status) ;
+  if (status != PRO_TK_NO_ERROR) return status;
+
+  status = UserCreateTrfMatrix(&amp;matrix_data);
+  ERROR_CHECK(&quot;UseCreateTrfMatrix&quot;, &quot;UserSectionBuild&quot;, status);
+<a name="anchor-35"></a>  if (status != PRO_TK_NO_ERROR) return status;
+
+/* =============================================================== *\
+   	Obtain offset values from projection entities
+\* =============================================================== */
+<a name="anchor-36"></a>
+  status = UserSelectOffsetDistances(offsets);
+  ERROR_CHECK(&quot;UserSelectOffsetDistances&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-37"></a>/* =============================================================== *\
+   		Add geometry center line ...
+\* =============================================================== */
+  c_line.type = PRO_2D_CENTER_LINE;
+  c_line.end1[0] = 0.0;
+<a name="anchor-38"></a>  c_line.end1[1] = 0.0;
+  c_line.end2[0] = 0.0;
+  c_line.end2[1] = 1.0;
+
+  ProUtil2DPointTrans(matrix_data.sec_trf, c_line.end1, c_line.end1);
+<a name="anchor-39"></a>  ProUtil2DPointTrans(matrix_data.sec_trf, c_line.end2, c_line.end2);
+
+  status = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;c_line, &amp;ctr_line_id);
+  ERROR_CHECK(&quot;UserSectionEntityAdd - 1&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+<a name="anchor-40"></a>  status = ProSectionEntityConstructionSet(section, ctr_line_id, PRO_B_FALSE);
+  ERROR_CHECK(&quot;ProSectionEntityConstructionSet&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+		
+/* =============================================================== *\
+<a name="anchor-41"></a>   		Add left vertical line ...
+\* =============================================================== */
+  line.type = PRO_2D_LINE;
+  line.end1[0] = offsets[1];
+  line.end1[1] = offsets[0];
+<a name="anchor-42"></a>  line.end2[0] = offsets[1];
+  line.end2[1] = offsets[0] + 50.0;
+
+  ProUtil2DPointTrans(matrix_data.sec_trf, line.end1, line.end1);
+  ProUtil2DPointTrans(matrix_data.sec_trf, line.end2, line.end2);
+<a name="anchor-43"></a>
+  status = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;line, &amp;lt_line_id);
+  ERROR_CHECK(&quot;UserSectionEntityAdd - 1&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-44"></a>/* =============================================================== *\
+   		Add top line ...
+\* =============================================================== */
+  line.type = PRO_2D_LINE;
+  line.end1[0] = offsets[1];
+<a name="anchor-45"></a>  line.end1[1] = offsets[0] + 50.0;
+  line.end2[0] = offsets[1] + 25.0;
+  line.end2[1] = offsets[0] + 50.0;
+
+  ProUtil2DPointTrans(matrix_data.sec_trf, line.end1, line.end1);
+<a name="anchor-46"></a>  ProUtil2DPointTrans(matrix_data.sec_trf, line.end2, line.end2);
+	
+  status = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;line, &amp;top_line_id);
+  ERROR_CHECK(&quot;UserSectionEntityAdd - 2&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+<a name="anchor-47"></a>
+/* =============================================================== *\
+   		Add upper arc ...
+\* =============================================================== */
+  arc.type = PRO_2D_ARC;
+<a name="anchor-48"></a>  arc.center[0] = offsets[1] + 40.0; 
+  arc.center[1] = offsets[0] + 50.0;
+  arc.start_angle =  PI + matrix_data.angle;
+  arc.end_angle = 1.5*PI + matrix_data.angle;
+  arc.radius = 15.0;
+<a name="anchor-49"></a>
+  ProUtil2DPointTrans(matrix_data.sec_trf, arc.center, arc.center);
+
+  status = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;arc, &amp;upper_arc_id);
+  ERROR_CHECK(&quot;UserSectionEntityAdd - 3&quot;, &quot;UserSectionBuild&quot;, status);
+<a name="anchor-50"></a>  if (status != PRO_TK_NO_ERROR) return status;
+
+/* =============================================================== *\
+   		Add right vertical line ...
+\* =============================================================== */
+<a name="anchor-51"></a>  line.type = PRO_2D_LINE;
+  line.end1[0] = offsets[1] + 40.0;
+  line.end1[1] = offsets[0] + 35.0;
+  line.end2[0] = offsets[1] + 40.0;
+  line.end2[1] = offsets[0] + 10.0;
+<a name="anchor-52"></a>
+  ProUtil2DPointTrans(matrix_data.sec_trf, line.end1, line.end1);
+  ProUtil2DPointTrans(matrix_data.sec_trf, line.end2, line.end2);
+
+  status = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;line, &amp;rt_line_id);
+<a name="anchor-53"></a>  ERROR_CHECK(&quot;UserSectionEntityAdd - 4&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+/* =============================================================== *\
+   		Add lower arc ...
+<a name="anchor-54"></a>\* =============================================================== */
+  arc.type = PRO_2D_ARC;
+  arc.center[0] = offsets[1] + 40.0; 
+  arc.center[1] = offsets[0];
+  arc.start_angle = 0.5*PI + matrix_data.angle;
+<a name="anchor-55"></a>  arc.end_angle = PI + matrix_data.angle; 
+  arc.radius = 10.0;
+
+  ProUtil2DPointTrans(matrix_data.sec_trf, arc.center, arc.center);
+
+<a name="anchor-56"></a>  status = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;arc, &amp;lower_arc_id);
+  ERROR_CHECK(&quot;UserSectionEntityAdd - 5&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+/* =============================================================== *\
+<a name="anchor-57"></a>   		Add bottom line ...
+\* =============================================================== */
+  line.type = PRO_2D_LINE;
+  line.end1[0] = offsets[1] + 30.0;
+  line.end1[1] = offsets[0];
+<a name="anchor-58"></a>  line.end2[0] = offsets[1];
+  line.end2[1] = offsets[0];
+
+  ProUtil2DPointTrans(matrix_data.sec_trf, line.end1, line.end1);
+  ProUtil2DPointTrans(matrix_data.sec_trf, line.end2, line.end2);
+<a name="anchor-59"></a>
+  status = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;line, &amp;btm_line_id);
+  ERROR_CHECK(&quot;UserSectionEntityAdd - 6&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-60"></a>/* =============================================================== *\
+   		Add dimension for left line
+\* =============================================================== */
+
+  ent_id[0] = lt_line_id;
+<a name="anchor-61"></a>  pt_type[0] = PRO_ENT_WHOLE;
+  place_pnt[0] = offsets[1] - 2.0;
+  place_pnt[1] = offsets[0] + 25.0;
+
+  ProUtil2DPointTrans(matrix_data.sec_trf, place_pnt, place_pnt);
+<a name="anchor-62"></a>
+  status = ProSecdimCreate(section, ent_id, pt_type, 1, PRO_TK_DIM_LINE, place_pnt, &amp;ll_dim_id); 
+  ERROR_CHECK(&quot;ProSecdimCreate - 1&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-63"></a>/* =============================================================== *\
+   	Add dimension for top line
+\* =============================================================== */
+
+  ent_id[0] = top_line_id;
+<a name="anchor-64"></a>  pt_type[0] = PRO_ENT_WHOLE;
+  place_pnt[0] = offsets[1] + 13.0;
+  place_pnt[1] = offsets[0] + 52.0;
+
+  ProUtil2DPointTrans(matrix_data.sec_trf, place_pnt, place_pnt);
+<a name="anchor-65"></a>
+  status = ProSecdimCreate(section, ent_id, pt_type, 1, PRO_TK_DIM_LINE, place_pnt, &amp;tl_dim_id); 
+  ERROR_CHECK(&quot;ProSecdimCreate - 2&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-66"></a>/* =============================================================== *\
+   	Add dimension for upper arc
+\* =============================================================== */
+
+  ent_id[0] = upper_arc_id;
+<a name="anchor-67"></a>  pt_type[0] = PRO_ENT_WHOLE;
+  place_pnt[0] = offsets[1] + 42.0;
+  place_pnt[1] = offsets[0] + 42.0;
+
+  ProUtil2DPointTrans(matrix_data.sec_trf, place_pnt, place_pnt);
+<a name="anchor-68"></a>
+  status = ProSecdimCreate(section, ent_id, pt_type, 1, PRO_TK_DIM_RAD, place_pnt, &amp;ua_dim_id); 
+  ERROR_CHECK(&quot;ProSecdimCreate - 3&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-69"></a>/* =============================================================== *\
+   	Add dimension for lower arc
+\* =============================================================== */
+
+  ent_id[0] = lower_arc_id;
+<a name="anchor-70"></a>  pt_type[0] = PRO_ENT_WHOLE;
+  place_pnt[0] = offsets[1] +42.0;
+  place_pnt[1] = offsets[0] + 5.0;
+
+  ProUtil2DPointTrans(matrix_data.sec_trf, place_pnt, place_pnt);
+<a name="anchor-71"></a>
+  status = ProSecdimCreate(section, ent_id, pt_type, 1, PRO_TK_DIM_RAD, place_pnt, &amp;la_dim_id); 
+  ERROR_CHECK(&quot;ProSecdimCreate - 4&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-72"></a>/* =============================================================== *\
+   	Add section dimension between center line and left line
+\* =============================================================== */
+	
+  c_ent_id[0] = ctr_line_id;
+<a name="anchor-73"></a>  c_ent_id[1] = lt_line_id;
+  proj_pt_type[0] = PRO_ENT_WHOLE;	
+  proj_pt_type[1] = PRO_ENT_WHOLE;	
+  place_pnt[0] = offsets[1] - 2.0;
+  place_pnt[1] = offsets[0] + 15.0;
+<a name="anchor-74"></a>
+  ProUtil2DPointTrans(matrix_data.sec_trf, place_pnt, place_pnt);
+
+  status = ProSecdimCreate(section, c_ent_id, proj_pt_type, 2, PRO_TK_DIM_LINE_LINE, place_pnt, &amp;cl_dim_id);
+  ERROR_CHECK(&quot;ProSecdimCreate - 5&quot;, &quot;UserSectionBuild&quot;, status);
+<a name="anchor-75"></a>  if (status != PRO_TK_NO_ERROR) return status;
+
+  status = ProSecdimValueSet(section, cl_dim_id, offsets[1]);
+  ERROR_CHECK(&quot;ProSecdimValueSet&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+<a name="anchor-76"></a>
+  /* =============================================================== *\
+   	Add section dimension between center line and left projection
+	entity
+\* =============================================================== */
+<a name="anchor-77"></a>
+  proj_ent_id[0] = ctr_line_id;
+  proj_ent_id[1] = proj_ids[1];
+  proj_pt_type[0] = PRO_ENT_WHOLE;	
+  proj_pt_type[1] = PRO_ENT_WHOLE;	
+<a name="anchor-78"></a>  place_pnt[0] = -2.0;
+  place_pnt[1] = 15.0;
+
+  ProUtil2DPointTrans(matrix_data.sec_trf, place_pnt, place_pnt);
+
+<a name="anchor-79"></a>  status = ProSecdimCreate(section, proj_ent_id, proj_pt_type, 2, PRO_TK_DIM_LINE_LINE, place_pnt, &amp;proj_dim_id[0]);
+  ERROR_CHECK(&quot;ProSecdimCreate - 5&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+  status = ProSecdimValueSet(section, proj_dim_id[0], 0.0);
+<a name="anchor-80"></a>  ERROR_CHECK(&quot;ProSecdimValueSet&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+  /* =============================================================== *\
+   	Add section dimension between bottom proj ent and bottom line
+<a name="anchor-81"></a>\* =============================================================== */
+	
+  proj_ent_id[0] = btm_line_id;
+  proj_ent_id[1] = proj_ids[0];
+  proj_pt_type[0] = PRO_ENT_WHOLE;	
+<a name="anchor-82"></a>  proj_pt_type[1] = PRO_ENT_WHOLE;	
+  place_pnt[0] = offsets[1] + 20.0;
+  place_pnt[1] = offsets[0] - 3.0;
+
+  ProUtil2DPointTrans(matrix_data.sec_trf, place_pnt, place_pnt);
+<a name="anchor-83"></a>
+  status = ProSecdimCreate(section, proj_ent_id, proj_pt_type, 2, PRO_TK_DIM_LINE_LINE, place_pnt, &amp;proj_dim_id[1]);
+  ERROR_CHECK(&quot;ProSecdimCreate - 6&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-84"></a>  status = ProSecdimValueSet(section, proj_dim_id[1], offsets[0]);
+  ERROR_CHECK(&quot;ProSecdimValueSet&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR) return status;
+
+  /* =============================================================== *\
+<a name="anchor-85"></a>   		Solve and regenerate the section
+  \* =============================================================== */
+
+  status = ProSecerrorAlloc(&amp;sec_errors);
+  ERROR_CHECK(&quot;ProSecerrorAlloc&quot;, &quot;UserSectionBuild&quot;, status);
+<a name="anchor-86"></a>  if (status != PRO_TK_NO_ERROR) return status;
+
+  status = ProSectionSolve(section, &amp;sec_errors);
+  if (status != 0)
+    {
+<a name="anchor-87"></a>      UserSecerrorPrint (  &amp;sec_errors );
+      return status; 
+    }
+
+  status = ProSectionRegenerate(section, &amp;sec_errors);
+<a name="anchor-88"></a>  if (status != 0)
+    {
+      UserSecerrorPrint (  &amp;sec_errors );
+      return status; 
+    }
+<a name="anchor-89"></a>	
+  status = ProSelectionFree(&amp;(matrix_data.sk_plane));
+  ERROR_CHECK(&quot;ProSelectionFree&quot;, &quot;UserSectionBuild&quot;, status);
+
+  free(temp1);
+<a name="anchor-90"></a>  free(temp2);
+
+  temp1 = NULL;
+  temp2 = NULL; 
+
+<a name="anchor-91"></a>  return(status);
+}
+
+
+/* =============================================================== *\
+<a name="anchor-92"></a>   Function: UserSelectSketchPlaneRefs
+   Purpose: Select references for sketch plane and orientation plane
+\* =============================================================== */
+
+ProError UserSelectSketchPlaneRefs(ProSelection **sketch_refs)
+<a name="anchor-93"></a>{
+  ProSelection *sel;
+  int num_sel;
+  ProError status;
+
+<a name="anchor-94"></a>  if (temp1 == NULL)
+    temp1 = (ProSelection *)calloc(2, sizeof(ProSelection)); 
+
+  ProStringToWstring(msgfile, &quot;msg_ug3dsketch.txt&quot;);
+
+<a name="anchor-95"></a>  status = ProMessageDisplay(msgfile, &quot;USER Select sketch plane&quot;);
+  ERROR_CHECK(&quot;ProMessageDisplay&quot;, &quot;UserSectionBuild&quot;, status);
+  status = ProSelect(&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;num_sel);
+  ERROR_CHECK(&quot;ProSelect&quot;, &quot;UserSectionBuild&quot;, status);
+  status = ProSelectionCopy(sel[0],&amp;temp1[0]);
+<a name="anchor-96"></a>  ERROR_CHECK(&quot;ProSelectionCopy&quot;, &quot;UserSectionBuild&quot;, status);
+
+  status = ProMessageDisplay(msgfile, &quot;USER Select top plane for orientation&quot;);
+  ERROR_CHECK(&quot;ProMessageDisplay&quot;, &quot;UserSectionBuild&quot;, status);
+  status = ProSelect(&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;num_sel);
+<a name="anchor-97"></a>  ERROR_CHECK(&quot;ProSelect&quot;, &quot;UserSectionBuild&quot;, status);
+  status = ProSelectionCopy(sel[0], &amp;temp1[1]);
+  ERROR_CHECK(&quot;ProSelectionCopy&quot;, &quot;UserSectionBuild&quot;, status);
+
+  *sketch_refs = temp1; 
+<a name="anchor-98"></a>
+  return(status);
+}
+
+
+<a name="anchor-99"></a>/* =============================================================== *\
+   Function: UserSelectProjectionEntities
+   Purpose: Select projection entity references from existing geometry
+\* =============================================================== */
+
+<a name="anchor-100"></a>ProError UserSelectProjectionEntities(ProSelection **proj_refs)
+{
+
+  ProSelection *sel;
+  int num_sel;
+<a name="anchor-101"></a>  ProError status;
+
+  if (temp2== NULL)
+    temp2= (ProSelection *)calloc(2, sizeof(ProSelection));
+  /* =============================================================== *\
+<a name="anchor-102"></a>     Prompt user to select reference geometry
+  \* =============================================================== */
+  ProStringToWstring(msgfile, &quot;msg_ug3dsketch.txt&quot;);
+
+  status = ProMessageDisplay(msgfile, 
+<a name="anchor-103"></a>		&quot;USER Select first projection reference (bottom edge of sketch plane)&quot;);
+  ERROR_CHECK(&quot;ProMessageDisplay&quot;, &quot;UserSectionBuild&quot;, status);
+  status = ProSelect(&quot;edge&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;num_sel);
+  ERROR_CHECK(&quot;ProSelect&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR || num_sel &lt; 1)
+<a name="anchor-104"></a>    return(status);
+  status = ProSelectionCopy(sel[0], &amp;temp2[0]);
+  ERROR_CHECK(&quot;ProSelectionCopy&quot;, &quot;UserSectionBuild&quot;, status);
+	
+  status = ProMessageDisplay(msgfile, 
+<a name="anchor-105"></a>		&quot;USER Select second projection reference (left edge of sketch plane)&quot;);
+  ERROR_CHECK(&quot;ProMessageDisplay&quot;, &quot;UserSectionBuild&quot;, status);
+  status = ProSelect(&quot;edge&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;num_sel);
+  ERROR_CHECK(&quot;ProSelect&quot;, &quot;UserSectionBuild&quot;, status);
+  if (status != PRO_TK_NO_ERROR || num_sel &lt; 1)
+<a name="anchor-106"></a>    return(status);
+  status = ProSelectionCopy(sel[0], &amp;temp2[1]);
+  ERROR_CHECK(&quot;ProSelectionCopy&quot;, &quot;UserSectionBuild&quot;, status);
+
+  *proj_refs = temp2;
+<a name="anchor-107"></a>
+  return(status);
+
+}
+
+<a name="anchor-108"></a>
+ProError UserSelectOffsetDistances(double *offset_vals)
+{
+
+  ProError status;
+<a name="anchor-109"></a>
+  ProStringToWstring(msgfile, &quot;msg_ug3dsketch.txt&quot;);
+
+  status = ProMessageDisplay(msgfile, 
+		&quot;USER Enter offset distance from first projection reference&quot;);
+<a name="anchor-110"></a>  ERROR_CHECK(&quot;ProMessageDisplay&quot;, &quot;UserSelectOffsetDistances&quot;, status);
+  status = ProMessageDoubleRead(NULL, &amp;offset_vals[0]);
+  ERROR_CHECK(&quot;ProMessageDoubleRead&quot;, &quot;UserSelectOffsetDistances&quot;, status);
+
+
+<a name="anchor-111"></a>  status = ProMessageDisplay(msgfile, 
+		&quot;USER Enter offset distance from second projection reference&quot;);
+  ERROR_CHECK(&quot;ProMessageDisplay&quot;, &quot;UserSelectOffsetDistances&quot;, status);
+  status = ProMessageDoubleRead(NULL, &amp;offset_vals[1]);
+  ERROR_CHECK(&quot;ProMessageDoubleRead&quot;, &quot;UserSelectOffsetDistances&quot;, status);
+<a name="anchor-112"></a>
+  return(status);
+
+}
+
+<a name="anchor-113"></a>ProError UserCreateTrfMatrix(Matrix_data *m_data)
+{
+
+  ProPoint3d origin; 
+  double sel_pnt[3], proj_sel_pnt[3], sel_vect[3]; 
+<a name="anchor-114"></a>  double x_plane[3];
+  ProVector x, y, sk_plane_norm;
+  ProVector d1[2], d2[2], norm;
+  int status;
+  ProMatrix inv_sk_mtrx;
+<a name="anchor-115"></a>  ProModelitem sk_modelitem;
+  ProSurface sk_surf;
+  ProUvParam sk_param;
+  /* =============================================================== *\
+   	Project point selected on sketch plane onto section
+<a name="anchor-116"></a>\* =============================================================== */
+
+  ProUtilMatrixInvert(m_data->sk_mtrx, inv_sk_mtrx);
+
+  status = ProSelectionUvParamGet(m_data->sk_plane, sk_param);
+<a name="anchor-117"></a>  ERROR_CHECK(&quot;ProSelectionUvParamGet&quot;, &quot;UserCreateTrfMatrix&quot;, status);
+  status = ProSelectionModelitemGet(m_data->sk_plane, &amp;sk_modelitem);
+  ERROR_CHECK(&quot;ProSelectionModelitemGet&quot;, &quot;UserCreateTrfMatrix&quot;, status);
+  status = ProGeomitemToSurface((ProGeomitem *)&amp;sk_modelitem, &amp;sk_surf);
+  ERROR_CHECK(&quot;ProGeomitemToSurface&quot;, &quot;UserCreateTrfMatrix&quot;, status);
+<a name="anchor-118"></a>  status = ProSurfaceXyzdataEval(sk_surf, sk_param, sel_pnt, d1, d2, norm);
+  ERROR_CHECK(&quot;ProSurfaceXyzdataEval&quot;, &quot;UserCreateTrfMatrix&quot;, status);
+
+  ProUtilPointTrans(inv_sk_mtrx, sel_pnt, proj_sel_pnt);
+  proj_sel_pnt[2] = 0.0;
+<a name="anchor-119"></a>
+  /* =============================================================== *\
+  	Create x and y vectors of transformation matrix such that 
+	selected point on sketch plane is in first quadrant
+\* =============================================================== */
+<a name="anchor-120"></a>
+  ProUtilLineLineX(m_data->x_axis, m_data->y_axis, origin);
+
+  ProUtilVectorDiff(proj_sel_pnt, origin, sel_vect);
+  sel_vect[2] = 0.0;
+<a name="anchor-121"></a>  ProUtilVectorNormalize(sel_vect, sel_vect);
+
+  ProUtilVectorDiff(m_data->x_axis[0], m_data->x_axis[1], x);
+  ProUtilVectorNormalize(x, x);
+
+<a name="anchor-122"></a>  ProUtilVectorDiff(m_data->y_axis[0], m_data->y_axis[1], y);
+  ProUtilVectorNormalize(y, y);	
+	
+/* =========  Selected point should be in first quadrant  ======= */
+
+<a name="anchor-123"></a>  if ((ProUtilVectorDot(x,sel_vect)) &lt; 0.0)
+    ProUtilVectorScale(-1.0, x, x);
+
+  if ((ProUtilVectorDot(y,sel_vect)) &lt; 0.0)
+    ProUtilVectorScale(-1.0, y, y);
+<a name="anchor-124"></a>
+/* ========= Make sure surface normal is properly oriented   ======= */
+/* ========= with respect to x and y   ============================= */
+
+
+<a name="anchor-125"></a>  ProUtilVectorCross(x, y, sk_plane_norm);
+  ProUtilVectorTrans(m_data->sk_mtrx, sk_plane_norm, sk_plane_norm);
+  ProUtilMatrixCopy(NULL, m_data->sec_trf);
+
+  if ((ProUtilVectorDot(sk_plane_norm, m_data->sk_mtrx[2])) &lt; 0.0)
+<a name="anchor-126"></a>    {
+      ProUtilVectorCopy(y, m_data->sec_trf[0]);
+      ProUtilVectorCopy(x, m_data->sec_trf[1]);
+      ProUtilVectorCopy(NULL, m_data->sec_trf[2]);
+      ProUtilVectorCopy(origin, m_data->sec_trf[3]);
+<a name="anchor-127"></a>    }
+
+  else
+    {
+      ProUtilVectorCopy(x, m_data->sec_trf[0]);
+<a name="anchor-128"></a>      ProUtilVectorCopy(y, m_data->sec_trf[1]);
+      ProUtilVectorCopy(NULL, m_data->sec_trf[2]);
+      ProUtilVectorCopy(origin, m_data->sec_trf[3]);
+    }
+		
+<a name="anchor-129"></a>  m_data->sec_trf[2][2] = m_data->sec_trf[3][3] = 1.0;
+
+/* =============================================================== *\
+		Calculate rotation angle  	
+\* =============================================================== */
+<a name="anchor-130"></a>  x_plane[0] = 1.0;
+  x_plane[1] = x_plane[2] = 0.0;
+  ProUtilVectorCross(x_plane, m_data->sk_mtrx[0], norm);
+  ProUtilVectorCross(m_data->sec_trf[0], m_data->sec_trf[1], sk_plane_norm);
+  m_data->angle = fabs(acos(ProUtilVectorDot(x_plane, m_data->sec_trf[0])));
+<a name="anchor-131"></a>  if (ProUtilVectorDot(norm, sk_plane_norm) &lt; 0.0)
+    m_data->angle *= -1.0;
+
+  return(status);
+
+<a name="anchor-132"></a>}
+
+/*====================================================================*\
+FUNCTION: UserSectionReplace
+PURPOSE:  Menu button action function for section replacement
+<a name="anchor-133"></a>\*====================================================================*/
+ProError UserSectionReplace ()
+{
+  ProError status;
+  ProSelection* sel_array;
+<a name="anchor-134"></a>  int n_sels;
+  ProFeature feat;
+  ProElement sk_elem_tree;
+  ProElempath sk_elem_path;
+  ProElempathItem elem_path_data [3];
+<a name="anchor-135"></a>  ProElement sk_elem;
+  ProSection sect_handle;
+  ProFeatureCreateOptions *options = 0;
+  int n_opts = 1;
+  ProErrorlist redef_errs;
+<a name="anchor-136"></a>  
+  elem_path_data [0].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+  elem_path_data [0].path_item.elem_id = PRO_E_STD_SECTION;
+  elem_path_data [1].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+  elem_path_data [1].path_item.elem_id = PRO_E_SKETCHER;
+<a name="anchor-137"></a>  
+  status = ProSelect (&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel_array, &amp;n_sels);
+  ERROR_CHECK (&quot;ProSelect&quot;, &quot;UserSectionReplace&quot;,  status);
+  if (status != PRO_TK_NO_ERROR)
+	return status;
+<a name="anchor-138"></a>
+  status = ProSelectionModelitemGet (sel_array [0], &amp;feat);
+  ERROR_CHECK (&quot;ProSelectionModelitemGet&quot;, &quot;UserSectionReplace&quot;,  status);
+
+  /*--------------------------------------------------------------------*\
+<a name="anchor-139"></a>		Find the sketch handle from the feature handle.
+  \*--------------------------------------------------------------------*/
+  status = ProFeatureElemtreeExtract (&amp;feat, NULL, PRO_FEAT_EXTRACT_NO_OPTS, &amp;sk_elem_tree);
+  ERROR_CHECK (&quot;ProFeatureElemtreeExtract()&quot;, &quot;UserSectionReplace&quot;,  status);
+
+<a name="anchor-140"></a>  status = ProElempathAlloc (&amp;sk_elem_path);
+  ERROR_CHECK (&quot;ProElempathAlloc()&quot;, &quot;UserSectionReplace&quot;,  status);
+  
+  status = ProElempathDataSet (sk_elem_path, elem_path_data, 2);
+  ERROR_CHECK (&quot;ProElempathDataSet()&quot;, &quot;UserSectionReplace&quot;,  status);
+<a name="anchor-141"></a>  
+  status = ProElemtreeElementGet (sk_elem_tree, sk_elem_path, 
+                                  &amp;sk_elem);
+  ERROR_CHECK (&quot;ProElemtreeElementGet()&quot;, &quot;UserSectionReplace&quot;,  status);
+  
+<a name="anchor-142"></a>  ProElempathFree (&amp;sk_elem_path);
+  
+  status = ProElementSpecialvalueGet(sk_elem, NULL, (ProAppData *) &amp;sect_handle);
+  ERROR_CHECK (&quot;ProElementSpecialvalueGet()&quot;, &quot;UserSectionReplace&quot;,  status);
+
+<a name="anchor-143"></a>  /*--------------------------------------------------------------------*\
+		Replace the section entity
+  \*--------------------------------------------------------------------*/
+  status = UserSectionCircleToEllipseReplace (sect_handle);
+  ERROR_CHECK (&quot;UserSectionCircleToEllipseReplace&quot;, &quot;UserSectionReplace&quot;,  status);
+<a name="anchor-144"></a>
+  if (status == PRO_TK_NO_ERROR)
+  {
+    status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+    1, (ProArray*)&amp;options);
+<a name="anchor-145"></a>
+    options[0]= PRO_FEAT_CR_DO_NOT_DISPLAY;
+
+	status = ProFeatureWithoptionsRedefine (NULL, &amp;feat, sk_elem_tree,
+    options, PRO_REGEN_NO_FLAGS, &amp;redef_errs);
+<a name="anchor-146"></a>
+	ERROR_CHECK (&quot;ProFeatureWithoptionsRedefine()&quot;, &quot;UserSectionReplace&quot;,  status);
+
+    status = ProArrayFree((ProArray*)&amp;options);
+
+<a name="anchor-147"></a>	ProWindowRepaint (-1);
+  }
+ 
+  return (1);
+}
+<a name="anchor-148"></a>
+/*====================================================================*\
+FUNCTION: UserSectionCircleToEllipseReplace
+PURPOSE:  Replace a circular sketch entity with ellipse entity
+\*====================================================================*/
+<a name="anchor-149"></a>ProError UserSectionCircleToEllipseReplace (ProSection sect_handle)
+{
+  ProError status;
+  ProBoolean is_proj;
+  ProIntlist id_array;
+<a name="anchor-150"></a>  int array_size, i, replace_id;
+  Pro2dEntdef* ent_def;
+  
+  Pro2dEllipsedef ellipse_def;
+  Pro2dCircledef* circle_def;
+<a name="anchor-151"></a>  int project_1 = -1;
+  int project_2 = -1;
+  int circle_id = -1;
+  int ellipse_id;
+
+<a name="anchor-152"></a>  int ent_ids [2];
+  ProSectionPointType pnt_types [2];
+  Pro2dPnt place_pnt = {0.0, 0.0};
+  int dim_id;
+  
+<a name="anchor-153"></a>  ProWSecerror sec_errs;
+ 
+/*--------------------------------------------------------------------*\
+	Get existing entities (needed to do the replacement)
+\*--------------------------------------------------------------------*/
+<a name="anchor-154"></a>  status = ProSectionEntityIdsGet (sect_handle, &amp;id_array, &amp;array_size);
+  ERROR_CHECK (&quot;ProSectionEntityIdsGet()&quot;, &quot;UserSectionCircleToEllipseReplace&quot;, status);
+  
+  for (i = 0; i &lt; array_size; i++)
+    {
+<a name="anchor-155"></a>      status = ProSectionEntityGet (sect_handle, id_array[i], &amp;ent_def);
+   
+	  if (ent_def->type == PRO_2D_LINE)
+	  {
+		/*--------------------------------------------------------------------*\
+<a name="anchor-156"></a>			Check for reference entity
+		\*--------------------------------------------------------------------*/
+		status = ProSectionEntityIsProjection (sect_handle, id_array [i], &amp;is_proj);
+		
+		if (!is_proj)
+<a name="anchor-157"></a>			return /*PRO_TK_UNAV_SEC;*/13;
+		else
+		{
+			if (project_1 == -1)
+				project_1 = id_array [i];
+<a name="anchor-158"></a>			else if (project_2 == -1)
+				project_2 = id_array [i];
+			else
+				return /*PRO_TK_UNAV_SEC;*/14;
+		}
+<a name="anchor-159"></a>	  }
+	  else if (ent_def->type == PRO_2D_CIRCLE)
+	  {
+		circle_id = id_array [i];
+		circle_def = (Pro2dCircledef*)ent_def;
+<a name="anchor-160"></a>	  }		
+	  else
+		return /*PRO_TK_UNAV_SEC;*/15;
+    }
+  if (project_1 == -1 || project_2 == -1 || circle_id == -1)
+<a name="anchor-161"></a>	  return /*PRO_TK_UNAV_SEC;*/16;
+
+  ProArrayFree ((ProArray*)&amp;id_array);
+ 
+/*--------------------------------------------------------------------*\
+<a name="anchor-162"></a>	Add the new entity (ellipse)
+\*--------------------------------------------------------------------*/
+  ellipse_def.type = PRO_2D_ELLIPSE;
+  memcpy (ellipse_def.origin, circle_def->center, sizeof (Pro2dPnt));
+  ellipse_def.x_radius = circle_def->radius * 1.2;
+<a name="anchor-163"></a>  ellipse_def.y_radius = circle_def->radius * 0.8;
+  
+  status = ProSectionEntityAdd (sect_handle, (Pro2dEntdef*)&amp;ellipse_def, &amp;ellipse_id);            
+  ERROR_CHECK (&quot;ProSectionEntityAdd()&quot;, &quot;UserSectionCircleToEllipseReplace&quot;, status);
+
+<a name="anchor-164"></a>/*--------------------------------------------------------------------*\
+	Manually dimension to new entity to the reference entities
+	 -- The replacement process will remove projected entities not currently in use.
+	 -- Adding dimensions from the replacement ellipse to the projected entities
+	       forces the entities to remain.
+<a name="anchor-165"></a>\*--------------------------------------------------------------------*/
+  ent_ids [0] = project_1;
+  ent_ids [1] = ellipse_id; 
+  pnt_types [0] = PRO_ENT_WHOLE;
+  pnt_types [1] = PRO_ENT_CENTER;
+<a name="anchor-166"></a>    
+  status = ProSecdimCreate (sect_handle, ent_ids, pnt_types, 2, PRO_TK_DIM_LINE_POINT, place_pnt, &amp;dim_id);
+  ERROR_CHECK (&quot;ProSecdimCreate()&quot;, &quot;UserSectionCircleToEllipseReplace&quot;, status);
+
+  ent_ids [0] = project_2;
+<a name="anchor-167"></a>  status = ProSecdimCreate (sect_handle, ent_ids, pnt_types, 2, PRO_TK_DIM_LINE_POINT, place_pnt, &amp;dim_id);
+  ERROR_CHECK (&quot;ProSecdimCreate()&quot;, &quot;UserSectionCircleToEllipseReplace&quot;, status);
+ 
+/*--------------------------------------------------------------------*\
+	Perform the replacement
+<a name="anchor-168"></a>\*--------------------------------------------------------------------*/
+  status = ProSectionEntityReplace (sect_handle, circle_id, 
+                                    ellipse_id);
+  ERROR_CHECK (&quot;ProSectionEntityReplace()&quot;, &quot;UserSectionCircleToEllipseReplace&quot;, status);
+
+<a name="anchor-169"></a>/*--------------------------------------------------------------------*\
+	Finish up dimensioning (x- and y- radius dimensions)
+\*--------------------------------------------------------------------*/
+  status = ProSectionAutodim (sect_handle, &amp;sec_errs);
+  ERROR_CHECK (&quot;ProSectionAutodim()&quot;, &quot;UserSectionCircleToEllipseReplace&quot;, status);
+<a name="anchor-170"></a>
+  if ( status != PRO_TK_NO_ERROR )
+    {
+      UserSecerrorPrint (  &amp;sec_errs );
+      return status; 
+<a name="anchor-171"></a>    }
+
+  status = ProSectionRegenerate (sect_handle, &amp;sec_errs);
+  ERROR_CHECK (&quot;ProSectionRegenerate()&quot;, &quot;UserSectionCircleToEllipseReplace&quot;, status);
+
+<a name="anchor-172"></a>  if ( status != PRO_TK_NO_ERROR )
+    {
+      UserSecerrorPrint (  &amp;sec_errs );
+    }
+
+<a name="anchor-173"></a>  return (status);
+}
+
+/* =============================================================== *\
+   Function: UserSectionPointBuild(ProSection section, ProSelection *sketch_refs)
+<a name="anchor-174"></a>   Purpose:  Creates a 3D Section consisting of Geometry Points
+\* =============================================================== */
+ProError UserSectionPointBuild(ProSection section, ProSelection *sketch_refs)
+{
+  int 		status, i, num_errors, err_counter, proj_ids[2];
+<a name="anchor-175"></a>  int 		point_id; 
+  double 	offsets[2];
+  char 		msg[PRO_PATH_SIZE];
+  ProMsg 	wmsg;
+
+<a name="anchor-176"></a>  Matrix_data 	matrix_data;
+
+  ProSelection 	*proj_ents;
+  ProWSecerror 	sec_errors;
+  Pro2dPointdef point;
+<a name="anchor-177"></a>  Pro2dLinedef  *btm_linedef, *left_linedef;
+  
+  ProStringToWstring(msgfile, &quot;msg_ug3dsketch.txt&quot;);
+  
+/* =============================================================== *\
+<a name="anchor-178"></a>   	Obtain projection entity handles as ProSelection structures
+\* =============================================================== */
+
+  status = UserSelectProjectionEntities(&amp;proj_ents);
+  ERROR_CHECK(&quot;UserSelectrojectionEntities&quot;, &quot;UserSectionPointBuild&quot;, status);
+<a name="anchor-179"></a>
+/* =============================================================== *\
+    Project reference edges onto section
+\* =============================================================== */
+
+<a name="anchor-180"></a>  for (i = 0; i &lt; 2; i++)
+    {
+      status = ProSectionEntityFromProjection(section, proj_ents[i], &amp;proj_ids[i]);
+      ERROR_CHECK(&quot;ProSectionEntityFromProjection&quot;, &quot;UserSectionPointBuild&quot;, status);
+      if (status != PRO_TK_NO_ERROR)
+<a name="anchor-181"></a>	return(status);
+    }
+  
+/* =============================================================== *\
+    Create section csys from edges, and obtion transformation 
+<a name="anchor-182"></a>	matrix between sketch plane csys and section csys
+\* =============================================================== */
+  
+  status = ProSectionEntityGet(section, proj_ids[0], (Pro2dEntdef **)&amp;btm_linedef);
+  ERROR_CHECK(&quot;ProSectionEntityGet&quot;, &quot;UserSectionPointBuild&quot;, status);
+<a name="anchor-183"></a>  
+  for (i = 0; i &lt; 2; i++)
+    {
+      matrix_data.x_axis[0][i] = btm_linedef->end1[i];
+      matrix_data.x_axis[1][i] = btm_linedef->end2[i];
+<a name="anchor-184"></a>      matrix_data.x_axis[i][2] = 0.0; 
+    }
+  
+  status = ProSectionEntityGet(section, proj_ids[1], (Pro2dEntdef **)&amp;left_linedef);
+  ERROR_CHECK(&quot;ProSectionEntityGet&quot;, &quot;UserSectionPointBuild&quot;, status);
+<a name="anchor-185"></a>  
+  for (i = 0; i &lt; 2; i++)
+    {
+      matrix_data.y_axis[0][i] = left_linedef->end1[i]; 
+      matrix_data.y_axis[1][i] = left_linedef->end2[i];
+<a name="anchor-186"></a>      matrix_data.y_axis[i][2] = 0.0; 
+    }
+  
+  status = ProSectionLocationGet(section, matrix_data.sk_mtrx);
+  ERROR_CHECK(&quot;ProSectionLocationGet&quot;, &quot;UserCreateTrfMatrix&quot;, status);
+<a name="anchor-187"></a>  
+  status = ProSelectionCopy(sketch_refs[0], &amp;(matrix_data.sk_plane));
+  ERROR_CHECK(&quot;ProSelectionCopy&quot;, &quot;UserSectionPointBuild&quot;, status) ;
+  
+  status = UserCreateTrfMatrix(&amp;matrix_data);
+<a name="anchor-188"></a>  ERROR_CHECK(&quot;UseCreateTrfMatrix&quot;, &quot;UserSectionPointBuild&quot;, status);
+
+/* =============================================================== *\     
+     Obtain offset values from projection entities
+\* =============================================================== */
+<a name="anchor-189"></a>  
+  status = UserSelectOffsetDistances(offsets);
+  ERROR_CHECK(&quot;UserSelectOffsetDistances&quot;, &quot;UserSectionPointBuild&quot;, status);
+  
+/* =============================================================== *\
+<a name="anchor-190"></a>     Add the required point(s)
+     Currently only one point is added 
+     This may be extended to add any number of points
+\* =============================================================== */
+  
+<a name="anchor-191"></a>  point.type    = PRO_2D_POINT;
+  point.pnt[0] = 100; 
+  point.pnt[1] = 100; 
+  
+  ProUtil2DPointTrans(matrix_data.sec_trf, point.pnt, point.pnt ); 
+<a name="anchor-192"></a>
+  status = ProSectionEntityAdd (section, (Pro2dEntdef*)&amp;point, &amp;point_id);
+  ERROR_CHECK(&quot;ProSectionEntityAdd - 1&quot;, &quot;UserSectionPointBuild&quot;, status);
+  status = ProSectionEntityConstructionSet(section, point_id,
+                                           PRO_B_FALSE);
+<a name="anchor-193"></a>  ERROR_CHECK(&quot;ProSectionEntityConstructionSet - 1&quot;, &quot;UserSectionPointBuild&quot;, status);
+
+/* =============================================================== *\
+   	Dimension, Solve and regenerate the section
+\* =============================================================== */
+<a name="anchor-194"></a>
+  status = ProSecerrorAlloc(&amp;sec_errors);
+  ERROR_CHECK(&quot;ProSecerrorAlloc&quot;, &quot;UserSectionPointBuild&quot;, status);
+  
+  status = ProSectionAutodim(section, &amp;sec_errors);
+<a name="anchor-195"></a>  
+  if (status != 0)
+    {    
+      UserSecerrorPrint (  &amp;sec_errors );
+      return status; 
+<a name="anchor-196"></a>    }
+  
+  status = ProSectionRegenerate(section, &amp;sec_errors);
+  if (status != 0)
+    {
+<a name="anchor-197"></a>      UserSecerrorPrint (  &amp;sec_errors );
+      return status; 
+    }
+  
+  status = ProSelectionFree(&amp;(matrix_data.sk_plane));
+<a name="anchor-198"></a>  ERROR_CHECK(&quot;ProSelectionFree&quot;, &quot;UserSectionPointBuild&quot;, status);
+  
+  free(temp1);
+  free(temp2);
+
+<a name="anchor-199"></a>  temp1 = NULL;
+  temp2 = NULL; 
+  
+  return(status);
+}
+<a name="anchor-200"></a>
+/* Purpose : To print the Section errors and then free memory */ 
+ProError UserSecerrorPrint ( ProWSecerror *section_errors )
+{
+  ProError status; 
+<a name="anchor-201"></a>  ProMsg error_message;
+  char error_message_s[PRO_PATH_SIZE];
+  int error_count; 
+  int n_sec, error_id; 
+  
+<a name="anchor-202"></a>  status = ProSecerrorCount ( section_errors, &amp;n_sec ); 
+  ERROR_CHECK (&quot; ProSecerrorCount&quot;, &quot;UserSecerrorPrint&quot;, status ); 
+  
+  ProTKPrintf(&quot;Number of errors in ProWSecerror = %d \n&quot;,n_sec ); 
+  
+<a name="anchor-203"></a>  if ( status == PRO_TK_NO_ERROR )
+    {
+      for ( error_count = 0; error_count &lt; n_sec; error_count++ )
+	{
+	  status = ProSecerrorMsgGet ( *section_errors, error_count, error_message);
+<a name="anchor-204"></a>	  ERROR_CHECK (&quot; ProSecerrorMsgGet&quot;, &quot;UserSecerrorPrint&quot;, status ); 
+	  if ( status == PRO_TK_NO_ERROR )
+	    {
+	      status = ProSecerrorItemGet ( *section_errors, error_count, &amp;error_id);
+	      ERROR_CHECK (&quot; ProSecerrorItemGet&quot;, &quot;UserSecerrorPrint&quot;, status ); 
+<a name="anchor-205"></a>	      if ( status == PRO_TK_NO_ERROR )
+		{
+		  ProWstringToString (error_message_s, error_message);
+		  ProTKPrintf(&quot; %s : Problem ID : %d \n&quot;, error_message_s, error_id );
+		}
+<a name="anchor-206"></a>	    }
+	}
+    }
+  status = ProSecerrorFree ( section_errors ); 
+  ERROR_CHECK (&quot; ProSecerrorFree&quot;, &quot;UserSecerrorPrint&quot;, status ); 
+<a name="anchor-207"></a>  
+  return status; 
+}
+/*===============================================================*\
+
+<a name="anchor-208"></a>  FUNCTION: UserSweepSectionAdd
+  ProError UserSweepSectionAdd ( ProSection ); 
+  PURPOSE:  Creates a 2D sketch for sweep section 
+
+\*===============================================================*/
+<a name="anchor-209"></a>ProError UserSweepSectionAdd ( ProSection section_here )
+{
+  Pro2dLinedef 		line; 
+  ProError 		status; 
+  int 			line_id[4]; 
+<a name="anchor-210"></a>  int 			cline_id1, cline_id2; 
+  
+  ProSelection          *proj_ents;
+  int 			proj_ids[2];
+  Pro2dLinedef          *left_linedef, *btm_linedef;
+<a name="anchor-211"></a>  
+  ProName section_name; 
+  
+  ProWSecerror section_errors; 
+  int n_sec; 
+<a name="anchor-212"></a>  ProMsg error_message;  
+  char error_message_s[100];
+  
+  int i, error_id; 
+
+<a name="anchor-213"></a>  status = ProSecerrorAlloc ( &amp;section_errors ); 
+  ERROR_CHECK (&quot; ProSecerrorAlloc&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+  
+  {
+    /* Adding Projection Entities => Specific to C/S in Sweep */ 
+<a name="anchor-214"></a>
+    /*---------------------------------------------------------------*\
+      Get the projection entity handles as ProSelection structures.
+      \*---------------------------------------------------------------*/
+  
+<a name="anchor-215"></a>    status = UserSelectProjectionEntities (&amp;proj_ents);
+    ERROR_CHECK (&quot; UserSelectProjectionEntities&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+    if (status != PRO_TK_NO_ERROR) return status;
+  
+    /*---------------------------------------------------------------*\
+<a name="anchor-216"></a>      Project the reference edges onto the section.
+      \*---------------------------------------------------------------*/
+  
+    for (i = 0; i &lt; 2; i++)
+      {
+<a name="anchor-217"></a>	status = ProSelectionVerify ( proj_ents[i] ); 
+	ERROR_CHECK (&quot; ProSelectionVerify&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+        if (status != PRO_TK_NO_ERROR) return status;
+
+	status = ProSectionEntityFromProjection ( section_here, proj_ents[i],
+<a name="anchor-218"></a>						  &amp;proj_ids[i]);
+	ERROR_CHECK (&quot; ProSectionEntityFromProjection&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+        if (status != PRO_TK_NO_ERROR) return status;
+      
+      }
+<a name="anchor-219"></a>
+    status = ProSectionEntityGet ( section_here, proj_ids[0],
+				   (Pro2dEntdef**)&amp;left_linedef);
+    ERROR_CHECK (&quot; ProSectionEntityGet&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+    if (status != PRO_TK_NO_ERROR) return status;
+<a name="anchor-220"></a>
+    status = ProSectionEntityGet ( section_here, proj_ids[1],
+				   (Pro2dEntdef**)&amp;btm_linedef);
+    ERROR_CHECK (&quot; ProSectionEntityGet&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+    if (status != PRO_TK_NO_ERROR) return status;
+<a name="anchor-221"></a>
+  }
+
+  line.type = PRO_2D_LINE;
+  line.end1[0] = 0;
+<a name="anchor-222"></a>  line.end1[1] = 0;
+  line.end2[0] = 100; 
+  line.end2[1] = 0; 
+
+  status = ProSectionEntityAdd ( section_here, (Pro2dEntdef*)&amp;line, &amp;line_id[0] ) ;
+<a name="anchor-223"></a>  ERROR_CHECK (&quot; ProSectionEntityAdd&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+	  
+  line.type = PRO_2D_LINE;
+  line.end1[0] = 100;
+<a name="anchor-224"></a>  line.end1[1] = 0;
+  line.end2[0] = 100; 
+  line.end2[1] = 100; 
+
+  status = ProSectionEntityAdd ( section_here, (Pro2dEntdef*)&amp;line, &amp;line_id[1] ) ;
+<a name="anchor-225"></a>  ERROR_CHECK (&quot; ProSectionEntityAdd&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+
+
+  line.type = PRO_2D_LINE;
+<a name="anchor-226"></a>  line.end1[0] = 100;
+  line.end1[1] = 100;
+  line.end2[0] = 0; 
+  line.end2[1] = 100; 
+  
+<a name="anchor-227"></a>  status = ProSectionEntityAdd ( section_here, (Pro2dEntdef*)&amp;line, &amp;line_id[2] ) ;
+  ERROR_CHECK (&quot; ProSectionEntityAdd&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+  
+  line.type = PRO_2D_LINE;
+<a name="anchor-228"></a>  line.end1[0] = 0;
+  line.end1[1] = 100;
+  line.end2[0] = 0; 
+  line.end2[1] = 0; 
+
+<a name="anchor-229"></a>  status = ProSectionEntityAdd ( section_here, (Pro2dEntdef*)&amp;line, &amp;line_id[3] ) ;
+  ERROR_CHECK (&quot; ProSectionEntityAdd&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+	  
+  { 
+<a name="anchor-230"></a>    double epsilon; 
+    status = ProSectionEpsilonGet( section_here, &amp;epsilon );
+    ERROR_CHECK (&quot; ProSectionEpsilonGet&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+
+    ProTKPrintf (&quot;The current epsilon  is %f\n&quot;, epsilon ); 
+<a name="anchor-231"></a>  } 
+
+  status = ProSectionEpsilonSet( section_here, 0.1 );
+  ERROR_CHECK (&quot; ProSectionEpsilonSet&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+<a name="anchor-232"></a>
+  status = ProSectionAutodim ( section_here, &amp;section_errors ); 
+  ERROR_CHECK (&quot; ProSectionAutodim&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+  
+  if ( status != PRO_TK_NO_ERROR )
+<a name="anchor-233"></a>    {
+      UserSecerrorPrint ( &amp;section_errors ); 
+      return status; 
+    } 
+  
+<a name="anchor-234"></a>  
+  status = ProSectionRegenerate ( section_here, &amp;section_errors ); 
+  ERROR_CHECK (&quot; ProSectionRegenerate&quot;, &quot;UserSweepSectionAdd&quot;, status ); 
+  
+  if ( status != PRO_TK_NO_ERROR )
+<a name="anchor-235"></a>    {
+      UserSecerrorPrint ( &amp;section_errors ); 
+      return status; 
+    }
+  
+<a name="anchor-236"></a>  return ( status ); 
+  
+}
+
+/*===============================================================*\
+<a name="anchor-237"></a>
+  FUNCTION: UserSweepSpineAdd
+  ProError UserSweepSpineAdd ( ProSection, ProSelection * ); 
+  PURPOSE:  Creates a 3D trajectory for sweep section 
+
+<a name="anchor-238"></a>\*===============================================================*/
+ProError UserSweepSpineAdd (ProSection section_here, 
+			    ProSelection *sketch_refs )
+{
+  ProSelection          *proj_ents;
+<a name="anchor-239"></a>  int                    status, i, num_errors, err_counter, proj_ids[2];
+  int                    ctr_line_id, rt_line_id, lt_line_id,
+   top_line_id, btm_line_id;
+  int                    upper_arc_id, lower_arc_id, ent_id[1],
+    c_ent_id[2], proj_ent_id[2];
+<a name="anchor-240"></a>  int                    ll_dim_id, tl_dim_id, ua_dim_id, la_dim_id,
+    cl_dim_id, proj_dim_id[2];
+  ProWSecerror           sec_errors;
+  Pro2dLinedef           line;
+  Pro2dClinedef          c_line;
+<a name="anchor-241"></a>  Pro2dLinedef          *left_linedef, *btm_linedef;
+  ProSectionPointType    pt_type[1], proj_pt_type[2];
+  Pro2dArcdef            arc;
+  Pro2dPnt               place_pnt;
+  ProMsg                 wmsg;
+<a name="anchor-242"></a>  char                   msg[PRO_PATH_SIZE];
+  double                 offsets[2];
+  Matrix_data            matrix_data;
+  
+  int row, column; 
+<a name="anchor-243"></a>
+  /* initializing the matrices */ 
+
+  for ( row = 0; row &lt; 4; row++ ) 
+    {
+<a name="anchor-244"></a>      for ( column  = 0 ; column &lt; 4; column++ ) 
+	{
+	  matrix_data.sec_trf[row][column] = 0.0; 
+	  matrix_data.sk_mtrx[row][column] = 0.0; 
+	}
+<a name="anchor-245"></a>    }
+  
+  /*---------------------------------------------------------------*\
+  Get the projection entity handles as ProSelection structures.
+  \*---------------------------------------------------------------*/
+<a name="anchor-246"></a>  
+  status = UserSelectProjectionEntities (&amp;proj_ents);
+  ERROR_CHECK (&quot; UserSelectProjectionEntities&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+  
+<a name="anchor-247"></a>  /*---------------------------------------------------------------*\
+  Project the reference edges onto the section.
+  \*---------------------------------------------------------------*/
+  
+  for (i = 0; i &lt; 2; i++)
+<a name="anchor-248"></a>    {
+      status = ProSelectionVerify ( proj_ents[i] ); 
+      ERROR_CHECK (&quot; ProSelectionVerify&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+      if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-249"></a>      status = ProSectionEntityFromProjection ( section_here, proj_ents[i],
+						&amp;proj_ids[i]);
+      ERROR_CHECK (&quot; ProSectionEntityFromProjection&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+      
+      if (status != PRO_TK_NO_ERROR) return status;
+<a name="anchor-250"></a>    }
+  
+  /*---------------------------------------------------------------*\
+    Create the section coordinate system from the edges. Get the 
+    transformation matrix between the sketch plane coordinate system
+<a name="anchor-251"></a>    and the section coordinate system.
+  \*---------------------------------------------------------------*/
+  
+  status = ProSectionEntityGet ( section_here, proj_ids[0],
+				 (Pro2dEntdef**)&amp;btm_linedef);
+<a name="anchor-252"></a>  ERROR_CHECK (&quot; ProSectionEntityGet&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+  
+  for (i = 0; i &lt; 2; i++)
+    {
+<a name="anchor-253"></a>      matrix_data.x_axis[0][i] = btm_linedef->end1[i];
+      matrix_data.x_axis[1][i] = btm_linedef->end2[i];
+      matrix_data.x_axis[i][2] = 0.0; 
+    }
+  
+<a name="anchor-254"></a>  status = ProSectionEntityGet ( section_here, proj_ids[1],
+				 (Pro2dEntdef**)&amp;left_linedef);
+  ERROR_CHECK (&quot; ProSectionEntityGet&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+  
+<a name="anchor-255"></a>  for (i = 0; i &lt; 2; i++)
+    {
+      matrix_data.y_axis[0][i] = left_linedef->end1[i]; 
+      matrix_data.y_axis[1][i] = left_linedef->end2[i];
+      matrix_data.y_axis[i][2] = 0.0; 
+<a name="anchor-256"></a>    }
+  
+  status = ProSectionLocationGet ( section_here, matrix_data.sk_mtrx);
+  ERROR_CHECK (&quot; ProSectionLocationGet&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+<a name="anchor-257"></a>  
+  status = ProSelectionCopy (sketch_refs[0], &amp;(matrix_data.sk_plane));
+  ERROR_CHECK (&quot; ProSelectionCopy&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+  
+<a name="anchor-258"></a>  status = UserCreateTrfMatrix (&amp;matrix_data);
+  ERROR_CHECK (&quot; UserCreateTrfMatrix&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+  
+  /*---------------------------------------------------------------*\
+<a name="anchor-259"></a>    Get the offset values from the projection entities.
+  \*---------------------------------------------------------------*/
+  
+  status = UserSelectOffsetDistances (offsets);
+  ERROR_CHECK (&quot; UserSelectOffsetDistances&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+<a name="anchor-260"></a>  if (status != PRO_TK_NO_ERROR) return status;
+  
+  ProTKPrintf(&quot;Offset Distances in main are offset[0] = %f : offset[1]  = %f\n&quot;, 
+	 offsets[0], offsets[1]);
+  
+<a name="anchor-261"></a>  /*---------------------------------------------------------------*\
+    Add the left vertical line.
+  \*---------------------------------------------------------------*/
+  
+  line.type = PRO_2D_LINE;
+<a name="anchor-262"></a>  
+  line.end1[0] = offsets[1];
+  line.end1[1] = offsets[0];
+  line.end2[0] = offsets[1];
+  line.end2[1] = offsets[0] + 50.0;
+<a name="anchor-263"></a> 
+  ProUtil2DPointTrans (matrix_data.sec_trf, line.end1, line.end1);
+  ProUtil2DPointTrans (matrix_data.sec_trf, line.end2, line.end2);
+  
+  status = ProSectionEntityAdd ( section_here, (Pro2dEntdef*)&amp;line,
+<a name="anchor-264"></a>				 &amp;lt_line_id);
+  ERROR_CHECK (&quot; ProSectionEntityAdd&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-265"></a>    Solve and regenerate the section.
+  \*---------------------------------------------------------------*/
+  
+  status = ProSecerrorAlloc (&amp;sec_errors);
+  ERROR_CHECK (&quot; ProSecerrorAlloc&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+<a name="anchor-266"></a>  
+  status = ProSectionEpsilonSet( section_here, 0.1 );
+  ERROR_CHECK (&quot; ProSectionEpsilonSet&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+  if (status != PRO_TK_NO_ERROR) return status;
+  
+<a name="anchor-267"></a>  status = ProSectionAutodim ( section_here, &amp;sec_errors);
+  ERROR_CHECK (&quot; ProSectionAutodim&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+  
+  if (status != PRO_TK_NO_ERROR)
+    {
+<a name="anchor-268"></a>      UserSecerrorPrint ( &amp;sec_errors ); 
+      return status; 
+    }
+  
+  status = ProSectionRegenerate ( section_here, &amp;sec_errors);
+<a name="anchor-269"></a>  ERROR_CHECK (&quot; ProSectionRegenerate&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+  
+  if (status != PRO_TK_NO_ERROR)
+    {
+      UserSecerrorPrint ( &amp;sec_errors ); 
+<a name="anchor-270"></a>      return status; 
+    }
+  status = ProSelectionFree (&amp;(matrix_data.sk_plane));
+  ERROR_CHECK (&quot; ProSelectionFree&quot;, &quot;UserSweepSpineAdd&quot;, status ); 
+  
+<a name="anchor-271"></a>  return (status);
+}
+
+</pre>
+</body>
+</html>

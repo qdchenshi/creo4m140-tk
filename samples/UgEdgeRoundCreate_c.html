@@ -1,0 +1,386 @@
+<html>
+<head>
+<title>UgEdgeRoundCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProFeature.h&quot;
+<a name="anchor-2"></a>#include &quot;ProElemId.h&quot;
+#include &quot;ProExtrude.h&quot;
+#include &quot;ProModFeat.h&quot;
+#include &quot;ProStdSection.h&quot;
+#include &quot;ProElement.h&quot;
+<a name="anchor-3"></a>#include &quot;ProElempath.h&quot;
+#include &quot;ProFeatType.h&quot;
+#include &quot;ProFeatForm.h&quot;
+#include &quot;ProSelection.h&quot;
+#include &quot;ProSection.h&quot;
+<a name="anchor-4"></a>
+#include &quot;ProSrfcollection.h&quot;
+#include &quot;ProCrvcollection.h&quot;
+#include &quot;ProRound.h&quot;
+
+<a name="anchor-5"></a>static ProFileName message_file; 
+
+#define C_LOG(a) ProTKPrintf (&quot;Status for %s is = %d\n&quot;, a, status ); \
+	ERROR_CHECK( a, &quot;UgRoundCreate.c&quot;, status );
+
+<a name="anchor-6"></a>#define C_PRINT(a) ProTKPrintf ( &quot;%s\n&quot;, a);
+
+/*===============================================================*\
+FUNCTION : UserEdgeRoundCreate()
+PURPOSE  : Function for creation of 3-Edge Round features.
+<a name="anchor-7"></a>\*===============================================================*/
+ProError UserEdgeRoundCreate()
+{
+  ProErrorlist            errors;
+  ProMdl                  model;
+<a name="anchor-8"></a>  ProSelection            model_sel;
+  ProFeature              feature;
+  ProFeatureCreateOptions *opts = 0;
+  ProElempath             path;
+  ProElempathItem         path_items[2];
+<a name="anchor-9"></a>  ProSection              section;
+  ProAsmcomppath          comp_path;
+  ProAsmcomppath          *p_comp_path = NULL;
+
+  ProCollection collection;
+<a name="anchor-10"></a>  ProCrvcollinstr instr;
+  ProModelitem model_item;
+  ProReference reference;
+
+  ProElement pro_e_feature_tree;
+<a name="anchor-11"></a>  ProElement pro_e_feature_type;
+  ProElement pro_e_std_feature_name;
+  ProElement pro_e_rndch_sets;
+  ProElement pro_e_rndch_set;
+  ProElement pro_e_rndch_dimensional_schema;
+<a name="anchor-12"></a>  ProElement pro_e_rndch_chamfer_shape;
+  ProElement pro_e_rndch_shape_options;
+  ProElement pro_e_rndch_variable_radius;
+  ProElement pro_e_rndch_compound_conic;
+  ProElement pro_e_rndch_conic_type;
+<a name="anchor-13"></a>  ProElement pro_e_rndch_conic_value;
+  ProElement pro_e_rndch_conic_dep_opt;
+  ProElement pro_e_rndch_references;
+  ProElement pro_e_rndch_reference_type;
+  ProElement pro_e_std_curve_collection_appl;
+<a name="anchor-14"></a>  ProElement pro_e_rndch_compound_spine;
+  ProElement pro_e_rndch_ball_spine;
+  ProElement pro_e_rndch_compound_ext_options;
+  ProElement pro_e_rndch_auto_blend;
+  ProElement pro_e_rndch_radii;
+<a name="anchor-15"></a>  ProElement pro_e_rndch_radius;
+  ProElement pro_e_rndch_leg1;
+  ProElement pro_e_rndch_leg_type;
+  ProElement pro_e_rndch_leg_value;
+  ProElement pro_e_rndch_leg2;
+<a name="anchor-16"></a>  ProElement pro_e_rndch_attach_type;
+  ProElement pro_e_rndch_transitions;
+
+  ProName wide_string;
+  ProSelection *sketch_refs;
+<a name="anchor-17"></a>  ProError 	status;
+  ProValueData 	value_data;
+  ProSelection * p_select;
+  int 		n_select;
+  
+<a name="anchor-18"></a>  ProStringToWstring ( message_file, &quot;utilities.txt&quot; ); 
+
+  status = ProMdlCurrentGet (&amp;model);
+  if ( status != PRO_TK_NO_ERROR ) return ( status );
+  
+<a name="anchor-19"></a>  /*---------------------------------------------------------------*\
+    Populating root element PRO_E_FEATURE_TREE 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_FEATURE_TREE *** &quot; );
+  status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;pro_e_feature_tree ); 
+<a name="anchor-20"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_FEATURE_TYPE 
+  \*---------------------------------------------------------------*/
+<a name="anchor-21"></a>  C_PRINT( &quot; *** Processing Element PRO_E_FEATURE_TYPE *** &quot; );
+  status = ProElementAlloc ( PRO_E_FEATURE_TYPE, &amp;pro_e_feature_type );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_feature_type, PRO_FEAT_ROUND ); 
+  C_LOG( &quot; ProElementIntegerSet &quot; );
+<a name="anchor-22"></a>  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_feature_type );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_STD_FEATURE_NAME 
+<a name="anchor-23"></a>  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_STD_FEATURE_NAME *** &quot; );
+  status = ProElementAlloc ( PRO_E_STD_FEATURE_NAME, &amp;pro_e_std_feature_name );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  ProStringToWstring ( wide_string, &quot;MY_ROUND&quot; );
+<a name="anchor-24"></a>  status = ProElementWstringSet (  pro_e_std_feature_name, wide_string );
+  C_LOG( &quot; ProElementWstringSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_std_feature_name );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+<a name="anchor-25"></a>  /*---------------------------------------------------------------*\
+    Populating element PRO_E_RNDCH_SETS 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_SETS *** &quot; );
+  status = ProElementAlloc ( PRO_E_RNDCH_SETS, &amp;pro_e_rndch_sets );
+<a name="anchor-26"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_rndch_sets  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-27"></a>    Populating element PRO_E_RNDCH_SET 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_SET *** &quot; );
+  status = ProElementAlloc ( PRO_E_RNDCH_SET, &amp;pro_e_rndch_set );
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-28"></a>  status = ProElemtreeElementAdd ( pro_e_rndch_sets, NULL, pro_e_rndch_set  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_RNDCH_SHAPE_OPTIONS 
+<a name="anchor-29"></a>  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_SHAPE_OPTIONS *** &quot; );
+  status = ProElementAlloc ( PRO_E_RNDCH_SHAPE_OPTIONS, &amp;pro_e_rndch_shape_options );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_shape_options, 
+<a name="anchor-30"></a>				  PRO_ROUND_TYPE_CONSTANT );  
+  C_LOG( &quot; ProElementIntegerSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_shape_options );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+<a name="anchor-31"></a>  /*---------------------------------------------------------------*\
+    Populating element PRO_E_RNDCH_COMPOUND_CONIC 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_COMPOUND_CONIC *** &quot; );
+  status = ProElementAlloc ( PRO_E_RNDCH_COMPOUND_CONIC, &amp;pro_e_rndch_compound_conic );
+<a name="anchor-32"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_compound_conic  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-33"></a>    Populating element PRO_E_RNDCH_CONIC_TYPE 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_CONIC_TYPE *** &quot; );
+  status = ProElementAlloc ( PRO_E_RNDCH_CONIC_TYPE, &amp;pro_e_rndch_conic_type );
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-34"></a>  status = ProElementIntegerSet ( pro_e_rndch_conic_type, 
+				  PRO_ROUND_CONIC_DISABLE ); 
+  C_LOG( &quot; ProElementIntegerSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_compound_conic, NULL, pro_e_rndch_conic_type );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-35"></a>
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_RNDCH_REFERENCES 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_REFERENCES *** &quot; );
+<a name="anchor-36"></a>  status = ProElementAlloc ( PRO_E_RNDCH_REFERENCES, &amp;pro_e_rndch_references );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_references  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+<a name="anchor-37"></a>  /*---------------------------------------------------------------*\
+    Populating element PRO_E_RNDCH_REFERENCE_TYPE 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_REFERENCE_TYPE *** &quot; );
+  status = ProElementAlloc ( PRO_E_RNDCH_REFERENCE_TYPE, &amp;pro_e_rndch_reference_type );
+<a name="anchor-38"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_reference_type, 
+				  PRO_ROUND_REF_EDGE ); 
+  C_LOG( &quot; ProElementIntegerSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_references, NULL, pro_e_rndch_reference_type );
+<a name="anchor-39"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_STD_CURVE_COLLECTION_APPL 
+  \*---------------------------------------------------------------*/
+<a name="anchor-40"></a>  C_PRINT( &quot; *** Processing Element PRO_E_STD_CURVE_COLLECTION_APPL *** &quot; );
+  status = ProElementAlloc ( PRO_E_STD_CURVE_COLLECTION_APPL, &amp;pro_e_std_curve_collection_appl );
+
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProCrvcollectionAlloc ( &amp;collection );
+<a name="anchor-41"></a>  C_LOG( &quot; ProCrvcollectionAlloc&quot; );
+  status = ProCrvcollinstrAlloc ( PRO_CURVCOLL_ADD_ONE_INSTR, &amp;instr ); 
+  C_LOG( &quot; ProCrvcollinstrAlloc&quot; );
+
+  {
+<a name="anchor-42"></a>    ProSelection *sel_array; 
+    int n_sel_array; 
+
+    ProTKPrintf(&quot; Please select 1st edge for ROUND  \n&quot;);
+    status = ProMessageDisplay ( message_file, &quot;USER Select reference.&quot; );
+<a name="anchor-43"></a>    C_LOG( &quot; ProMessageDisplay&quot; );
+    status = ProSelect ( &quot;edge,curve&quot;, 1, NULL, NULL, NULL, NULL, 
+        &amp;sel_array, &amp;n_sel_array ); 
+    C_LOG( &quot; ProSelect&quot; );
+
+<a name="anchor-44"></a>    if ( n_sel_array &lt;= 0 ) 
+      return PRO_TK_GENERAL_ERROR; 
+    
+    status = ProSelectionToReference ( sel_array[0], &amp;reference ); 
+    C_LOG( &quot; ProSelectionToReference&quot; );
+<a name="anchor-45"></a>  }
+  status = ProCrvcollinstrReferenceAdd ( instr, reference );
+  C_LOG( &quot; ProCrvcollinstrReferenceAdd&quot; );
+  status = ProCrvcollectionInstructionAdd ( collection, instr );
+  C_LOG( &quot; ProCrvcollectionInstructionAdd&quot; );
+<a name="anchor-46"></a>  status = ProCrvcollinstrAlloc ( PRO_CURVCOLL_ADD_ONE_INSTR, &amp;instr ); 
+  C_LOG( &quot; ProCrvcollinstrAlloc&quot; );
+
+  {
+    ProSelection *sel_array; 
+<a name="anchor-47"></a>    int n_sel_array; 
+
+    ProTKPrintf(&quot; Please select 2nd edge for ROUND  \n&quot;);
+    status = ProMessageDisplay ( message_file, &quot;USER Select reference.&quot; );
+    C_LOG( &quot; ProMessageDisplay&quot; );
+<a name="anchor-48"></a>    status = ProSelect ( &quot;edge,curve&quot;, 1, NULL, NULL, NULL, NULL, 
+        &amp;sel_array, &amp;n_sel_array ); 
+    C_LOG( &quot; ProSelect&quot; );
+
+    if ( n_sel_array &lt;= 0 ) 
+<a name="anchor-49"></a>      return PRO_TK_GENERAL_ERROR; 
+    
+    status = ProSelectionToReference ( sel_array[0], &amp;reference ); 
+    C_LOG( &quot; ProSelectionToReference&quot; );
+  }
+<a name="anchor-50"></a>  status = ProCrvcollinstrReferenceAdd ( instr, reference );
+  C_LOG( &quot; ProCrvcollinstrReferenceAdd&quot; );
+  status = ProCrvcollectionInstructionAdd ( collection, instr );
+  C_LOG( &quot; ProCrvcollectionInstructionAdd&quot; );
+  status = ProCrvcollinstrAlloc ( PRO_CURVCOLL_ADD_ONE_INSTR, &amp;instr );
+<a name="anchor-51"></a>  C_LOG( &quot; ProCrvcollinstrAlloc&quot; );
+  {
+    ProSelection *sel_array; 
+    int n_sel_array; 
+
+<a name="anchor-52"></a>    ProTKPrintf(&quot; Please select 3rd edge for ROUND  \n&quot;);
+    status = ProMessageDisplay ( message_file, &quot;USER Select reference.&quot; );
+    C_LOG( &quot; ProMessageDisplay&quot; );
+    status = ProSelect ( &quot;edge,curve&quot;, 1, NULL, NULL, NULL, NULL, 
+        &amp;sel_array, &amp;n_sel_array ); 
+<a name="anchor-53"></a>    C_LOG( &quot; ProSelect&quot; );
+
+    if ( n_sel_array &lt;= 0 ) 
+      return PRO_TK_GENERAL_ERROR; 
+    
+<a name="anchor-54"></a>    status = ProSelectionToReference ( sel_array[0], &amp;reference ); 
+    C_LOG( &quot; ProSelectionToReference&quot; );
+  }
+  status = ProCrvcollinstrReferenceAdd ( instr, reference );
+  C_LOG( &quot; ProCrvcollinstrReferenceAdd&quot; );
+<a name="anchor-55"></a>  status = ProCrvcollectionInstructionAdd ( collection, instr );
+  C_LOG( &quot; ProCrvcollectionInstructionAdd&quot; );
+  status = ProCrvcollinstrAlloc ( PRO_CURVCOLL_ADD_TANGENT_INSTR, &amp;instr ); 
+  C_LOG( &quot; ProCrvcollinstrAlloc&quot; );
+  status = ProCrvcollectionInstructionAdd ( collection, instr );
+<a name="anchor-56"></a>  C_LOG( &quot; ProCrvcollectionInstructionAdd&quot; );
+  status = ProElementCollectionSet( pro_e_std_curve_collection_appl, collection );
+  C_LOG( &quot; ProElementCollectionSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_references, NULL, pro_e_std_curve_collection_appl );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-57"></a>
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_RNDCH_RADII 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_RADII *** &quot; );
+<a name="anchor-58"></a>  status = ProElementAlloc ( PRO_E_RNDCH_RADII, &amp;pro_e_rndch_radii );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_radii  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+<a name="anchor-59"></a>  /*---------------------------------------------------------------*\
+    Populating element PRO_E_RNDCH_RADIUS 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_RADIUS *** &quot; );
+  status = ProElementAlloc ( PRO_E_RNDCH_RADIUS, &amp;pro_e_rndch_radius );
+<a name="anchor-60"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_radii, NULL, pro_e_rndch_radius  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-61"></a>    Populating element PRO_E_RNDCH_LEG1 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_LEG1 *** &quot; );
+  status = ProElementAlloc ( PRO_E_RNDCH_LEG1, &amp;pro_e_rndch_leg1 );
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-62"></a>  status = ProElemtreeElementAdd ( pro_e_rndch_radius, NULL, pro_e_rndch_leg1  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_RNDCH_LEG_TYPE 
+<a name="anchor-63"></a>  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_LEG_TYPE *** &quot; );
+  status = ProElementAlloc ( PRO_E_RNDCH_LEG_TYPE, &amp;pro_e_rndch_leg_type );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_leg_type, 
+<a name="anchor-64"></a>				  PRO_ROUND_RADIUS_TYPE_VALUE ); 
+  C_LOG( &quot; ProElementIntegerSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_leg1, NULL, pro_e_rndch_leg_type );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+<a name="anchor-65"></a>  /*---------------------------------------------------------------*\
+    Populating element PRO_E_RNDCH_LEG_VALUE 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_LEG_VALUE *** &quot; );
+  status = ProElementAlloc ( PRO_E_RNDCH_LEG_VALUE, &amp;pro_e_rndch_leg_value );
+<a name="anchor-66"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementDoubleSet (  pro_e_rndch_leg_value, 50.000000 );
+  C_LOG( &quot; ProElementDoubleSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_leg1, NULL, pro_e_rndch_leg_value );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-67"></a>
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_RNDCH_ATTACH_TYPE 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_RNDCH_ATTACH_TYPE *** &quot; );
+<a name="anchor-68"></a>  status = ProElementAlloc ( PRO_E_RNDCH_ATTACH_TYPE, &amp;pro_e_rndch_attach_type );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_attach_type, PRO_ROUND_ATTACHED ); 
+  C_LOG( &quot; ProElementIntegerSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_rndch_attach_type );
+<a name="anchor-69"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Creating feature in the current model.
+  \*---------------------------------------------------------------*/
+<a name="anchor-70"></a>  status = ProMdlToModelitem( model, &amp;model_item ); 
+  status = ProSelectionAlloc (p_comp_path, &amp;model_item,
+			   &amp;model_sel);
+  
+
+<a name="anchor-71"></a>  status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+    1, (ProArray*)&amp;opts);
+
+  opts[0]= PRO_FEAT_CR_DEFINE_MISS_ELEMS;
+
+<a name="anchor-72"></a>  status = ProFeatureWithoptionsCreate (model_sel, pro_e_feature_tree,
+    opts, PRO_REGEN_NO_FLAGS, &amp;feature, &amp;errors);
+  C_LOG (&quot; ProFeatureWithoptionsCreate&quot;); 
+
+  status = ProArrayFree((ProArray*)&amp;opts);
+<a name="anchor-73"></a>  
+/*---------------------------------------------------------------*\
+    Free up the allocated memory.
+\*---------------------------------------------------------------*/ 
+  
+<a name="anchor-74"></a>  status = ProElementFree (&amp;pro_e_feature_tree ); 
+  C_LOG (&quot; ProElementFree&quot;); 
+  
+  return (status);
+}
+<a name="anchor-75"></a>
+#undef C_LOG
+#undef C_PRINT
+</pre>
+</body>
+</html>

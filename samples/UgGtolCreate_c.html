@@ -1,0 +1,317 @@
+<html>
+<head>
+<title>UgGtolCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProSurface.h>
+#include &lt;ProArray.h>
+#include &lt;ProGtol.h>
+#include &lt;ProUtil.h>
+<a name="anchor-2"></a>#include &lt;ProModelitem.h>
+#include &lt;ProMessage.h>
+#include &lt;ProAnnotation.h>
+#include &lt;ProSolid.h>
+#include &lt;ProDisplist.h>
+<a name="anchor-3"></a>#include &lt;ProWindows.h>
+
+#include &lt;UtilMessage.h>
+#include &lt;PTApplsUnicodeUtils.h>
+#define EPSM6 0.0001
+<a name="anchor-4"></a>/*---------------------------------------------------------------------*\
+     Data structure for finding parallel solid plane surfaces 
+\*---------------------------------------------------------------------*/
+ typedef struct planes_data 
+{
+<a name="anchor-5"></a>    ProGeomitem reference; 
+    ProAnnotationPlane ap;
+    ProVector normal; 
+    double tolerance; 
+} Planesdata_t;
+<a name="anchor-6"></a>
+/*====================================================================*\ 
+FUNCTION: UsrPlanePositiontolSet() 
+PURPOSE:  To add a position gtol to the specified surface 
+\*====================================================================*/ 
+<a name="anchor-7"></a>int UsrPlanePositiontolSet( 
+    ProSelection surface, /* The surface */ 
+    ProVector pos, /* The position of the gtol */ 
+    ProGeomitem *reference, /* The datum reference */ 
+    ProAnnotationPlane* ap, /* The annotation plane */
+<a name="anchor-8"></a>    double tolerance) /* The tolerance value */ 
+{ 
+    ProError status; 
+    ProGtoldata gdata; 
+    ProGtoldataStatus gstatus; 
+<a name="anchor-9"></a>    ProGtolleader leader, *leaders; 
+    ProName wname; 
+    ProCharName name; 
+    ProModelitem modelitem; 
+    ProGtoldatumref datumref; 
+<a name="anchor-10"></a>    ProSelection ref; 
+    ProGtol gtol;
+
+/*--------------------------------------------------------------------*\ 
+    Allocate the gtol data structure 
+<a name="anchor-11"></a>\*--------------------------------------------------------------------*/ 
+    ProGtoldataAlloc(reference->owner, &amp;gdata);
+
+/*--------------------------------------------------------------------*\ 
+    Set the gtol type 
+<a name="anchor-12"></a>\*--------------------------------------------------------------------*/ 
+    ProGtoldataTypeSet(gdata, PROGTOLTYPE_POSITION, &amp;gstatus);
+
+/*--------------------------------------------------------------------*\ 
+    Set the gtol model 
+<a name="anchor-13"></a>    \*--------------------------------------------------------------------*/ 
+    ProGtoldataModelSet(gdata, reference->owner, &amp;gstatus);
+
+/*--------------------------------------------------------------------*\ 
+    Set the reference to the surface 
+<a name="anchor-14"></a>\*--------------------------------------------------------------------*/ 
+    ProGtoldataReferenceSet(gdata, PROGTOLRTYPE_SURF, surface, &amp;gstatus);
+
+/*--------------------------------------------------------------------*\ 
+    Allocate a leader which is attached to the surface 
+<a name="anchor-15"></a>\*--------------------------------------------------------------------*/ 
+    ProGtolleaderAlloc(PROLEADERTYPE_ARROWHEAD, surface, &amp;leader);
+
+/*--------------------------------------------------------------------*\ 
+    Set up an array of leaders with the one leader in it 
+<a name="anchor-16"></a>\*--------------------------------------------------------------------*/ 
+    ProArrayAlloc(0, sizeof(ProGtolleader), 1, (ProArray)&amp;leaders); 
+    ProArrayObjectAdd((ProArray)&amp;leaders, -1, 1, &amp;leader);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-17"></a>    Set the placement using the leader and the specified position 
+\*--------------------------------------------------------------------*/ 
+    ProGtoldataPlacementSet(gdata, PROGTOLPTYPE_LEADERS, NULL, leaders,
+                        pos, NULL, &amp;gstatus);
+
+<a name="anchor-18"></a>/*--------------------------------------------------------------------*\ 
+    Set the annotation plane 
+\*--------------------------------------------------------------------*/ 
+    ProGtoldataPlaneSet(gdata, ap);
+
+<a name="anchor-19"></a>/*--------------------------------------------------------------------*\ 
+    Free the leader 
+\*--------------------------------------------------------------------*/ 
+    ProGtolleaderFree(&amp;leader);
+
+<a name="anchor-20"></a>/*--------------------------------------------------------------------*\ 
+    Set up a ProSelection for the datum, and set it as the basic reference 
+\*--------------------------------------------------------------------*/ 
+    ProSelectionAlloc(NULL, reference, &amp;ref); 
+    ProGtoldatumrefAlloc(ref, PROGTOLMATCOND_DEFAULT_RFS, NULL,
+<a name="anchor-21"></a>                    PROGTOLMATCOND_DEFAULT_RFS, &amp;datumref);  
+    ProGtoldataGtoldatumrefSet(gdata, datumref, NULL, NULL, &amp;gstatus);
+    ProGtoldatumrefFree(&amp;datumref);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-22"></a>    Set the tolerance value 
+\*--------------------------------------------------------------------*/ 
+    ProSelectionModelitemGet(surface, &amp;modelitem); 
+    ProTKSprintf(name, &quot;surf%d&quot;,modelitem.id); ProStringToWstring(wname, name);
+    ProGtoldataValueSet(gdata, PRO_B_TRUE, tolerance, wname, &amp;gstatus);
+<a name="anchor-23"></a>
+/*--------------------------------------------------------------------*\ 
+    Create the tolerance 
+\*--------------------------------------------------------------------*/ 
+    status = ProGtolCreate(gdata, &amp;gtol);
+<a name="anchor-24"></a>
+/*--------------------------------------------------------------------*\ 
+    Free the gtol data 
+\*--------------------------------------------------------------------*/ 
+    ProGtoldataFree(&amp;gdata);
+<a name="anchor-25"></a>    return(status == PRO_TK_NO_ERROR ? 1 : 0); 
+}
+
+/*====================================================================*\ 
+FUNCTION: UsrSurfAction() 
+<a name="anchor-26"></a>PURPOSE:  Action function called when visiting solid surfaces to 
+               attach gtol to. 
+\*====================================================================*/ 
+ProError UsrSurfAction( 
+    ProSurface surface, 
+<a name="anchor-27"></a>    ProError filt_status, 
+    ProAppData data) 
+{ 
+    Planesdata_t *pdata=(Planesdata_t*)data; 
+    ProVector normal, cross, pos; 
+<a name="anchor-28"></a>    ProUvParam uv; 
+    ProSrftype stype; 
+    int id; 
+    ProModelitem modelitem; 
+    ProSelection sel;
+<a name="anchor-29"></a>
+/*--------------------------------------------------------------------*\ 
+    If the surface is not a plane, skip it. 
+\*--------------------------------------------------------------------*/ 
+    ProSurfaceTypeGet(surface, &amp;stype); 
+<a name="anchor-30"></a>    if(stype != PRO_SRF_PLANE) 
+        return(PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\ 
+    If the surface is not parallel to the reference datum, skip it. 
+<a name="anchor-31"></a>\*--------------------------------------------------------------------*/ 
+    uv[0]=uv[1]=0.0; 
+    ProSurfaceXyzdataEval(surface, uv, pos, NULL, NULL, normal); 
+    ProUtilVectorCross(normal, pdata->normal, cross);
+    if(fabs(ProUtilVectorLength(cross)) > EPSM6) 
+<a name="anchor-32"></a>        return(PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\ 
+    Set the position of the gtol to be the point for zero UV, offset 
+    by the outward normal. 
+<a name="anchor-33"></a>\*--------------------------------------------------------------------*/ 
+    pos[0] += normal[0]; 
+    pos[1] += normal[1]; 
+    pos[2] += normal[2];
+
+<a name="anchor-34"></a>/*--------------------------------------------------------------------*\ 
+    Add the gtol to the surface 
+\*--------------------------------------------------------------------*/ 
+    ProSurfaceIdGet(surface, &amp;id); 
+    ProModelitemInit(pdata->reference.owner, id, PRO_SURFACE, &amp;modelitem);
+<a name="anchor-35"></a>    ProSelectionAlloc(NULL, &amp;modelitem, &amp;sel); 
+    UsrPlanePositiontolSet(sel, pos, &amp;pdata->reference, &amp;pdata->ap,  pdata->tolerance);
+
+    return(PRO_TK_NO_ERROR); 
+}
+<a name="anchor-36"></a>
+/*====================================================================*\ 
+FUNCTION: UsrPlanesTol() 
+PURPOSE:  Command to add a position gtol to all solid planes that are
+          parallel to a selected datum. Makes the selected datum 
+<a name="anchor-37"></a>          into a gtol reference if required. 
+\*====================================================================*/ 
+int UsrPlanesTol() 
+{ 
+    ProError status; 
+<a name="anchor-38"></a>    ProSelection *sel; 
+    int n_sel; 
+    ProGeomitem datum; 
+    ProName wname; 
+    ProBoolean ref_datum, is_in_dim; 
+<a name="anchor-39"></a>    ProDimension dim; 
+    Planesdata_t data; 
+    ProUvParam uv; 
+    ProSurface surface;
+    ProFileName msgfil;
+<a name="anchor-40"></a>    ProAnnotationPlane ap;
+    ProVector normal;
+    ProModelitem ap_datum;
+    ProSurface ap_surf;
+    ProGeomitemdata* gdata;
+<a name="anchor-41"></a>
+    ProStringToWstring (msgfil, &quot;msg_uggtol.txt&quot;);
+
+/*--------------------------------------------------------------------*\ 
+    Select the datum 
+<a name="anchor-42"></a>\*--------------------------------------------------------------------*/ 
+    ProMessageDisplay(msgfil,
+		      &quot;USER Select a datum plane for gtol references&quot;); 
+
+    if(ProSelect(&quot;datum&quot;,1,NULL,NULL,NULL,NULL,&amp;sel,&amp;n_sel) 
+<a name="anchor-43"></a>                != PRO_TK_NO_ERROR || n_sel &lt; 0) 
+        return(0); 
+
+    ProSelectionModelitemGet(sel[0], &amp;datum);
+
+<a name="anchor-44"></a>/*--------------------------------------------------------------------*\ 
+    Convert it's type to be a DATUM_PLANE 
+\*--------------------------------------------------------------------*/ 
+    ProModelitemInit(datum.owner, datum.id, PRO_DATUM_PLANE, &amp;datum);
+    ProModelitemNameGet(&amp;datum, wname);
+<a name="anchor-45"></a>
+/*--------------------------------------------------------------------*\ 
+    Is the datum a gtol reference? 
+\*--------------------------------------------------------------------*/ 
+    ProGeomitemIsGtolref(&amp;datum, &amp;ref_datum, &amp;is_in_dim, &amp;dim);
+<a name="anchor-46"></a>
+/*--------------------------------------------------------------------*\ 
+    If so, say so; if not, ask whether it should be made one 
+\*--------------------------------------------------------------------*/ 
+    if(ref_datum) 
+<a name="anchor-47"></a>        ProMessageDisplay(msgfil,&quot;USER %0w is already a reference datum&quot;,
+                   wname); 
+
+    else 
+    { 
+<a name="anchor-48"></a>        ProMessageDisplay(msgfil,&quot;USER %0w is not a reference datum.&quot; 
+                   &quot;Do you wish to set it (yes/no)?|||yes&quot;, wname);
+	ref_datum = ProUtilYesnoGet(&quot;YES&quot;);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-49"></a>        If &quot;no&quot; then exit, else set the datum ad a gtol reference 
+\*--------------------------------------------------------------------*/ 
+        if(!ref_datum) 
+            return(0);
+
+<a name="anchor-50"></a>        ProGeomitemSetdatumSet (&amp;datum, NULL);
+    }
+
+/*--------------------------------------------------------------------*\ 
+    Remember the reference 
+<a name="anchor-51"></a>\*--------------------------------------------------------------------*/ 
+    memcpy(&amp;data.reference, &amp;datum, sizeof(ProGeomitem));
+
+/*--------------------------------------------------------------------*\ 
+    Calculate the normal, used in checking for parallel surfaces 
+<a name="anchor-52"></a>\*--------------------------------------------------------------------*/ 
+    ProSurfaceInit(datum.owner, datum.id, &amp;surface); 
+    uv[0]=uv[1]=0.0;
+    ProSurfaceXyzdataEval(surface, uv, NULL, NULL, NULL, data.normal);
+
+<a name="anchor-53"></a>/*--------------------------------------------------------------------*\ 
+    Ask the user for the annotation plane
+\*--------------------------------------------------------------------*/ 
+    ProMessageDisplay(msgfil,&quot;USER Select the annotation plane to use&quot;);
+    if (ProSelect (&quot;datum&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel))
+<a name="anchor-54"></a>      return (0);
+    
+/*--------------------------------------------------------------------*\ 
+    Create the annotation plane using the default normal vector 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-55"></a>    status = ProSelectionModelitemGet (sel[0], &amp;ap_datum);	
+    status = ProGeomitemToSurface (&amp;ap_datum, &amp;ap_surf);
+    status = ProSurfaceDataGet (ap_surf, &amp;gdata); 
+    memcpy (normal, gdata->data.p_surface_data->srf_shape.plane.e3, sizeof (ProVector));
+    
+<a name="anchor-56"></a>    ProGeomitemdataFree (&amp;gdata);
+    
+    status = ProAnnotationplaneCreate (sel[0], normal, &amp;ap);
+    memcpy(&amp;data.ap, &amp;ap, sizeof(ProAnnotationPlane));
+    
+<a name="anchor-57"></a>/*--------------------------------------------------------------------*\ 
+    Ask the user for the tolerance value 
+\*--------------------------------------------------------------------*/ 
+    ProMessageDisplay(msgfil,&quot;USER Enter the tolerance value|||0.1&quot;);
+    status = ProMessageDoubleRead(NULL, &amp;data.tolerance); 
+<a name="anchor-58"></a>    if(status == PRO_TK_MSG_USER_QUIT) 
+        return(0); 
+    if(status != PRO_TK_NO_ERROR) 
+        data.tolerance = 0.1;
+
+<a name="anchor-59"></a>/*--------------------------------------------------------------------*\ 
+    Visit all the solid surfaces, attaching a gtol to each one which is
+    plane and parallel to the reference. 
+\*--------------------------------------------------------------------*/
+    ProSolidSurfaceVisit(datum.owner, UsrSurfAction, NULL, &amp;data);
+<a name="anchor-60"></a>
+/*--------------------------------------------------------------------*\ 
+    Repaint the model to show the added geometric tolerances
+\*--------------------------------------------------------------------*/
+    ProDisplistInvalidate (datum.owner);
+<a name="anchor-61"></a>    ProWindowRepaint (PRO_VALUE_UNUSED);
+
+    return(1); 
+}
+</pre>
+</body>
+</html>

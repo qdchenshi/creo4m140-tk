@@ -1,0 +1,718 @@
+<html>
+<head>
+<title>TestImportfeat.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-2"></a>#include &lt;ProToolkit.h>
+#include &lt;ProEdgedata.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProFeature.h>
+#include &lt;ProIntfData.h>
+<a name="anchor-3"></a>#include &lt;ProImportfeat.h>
+#include &lt;ProQuiltdata.h>
+#include &lt;ProSolid.h>
+#include &lt;ProSurfacedata.h>
+#include &lt;ProUtil.h>
+<a name="anchor-4"></a>
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;UtilMenu.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilMessage.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;ProMenu.h>
+<a name="anchor-7"></a>#include &lt;TestDbms.h>
+
+#define NEW_PART_NAME &quot;new_impfeat_part&quot;
+
+#define UV_POINTS 1
+<a name="anchor-8"></a>#define UV_CURVES 2
+#define XYZ_CURVE 4
+
+#define JOIN_SURFACES 1
+#define MAKE_SOLID    2
+<a name="anchor-9"></a>#define ADD_SOLID     4
+
+static int  cr_type = UV_POINTS | UV_CURVES | XYZ_CURVE;
+static  ProPartConversionOptions opt = { {1, 1, 1}, PRO_PART_CURVES_AS_DEFAULT,
+    PRO_PART_SURFACES_AS_DEFAULT }; 
+<a name="anchor-10"></a>
+/*====================================================================*\
+    FUNCTION :  ProUtilIntfTypeToStr()
+    PURPOSE  :  convert ProIntfType to str
+                Must contain same intf types as in ProTestSelectIntfType()
+<a name="anchor-11"></a>\*====================================================================*/
+char * ProUtilIntfTypeToStr(ProIntfType type)
+{
+  int i;
+  static struct intf_type_str
+<a name="anchor-12"></a>  {
+    ProIntfType type;
+    char *str;
+  } tab[] = {
+    {PRO_INTF_NONE, (char *)&quot;PRO_INTF_NONE&quot;},
+<a name="anchor-13"></a>    {PRO_INTF_NEUTRAL, (char *)&quot;PRO_INTF_NEUTRAL&quot;},
+    {PRO_INTF_NEUTRAL_FILE, (char *)&quot;PRO_INTF_NEUTRAL_FILE&quot;},
+    {PRO_INTF_IGES, (char *)&quot;PRO_INTF_IGES&quot;},
+    {PRO_INTF_STEP, (char *)&quot;PRO_INTF_STEP&quot;},
+    {PRO_INTF_VDA, (char *)&quot;PRO_INTF_VDA&quot;},
+<a name="anchor-14"></a>    {PRO_INTF_NONE, (char *)&quot;UNKNOWN&quot;}
+  };
+  
+  for (i=0; i&lt;sizeof(tab)/sizeof(tab[0])-1; i++)
+  {
+<a name="anchor-15"></a>    if (tab[i].type == type)
+      break;
+  }
+  return (tab[i].str);
+}
+<a name="anchor-16"></a>
+/*====================================================================*\
+    FUNCTION :  ProUtilImportfeatInfoPrint()
+    PURPOSE  :  write import feat info to file 
+\*====================================================================*/
+<a name="anchor-17"></a>ProError ProUtilImportfeatInfoPrint(
+  ProFeature *import_feat)  /* In: import feat */
+{
+  ProError err;
+  FILE *fp;
+<a name="anchor-18"></a>  int cont=1, i, j, *p_item_id, n_map, n_uid=0, n_iid=0;
+  int *p_user_id;
+  ProImportfeatData if_data;
+  char fname[PRO_PATH_SIZE];
+  ProImportfeatIdMap *p_id_map, id_map;
+<a name="anchor-19"></a>  
+  fp = (FILE *)PTApplsUnicodeFopen(&quot;impfeat_part.txt&quot;, &quot;w&quot;);
+  
+  do 
+  {
+<a name="anchor-20"></a>    ProTKFprintf(fp, &quot;Import feature info:\n&quot;);
+    
+    err = ProImportfeatDataGet(import_feat, &amp;if_data);
+    TEST_CALL_REPORT(&quot;ProImportfeatDataGet()&quot;,
+      &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>    
+    if (err != PRO_TK_NO_ERROR)
+      break;
+    
+    ProTKFprintf(fp,&quot;Interface type: %s\n&quot;,ProUtilIntfTypeToStr(if_data.intf_type)); 
+<a name="anchor-22"></a>    ProWstringToString(fname, if_data.filename);
+    ProTKFprintf(fp, &quot;Filename: %s\n&quot;, fname);
+    ProTKFprintf(fp, &quot;Attributes: %x\n\n&quot;, if_data.attr);
+    
+    
+<a name="anchor-23"></a>    err = ProImportfeatIdArrayCreate(import_feat, &amp;p_id_map);
+    TEST_CALL_REPORT(&quot;ProImportfeatIdArrayCreate()&quot;,
+      &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-24"></a>      break;
+    
+    err = ProImportfeatIdArrayMapCount(p_id_map, &amp;n_map);
+    TEST_CALL_REPORT(&quot;ProImportfeatIdArrayMapCount()&quot;,
+      &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-25"></a>    
+    if (n_map == 0)
+      p_id_map = NULL;
+    else
+    ProTKFprintf(fp, &quot;Map N   Type   UserId ItemId UId->IId                      &quot;
+<a name="anchor-26"></a>      &quot;IId->UId\n&quot;);
+    for (i=0; i&lt;n_map; i++)
+    {
+      err = ProImportfeatIdArrayMapGet(p_id_map, i, &amp;id_map);
+      TEST_CALL_REPORT(&quot;ProImportfeatIdArrayMapGet()&quot;,
+<a name="anchor-27"></a>        &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+      err = ProArrayAlloc(0, sizeof(p_item_id[0]), 1, (ProArray*)&amp;p_item_id);
+      TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,
+        &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-28"></a>      
+      err = ProImportfeatUserIdToItemId(import_feat, id_map.user_id,
+        id_map.item_type, &amp;p_item_id);
+      TEST_CALL_REPORT(&quot;ProImportfeatUserIdToItemId()&quot;,
+        &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-29"></a>      
+      err = ProArraySizeGet((ProArray*)p_item_id, &amp;n_iid);
+      TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+        &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+<a name="anchor-30"></a>      err = ProArrayAlloc( 0, sizeof(int), 1, (ProArray*)&amp;p_user_id );
+      TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,
+        &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+      if (err != PRO_TK_NO_ERROR)
+        break;
+<a name="anchor-31"></a>      
+      err = ProImportfeatItemIdToUserId(import_feat, id_map.item_id,
+        id_map.item_type, &amp;p_user_id);
+      TEST_CALL_REPORT(&quot;ProImportfeatItemIdToUserId()&quot;,
+        &quot;ProUtilImportfeatInfoPrint()&quot;, 
+<a name="anchor-32"></a>        err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_NOT_IMPLEMENTED );
+      
+      err = ProArraySizeGet((ProArray*)p_user_id, &amp;n_uid);
+      TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+        &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-33"></a>      
+      ProTKFprintf(fp, &quot;%5d  %5d  %5d  %5d&quot;, i, id_map.item_type, id_map.item_id,
+        id_map.user_id);
+      
+      for (j=0; j&lt;n_iid || j&lt;5; j++)
+<a name="anchor-34"></a>      {
+        if (j&lt;n_iid)
+          ProTKFprintf(fp, &quot; %5d&quot;, p_item_id[j]);
+        else
+          ProTKFprintf(fp, &quot;      &quot;);
+<a name="anchor-35"></a>      }
+      for (j=0; j&lt;n_uid; j++)
+        ProTKFprintf(fp, &quot;%5d&quot;, p_user_id[j]);
+      
+      ProTKFprintf(fp, &quot;\n&quot;);
+<a name="anchor-36"></a>      
+      err = ProArrayFree( (ProArray*)&amp;p_item_id );
+      TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+        &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+<a name="anchor-37"></a>      err = ProArrayFree( (ProArray*)&amp;p_user_id );
+      TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+        &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+    }
+<a name="anchor-38"></a>    
+    if (p_id_map != NULL)
+    {
+      err = ProImportfeatIdArrayFree(p_id_map);
+      TEST_CALL_REPORT(&quot;ProImportfeatIdArrayFree()&quot;,
+<a name="anchor-39"></a>        &quot;ProUtilImportfeatInfoPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    
+  } while (!cont);
+  
+<a name="anchor-40"></a>  fclose(fp);
+  return (err);   
+}
+
+/*====================================================================*\
+<a name="anchor-41"></a>    FUNCTION :  ProUtilIntfDataCopy()
+    PURPOSE  :  copy all data using different functions
+\*====================================================================*/
+ProError ProUtilIntfDataCopy(
+  ProIntfData **p_i_data)   /* In, Out: intf data */
+<a name="anchor-42"></a>{
+  ProIntfData *out_data = NULL;
+  ProError err;
+  int stop=0, num_surf, s, num_quilt, q, num_edge, e, d, num_datum;
+  ProSurfacedata *p_surf_data;
+<a name="anchor-43"></a>  ProQuiltdata *p_quilt_data;
+  ProEdgedata *p_edge_data;
+  ProDatumdata *p_datum_data=NULL;
+  double acc;
+  ProAccuracytype acc_type;
+<a name="anchor-44"></a>  ProOutline xyz_outline;
+  
+  err = ProIntfDataAlloc(&amp;out_data);
+  TEST_CALL_REPORT(&quot;ProIntfDataAlloc()&quot;,
+    &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-45"></a>  
+  do
+  {
+    err = ProIntfDataSurfaceCount(*p_i_data, &amp;num_surf);
+    TEST_CALL_REPORT(&quot;ProIntfDataSurfaceCount()&quot;,
+<a name="anchor-46"></a>      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+      break;
+    
+    for (s=0; s&lt;num_surf; s++)
+<a name="anchor-47"></a>    {
+      err = ProIntfDataSurfaceGet(*p_i_data, s, &amp;p_surf_data);
+      TEST_CALL_REPORT(&quot;ProIntfDataSurfaceGet()&quot;,
+        &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+<a name="anchor-48"></a>      err = ProUtilSurfacedataCopy(&amp;p_surf_data);
+      
+      err = ProIntfDataSurfaceAppend(out_data, p_surf_data);
+      TEST_CALL_REPORT(&quot;ProIntfDataSurfaceAppend()&quot;,
+        &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-49"></a>      
+      err = ProSurfacedataMemoryFree(p_surf_data);
+      TEST_CALL_REPORT(&quot;ProSurfacedataMemoryFree()&quot;,
+        &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-50"></a>    
+    err = ProIntfDataQuiltCount(*p_i_data, &amp;num_quilt);
+    TEST_CALL_REPORT(&quot;ProIntfDataQuiltCount()&quot;,
+      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-51"></a>      break;
+    
+    for (q=0; q&lt;num_quilt; q++)
+    {
+      err = ProIntfDataQuiltGet(*p_i_data, q, &amp;p_quilt_data);
+<a name="anchor-52"></a>      TEST_CALL_REPORT(&quot;ProIntfDataQuiltGet()&quot;,
+        &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+      err = ProUtilQuiltdataCopy(&amp;p_quilt_data);
+      
+<a name="anchor-53"></a>      err = ProIntfDataQuiltAppend(out_data, p_quilt_data);
+      TEST_CALL_REPORT(&quot;ProIntfDataQuiltAppend()&quot;,
+        &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+      err = ProQuiltdataMemoryFree(p_quilt_data);
+<a name="anchor-54"></a>      TEST_CALL_REPORT(&quot;ProQuiltdataMemoryFree()&quot;,
+        &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    
+    err = ProIntfDataEdgeCount(*p_i_data, &amp;num_edge);
+<a name="anchor-55"></a>    TEST_CALL_REPORT(&quot;ProIntfDataEdgeCount()&quot;,
+      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+      break;
+    
+<a name="anchor-56"></a>    for (e=0; e&lt;num_edge; e++)
+    {
+      err = ProIntfDataEdgeGet(*p_i_data, e, &amp;p_edge_data);
+      TEST_CALL_REPORT(&quot;ProIntfDataEdgeGet()&quot;,
+        &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-57"></a>      
+      err = ProUtilEdgedataCopy(&amp;p_edge_data);
+      
+      err = ProIntfDataEdgeAppend(out_data, p_edge_data);
+      TEST_CALL_REPORT(&quot;ProIntfDataEdgeAppend()&quot;,
+<a name="anchor-58"></a>        &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+      err = ProEdgedataMemoryFree(p_edge_data);
+      TEST_CALL_REPORT(&quot;ProEdgedataMemoryFree()&quot;,
+        &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-59"></a>    }
+    err = ProIntfDataDatumCount(*p_i_data, &amp;num_datum);
+    TEST_CALL_REPORT(&quot;ProIntfDataDatumCount()&quot;,
+      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-60"></a>      break;
+    
+    err = ProDatumdataAlloc( &amp;p_datum_data );
+    TEST_CALL_REPORT(&quot;ProDatumdataAlloc()&quot;, &quot;ProUtilIntfDataCopy()&quot;, 
+      err, err != PRO_TK_NO_ERROR);
+<a name="anchor-61"></a>    
+    for (d=0; d&lt;num_datum; d++)
+    {
+      err = ProIntfDataDatumGet(*p_i_data, d, &amp;p_datum_data);
+      TEST_CALL_REPORT(&quot;ProIntfDataDatumGet()&quot;,
+<a name="anchor-62"></a>        &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+      err = ProUtilDatumdataCopy(&amp;p_datum_data);
+      
+      if (err == PRO_TK_NO_ERROR)
+<a name="anchor-63"></a>      {
+        
+        err = ProIntfDataDatumAppend(out_data, p_datum_data);
+        TEST_CALL_REPORT(&quot;ProIntfDataDatumAppend()&quot;,
+          &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-64"></a>        
+        err = ProDatumdataMemoryFree(p_datum_data);
+        TEST_CALL_REPORT(&quot;ProDatumdataMemoryFree()&quot;,
+          &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);              
+        
+<a name="anchor-65"></a>      }
+    }
+    
+    err = ProIntfDataAccuracytypeGet(*p_i_data, &amp;acc_type);
+    TEST_CALL_REPORT(&quot;ProIntfDataAccuracytypeGet()&quot;,
+<a name="anchor-66"></a>      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProIntfDataAccuracytypeSet(out_data, acc_type);
+    TEST_CALL_REPORT(&quot;ProIntfDataAccuracytypeSet()&quot;,
+      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-67"></a>    
+    err = ProIntfDataAccuracyGet(*p_i_data, &amp;acc);
+    TEST_CALL_REPORT(&quot;ProIntfDataAccuracyGet()&quot;,
+      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-68"></a>    err = ProIntfDataAccuracySet(out_data, acc);
+    TEST_CALL_REPORT(&quot;ProIntfDataAccuracySet()&quot;,
+      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProIntfDataOutlineGet(*p_i_data, xyz_outline);
+<a name="anchor-69"></a>    TEST_CALL_REPORT(&quot;ProIntfDataOutlineGet()&quot;,
+      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProIntfDataOutlineSet(out_data, xyz_outline);
+    TEST_CALL_REPORT(&quot;ProIntfDataOutlineSet()&quot;,
+<a name="anchor-70"></a>      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+  } while (stop);
+  
+  if (err == PRO_TK_NO_ERROR)
+  {
+<a name="anchor-71"></a>    
+    memset(*p_i_data, '\0', sizeof(ProIntfData));
+    
+    err = ProIntfDataFree(*p_i_data);
+    TEST_CALL_REPORT(&quot;ProIntfDataFree()&quot;,
+<a name="anchor-72"></a>      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    p_i_data[0] = out_data;
+    return (PRO_TK_NO_ERROR);
+  }
+<a name="anchor-73"></a>  else
+  {
+    err = ProIntfDataFree(out_data);
+    TEST_CALL_REPORT(&quot;ProIntfDataFree()&quot;,
+      &quot;ProUtilIntfDataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-74"></a>    return (PRO_TK_GENERAL_ERROR);
+  }
+}
+
+/*====================================================================*\
+<a name="anchor-75"></a>    FUNCTION :  ProTestEdgeCreationTypeGet()
+    PURPOSE  :  returns creation type
+\*====================================================================*/
+void ProTestEdgeCreationTypeGet (int *creation_type)
+{
+<a name="anchor-76"></a>  *creation_type = cr_type;
+}
+
+/*====================================================================*\
+    FUNCTION :  ProTestEdgeMenuAction()
+<a name="anchor-77"></a>    PURPOSE  :  action function for edge creation type menu
+\*====================================================================*/
+int ProTestEdgeMenuAction (ProAppData data, int action)
+{
+  int *cr_type = (int *)data;
+<a name="anchor-78"></a>  *cr_type ^= action;
+  return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-79"></a>    FUNCTION :  ProUtilSurfaceMenuAction()
+    PURPOSE  :  action function for edge creation type menu
+\*====================================================================*/
+int ProUtilSurfaceMenuAction(
+  ProAppData data, int action)
+<a name="anchor-80"></a>{
+  *(int*)data = action;
+  return (0);
+}
+
+<a name="anchor-81"></a>/*====================================================================*\
+    FUNCTION :  ProTestSelectEdgeCreationType()
+    PURPOSE  :  Selects edge creation type
+\*====================================================================*/
+void ProTestSelectEdgeCreationType (
+<a name="anchor-82"></a>  ProPartConversionOptions *p_opts)
+{
+  ProError status;
+  int menu_id, action, cr_type;
+  static char *cmpnd_menu[] = 
+<a name="anchor-83"></a>  {&quot;TkEdgeCreat&quot;, &quot;TkSurfCreat&quot;, &quot;TkCurvCreat&quot;, &quot;DONE&quot;,&quot;&quot;};
+  
+  status = ProMenuFileRegister( (char*)&quot;TkEdgeCreat&quot;, (char*)&quot;tkedgecreat.mnu&quot;, 
+    &amp;menu_id );
+  TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, 
+<a name="anchor-84"></a>    &quot;ProTestSelectEdgeCreationType()&quot;,
+    status,  status != PRO_TK_NO_ERROR );
+  
+  ProMenubuttonActionSet( (char*)&quot;TkEdgeCreat&quot;, (char*)&quot;UV points&quot;,
+    (ProMenubuttonAction)ProTestEdgeMenuAction, 
+<a name="anchor-85"></a>    (ProAppData)&amp;cr_type, UV_POINTS );
+  ProMenubuttonActionSet( (char*)&quot;TkEdgeCreat&quot;, (char*)&quot;UV curves&quot;,
+    (ProMenubuttonAction)ProTestEdgeMenuAction, 
+    (ProAppData)&amp;cr_type, UV_CURVES );
+  ProMenubuttonActionSet( (char*)&quot;TkEdgeCreat&quot;, (char*)&quot;XYZ curve&quot;,
+<a name="anchor-86"></a>    (ProMenubuttonAction)ProTestEdgeMenuAction, 
+    (ProAppData)&amp;cr_type, XYZ_CURVE);
+  ProMenubuttonActionSet( (char*)&quot;TkEdgeCreat&quot;, (char*)&quot;TkEdgeCreat&quot;,
+    (ProMenubuttonAction)ProMenuHold, NULL,  0 );
+  
+<a name="anchor-87"></a>  status = ProMenuFileRegister( (char*)&quot;TkSurfCreat&quot;, (char*)&quot;tksurfcreat.mnu&quot;, 
+    &amp;menu_id );
+  ProMenubuttonActionSet( (char*)&quot;TkSurfCreat&quot;, (char*)&quot;Default Surf&quot;,
+    (ProMenubuttonAction)ProUtilSurfaceMenuAction, 
+    (ProAppData)&amp;p_opts->surface_representation, 
+<a name="anchor-88"></a>    PRO_PART_SURFACES_AS_DEFAULT );
+  ProMenubuttonActionSet( (char*)&quot;TkSurfCreat&quot;, (char*)&quot;Spl as BSpl&quot;,
+    (ProMenubuttonAction)ProUtilSurfaceMenuAction, 
+    (ProAppData)&amp;p_opts->surface_representation, 
+    PRO_PART_SPL_SURFACES_AS_BSPL_SURFACES );
+<a name="anchor-89"></a>  ProMenubuttonActionSet( (char*)&quot;TkSurfCreat&quot;, (char*)&quot;Srf as BSpl&quot;,
+    (ProMenubuttonAction)ProUtilSurfaceMenuAction, 
+    (ProAppData)&amp;p_opts->surface_representation, 
+    PRO_PART_SURFACES_AS_BSPL_SURFACES );
+  ProMenubuttonActionSet( (char*)&quot;TkSurfCreat&quot;, (char*)&quot;TkSurfCreat&quot;,
+<a name="anchor-90"></a>    (ProMenubuttonAction)ProMenuHold, NULL,  0 );
+  
+  status = ProMenuFileRegister( (char*)&quot;TkCurvCreat&quot;, (char*)&quot;tkcurvcreat.mnu&quot;, 
+    &amp;menu_id );
+  ProMenubuttonActionSet( (char*)&quot;TkCurvCreat&quot;, (char*)&quot;Default Curve&quot;,
+<a name="anchor-91"></a>    (ProMenubuttonAction)ProUtilSurfaceMenuAction, 
+    (ProAppData)&amp;p_opts->curve_representation, 
+    PRO_PART_CURVES_AS_DEFAULT );
+  ProMenubuttonActionSet( (char*)&quot;TkCurvCreat&quot;, (char*)&quot;Spl as BSpl&quot;,
+    (ProMenubuttonAction)ProUtilSurfaceMenuAction, 
+<a name="anchor-92"></a>    (ProAppData)&amp;p_opts->curve_representation, 
+    PRO_PART_SPLINES_AS_BSPLINES );
+  ProMenubuttonActionSet( (char*)&quot;TkCurvCreat&quot;, (char*)&quot;Curve as BSpl&quot;,
+    (ProMenubuttonAction)ProUtilSurfaceMenuAction, 
+    (ProAppData)&amp;p_opts->curve_representation, 
+<a name="anchor-93"></a>    PRO_PART_CURVES_AS_BSPLINES );
+  ProMenubuttonActionSet( (char*)&quot;TkCurvCreat&quot;, (char*)&quot;TkCurvCreat&quot;,
+    (ProMenubuttonAction)ProMenuHold, NULL,  0 );
+  
+  
+<a name="anchor-94"></a>  status = ProMenuModeSet ((char*)&quot;TkEdgeCreat&quot;, PROMENUMODE_DATA);
+  TEST_CALL_REPORT( &quot;ProMenuModeSet()&quot;, &quot;ProTestSelectEdgeCreationType()&quot;,
+    status,  status != PRO_TK_NO_ERROR );
+  status = ProMenuDatamodeSet ((char*)&quot;TkEdgeCreat&quot;, PRO_B_TRUE);
+  TEST_CALL_REPORT( &quot;ProMenuDatamodeSet()&quot;, &quot;ProTestSelectEdgeCreationType()&quot;,
+<a name="anchor-95"></a>    status,  status != PRO_TK_NO_ERROR );
+  
+  status = ProMenuFileRegister((char*)&quot;DONE&quot;,(char*)&quot;tketdone.mnu&quot;, &amp;menu_id);
+  TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, &quot;ProTestSelectEdgeCreationType()&quot;,
+    status , status != PRO_TK_NO_ERROR);
+<a name="anchor-96"></a>  status = ProMenubuttonActionSet((char*)&quot;DONE&quot;,(char*)&quot;-Done&quot;,
+    (ProMenubuttonAction)ProUtilMenuKill, NULL, 4);
+  
+  status = ProMenubuttonActionSet((char*)&quot;DONE&quot;,(char*)&quot;DONE&quot;,
+    (ProMenubuttonAction)ProMenuHold,NULL,0);
+<a name="anchor-97"></a>  
+  status = ProCompoundmenuCreate(cmpnd_menu, &amp;menu_id);
+  TEST_CALL_REPORT(&quot;ProCompoundmenuCreate()&quot;, 
+    &quot;ProTestSelectEdgeCreationType()&quot;,
+    status , status != PRO_TK_NO_ERROR);
+<a name="anchor-98"></a>  
+  cr_type = 0;
+  if (opt.edge_representation.uv_points) 
+    cr_type |= UV_POINTS;
+  if (opt.edge_representation.uv_curves)
+<a name="anchor-99"></a>    cr_type |= UV_CURVES;
+  if (opt.edge_representation.xyz_curve)
+    cr_type |= XYZ_CURVE;
+  
+  ProUtilMenubuttonHighlight ((char*)&quot;TkEdgeCreat&quot;, (char*)&quot;UV points&quot;, cr_type&amp; UV_POINTS);
+<a name="anchor-100"></a>  ProUtilMenubuttonHighlight ((char*)&quot;TkEdgeCreat&quot;, (char*)&quot;UV curves&quot;, cr_type&amp; UV_CURVES);
+  ProUtilMenubuttonHighlight ((char*)&quot;TkEdgeCreat&quot;, (char*)&quot;XYZ curve&quot;, cr_type&amp; XYZ_CURVE);
+  ProUtilMenubuttonHighlight ((char*)&quot;TkSurfCreat&quot;, (char*)&quot;Default Surf&quot;, 1);
+  ProUtilMenubuttonHighlight ((char*)&quot;TkCurvCreat&quot;, (char*)&quot;Default Curve&quot;, 1);
+  
+<a name="anchor-101"></a>  if( status == PRO_TK_NO_ERROR )
+  {
+    status = ProMenuProcess( (char*)&quot;TkEdgeCreat&quot;, &amp;action );
+    TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSelectEdgeCreationType()&quot;,
+      status,  status != PRO_TK_NO_ERROR );
+<a name="anchor-102"></a>  }
+  
+  opt.edge_representation.uv_points = (cr_type &amp; UV_POINTS) &amp;&amp; 1;
+  opt.edge_representation.uv_curves = (cr_type &amp; UV_CURVES) &amp;&amp; 1;
+  opt.edge_representation.xyz_curve = (cr_type &amp; XYZ_CURVE) &amp;&amp; 1;
+<a name="anchor-103"></a>}
+
+/*====================================================================*\
+    FUNCTION :  ProTestSelectIntfType()
+    PURPOSE  :  Commands for testing import feature in Pro/TOOLKIT
+<a name="anchor-104"></a>                Must contain same intf types as in ProUtilIntfTypeToStr()
+\*====================================================================*/
+void ProTestSelectIntfType(
+  ProIntfType *type)
+{
+<a name="anchor-105"></a>  ProError err;
+  int action;    
+  static ProUtilMenuButtons intf_type[] = { 
+    {&quot;TkIntfType&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+    {&quot;Neutral&quot;, PRO_INTF_NEUTRAL, 0},
+<a name="anchor-106"></a>    {&quot;Neutral File&quot;, PRO_INTF_NEUTRAL_FILE, 0},
+    {&quot;Iges File&quot;, PRO_INTF_IGES, 0},
+    {&quot;Step File&quot;, PRO_INTF_STEP, 0},
+    {&quot;Vda File&quot;, PRO_INTF_VDA, 0},
+    {&quot;&quot;,0,0}
+<a name="anchor-107"></a>  };
+  err = ProUtilMenuIntValueSelect(intf_type, &amp;action);
+  if (err != PRO_TK_NO_ERROR)
+    *type = PRO_INTF_NONE;
+  else
+<a name="anchor-108"></a>    *type = (ProIntfType)action;
+}
+
+/*====================================================================*\
+    FUNCTION :  ProTestImportfeat()
+<a name="anchor-109"></a>    PURPOSE  :  Commands for testing import feature in Pro/TOOLKIT
+\*====================================================================*/
+int ProTestImportfeat(ProMdl *mdl)
+{
+  ProError err;
+<a name="anchor-110"></a>  ProIntfType intf_type;
+  ProIntfDataSourceType intfdatasrc_type;    
+  ProPart part = (ProPart)*mdl, new_part;
+  ProIntfDataSource id_source;
+  ProIntfData *id_data = NULL;
+<a name="anchor-111"></a>  int cont = 1, w_id;
+  ProName w_file_name;
+  ProMdlName w_name;
+  ProFeature feat;
+  ProImportfeatRedefSource redef_source;
+<a name="anchor-112"></a>  ProImportfeatRedefSourceType redefsourcetype;    
+  void *vp;
+  
+  ProTestSelectIntfType(&amp;intf_type);
+  if (intf_type == PRO_INTF_NONE)
+<a name="anchor-113"></a>    return (0);
+  
+  if (intf_type == PRO_INTF_NEUTRAL)
+  {    
+    ProTestSelectEdgeCreationType (&amp;opt);
+<a name="anchor-114"></a>  }
+    
+  ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter new part name.&quot;);
+  ProStringToWstring(w_name, (char *)NEW_PART_NAME);
+    
+<a name="anchor-115"></a>  ProUtilStringGet(w_name, w_name, PRO_MDLNAME_SIZE);
+  err = ProSolidMdlnameCreate(w_name, PRO_MDLFILE_PART, &amp;new_part);
+  TEST_CALL_REPORT(&quot;ProSolidMdlnameCreate()&quot;,
+    &quot;ProTestImportfeat()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-116"></a>  do
+  {
+    intfdatasrc_type = ProIntfTypeToIntfDataSourceType(intf_type);
+    TEST_CALL_REPORT(&quot; ProIntfTypeToIntfDataSourceType()&quot;,
+      &quot;ProTestImportfeat()&quot;, PRO_TK_NO_ERROR, 0);
+<a name="anchor-117"></a>    
+    if (intfdatasrc_type == PRO_INTF_DATA_SOURCE_NONE)
+      break;
+    
+    if (intfdatasrc_type == PRO_INTF_DATA_SOURCE_FILE)
+<a name="anchor-118"></a>    {
+      ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the import file name.&quot;);
+      if (ProUtilStringGet(w_file_name, NULL, PRO_NAME_SIZE) == 0)
+        break;
+      vp = (void*)w_file_name;  
+<a name="anchor-119"></a>    }
+    else
+    {    
+      err = ProIntfDataAlloc(&amp;id_data);
+      TEST_CALL_REPORT(&quot;ProIntfDataAlloc()&quot;,
+<a name="anchor-120"></a>        &quot;ProTestImportfeat()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+      err = ProPartToProIntfData(part, &amp;opt, id_data);
+      TEST_CALL_REPORT(&quot;ProPartToProIntfData()&quot;,
+        &quot;ProTestImportfeat()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-121"></a>      if (err != PRO_TK_NO_ERROR)
+        break;
+      
+      vp = (void*)id_data;  
+    }
+<a name="anchor-122"></a>    
+    err = ProIntfDataSourceInit( intf_type, vp, &amp;id_source);
+    TEST_CALL_REPORT(&quot;ProIntfDataSourceInit()&quot;,
+      &quot;ProTestImportfeat()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-123"></a>      break;
+    
+    err = ProImportfeatCreate(new_part, &amp;id_source, NULL, NULL, &amp;feat);
+    TEST_CALL_REPORT(&quot;ProImportfeatCreate()&quot;,
+      &quot;ProTestImportfeat()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-124"></a>    
+    if (err != PRO_TK_NO_ERROR)
+      break;
+    
+#ifndef PT_PRODUCTS_BUILD
+<a name="anchor-125"></a>    err = ProObjectwindowMdlnameCreate(w_name, PRO_PART, &amp;w_id);
+    TEST_CALL_REPORT(&quot;ProObjectwindowMdlnameCreate()&quot;,
+      &quot;ProTestImportfeat()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProMdlDisplay((ProMdl)new_part);
+<a name="anchor-126"></a>    TEST_CALL_REPORT(&quot;ProMdlDisplay()&quot;,
+      &quot;ProTestImportfeat()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProWindowActivate(w_id);
+    TEST_CALL_REPORT(&quot;ProWindowActivate()&quot;,
+<a name="anchor-127"></a>      &quot;ProTestImportfeat()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+#endif
+    if (id_data != NULL)
+    {      
+<a name="anchor-128"></a>      err = ProImportfeatRedefSourceInit(PRO_IMPORT_FEAT_REDEF_SUBSTITUTE,
+        (void*)&amp;id_source, &amp;redef_source);
+      TEST_CALL_REPORT(&quot;ProImportfeatRedefSourceInit()&quot;,
+        &quot;ProTestImportfeat()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+<a name="anchor-129"></a>      redefsourcetype = ProImportfeatRedefSourceTypeGet(
+        PRO_IMPORT_FEAT_REDEF_SUBSTITUTE);
+      TEST_CALL_REPORT(&quot;ProImportfeatRedefSourceTypeGet()&quot;,
+        &quot;ProTestImportfeat()&quot;, PRO_TK_NO_ERROR, 0);
+            
+<a name="anchor-130"></a>      err = ProImportfeatRedefine(&amp;feat, &amp;redef_source); 
+      TEST_CALL_REPORT(&quot;ProImportfeatRedefine()&quot;,
+        &quot;ProTestImportfeat()&quot;, err, 
+        (err != PRO_TK_NO_ERROR)&amp;&amp;
+        (err != PRO_TK_NOT_IMPLEMENTED));      
+<a name="anchor-131"></a>    }
+    ProUtilImportfeatInfoPrint(&amp;feat);
+    
+  } while (!cont);
+  
+<a name="anchor-132"></a>  if (id_data != NULL)
+  {
+    err = ProIntfDataFree(id_data);
+    TEST_CALL_REPORT(&quot;ProIntfDataFree()&quot;,
+      &quot;ProTestImportfeat()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-133"></a>  }
+  
+  return (0);
+}
+
+<a name="anchor-134"></a>
+/*====================================================================*\
+    FUNCTION :  ProUtilImportfeatFilter()
+    PURPOSE  :  Allows to collect only import features
+\*====================================================================*/
+<a name="anchor-135"></a>ProError ProUtilImportfeatFilter(
+  ProFeature *p_feature)
+{
+  ProError err;
+  ProFeattype feattype;
+<a name="anchor-136"></a>  
+  err = ProFeatureTypeGet(p_feature, &amp;feattype);
+  TEST_CALL_REPORT( &quot; ProFeatureTypeGet()&quot;, 
+    &quot; ProUtilImportfeatFilter()&quot;, err,  err != PRO_TK_NO_ERROR );
+  return (err == PRO_TK_NO_ERROR &amp;&amp; feattype == PRO_FEAT_IMPORT ?
+<a name="anchor-137"></a>  PRO_TK_NO_ERROR : PRO_TK_CONTINUE);
+}
+
+
+int ProTestImpfeatAttrMenuAction( ProAppData data, int action )
+<a name="anchor-138"></a>{
+  ProImportfeatAttr *p_attrs = (ProImportfeatAttr*)data;
+  
+  switch( action )
+  {
+<a name="anchor-139"></a>  case JOIN_SURFACES:
+    p_attrs->join_surfaces = p_attrs->join_surfaces ? 0 : 1;
+    break;
+    
+  case MAKE_SOLID:
+<a name="anchor-140"></a>    p_attrs->attempt_make_solid = p_attrs->attempt_make_solid ? 0 : 1;
+    break;
+    
+  case ADD_SOLID:
+    p_attrs->cut_or_add = p_attrs->cut_or_add ? 0 : 1;
+<a name="anchor-141"></a>    break;
+  }
+  
+  return 0;
+}
+</pre>
+</body>
+</html>

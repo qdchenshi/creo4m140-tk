@@ -1,0 +1,166 @@
+<html>
+<head>
+<title>UgXsecList.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProSurface.h>
+#include &lt;ProXsec.h>
+<a name="anchor-2"></a>#include &lt;ProAsmcomp.h>
+#include &lt;ProUtil.h>
+
+#include &lt;PTApplsUnicodeUtils.h>
+
+<a name="anchor-3"></a>
+/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+
+/*---------------------- Function Prototypes -------------------------*/
+<a name="anchor-4"></a>void user_List_Xsecs();
+void user_member_path ();
+
+ProError user_xsec_contour_visit(ProContour  p_contour,
+                                  ProError    status,
+<a name="anchor-5"></a>                                  ProAppData  app_data)
+{
+  static int n_conts;
+  FILE *fp = (FILE*)app_data;
+  ProTKFprintf(fp, &quot;            Contour %d\n&quot;, n_conts++);
+<a name="anchor-6"></a>  return PRO_TK_NO_ERROR;
+}
+
+ProError user_xsec_visit(ProXsec *p_xsec,
+                         ProAppData app_data)
+<a name="anchor-7"></a>{
+  ProError status;
+  FILE *fp = (FILE*)app_data;
+  ProCharName cname;
+  ProXsecGeometry  *geom_arr;
+<a name="anchor-8"></a>  int n_components, ii;
+  char        path[200];
+
+  ProTKFprintf(fp,&quot;Cross section %s\n&quot;, ProWstringToString (cname,
+               p_xsec->xsec_name));
+<a name="anchor-9"></a>
+  status = ProXsecRegenerate(p_xsec);
+
+  status = ProXsecGeometryCollect(p_xsec, NULL, &amp;geom_arr);
+  status = ProArraySizeGet((ProArray)geom_arr, &amp;n_components);
+<a name="anchor-10"></a>
+  /*-----------------------------------------------------------*\
+    For each component of the cross section
+  \*-----------------------------------------------------------*/
+  for (ii = 0; ii &lt; n_components; ii++)
+<a name="anchor-11"></a>  {
+    int *memb_id_tab = geom_arr[ii].memb_id_tab;
+    int memb_num, n_faces;
+    ProSurface h_face = (ProSurface)geom_arr[ii].geom_ptr;
+    double area;
+<a name="anchor-12"></a>
+    /*-----------------------------------------------------------*\
+       Print the assembly path of the component.
+    \*-----------------------------------------------------------*/
+    status = ProArraySizeGet((ProArray)memb_id_tab, &amp;memb_num);
+<a name="anchor-13"></a>
+    user_member_path (p_xsec->solid_owner, memb_num, memb_id_tab, path);
+    ProTKFprintf(fp,&quot;    Component %2d : %s\n&quot;, ii, path);
+
+    /*-----------------------------------------------------------*\
+<a name="anchor-14"></a>       List the component faces and contours.
+    \*-----------------------------------------------------------*/
+     n_faces = 1;
+     do {
+         ProSurface next_face;
+<a name="anchor-15"></a>         status = ProSurfaceAreaEval(h_face, &amp;area);
+         ProTKFprintf(fp, &quot;        Face %d, area %f\n&quot;, n_faces++, area);
+         status = ProSurfaceContourVisit(h_face, 
+                       (ProSurfaceContourVisitAction)user_xsec_contour_visit, 
+                       (ProSurfaceContourFilterAction)NULL, (ProAppData)fp);
+<a name="anchor-16"></a>         status = ProSurfaceNextGet(h_face, &amp;next_face);
+         h_face = next_face;
+     } while (h_face != NULL);
+  }
+
+<a name="anchor-17"></a>  return status;
+}
+
+void user_List_Xsecs()
+{
+<a name="anchor-18"></a>    ProCharName filename = {'x','s','e','c','s','.','l','s','t','\0'};
+    ProFileName wfilename;
+    ProError    status;
+    ProMdl      h_obj;
+
+<a name="anchor-19"></a>    FILE	*fp;
+
+    ProStringToWstring(wfilename, filename);
+    fp = PTApplsUnicodeFopen(filename, &quot;w&quot;);
+
+<a name="anchor-20"></a>    status = ProMdlCurrentGet(&amp;h_obj);
+/*-----------------------------------------------------------*\
+    For each cross section...
+\*-----------------------------------------------------------*/
+    status = ProSolidXsecVisit((ProSolid)h_obj, 
+<a name="anchor-21"></a>                    (ProSolidXsecVisitAction)user_xsec_visit, 
+                    (ProAppData)fp);
+
+    ProInfoWindowDisplay(wfilename, NULL, NULL);
+}
+<a name="anchor-22"></a>
+
+void user_member_path (h_obj, memb_num, memb_id_tab, path)
+ProMdl        h_obj;
+int memb_num, *memb_id_tab;
+<a name="anchor-23"></a>char           path[];
+{
+    ProMdl            assembly;
+    char              name[PRO_MDLNAME_SIZE], type[PRO_MDLEXTENSION_SIZE],buff[200];
+    int               m;    
+<a name="anchor-24"></a>    ProError          err;
+	ProMdlName modelName;
+	ProMdlExtension modelExtension;
+	    
+	err = ProMdlMdlnameGet((ProMdl)h_obj, modelName);    
+<a name="anchor-25"></a> 
+	err = ProMdlExtensionGet((ProMdl)h_obj, modelExtension);    
+
+    ProWstringToString(name,modelName);
+    ProWstringToString(type,modelExtension);
+<a name="anchor-26"></a>
+    strcpy (path, name);
+    strcat (path, &quot;.&quot;);
+    strcat (path, type);
+
+<a name="anchor-27"></a>    assembly = h_obj;
+    for (m = 0; m &lt; memb_num; m++)
+    {
+        ProMdl comp_model;
+        ProAsmcomp component;
+<a name="anchor-28"></a>
+        component.type = PRO_FEATURE;
+        component.id = memb_id_tab[m];
+        component.owner = assembly;
+
+<a name="anchor-29"></a>        err = ProAsmcompMdlGet(&amp;component, &amp;comp_model);        
+
+		err = ProMdlMdlnameGet((ProMdl)comp_model, modelName);
+		 
+		err = ProMdlExtensionGet((ProMdl)comp_model, modelExtension);
+<a name="anchor-30"></a>		
+        ProTKSprintf(buff, &quot;/%s.%s[%d]&quot;, 
+                      ProWstringToString (name, modelName),
+                      ProWstringToString (type, modelExtension), 
+                      memb_id_tab[m]);
+<a name="anchor-31"></a>        strcat (path, buff);
+    }
+}
+</pre>
+</body>
+</html>

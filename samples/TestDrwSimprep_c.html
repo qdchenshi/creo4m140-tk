@@ -1,0 +1,241 @@
+<html>
+<head>
+<title>TestDrwSimprep.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProArray.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProSelection.h>
+#include &lt;ProSimprep.h>
+#include &lt;ProSimprepdata.h>
+<a name="anchor-2"></a>#include &lt;ProMessage.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMdl.h>
+#include &lt;ProUtil.h>
+#include &lt;ProDwgtable.h>
+<a name="anchor-3"></a>#include &lt;ProSimprepdata.h>
+
+#include &lt;TestError.h>
+#include &lt;UtilString.h>
+#include &lt;UtilFiles.h>
+<a name="anchor-4"></a>#include &lt;UtilMessage.h>
+#include &lt;ProTKRunTime.h>
+/*--------------------------------------------------------------------*\
+  Function prototypes
+\*--------------------------------------------------------------------*/
+<a name="anchor-5"></a>int ProTestDrwSimpRepAdd ();
+int ProTestDrwSimpRepDel ();
+
+/*===========================================================================*\
+  FUNCTION: ProTestDrwSimpRep
+<a name="anchor-6"></a>  PURPOSE:  to read and make dwg simprep menu files
+\*===========================================================================*/
+int ProTestDrwSimpRep()
+{
+    int menu_id;
+<a name="anchor-7"></a>    ProError error;
+
+
+    error = ProMenuFileRegister((char*)&quot;-Simp Rep&quot;,(char*)&quot;tksimprep.mnu&quot;, &amp;menu_id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister()&quot;,
+<a name="anchor-8"></a>        &quot;ProTestDrwSimpRep()&quot;, error, error!=PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;-Simp Rep&quot;, (char*)&quot;-add&quot;,
+                (ProMenubuttonAction)ProTestDrwSimpRepAdd, NULL, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+<a name="anchor-9"></a>        &quot;ProTestDrwSimpRep()&quot;, error, error!=PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;-Simp Rep&quot;, (char*)&quot;-delete&quot;,
+                (ProMenubuttonAction)ProTestDrwSimpRepDel, NULL, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+<a name="anchor-10"></a>        &quot;ProTestDrwSimpRep()&quot;, error, error!=PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;-Simp Rep&quot;, (char*)&quot;-Simp Rep&quot;,
+                (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+<a name="anchor-11"></a>        &quot;ProTestDrwSimpRep()&quot;, error, error!=PRO_TK_NO_ERROR);
+
+
+    error = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;-Simp Rep&quot;, &amp;menu_id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate()&quot;,
+<a name="anchor-12"></a>        &quot;ProTestDrwSimpRep()&quot;, error, error!=PRO_TK_NO_ERROR);
+
+    error = ProMenuProcess((char*)&quot;-Simp Rep&quot;, &amp;menu_id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess()&quot;, &quot;ProTestDrwSimpRep()&quot;, error, 
+        error != PRO_TK_NO_ERROR &amp;&amp; error != PRO_TK_E_FOUND);
+<a name="anchor-13"></a>
+    return (0);
+}
+
+/*===========================================================================*\
+<a name="anchor-14"></a>  FUNCTION: ProTestDrwSimpRepAdd
+  PURPOSE: add simpliefied representation to drawing.
+\*===========================================================================*/
+int ProTestDrwSimpRepAdd ()
+{
+<a name="anchor-15"></a>    int             i, mdl_num;
+    ProCharLine     c_name, line;
+    ProDrawing      drawing;
+    ProMdl         *mdl_arr = NULL;
+    ProSimprep      simprep;
+<a name="anchor-16"></a>    ProMdlName      w_name;
+    ProError        error;
+
+    error = ProMdlCurrentGet((ProMdl*)&amp;drawing);
+    TEST_CALL_REPORT (&quot;ProMdlCurrentGet()&quot;,
+<a name="anchor-17"></a>        &quot;ProTestDrwSimpRepAdd()&quot;, error, error!=PRO_TK_NO_ERROR);
+
+/*----------------------------------------------------------------------------*\
+    Get model list in session.
+\*----------------------------------------------------------------------------*/
+<a name="anchor-18"></a>    error = ProSessionMdlList ( PRO_MDL_ASSEMBLY, &amp;mdl_arr, &amp;mdl_num);
+    TEST_CALL_REPORT (&quot;ProSessionMdlList()&quot;,
+        &quot;ProTestDrwSimpRepAdd()&quot;, error, error!=PRO_TK_NO_ERROR);
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-19"></a>    Add simp representation.
+\*----------------------------------------------------------------------------*/
+    if ( mdl_num >0)
+    {
+        for (i=0;i&lt;mdl_num; i++)
+<a name="anchor-20"></a>        {
+            error = ProMdlMdlnameGet (mdl_arr[i], w_name);
+            TEST_CALL_REPORT (&quot;ProMdlMdlnameGet()&quot;,
+                &quot;ProTestDrwSimpRepAdd()&quot;, error, error!=PRO_TK_NO_ERROR);
+
+<a name="anchor-21"></a>            ProTKSprintf (line,&quot;Add simpliefied representation from model %s [y/N}:&quot;,
+                    ProWstringToString(c_name, w_name));
+
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+
+<a name="anchor-22"></a>            if (!ProUtilYesnoGet((char*)&quot;Y&quot;))
+                continue;
+
+            error = ProSimprepSelect ((ProSolid)mdl_arr[i], &amp;simprep);
+            TEST_CALL_REPORT (&quot;ProSimprepSelect()&quot;,
+<a name="anchor-23"></a>                &quot;ProTestDrwSimpRepAdd()&quot;, error, error!=PRO_TK_NO_ERROR);
+            if (error == PRO_TK_NO_ERROR)
+            {
+                error = ProDrawingAsmsimprepAdd (drawing, &amp;simprep);
+                TEST_CALL_REPORT (&quot;ProDrawingAsmsimprepAdd()&quot;,
+<a name="anchor-24"></a>                    &quot;ProTestDrwSimpRepAdd()&quot;, error, error!=PRO_TK_NO_ERROR);
+            }
+        }
+
+        error = ProArrayFree ((ProArray*)&amp;mdl_arr);
+<a name="anchor-25"></a>        TEST_CALL_REPORT (&quot;ProArrayFree()&quot;,
+            &quot;ProTestDrwSimpRepAdd()&quot;, error, error!=PRO_TK_NO_ERROR);
+
+    }
+    return (0);
+<a name="anchor-26"></a>}
+
+/*===========================================================================*\
+  FUNCTION: ProTestDrwSimpRepDel
+  PURPOSE: Delete selected simpliefied representation from drawing.
+<a name="anchor-27"></a>\*===========================================================================*/
+int ProTestDrwSimpRepDel ()
+{
+    int             j, i;
+    int             rep_num, model_num;
+<a name="anchor-28"></a>    ProCharLine     line, c_name;
+    ProDrawing      drawing;
+    ProError        status;
+    ProName         name;
+    ProSimprep     *rep_arr      = NULL;
+<a name="anchor-29"></a>    ProSimprepdata *rep_data_ptr = NULL;
+    ProSolid        model;
+    ProView         view;
+    ProSelection   *sel_arr;
+
+<a name="anchor-30"></a>    status = ProMdlCurrentGet ((ProMdl*)&amp;drawing);
+    TEST_CALL_REPORT (&quot;ProMdlCurrentGet()&quot;, &quot;ProTestDrwSimpRepDel()&quot;,
+        status, status!=PRO_TK_NO_ERROR);
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select view with simprep for delete.&quot;);
+<a name="anchor-31"></a>    status = ProSelect ((char*)&quot;dwg_view&quot;, 1, NULL, NULL, NULL, NULL, 
+                &amp;sel_arr, &amp;model_num);
+    TEST_CALL_REPORT (&quot;ProSelect()&quot;, &quot;ProTestDrwSimpRepDel()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-32"></a>    status = ProSelectionViewGet (sel_arr[0], &amp;view);
+    TEST_CALL_REPORT (&quot;ProSelectionViewGet()&quot;, &quot;ProTestDrwSimpRepDel()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    
+    status = ProDrawingViewSolidGet (drawing, view, &amp;model);
+<a name="anchor-33"></a>    TEST_CALL_REPORT (&quot;ProDrawingViewSolidGet()&quot;, &quot;ProTestDrwSimpRepDel()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+/*----------------------------------------------------------------------------*\
+            Get  simp representations in model.
+<a name="anchor-34"></a>\*----------------------------------------------------------------------------*/
+    status = ProDrawingSimprepsCollect(drawing, model, &amp;rep_arr);
+    TEST_CALL_REPORT (&quot;ProDrawingSimprepsCollect()&quot;,
+        &quot;ProTestDrwSimpRepDel()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+<a name="anchor-35"></a>    /* status != PRO_TK_GENERAL_ERROR until simpreps corrupt.*/
+    
+    status = ProArraySizeGet ((ProArray)rep_arr , &amp;rep_num);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestDrwSimpRepDel()&quot;, status,
+        status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_BAD_INPUTS);
+<a name="anchor-36"></a>
+#if 0
+    if ( status == PRO_TK_NO_ERROR)
+    {
+        for (i=0; i&lt;rep_num; i++)
+<a name="anchor-37"></a>        {
+/*----------------------------------------------------------------------------*\
+                Dont work with master representation.
+\*----------------------------------------------------------------------------*/
+            if (rep_arr[i].id == -1)
+<a name="anchor-38"></a>                continue;
+
+/*----------------------------------------------------------------------------*\
+                Delete some simp representation.
+\*----------------------------------------------------------------------------*/
+<a name="anchor-39"></a>            /* status != PRO_TK_E_NOT_FOUND */
+            status = ProSimprepdataGet (&amp;rep_arr[i], &amp;rep_data_ptr);
+            TEST_CALL_REPORT (&quot;ProSimprepdataGet()&quot;,
+                &quot;ProTestDrwSimpRepDel()&quot;, status, status != PRO_TK_NO_ERROR
+                &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+<a name="anchor-40"></a>
+            if (status != PRO_TK_NO_ERROR)
+                continue;
+
+            status = ProSimprepdataNameGet (rep_data_ptr, name);
+<a name="anchor-41"></a>            TEST_CALL_REPORT (&quot;ProSimprepdataNameGet()&quot;,
+                &quot;ProTestDrwSimpRepDel()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+            sprintf (line, &quot;Delete simpliefied representation %s [y/n]&quot;,
+                     ProWstringToString(c_name, name));
+<a name="anchor-42"></a>
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+
+            if (!ProUtilYesnoGet(&quot;Y&quot;))
+                continue;
+<a name="anchor-43"></a>
+            status = ProSimprepdataFree (&amp;rep_data_ptr);
+            TEST_CALL_REPORT (&quot;ProSimprepdataFree()&quot;,
+                &quot;ProTestDrwSimpRepDel()&quot;, status, status!=PRO_TK_NO_ERROR);
+
+<a name="anchor-44"></a>            status = ProDrawingAsmsimprepDelete(drawing,  &amp;rep_arr[i]);
+            TEST_CALL_REPORT (&quot;ProDrawingAsmsimprepDelete()&quot;,
+                &quot;ProTestDrwSimpRepDel()&quot;, status, status!=PRO_TK_NO_ERROR);
+        }
+
+<a name="anchor-45"></a>        status = ProArrayFree ((ProArray*)&amp;rep_arr);
+        TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestDrwSimpRepDel()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+    }
+#endif
+<a name="anchor-46"></a>
+    return (0);
+}
+</pre>
+</body>
+</html>

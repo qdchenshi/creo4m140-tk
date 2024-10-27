@@ -1,0 +1,637 @@
+<html>
+<head>
+<title>TestAsync.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+<a name="anchor-2"></a>#include &quot;ProCore.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProMessage.h&quot;
+#include &quot;ProMenuBar.h&quot;
+#include &quot;ProMdl.h&quot;
+<a name="anchor-3"></a>#include &quot;ProNotify.h&quot;
+#include &quot;ProUtil.h&quot;
+#include &quot;ProToolkitDll.h&quot;
+#include &quot;ProTKRunTime.h&quot;
+
+<a name="anchor-4"></a>
+/*------------------------------------------------------------------*\
+Application includes
+\*------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+<a name="anchor-5"></a>#include &quot;UtilString.h&quot;
+#include &quot;UtilFiles.h&quot;
+
+#include &lt;stdlib.h>
+#include &lt;time.h>
+<a name="anchor-6"></a>
+/*  STATICS  */
+static int event = 0;
+static int Action_done = 1;
+static ProFileName msgfil;
+<a name="anchor-7"></a>static ProProcessHandle proe_handle;
+static int connect_mode = 0;
+
+
+void UserTerminateAction  PRO_PROTO ((ProeTerminationStatus term_type));
+<a name="anchor-8"></a>int UserActionFunc   PRO_PROTO (( ProAppData ptr, int opt));
+int UserRestartProeTest (char*, char*, int, char*);
+int UserTerm ();
+int ProTestShowMenu ();
+ProError UserNotificationFunc();
+<a name="anchor-9"></a>
+#define USER_RETRIEVE_ACTION    1
+#define USER_MESSAGE_ACTION     2
+#define USER_EXIT_ACTION        3
+
+<a name="anchor-10"></a>#define MSGFIL msgfil
+
+/*====================================================================*\
+    FUNCTION :	TestAccessDefault()
+    PURPOSE  :   enable access to the -Main button	
+<a name="anchor-11"></a>\*====================================================================*/
+static uiCmdAccessState TestAccessDefault(uiCmdAccessMode access_mode)
+{
+    return (ACCESS_AVAILABLE);
+}
+<a name="anchor-12"></a>
+static int PTAsyncMain (int argc, char*argv[]);
+
+#ifdef PT_ASYNC_MD
+
+<a name="anchor-13"></a>/*============================================================================*\
+  Function : InvokePTAsyncByDll
+  Purpose  : Demonstrate the asynchronous mode of operations invoked from an
+				external DLL
+\*============================================================================*/
+<a name="anchor-14"></a>__declspec (dllexport) int InvokePTAsyncMDByDll(int argc, char *argv[])
+{
+	return PTAsyncMain (argc, argv);
+}
+
+<a name="anchor-15"></a>#else
+
+/*============================================================================*\
+  Function : main
+  Purpose  : Demonstrate the asynchronous mode of operations
+<a name="anchor-16"></a>\*============================================================================*/
+int main(int argc, char *argv[])
+{
+	return PTAsyncMain (argc, argv);
+}
+<a name="anchor-17"></a>
+
+#endif
+
+
+<a name="anchor-18"></a>/*============================================================================*\
+  Function : PTAsyncMain
+  Purpose  : Asynchronous demonstration procedure
+\*============================================================================*/
+int PTAsyncMain (int argc, char* argv[])
+<a name="anchor-19"></a>{
+  int   i, action, bad_status = 0;
+  char  *part_to_retrieve=NULL;
+  char  proe_command[PRO_PATH_SIZE], text_path[PRO_PATH_SIZE];
+  char  ua_msg[20];
+<a name="anchor-20"></a>  int counter = 0, timeout = 10;
+  char *hostname ;   /* hostname not supported in Release 20. */
+  char *display=NULL, *user=NULL;
+  ProBoolean random, asy_flag = PRO_B_FALSE, random_choice;
+  ProError err, last_err = PRO_TK_NO_ERROR;
+<a name="anchor-21"></a>  time_t action_time = 0, report_time = 0, cur_time; 
+  wchar_t workspace[PRO_NAME_SIZE];
+  ProProcessHandle p_handle;
+
+  ProStringToWstring(MSGFIL, &quot;usermsg.txt&quot;);
+<a name="anchor-22"></a>  ProTestErrlogOpen(&quot;pt_toolkit&quot;, &quot;&quot;, &quot;&quot;);
+
+  if (argc >= 2)
+    if (strncmp (argv[1], &quot;-rpc&quot;, 4) == 0)
+      asy_flag = PRO_B_TRUE;
+<a name="anchor-23"></a>            
+  if (asy_flag == PRO_B_TRUE)
+    /*  Start application from Pro/E session */
+    {
+      err = ProAsynchronousMain (argc, argv);
+<a name="anchor-24"></a>      TEST_CALL_REPORT (&quot;ProAsynchronousMain()&quot;, &quot;main()&quot;,
+			err, err != PRO_TK_NO_ERROR);
+        
+      if (err != PRO_TK_NO_ERROR)
+        {
+<a name="anchor-25"></a>	  ProTKFprintf (stderr, &quot;Could not connect to Pro/E\n&quot;);
+	  exit (0);
+        }
+      else 
+	ProTKPrintf (&quot;Connection may have succeeded!\n&quot;);
+<a name="anchor-26"></a>    }
+  else
+    /*  Start application from command line */
+    {
+      /* Check command line args and make the proe command */ 
+<a name="anchor-27"></a>      for(i=0; i&lt;argc; i++)
+        {
+	  ProTKFprintf(stderr, &quot;   argv[%d]:  %s\n&quot;, i, argv[i]);
+        }
+      if (argc &lt; 3 || ((ProUtilStrcmp(argv[1], &quot;-connect&quot;)==0) &amp;&amp; (argc&lt;3)))
+<a name="anchor-28"></a>        {
+	  ProTKFprintf(stderr, &quot;\t%s  &lt;Pro/E command>  &lt;text_path> or\n&quot;, argv[0]);
+	  ProTKFprintf(stderr, 
+		       &quot;\t%s  &lt;Pro/E command>  &lt;text_path> &lt;model/trailfile> or\n&quot;, argv[0]);
+	  ProTKFprintf(stderr, 
+<a name="anchor-29"></a>		       &quot;\t%s  &lt;Pro/E command>  &lt;text_path> &lt;runmode> &lt;graphics mode>&quot;
+		       &quot; &lt;trail mode> &lt;trailfile>\n&quot;, argv[0]);
+	  ProTKFprintf(stderr, 
+		       &quot;\t%s  -connect &lt;text_path> [user [display ]]\n&quot;, argv[0]);
+	  exit(0);
+<a name="anchor-30"></a>        }
+
+/*------------------------------------------------------------------*\
+        Connect to a Pro/ENGINNER session.
+\*------------------------------------------------------------------*/
+<a name="anchor-31"></a>      if (ProUtilStrcmp(argv[1], &quot;-connect&quot;)==0)
+        {
+	  connect_mode = 1;
+	  strcpy(text_path, argv[2]);
+	  hostname = &quot;&quot; ; 
+<a name="anchor-32"></a>	  if (argc>4)
+	    display = argv[4];
+	  if (argc>3)
+	    user = argv[3];
+    
+<a name="anchor-33"></a>	  ProTKPrintf(&quot;Attempt to connect ... user %s, display %s\n&quot;,
+		      user == NULL ? &quot;any&quot; : user,
+		      display == NULL ? &quot;any&quot; : display);
+	  ProTKPrintf(&quot;Text path %s\n&quot;, text_path);
+  
+<a name="anchor-34"></a>	  if (argc>5)
+	    {
+	      if (argc&lt;7)
+		
+            	{
+<a name="anchor-35"></a>		  ProTKFprintf(stderr, 
+			       &quot;\t%s  -connect &lt;text_path> [user [display [workspace timeout]] ]\n&quot;, 
+			       argv[0]);
+            	}
+	      ProStringToWstring (workspace, argv[5]);
+<a name="anchor-36"></a>	      timeout = atoi (argv[6]);
+	      err = ProEngineerConnectWS (&quot;&quot;, display, user, workspace,
+					  text_path, PRO_B_TRUE, timeout, &amp;random_choice,
+					  &amp;p_handle);
+	      TEST_CALL_REPORT(&quot;ProEngineerConnectWS()&quot;,
+<a name="anchor-37"></a>			       &quot;main()&quot;, err, err != PRO_TK_NO_ERROR);
+       	    } else{
+	    err = ProEngineerConnect(hostname, display, user, text_path, 
+				     PRO_B_TRUE, 20, &amp;random, &amp;proe_handle);
+	    TEST_CALL_REPORT(&quot;ProEngineerConnect()&quot;,
+<a name="anchor-38"></a>			     &quot;main()&quot;, err, err != PRO_TK_NO_ERROR);
+	  }	
+	    			
+	  if (err != PRO_TK_NO_ERROR)
+            {
+<a name="anchor-39"></a>	      /* print error directly, so users don't have to look for it. */
+	      ProTKPrintf(&quot;Attempt unsuccessfull (error %d), exiting\n&quot;,
+			  err);
+	      return (0);
+            }
+<a name="anchor-40"></a>
+        }
+/*------------------------------------------------------------------*\
+        Spawn a Pro/ENGINNER session.
+\*------------------------------------------------------------------*/
+<a name="anchor-41"></a>      else
+        {
+	  strcpy(proe_command, argv[1]); /* Pro/E command */
+	  if(argc == 4)
+	    {
+<a name="anchor-42"></a>	      strcat(proe_command, &quot; &quot;);
+	      strcat(proe_command, argv[argc-1]); /* model or trail file */
+	    }
+	  else if (argc > 4)
+	    {
+<a name="anchor-43"></a>	      strcat(proe_command, &quot; &quot;);
+	      strcat(proe_command, argv[3]); /* run mode */
+	      strcat(proe_command, &quot; &quot;);
+	      strcat(proe_command, argv[4]); /* graphics mode */
+	      strcat(proe_command, &quot; &quot;);
+<a name="anchor-44"></a>	      strcat(proe_command, argv[5]); /* trail mode */
+	      strcat(proe_command, &quot; &quot;);
+	      strcat(proe_command, argv[6]); /* trail file */
+	    } 
+	  strcpy(text_path, argv[2]);
+<a name="anchor-45"></a>    
+	  /* Start up Pro/ENGINEER */
+	  ProTKFprintf(stderr, &quot;\n*****\tStarting Pro/Engineer\t*****\n&quot;);
+	  ProTKFprintf(stderr, &quot;\tProe command: \&quot;%s\&quot;\t\n\tPlease wait...\n&quot;,
+		       proe_command);
+<a name="anchor-46"></a>
+	  err = ProEngineerStart(proe_command, text_path);
+	  TEST_CALL_REPORT(&quot;ProEngineerStart()&quot;,
+			   &quot;main()&quot;, err, err != PRO_TK_NO_ERROR);
+        }
+<a name="anchor-47"></a>    }
+  /* Interrupt handling */ 
+   
+  ProAsynchronousEventLoop();
+   
+<a name="anchor-48"></a>  ProEventProcess();
+  if (asy_flag == PRO_B_FALSE)
+    {
+/*------------------------------------------------------------------*\
+    If the Pro/ENGINEER session was spawned by this application,
+<a name="anchor-49"></a>    restart Pro/ENGINEER after initial Pro/ENGINEER termination.
+    (Restart is simple asynchronous model.)
+\*------------------------------------------------------------------*/
+      if (!connect_mode) 
+        {
+<a name="anchor-50"></a>	  /*  Now re-start Pro/E  */ 
+	  UserRestartProeTest(proe_command, text_path, argc, 
+			      part_to_retrieve);
+        }
+    }
+<a name="anchor-51"></a>  ProTestErrlogClose();
+    
+  return (0);
+}
+
+<a name="anchor-52"></a>/*===========================================================================*\
+  Function : user_initialize()
+  Purpost  : demo another way to add user's menu item
+\*===========================================================================*/
+int user_initialize(int argc, char *argv[])
+<a name="anchor-53"></a>{
+    char  *pre = &quot;Pre&quot;, *post = &quot;Post&quot;;
+    ProError err;
+    uiCmdCmdId   cmd_id;
+
+<a name="anchor-54"></a>/*------------------------------------------------------------------*\
+    Parse the command line
+\*------------------------------------------------------------------*/
+    ProUtilCommandLineParse( argc, argv );
+
+<a name="anchor-55"></a>/*------------------------------------------------------------------*\
+    Initialize termination notification function.
+\*------------------------------------------------------------------*/
+    err = ProTermFuncSet((ProTerminationAction)UserTerminateAction);
+    TEST_CALL_REPORT(&quot;ProTermFuncSet()&quot;, 
+<a name="anchor-56"></a>		    	    &quot;user_initialize()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    if( err != PRO_TK_NO_ERROR)
+       ProTKFprintf(stderr, &quot;\nTermination function is NOT SET !!!\n&quot;);
+
+<a name="anchor-57"></a>/*---------------------------------------------------------------------*\
+    Add new button to the menu bar
+\*---------------------------------------------------------------------*/
+    err = ProCmdActionAdd(&quot;-Pt Async&quot;,
+        (uiCmdCmdActFn)ProTestShowMenu,
+<a name="anchor-58"></a>        uiProe2ndImmediate, TestAccessDefault,
+        PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+    TEST_CALL_REPORT(&quot;ProCmdActionAdd&quot;, &quot;user_initialize&quot;,
+                      err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-59"></a>    err = ProMenubarmenuPushbuttonAdd(
+        &quot;Utilities&quot;, &quot;-Pt Async&quot;, &quot;-Pt Async&quot;,
+        &quot;Async mode test commands&quot;, &quot;Utilities.psh_util_aux&quot;,
+	 PRO_B_TRUE, cmd_id, MSGFIL);
+    TEST_CALL_REPORT(&quot;ProMenubarmenuPushbuttonAdd&quot;, &quot;user_initialize&quot;,
+<a name="anchor-60"></a>                      err, err != PRO_TK_NO_ERROR);
+
+    err = ProCmdCmdIdFind(&quot;exit&quot;, &amp;cmd_id);
+    TEST_CALL_REPORT(&quot;ProCmdCmdIdFind()&quot;, 
+			&quot;user_initialize()&quot;, err, err != PRO_TK_NO_ERROR &amp;&amp;
+<a name="anchor-61"></a>                        err != PRO_TK_GENERAL_ERROR);
+ 
+    err = ProCmdBracketFuncAdd(cmd_id, (uiCmdCmdBktFn)UserTerm, &quot;UserTerm&quot;,
+	NULL);
+
+<a name="anchor-62"></a>    err = ProMenuFileRegister(&quot;Async Test&quot;, &quot;tkasync.mnu&quot;, NULL);
+    TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, 
+			&quot;user_initialize()&quot;, err, err !=PRO_TK_NO_ERROR);
+
+    err = ProMenubuttonActionSet(&quot;Async Test&quot;, &quot;Async Test&quot;,
+<a name="anchor-63"></a>        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+                        &quot;user_initialize()&quot;, err, err !=PRO_TK_NO_ERROR);
+
+    err = ProMenubuttonActionSet(&quot;Async Test&quot;, &quot;Done/Return&quot;,
+<a name="anchor-64"></a>        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+                        &quot;user_initialize()&quot;, err, err !=PRO_TK_NO_ERROR);
+
+    err = ProMenubuttonActionSet(&quot;Async Test&quot;, &quot;-Retrieve Obj&quot;,
+<a name="anchor-65"></a>        (ProMenubuttonAction)UserActionFunc, NULL, USER_RETRIEVE_ACTION);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+                        &quot;user_initialize()&quot;, err, err !=PRO_TK_NO_ERROR);
+    
+    err = ProMenubuttonLocationSet(&quot;Async Test&quot;, &quot;-Exit&quot;, -1);
+<a name="anchor-66"></a>    TEST_CALL_REPORT(&quot;ProMenubuttonLocationSet()&quot;,
+                        &quot;user_initialize()&quot;, err, err !=PRO_TK_NO_ERROR);
+    err = ProMenubuttonActionSet(&quot;Async Test&quot;, &quot;-Exit&quot;,
+        (ProMenubuttonAction)UserActionFunc, NULL, USER_EXIT_ACTION);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+<a name="anchor-67"></a>                        &quot;user_initialize()&quot;, err, err !=PRO_TK_NO_ERROR);
+
+    err = ProNotificationSet(PRO_MDL_DISPLAY_PRE, 
+	(ProFunction)UserNotificationFunc);
+    TEST_CALL_REPORT(&quot;ProNotificationSet()&quot;,
+<a name="anchor-68"></a>                        &quot;user_initialize()&quot;, err, err !=PRO_TK_NO_ERROR);
+    return(0);
+}
+
+/*===========================================================================*\
+<a name="anchor-69"></a>  Function : user_terminate()
+  Purpost  : end Pro/T application
+\*===========================================================================*/
+void  user_terminate()
+{
+<a name="anchor-70"></a>    ProError err;
+
+    err = ProNotificationUnset(PRO_MDL_DISPLAY_PRE);
+    TEST_CALL_REPORT(&quot;ProNotificationUnset()&quot;,
+                        &quot;user_terminate()&quot;, err, err !=PRO_TK_NO_ERROR);
+<a name="anchor-71"></a>    
+    TEST_CALL_REPORT(&quot;user_terminate()&quot;, 
+			&quot;user_terminate()&quot;, PRO_TK_NO_ERROR, 0);
+    ProTKPrintf(&quot;user terminate\n&quot;);
+    ProAsynchronousEventLoopInterrupt();
+<a name="anchor-72"></a>}
+
+/*===========================================================================*\
+  Function : UserTerm()
+  Purpose  : Calling Async Event Loop Interrupt telling Pro/DEVELOP application
+<a name="anchor-73"></a>      that Pro/E terminated 
+\*===========================================================================*/
+int UserTerm()
+{
+    ProLine wcmd;
+<a name="anchor-74"></a>    ProError err;
+
+    ProAsynchronousEventLoopInterrupt();
+
+    ProStringToWstring(wcmd, &quot;yes&quot;);
+<a name="anchor-75"></a>    
+    err = ProMacroLoad(wcmd);
+    TEST_CALL_REPORT(&quot;ProMacroLoad()&quot;,
+               		         &quot;UserTerm()&quot;, err, err !=PRO_TK_NO_ERROR);
+    return(0);
+<a name="anchor-76"></a>}
+
+/*===========================================================================*\
+  Function : UserRestartProeTest()
+  Purpose  : test restarting Pro/E and simple async call
+<a name="anchor-77"></a>\*===========================================================================*/
+int UserRestartProeTest(
+    char *pro_command, 
+    char *text_path,
+    int arg_num,
+<a name="anchor-78"></a>    char *part_to_retrieve)
+{
+    char name[PRO_FAMILY_MDLNAME_SIZE];
+    ProMdlfileType type;
+    char name_type[PRO_FAMILY_MDLNAME_SIZE + PRO_TYPE_SIZE + 2];
+<a name="anchor-79"></a>    wchar_t w_name_type[PRO_FAMILY_MDLNAME_SIZE + PRO_TYPE_SIZE + 2];
+    ProMdl model;
+    char *proe;
+    int w_id, ret = 0;
+    ProError err;
+<a name="anchor-80"></a>
+    if(arg_num>3)
+     	if (arg_num==4)
+	{
+       	    proe=strrchr(pro_command, ' '); 
+<a name="anchor-81"></a>            *proe='\0';
+      	}
+     	else
+      	{
+       	    return (0);
+<a name="anchor-82"></a>      	}
+
+    /* Start up Pro/ENGINEER */
+    ProTKFprintf(stderr, &quot;\n*****\tRe-Starting Pro/Engineer\t*****\n&quot;);
+    ProTKFprintf(stderr, &quot;\tProe command: \&quot;%s\&quot;\t\n&quot;, pro_command);
+<a name="anchor-83"></a>    ProTKFprintf(stderr, &quot;\t\tPlease wait...\n&quot;); 
+     
+
+    err = ProEngineerStart(pro_command, text_path);
+    TEST_CALL_REPORT(&quot;ProEngineerStart()&quot;,
+<a name="anchor-84"></a>                        &quot;UserRestartProeTest()&quot;, err, err !=PRO_TK_NO_ERROR);
+
+    if (part_to_retrieve!=NULL)
+    {
+        ProTKFprintf(stderr, &quot;\nRetrieving part %s\n&quot;, part_to_retrieve); 
+<a name="anchor-85"></a>        /*  Query for an object  */
+        ret = ProUtilConfirmNameType(part_to_retrieve, name, (ProType*)&amp;type);
+    }
+    else
+    {
+<a name="anchor-86"></a>         /*  Query for an object  */
+	err = ProMessageDisplay(MSGFIL, &quot;USER %0s&quot;, &quot;Enter object name.type: &quot;);
+        TEST_CALL_REPORT(&quot;ProMessageDisplay()&quot;,
+             &quot;UserRestartProeTest()&quot;, err, err !=PRO_TK_NO_ERROR);
+	err = ProMessageStringRead(79, w_name_type);
+<a name="anchor-87"></a>        if (err == PRO_TK_NO_ERROR)
+	{
+	    ProWstringToString(name_type, w_name_type);
+	    part_to_retrieve = name_type ; 
+	    ret = ProUtilConfirmNameType(name_type, name, (ProType*)&amp;type); 
+<a name="anchor-88"></a>	}
+    }
+
+        /*  Retrieve an object  */
+    if (err == PRO_TK_NO_ERROR &amp;&amp; ret > 0)
+<a name="anchor-89"></a>    {
+	ProStringToWstring(w_name_type, name);
+    	err = ProMdlnameRetrieve (w_name_type, type, &amp;model);
+    	TEST_CALL_REPORT(&quot;ProMdlnameRetrieve ()&quot;,
+                        &quot;UserRestartProeTest()&quot;, err, err !=PRO_TK_NO_ERROR);
+<a name="anchor-90"></a>
+        /*  Display the object  */
+        err = ProObjectwindowMdlnameCreate(w_name_type, (ProType)type, &amp;w_id);
+	TEST_CALL_REPORT(&quot;ProObjectwindowCreate()&quot;,
+                        &quot;UserRestartProeTest()&quot;, err, err !=PRO_TK_NO_ERROR);
+<a name="anchor-91"></a>
+        err = ProMdlDisplay(model);
+	TEST_CALL_REPORT(&quot;ProMdlDisplay()&quot;,
+                        &quot;UserRestartProeTest()&quot;, err, err !=PRO_TK_NO_ERROR);
+
+<a name="anchor-92"></a>        ProTKFprintf(stderr, &quot;After retrieving '%s' part\n&quot;, part_to_retrieve);
+        ProTKFprintf(stderr, &quot;Exit Pro/E\n&quot;);
+    }
+ 
+    err = ProEngineerEnd();
+<a name="anchor-93"></a>    TEST_CALL_REPORT(&quot;ProEngineerEnd()&quot;, &quot;UserRestartProeTest()&quot;,
+		     err, err != PRO_TK_NO_ERROR);    
+    return (0);
+}
+
+<a name="anchor-94"></a>/*---------------------------------------------------------------------*\
+ Function: UserTerminateAction()
+ Purpose: called on Pro/E exit
+\*---------------------------------------------------------------------*/
+void UserTerminateAction(
+<a name="anchor-95"></a>    ProeTerminationStatus term_type)
+{
+    TEST_CALL_REPORT(&quot;ProTerminationAction()&quot;, &quot;UserTerminateAction()&quot;, 
+        PRO_TK_NO_ERROR, 0);
+    ProAsynchronousEventLoopInterrupt();
+<a name="anchor-96"></a>    switch (term_type)
+    {
+     	case PROTERM_EXIT:  
+	  ProTKFprintf(stderr, &quot;\nMenu item 'EXIT' was picked\n&quot;);
+	  break;
+<a name="anchor-97"></a>    } 
+}
+
+/*============================================================================*\
+  Function : ProTestShowMenu()
+<a name="anchor-98"></a>  Purpose  : Perform a Pro/E operation
+\*============================================================================*/
+int ProTestShowMenu()
+{
+    int action, menu_id;
+<a name="anchor-99"></a>    ProError err;
+    
+  
+    err = ProMenuCreate(PROMENUTYPE_MAIN, &quot;Async Test&quot;, &amp;menu_id);
+    TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;,
+<a name="anchor-100"></a>		     &quot;ProTestShowMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProMenuProcess(&quot;Async Test&quot;, &amp;action);
+    TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;,
+		     &quot;ProTestShowMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-101"></a>
+    return(0);
+}
+
+/*============================================================================*\
+<a name="anchor-102"></a>  Function : UserActionFunc()
+  Purpose  : Perform a Pro/E operation
+\*============================================================================*/
+int UserActionFunc(
+    ProAppData ptr, 
+<a name="anchor-103"></a>    int opt)
+{
+    char name[PRO_FAMILY_MDLNAME_SIZE];
+    ProMdlfileType type;
+    ProMdl model;
+<a name="anchor-104"></a>    ProCharLine msgbuf;
+    char name_type[PRO_FAMILY_MDLNAME_SIZE + PRO_TYPE_SIZE + 2];
+    wchar_t w_name_type[PRO_FAMILY_MDLNAME_SIZE + PRO_TYPE_SIZE + 2];
+    ProError err;
+	int strLength;
+<a name="anchor-105"></a>    int w_id, ret=0;
+
+    switch (opt)
+    {
+    case USER_RETRIEVE_ACTION :
+<a name="anchor-106"></a>        Action_done = 1;
+         /*  Query for an object  */
+        err = ProMessageDisplay(MSGFIL, &quot;USER %0s&quot;, &quot;Enter object name.type: &quot;);
+        TEST_CALL_REPORT(&quot;ProMessageDisplay()&quot;,
+            &quot;UserActionFunc()&quot;, err, err !=PRO_TK_NO_ERROR);
+<a name="anchor-107"></a>        err = ProMessageStringRead(79, w_name_type);
+        if (err == PRO_TK_NO_ERROR)
+        {
+            ProWstringToString(name_type, w_name_type);
+            ret = ProUtilConfirmNameType(name_type, name, (ProType*)&amp;type);
+<a name="anchor-108"></a>        }
+	/*  Retrieve the object  */
+    	if (err == PRO_TK_NO_ERROR &amp;&amp; ret > 0)
+    	{
+            ProStringToWstring(w_name_type, name);
+<a name="anchor-109"></a>            err = ProMdlnameRetrieve(w_name_type, type, &amp;model);
+            TEST_CALL_REPORT(&quot;ProMdlnameRetrieve()&quot;,
+                        &quot;UserActionFunc()&quot;, err, err !=PRO_TK_NO_ERROR);
+
+            /*  Display the object  */
+<a name="anchor-110"></a>            err = ProObjectwindowMdlnameCreate(w_name_type, (ProType)type, &amp;w_id);
+            TEST_CALL_REPORT(&quot;ProObjectwindowMdlnameCreate()&quot;,
+                        &quot;UserActionFunc()&quot;, err, err !=PRO_TK_NO_ERROR);
+
+	    err = ProWindowActivate(w_id);
+<a name="anchor-111"></a>            TEST_CALL_REPORT(&quot;ProWindowActivate()&quot;,
+                        &quot;UserActionFunc()&quot;, err, err !=PRO_TK_NO_ERROR);
+
+            err = ProMdlDisplay(model);
+            TEST_CALL_REPORT(&quot;ProMdlDisplay()&quot;,
+<a name="anchor-112"></a>                        &quot;UserActionFunc()&quot;, err, err !=PRO_TK_NO_ERROR);
+
+	    if (err == PRO_TK_NO_ERROR)
+	    {
+		/*  Confirm back to user  */
+<a name="anchor-113"></a>			err = ProWstringLengthGet (w_name_type, &amp;strLength);
+			TEST_CALL_REPORT(&quot;ProWstringLengthGet()&quot;,
+                        &quot;UserActionFunc()&quot;, err, err !=PRO_TK_NO_ERROR);
+
+			if (strLength &lt; 80)
+<a name="anchor-114"></a>			{
+	   			ProTKSprintf(msgbuf, &quot;Retrieved: %s&quot;, name_type);
+            	err = ProMessageDisplay(MSGFIL, &quot;USER %0s&quot;, msgbuf);
+                TEST_CALL_REPORT(&quot;ProMessageDisplay()&quot;,
+                        &quot;UserActionFunc()&quot;, err, err !=PRO_TK_NO_ERROR);
+<a name="anchor-115"></a>            	ProTKFprintf(stderr, &quot;\t%s\n&quot;, msgbuf);
+			}
+			else
+			{
+				return PRO_TK_LINE_TOO_LONG;
+<a name="anchor-116"></a>			}
+	    }
+    	}
+        break;
+
+<a name="anchor-117"></a>    case USER_MESSAGE_ACTION :
+        err = ProMessageDisplay(MSGFIL, &quot;USER %0s&quot;, msgbuf);
+        TEST_CALL_REPORT(&quot;ProMessageDisplay()&quot;,
+                        &quot;UserActionFunc()&quot;, err, err !=PRO_TK_NO_ERROR);
+        ProTKFprintf(stderr, &quot;\t%s\n&quot;, msgbuf);
+<a name="anchor-118"></a>        break;
+
+    case USER_EXIT_ACTION :
+        if (!connect_mode)
+        {
+<a name="anchor-119"></a>    	    err = ProEngineerEnd();
+    	    TEST_CALL_REPORT(&quot;ProEngineerEnd()&quot;,
+			&quot;UserActionFunc()&quot;, err, err != PRO_TK_NO_ERROR);
+            ProTKFprintf(stderr, &quot;\n\tHello World! After ProEngineerEnd()\n&quot;);
+	}
+<a name="anchor-120"></a>	else
+	{
+	    err = ProEngineerDisconnect(&amp;proe_handle, 20);
+    	    TEST_CALL_REPORT(&quot;ProEngineerDisconnect()&quot;,
+			&quot;UserActionFunc()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-121"></a>            ProTKFprintf(stderr, &quot;\n\tHello World! After ProDisconnectProe()\n&quot;);
+	}
+        ProAsynchronousEventLoopInterrupt();
+        break;
+
+<a name="anchor-122"></a>    default :
+        break;
+    }
+    return(0);
+}
+<a name="anchor-123"></a>
+/*============================================================================*\
+  Function : UserNotificationFunc()
+  Purpose  : Test Notification function in async mode
+\*============================================================================*/
+<a name="anchor-124"></a>ProError UserNotificationFunc()
+{
+   ProTKFprintf(stderr, &quot;Notification function\n&quot;);
+   TEST_CALL_REPORT(&quot;ProMdlDisplayPre()&quot;,
+			&quot;UserNotificationFunc()&quot;, PRO_TK_NO_ERROR, 0);
+<a name="anchor-125"></a>
+   return (PRO_TK_NO_ERROR);
+}
+
+</pre>
+</body>
+</html>

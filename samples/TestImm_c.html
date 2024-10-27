@@ -1,0 +1,218 @@
+<html>
+<head>
+<title>TestImm.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*----------------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*----------------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMenu.h>
+#include &lt;ProMdl.h>
+#include &lt;ProImm.h>
+#include &lt;ProArray.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>#include &lt;ProTKRunTime.h>	
+
+/*----------------------------------------------------------------------------*\
+C System includes
+\*----------------------------------------------------------------------------*/
+<a name="anchor-4"></a>
+/*----------------------------------------------------------------------------*\
+Application includes
+\*----------------------------------------------------------------------------*/
+#include &quot;UtilMessage.h&quot;
+<a name="anchor-5"></a>#include &quot;UtilMenu.h&quot;
+#include &quot;UtilFiles.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+
+<a name="anchor-6"></a>/*----------------------------------------------------------------------------*\
+Application macros
+\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-7"></a>Application prototypes
+\*----------------------------------------------------------------------------*/
+int     ProTestImmInfo(ProMdl );
+int     ProTestImmCreate(ProMdl );
+int     ProTestImmRedefine(ProMdl );
+<a name="anchor-8"></a>
+/*----------------------------------------------------------------------------*\
+Application global/external data
+\*----------------------------------------------------------------------------*/
+
+<a name="anchor-9"></a>/*============================================================================*\
+    FUNCTION : ProTestImm	
+    PURPOSE  : Setup menu for testing
+\*============================================================================*/
+ProError ProTestImm(ProMdl mdl)
+<a name="anchor-10"></a>{
+    ProError err;
+    int menu_id, action;
+    ProImmParams imm_par = NULL;
+        
+<a name="anchor-11"></a>    err = ProMenuFileRegister((char *)&quot;TkImm&quot;,(char *)&quot;tkimm.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char *)&quot;TkImm&quot;, (char *)&quot;TkImm&quot;,
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char *)&quot;TkImm&quot;, (char *)&quot;Add&quot;,
+	(ProMenubuttonAction)ProTestImmCreate, mdl, 0);
+<a name="anchor-12"></a>    err = ProMenubuttonActionSet((char *)&quot;TkImm&quot;, (char *)&quot;Info&quot;,
+	(ProMenubuttonAction)ProTestImmInfo, mdl, 0);
+    err = ProMenubuttonActionSet((char *)&quot;TkImm&quot;, (char *)&quot;Replace&quot;,
+	(ProMenubuttonAction)ProTestImmRedefine, mdl, 0);
+    err = ProMenubuttonActionSet((char *)&quot;TkImm&quot;, (char *)&quot;Done&quot;,
+<a name="anchor-13"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+
+    err = ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;TkImm&quot;, NULL);
+    
+    err = ProImmFromModelGet (mdl, &amp;imm_par);
+<a name="anchor-14"></a>    TEST_CALL_REPORT(&quot;ProImmFromModelGet()&quot;, &quot;ProTestImmCreate()&quot;, 
+	err, (err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_E_NOT_FOUND));
+    
+    if (err == PRO_TK_E_NOT_FOUND)
+    {
+<a name="anchor-15"></a>        err = ProMenubuttonDeactivate ((char *)&quot;TkImm&quot;, (char *)&quot;Replace&quot;);
+        err = ProMenubuttonDeactivate ((char *)&quot;TkImm&quot;, (char *)&quot;Info&quot;);
+    }    
+    else
+        err = ProMenubuttonDeactivate ((char *)&quot;TkImm&quot;, (char *)&quot;Add&quot;);
+<a name="anchor-16"></a>        
+    err = ProMenuProcess((char *)&quot;&quot;, &amp;action);
+    
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-17"></a>
+/*============================================================================*\
+    FUNCTION : ProTestImmCreate 	
+    PURPOSE  : Create new IMM.	
+\*============================================================================*/
+<a name="anchor-18"></a>int ProTestImmCreate (ProMdl mdl)
+{
+    ProError err;
+    ProImmParams imm_par = NULL;
+    ProName  machine_name;
+<a name="anchor-19"></a>    
+    
+    err =  ProImmParamsAlloc(&amp;imm_par);
+    TEST_CALL_REPORT(&quot;ProImmParamsAlloc()&quot;,
+            &quot;ProTestImmCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-20"></a>            
+    ProStringToWstring (machine_name, (char *)&quot;Access_220_725&quot;);
+    err = ProImmParamsDefaultSet (machine_name, imm_par);
+    TEST_CALL_REPORT(&quot;ProImmParamsDefaultSet()&quot;,
+            &quot;ProTestImmCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>   
+    err = ProImmDialog (mdl, imm_par);
+    TEST_CALL_REPORT(&quot;ProImmDialog()&quot;,
+            &quot;ProTestImmCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err == PRO_TK_NO_ERROR) 
+<a name="anchor-22"></a>    {       
+        err = ProImmCreate (imm_par);
+        TEST_CALL_REPORT(&quot;ProImmCreate()&quot;,
+            &quot;ProTestImmCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-23"></a>    err = ProImmParamsFree (&amp;imm_par);
+    TEST_CALL_REPORT(&quot;ProImmParamsFree()&quot;,
+            &quot;ProTestImmCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+    return (0);
+<a name="anchor-24"></a>}
+
+/*============================================================================*\
+    FUNCTION : ProTestImmRedefine	
+    PURPOSE  : Redefine existing IMM	
+<a name="anchor-25"></a>\*============================================================================*/
+int ProTestImmRedefine (ProMdl mdl)
+{
+    ProError err;
+    ProImmParams imm_par = NULL;
+<a name="anchor-26"></a>    
+    err = ProImmFromModelGet (mdl, &amp;imm_par);
+    TEST_CALL_REPORT(&quot;ProImmFromModelGet()&quot;,
+            &quot;ProTestImmRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-27"></a>        return (-1);
+        
+    err = ProImmDialog (mdl, imm_par);
+    TEST_CALL_REPORT(&quot;ProImmDialog()&quot;,
+            &quot;ProTestImmRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-28"></a>    if (err == PRO_TK_NO_ERROR) 
+    {       
+        err = ProImmCreate (imm_par);
+        TEST_CALL_REPORT(&quot;ProImmCreate()&quot;,
+            &quot;ProTestImmRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-29"></a>    }
+    err = ProImmParamsFree (&amp;imm_par);
+    TEST_CALL_REPORT(&quot;ProImmParamsFree()&quot;,
+            &quot;ProTestImmCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-30"></a>    return (0);
+}
+
+/*============================================================================*\
+    FUNCTION : ProTestImmInfo	
+<a name="anchor-31"></a>    PURPOSE  : Get IMM info	
+\*============================================================================*/
+int ProTestImmInfo (ProMdl mdl)
+{
+    ProError err;
+<a name="anchor-32"></a>    ProImmParams imm_par = NULL;
+    ProName       machine_name, *p_param_values = NULL;
+    ProCharName *p_param_names = NULL;
+    ProCharLine line, value;
+    char f_name[PRO_FILE_NAME_SIZE];
+<a name="anchor-33"></a>    FILE *fp;
+    int n_params, i;
+    
+    ProTestQcrName(&amp;mdl, (char *)&quot;.inf&quot;, f_name);
+    fp = PTApplsUnicodeFopen (f_name, &quot;w&quot;);
+<a name="anchor-34"></a>    if (fp == NULL)
+        return -1;
+    
+    
+    err = ProImmFromModelGet (mdl, &amp;imm_par);
+<a name="anchor-35"></a>    TEST_CALL_REPORT(&quot;ProImmFromModelGet()&quot;,
+            &quot;ProTestImmInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+        return (-1);
+    
+<a name="anchor-36"></a>    err = ProArrayAlloc (0, sizeof(ProCharName), 1, (ProArray*)&amp;p_param_names);
+    err = ProArrayAlloc (0, sizeof(ProName), 1, (ProArray*)&amp;p_param_values);
+    
+    err = ProImmParamsGet (imm_par, machine_name, &amp;p_param_names, 
+        &amp;p_param_values );
+<a name="anchor-37"></a>    TEST_CALL_REPORT(&quot;ProImmParamsGet()&quot;,
+            &quot;ProTestImmInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+    ProTKFprintf (fp, &quot;\nMachine_name: %s\n&quot;, 
+        ProWstringToString(line, machine_name));
+<a name="anchor-38"></a>    err = ProArraySizeGet ((ProArray)p_param_names, &amp;n_params);
+    for (i = 0; i &lt; n_params; i++)
+    {
+         strcpy(line, p_param_names[i]);
+         ProWstringToString(value, p_param_values[i]);
+<a name="anchor-39"></a>         ProTKFprintf(fp, &quot;    %-20s %s\n&quot;, line, value); 
+    }
+    err = ProArrayFree ((ProArray*)&amp;p_param_values);    
+    err = ProArrayFree ((ProArray*)&amp;p_param_names);
+    err = ProImmParamsFree (&amp;imm_par);
+<a name="anchor-40"></a>    TEST_CALL_REPORT(&quot;ProImmParamsFree()&quot;,
+            &quot;ProTestImmCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    fclose (fp);
+    
+<a name="anchor-41"></a>    ProStringToWstring(machine_name, f_name);
+    ProInfoWindowDisplay(machine_name, NULL, NULL); 
+    
+    return (0);
+}
+</pre>
+</body>
+</html>

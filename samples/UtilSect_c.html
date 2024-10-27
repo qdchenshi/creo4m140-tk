@@ -1,0 +1,3140 @@
+<html>
+<head>
+<title>UtilSect.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProSecdim.h>
+#include &lt;ProSection.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMenu.h>
+<a name="anchor-3"></a>#include &lt;ProEdge.h>
+#include &lt;ProGeomitem.h>
+#include &lt;ProFeature.h>
+#include &lt;ProSelection.h>
+#include &lt;ProSurface.h>
+<a name="anchor-4"></a>#include &lt;ProArray.h>
+#include &lt;ProUtil.h>
+
+/*--------------------------------------------------------------------*\
+C System includes
+<a name="anchor-5"></a>\*--------------------------------------------------------------------*/
+#include &lt;math.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-6"></a>\*--------------------------------------------------------------------*/
+#include &quot;UtilMenu.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;TestSect.h&quot;
+#include &quot;TestSelect.h&quot;
+<a name="anchor-7"></a>#include &quot;UtilMessage.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;UtilMath.h&quot;
+#include &quot;UtilMatrix.h&quot;
+#include &quot;UtilCollect.h&quot;
+<a name="anchor-8"></a>#include &quot;UtilTree.h&quot;
+#include &quot;ProDtmCrv.h&quot;
+#include &quot;TestFeattype.h&quot;
+#include &quot;UtilString.h&quot;
+/*--------------------------------------------------------------------*\
+<a name="anchor-9"></a>Application global/external data
+\*--------------------------------------------------------------------*/
+#define mnUSE_EDGE          0
+#define mnUSE_EDGE_CHAIN    1
+#define mnUSE_EDGE_LOOP     2
+<a name="anchor-10"></a>#define mnUSE_CURVE_CHAIN   3
+#define mnUSE_CURVE_LOOP    4
+#define mnUSE_DONE          -1
+
+/*
+<a name="anchor-11"></a>Used functions
+*/        
+int ProUtilSecEntityUseEdge (ProSection section);
+int ProUtilSecEntityUseEdgeChain (ProSection section);
+int ProUtilSecEntityUseEdgeLoop (ProSection section);
+<a name="anchor-12"></a>int ProUtilSecEntityUseCurveLoop (ProSection section);
+int ProUtilSecEntityUseCurveChain (ProSection section);
+
+ProError AddProjectedEdgeSectionEntities(ProSolid solid, ProSection section, ProEdge *edges);
+ProError CreateSketchFeatures(SketchInfo *sketch_info, ProFeature *feature);
+<a name="anchor-13"></a>ProError CreateSketchReferences (SketchInfo *sketch_info, ProSelection **proj_refs_i);
+
+
+/*====================================================================*\
+    FUNCTION :	ProUtilSectionRetrieve
+<a name="anchor-14"></a>    PURPOSE  :	Retrieves a section from disk, memory or from feature
+\*====================================================================*/
+ProError ProUtilSectionRetrieve(ProSection *section)
+{
+    int by_name = 0;
+<a name="anchor-15"></a>    int ProUtilAssign();
+    ProError status;
+    int id;
+
+    status = ProMenuFileRegister((char*)&quot;TK SECT RETR&quot;,(char*)&quot;tk_secretr.mnu&quot;, &amp;id);
+<a name="anchor-16"></a>    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProUtilSectionRetrieve&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TK SECT RETR&quot;,(char*)&quot;-By Name&quot;,(ProMenubuttonAction)ProUtilAssign,
+                      &amp;by_name,1);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProUtilSectionRetrieve&quot;,
+<a name="anchor-17"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TK SECT RETR&quot;,(char*)&quot;-From Feature&quot;,
+        (ProMenubuttonAction)ProUtilAssign, &amp;by_name,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProUtilSectionRetrieve&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-18"></a>    status = ProMenubuttonActionSet((char*)&quot;TK SECT RETR&quot;,(char*)&quot;TK SECT RETR&quot;,
+         (ProMenubuttonAction)ProMenuDelete, NULL,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProUtilSectionRetrieve&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*)&quot;TK SECT RETR&quot;, &amp;id);
+<a name="anchor-19"></a>    TEST_CALL_REPORT (&quot;ProMenuCreate&quot;, &quot;ProUtilSectionRetrieve&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess((char*)&quot;TK SECT RETR&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProUtilSectionRetrieve&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-20"></a>
+    if (by_name)
+    {
+	status = ProUtilSectionRetr(section);
+    }
+<a name="anchor-21"></a>    else
+    {
+	status = ProUtilSectionFromFeatGet(section);
+    }
+
+<a name="anchor-22"></a>    return(status);
+}
+/*====================================================================*\
+    FUNCTION :	ProUtilSectionFromFeatGet
+    PURPOSE  :	Gets a section from a feature
+<a name="anchor-23"></a>\*====================================================================*/
+ProError ProUtilSectionFromFeatGet(ProSection *section)
+{
+    ProSelection *p_sels;
+    int n_sels;
+<a name="anchor-24"></a>    ProFeature feat;
+    int n_sections;
+    int range[2],n;
+    wchar_t wname[PRO_NAME_SIZE];
+    ProError err;
+<a name="anchor-25"></a>
+    *section = NULL;
+
+    ProUtilMsgPrint((char*)&quot;gen&quot;,(char*)&quot;TEST %0s&quot;,
+		    (char*)&quot;Select a feature containing a sketch.&quot;);
+<a name="anchor-26"></a>    err = ProSelect((char*)&quot;feature&quot;, 1,
+		    NULL,NULL,NULL,NULL, &amp;p_sels, &amp;n_sels);
+    TEST_CALL_REPORT(&quot;ProSelect&quot;, &quot;ProUtilSectionFromFeatGet&quot;,
+		      err , err != PRO_TK_NO_ERROR);
+
+<a name="anchor-27"></a>    if (err != PRO_TK_NO_ERROR || n_sels != 1)
+	return(PRO_TK_USER_ABORT);
+
+    err = ProSelectionModelitemGet(p_sels[0],&amp;feat);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;,
+<a name="anchor-28"></a>		     &quot;ProUtilSectionFromFeatGet&quot;,
+		      err , err != PRO_TK_NO_ERROR);
+
+    err = ProFeatureNumSectionsGet(&amp;feat,&amp;n_sections);
+    TEST_CALL_REPORT(&quot;ProFeatureNumSectionsGet&quot;,
+<a name="anchor-29"></a>		     &quot;ProUtilSectionFromFeatGet&quot;,
+		      err , err != PRO_TK_NO_ERROR);
+
+    if (n_sections &lt; 1)
+    {
+<a name="anchor-30"></a>	ProUtilMsgPrint((char*)&quot;gen&quot;,(char*)&quot;TEST %0s&quot;,
+			(char*)&quot;Feature does not contain any sections.&quot;);
+        return(PRO_TK_GENERAL_ERROR);
+    }
+
+<a name="anchor-31"></a>    range[0] = 0; range[1] = n_sections-1;
+    n = 0;
+    if ( range[0] != range[1] )
+    {
+	ProUtilMsgPrint((char*)&quot;gen&quot;,(char*)&quot;TEST %0s&quot;,
+<a name="anchor-32"></a>			(char*)&quot;Specify section number to retrieve.&quot;);
+        ProUtilIntGet(range,&amp;range[0],&amp;n);
+    }
+
+    err = ProFeatureSectionCopy(&amp;feat,n,section);
+<a name="anchor-33"></a>    TEST_CALL_REPORT(&quot;ProFeatureSectionCopy&quot;,
+		     &quot;ProUtilSectionFromFeatGet&quot;,
+		      err , err != PRO_TK_NO_ERROR);
+    ProUtilMsgPrint((char*)&quot;gen&quot;,(char*)&quot;TEST %0s&quot;,
+		(char*)&quot;Enter section name [NONE]: &quot;);
+<a name="anchor-34"></a>    if (ProUtilStringGet(wname,NULL, PRO_NAME_SIZE-1))
+    {
+	err = ProSectionNameSet(*section,wname);
+	/*  The function returns -2 for feature section (3D sec)
+	    but successfully sets the name. ProSection3dTo2d (doesn't 
+<a name="anchor-35"></a>	    exist yet))needs to be used before calling to ProSectionNameSet().
+        TEST_CALL_REPORT(&quot;ProSectionNameSet&quot;,
+		         &quot;ProUtilSectionFromFeatGet&quot;,
+		         err , err != PRO_TK_NO_ERROR);
+	*/
+<a name="anchor-36"></a>    }
+
+     return(err);
+}
+
+<a name="anchor-37"></a>/*====================================================================*\
+    FUNCTION :	ProUtilSectionPointTypeStr
+    PURPOSE  :	Dumps section entity info to a file
+\*====================================================================*/
+char* ProUtilSectionPointTypeStr(
+<a name="anchor-38"></a>    ProSectionPointType type)
+{
+    switch(type)
+    {
+	case PRO_ENT_WHOLE:
+<a name="anchor-39"></a>	     return((char*)&quot;PRO_ENT_WHOLE&quot;);
+	case PRO_ENT_START:
+	     return((char*)&quot;PRO_ENT_START&quot;);
+	case PRO_ENT_END:
+	     return((char*)&quot;PRO_ENT_END&quot;);
+<a name="anchor-40"></a>	case PRO_ENT_CENTER:
+	     return((char*)&quot;PRO_ENT_CENTER&quot;);
+	case PRO_ENT_LEFT_TANGENT:
+	     return((char*)&quot;PRO_ENT_LEFT_TANGENT&quot;);
+	case PRO_ENT_RIGHT_TANGENT:
+<a name="anchor-41"></a>	     return((char*)&quot;PRO_ENT_RIGHT_TANGENT&quot;);
+	case PRO_ENT_TOP_TANGENT:
+	     return((char*)&quot;PRO_ENT_TOP_TANGENT&quot;);
+	case PRO_ENT_BOTTOM_TANGENT:
+	     return((char*)&quot;PRO_ENT_BOTTOM_TANGENT&quot;);
+<a name="anchor-42"></a>    }
+    return((char*)&quot;UNKNOWN&quot;);
+}
+
+
+<a name="anchor-43"></a>
+/*====================================================================*\
+    FUNCTION :	ProUtilSectionInfoGet
+    PURPOSE  :	Dumps section entity info to a file
+
+<a name="anchor-44"></a>    WARNING:	Do not call to this function during feature redefinition. 
+		The function calls to ProSectionDimensionIdsGet which 
+		should be used only for completely redefined feature.
+\*====================================================================*/
+ProError ProUtilSectionInfoGet(FILE *fp,ProSection section)
+<a name="anchor-45"></a>{
+    ProIntlist ent_ids,dim_ids,con_ids;
+    int n_ids,n_dimids, n_conids, i,j;
+    ProError status;
+    Pro2dEntdef *p_ent;
+<a name="anchor-46"></a>    Pro2dPointdef *p_pnt;
+    Pro2dLinedef *p_line;
+    Pro2dArcdef *p_arc;
+    Pro2dCircledef *p_circle;
+    Pro2dSplinedef *p_spline;
+<a name="anchor-47"></a>    Pro2dTextdef *p_text;
+    Pro2dBlendVertexdef *p_bvertex;
+    Pro2dEllipsedef *p_ellipse;
+    Pro2dConicdef *p_conic;
+    ProVector point,deriv,deriv2;
+<a name="anchor-48"></a>    double value;
+    ProSecdimType dim_type;
+    char d_type[50];
+    char *p_type, *c_type, *c_status;
+    ProSectionPointType *p_types;
+<a name="anchor-49"></a>    int *ref_ids;
+    int n_ref_ids,k;
+    ProBoolean is_projection;
+    ProIntlist secdim_ids,mdldim_ids;
+    int n_mdldim_ids,l;
+<a name="anchor-50"></a>    ProConstraintType con_type;
+    ProConstraintStatus con_status;
+    char c_string [PRO_COMMENT_SIZE];
+    char c_font_name [PRO_COMMENT_SIZE];
+    ProWSecerror sec_errors; 
+<a name="anchor-51"></a>
+    ProTestSecerrAlloc(&amp;sec_errors);
+
+    status = ProSectionRegenerate( section, &amp;sec_errors);
+    TEST_CALL_REPORT(&quot;ProSectionRegenerate()&quot;,
+<a name="anchor-52"></a>		     &quot;ProUtilSectionInfoGet()&quot;,
+		     status, status != PRO_TK_NO_ERROR);
+
+    ProTestSecerrFree(&amp;sec_errors);
+
+<a name="anchor-53"></a>    ProTKFprintf(fp,&quot;Section Entity and Dimension Info\n&quot;);
+    ProTKFprintf(fp,&quot;---------------------------------\n\n&quot;);
+ 
+    status = ProSectionEntityIdsGet(section,&amp;ent_ids,&amp;n_ids);
+    TEST_CALL_REPORT(&quot;ProSectionEntityIdsGet()&quot;, &quot;ProUtilSectionInfoGet()&quot;,
+<a name="anchor-54"></a>		     status, status != PRO_TK_NO_ERROR);
+
+    if ( status != PRO_TK_NO_ERROR ) 
+      {
+	ProTKFprintf(fp,&quot;ProSectionEntityIdsGet returned an error = %d \n&quot;, status );
+<a name="anchor-55"></a>	ProTKFprintf(fp,&quot;Not able to access section information \n&quot; );
+	ProTKFprintf(fp,&quot;---------------------------------\n\n&quot;);
+
+	return status; 
+      }
+<a name="anchor-56"></a>
+    for (i=0; i&lt;n_ids; i++)
+    {
+	status = ProSectionEntityGet(section,ent_ids[i],&amp;p_ent);
+        TEST_CALL_REPORT(&quot;ProSectionEntityGet()&quot;,
+<a name="anchor-57"></a>			 &quot;ProUtilSectionInfoGet()&quot;,
+		         status, status != PRO_TK_NO_ERROR);
+
+	ProTKFprintf(fp,&quot;Entity Id: [%d]\n&quot;,ent_ids[i]);
+        if (status != PRO_TK_NO_ERROR) continue;
+<a name="anchor-58"></a>
+        status = ProSectionEntityIsProjection(section,ent_ids[i],
+					       &amp;is_projection);
+        TEST_CALL_REPORT(&quot;ProSectionEntityIsProjection()&quot;,
+			 &quot;ProUtilSectionInfoGet()&quot;,
+<a name="anchor-59"></a>		         status, status != PRO_TK_NO_ERROR);
+        if (status != PRO_TK_NO_ERROR) continue;
+
+        if (is_projection == PRO_B_TRUE)
+	     ProTKFprintf(fp,&quot;\tEntity Is Projection\n&quot;);
+<a name="anchor-60"></a>
+        switch(p_ent->type)
+	{
+	    case PRO_2D_POINT:
+	    case PRO_2D_COORD_SYS:
+<a name="anchor-61"></a>		if (p_ent->type == PRO_2D_POINT)
+		    ProTKFprintf(fp,&quot;\tEntity Type: PRO_2D_POINT\n&quot;);
+                else
+		    ProTKFprintf(fp,&quot;\tEntity Type: PRO_2D_COORD_SYS\n&quot;);
+                p_pnt = (Pro2dPointdef *)p_ent;
+<a name="anchor-62"></a>                ProTKFprintf(fp,&quot;\tLocation: [ %4.2lf, %4.2lf ]\n&quot;,
+			p_pnt->pnt[0],p_pnt->pnt[1]);;
+		break;
+            case PRO_2D_LINE:
+	    case PRO_2D_CENTER_LINE:
+<a name="anchor-63"></a>		if (p_ent->type == PRO_2D_LINE)
+		    ProTKFprintf(fp,&quot;\tEntity Type: PRO_2D_LINE\n&quot;);
+                else
+		    ProTKFprintf(fp,&quot;\tEntity Type: PRO_2D_CENTER_LINE\n&quot;);
+                p_line = (Pro2dLinedef *)p_ent;
+<a name="anchor-64"></a>                ProTKFprintf(fp,&quot;\tEnd1: [ %4.2lf, %4.2lf ]\n&quot;,p_line->end1[0],
+						  p_line->end1[1]);
+                ProTKFprintf(fp,&quot;\tEnd2: [ %4.2lf, %4.2lf ]\n&quot;,p_line->end2[0],
+						  p_line->end2[1]);
+                break;
+<a name="anchor-65"></a>            case PRO_2D_ARC:
+		ProTKFprintf(fp,&quot;\tEntity Type: PRO_2D_ARC\n&quot;);
+		p_arc = (Pro2dArcdef *)p_ent;
+		ProTKFprintf(fp,&quot;\tCenter: [ %4.2lf, %4.2lf ]\n&quot;,p_arc->center[0],
+						         p_arc->center[1]);
+<a name="anchor-66"></a>		ProTKFprintf(fp,&quot;\tRadius: [ %4.2lf ]\n&quot;,p_arc->radius);
+		ProTKFprintf(fp,&quot;\tStart Angle: [ %4.2lf ]\n&quot;,
+				      180/PI*p_arc->start_angle);
+		ProTKFprintf(fp,&quot;\tEnd Angle: [ %4.2lf ]\n&quot;,
+				      180/PI*p_arc->end_angle);
+<a name="anchor-67"></a>		break;
+	    case PRO_2D_CIRCLE:
+	    case PRO_2D_CONSTR_CIRCLE:
+	      if (p_ent -> type == PRO_2D_CIRCLE)
+		ProTKFprintf(fp,&quot;\tEntity Type: PRO_2D_CIRCLE\n&quot;);
+<a name="anchor-68"></a>	      else
+		ProTKFprintf(fp,&quot;\tEntity Type: PRO_2D_CONSTR_CIRCLE\n&quot;);
+		p_circle = (Pro2dCircledef *)p_ent;
+		ProTKFprintf(fp,&quot;\tCenter: [ %4.2lf ]\n&quot;,p_circle->center[0],
+						  p_circle->center[1]);
+<a name="anchor-69"></a>		ProTKFprintf(fp,&quot;\tRadius: [ %4.2lf ]\n&quot;,p_circle->radius);
+		break;
+            case PRO_2D_SPLINE:
+	        ProTKFprintf(fp,&quot;\tEntity Type: PRO_2D_SPLINE\n&quot;);
+		p_spline = (Pro2dSplinedef *)p_ent;
+<a name="anchor-70"></a>		ProTKFprintf(fp,&quot;\tTangency Type: [%d]\n&quot;,
+			p_spline->tangency_type);
+                ProTKFprintf(fp,&quot;\tStart Tangent Angle: [ %4.2lf ]\n&quot;,
+			180/PI*p_spline->start_tang_angle);
+                ProTKFprintf(fp,&quot;\tEnd Tangent Angle: [ %4.2lf ]\n&quot;,
+<a name="anchor-71"></a>			180/PI*p_spline->end_tang_angle);
+                ProTKFprintf(fp,&quot;\tNum Points: [%d]\n&quot;,p_spline->n_points);
+		for (j=0; j&lt;(int)p_spline->n_points; j++)
+		    ProTKFprintf(fp,&quot;\tPoint%d: [ %4.2lf, %4.2lf ]\n&quot;,j,
+			    p_spline->point_arr[j][0],
+<a name="anchor-72"></a>			    p_spline->point_arr[j][1]);
+                break;
+
+	    case PRO_2D_TEXT:
+	      ProTKFprintf (fp, &quot;\tEntity Type: PRO_2D_TEXT\n&quot;);
+<a name="anchor-73"></a>	      p_text = (Pro2dTextdef *)p_ent;
+	      ProTKFprintf (fp, &quot;\tFirst corner: [ %4.2lf , %4.2lf ]\n&quot;,
+		       p_text->first_corner[0], p_text->first_corner[1]);
+	      ProTKFprintf (fp, &quot;\tSecond corner: [ %4.2lf , %4.2lf ]\n&quot;,
+		       p_text->second_corner[0], p_text->second_corner[1]);
+<a name="anchor-74"></a>	      ProWstringToString (c_string, p_text->string);
+	      ProTKFprintf (fp, &quot;\tText: %s\n&quot;, c_string);
+	      ProWstringToString (c_font_name, p_text->font_name);
+	      ProTKFprintf (fp, &quot;\tFont name: %s\n&quot;, c_font_name);
+	      break;
+<a name="anchor-75"></a>	      
+	    case PRO_2D_BLEND_VERTEX:
+	      ProTKFprintf (fp, &quot;\tEntity Type: PRO_2D_BLEND_VERTEX\n&quot;);
+	      p_bvertex = (Pro2dBlendVertexdef *)p_ent;
+	      ProTKFprintf (fp, &quot;\tPoint: [ %4.2lf , %4.2lf ]\n&quot;,
+<a name="anchor-76"></a>		       p_bvertex->pnt[0], p_bvertex->pnt[1]);
+	      ProTKFprintf (fp, &quot;\tDepth level: %d\n&quot;,
+		       p_bvertex->depth_level);
+	      break;
+
+<a name="anchor-77"></a>	    case PRO_2D_ELLIPSE:
+	      ProTKFprintf (fp, &quot;\tEntity Type: PRO_2D_ELLIPSE\n&quot;);
+	      p_ellipse = (Pro2dEllipsedef *)p_ent;
+	      ProTKFprintf (fp, &quot;\tOrigin: [ %4.2lf , %4.2lf ]\n&quot;,
+		       p_ellipse->origin[0], p_ellipse->origin [1]);
+<a name="anchor-78"></a>	      ProTKFprintf (fp, &quot;\tX radius: %4.2lf\n&quot;, p_ellipse->x_radius);
+	      ProTKFprintf (fp, &quot;\tY radius: %4.2lf\n&quot;, p_ellipse->y_radius);	
+	      break;
+
+	    case PRO_2D_CONIC:
+<a name="anchor-79"></a>	      ProTKFprintf (fp, &quot;\tEntity Type: PRO_2D_CONIC\n&quot;);
+	      p_conic = (Pro2dConicdef *)p_ent;
+	      ProTKFprintf (fp, &quot;\tFirst end point: [ %4.2lf , %4.2lf ]\n&quot;,
+		       p_conic->first_end_point[0], p_conic->first_end_point[1]);
+	      ProTKFprintf (fp, &quot;\tSecond end point: [ %4.2lf , %4.2lf ]\n&quot;,
+<a name="anchor-80"></a>		       p_conic->second_end_point[0], p_conic->second_end_point[1]);
+	      ProTKFprintf (fp, &quot;\tShoulder point: [ %4.2lf , %4.2lf ]\n&quot;,
+		       p_conic->shoulder_point[0], p_conic->shoulder_point[1]);
+	      ProTKFprintf (fp, &quot;\tParameter: %4.2lf\n&quot;, p_conic->parameter);
+	      
+<a name="anchor-81"></a>	      break;
+
+            default:
+		ProTKFprintf(fp,&quot;\tEntity Type: UNKNOWN\n&quot;);
+		break;
+<a name="anchor-82"></a>         }
+
+         if (p_ent->type != PRO_2D_POINT &amp;&amp;
+	     p_ent->type != PRO_2D_COORD_SYS )
+         {
+<a name="anchor-83"></a>             ProTKFprintf(fp,&quot;\tPoints Evaluated on Entity\n&quot;);
+             for (j=0; j&lt;=4; j++)
+	     {
+	        status = ProSectionEntityEval(section,ent_ids[i],j*.25,
+					  point,deriv,deriv2);
+<a name="anchor-84"></a>                TEST_CALL_REPORT(&quot;ProSectionEntityEval()&quot;,
+			     &quot;ProUtilSectionInfoGet()&quot;,
+		              status, status != PRO_TK_NO_ERROR);
+                ProTKFprintf(fp,&quot;\t\tParameter: [%4.2lf]\n&quot;,j*.25);
+	        ProTKFprintf(fp,&quot;\t\t\tPoint: [ %4.2lf, %4.2lf ]\n&quot;,
+<a name="anchor-85"></a>				     point[0],point[1]);
+	        ProTKFprintf(fp,&quot;\t\t\tFirst Derivative: [ %4.2lf, %4.2lf ]\n&quot;,
+				     deriv[0],deriv[1]);
+	        ProTKFprintf(fp,&quot;\t\t\tSecond Derivative: [ %4.2lf, %4.2lf ]\n&quot;,
+				     deriv2[0],deriv2[1]);
+<a name="anchor-86"></a>             }
+         }
+
+	 ProTKFprintf(fp,&quot;\n&quot;);
+    }
+<a name="anchor-87"></a>
+    status = ProArrayFree((ProArray*)&amp;ent_ids);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+	    &quot;ProUtilSectionInfoGet()&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-88"></a>/*------------------------------------------------*\
+    Section dimensions
+\*------------------------------------------------*/
+
+    status = ProSecdimIdsGet(section,&amp;dim_ids,&amp;n_dimids);
+<a name="anchor-89"></a>    TEST_CALL_REPORT(&quot;ProSecdimIdsGet()&quot;, &quot;ProUtilSectionInfoGet()&quot;,
+		     status, status != PRO_TK_NO_ERROR);
+    n_mdldim_ids = 0;
+    status = ProSectionDimensionIdsGet(section,&amp;secdim_ids,
+				       &amp;mdldim_ids, &amp;n_mdldim_ids);
+<a name="anchor-90"></a>    TEST_CALL_REPORT(&quot;ProSectionDimensionIdsGet()&quot;,
+		     &quot;ProUtilSectionInfoGet()&quot;,
+		     status, (status != PRO_TK_NO_ERROR) &amp;&amp; 
+                     (status != PRO_TK_NOT_EXIST));
+    if( status != PRO_TK_NO_ERROR )
+<a name="anchor-91"></a>	n_mdldim_ids = 0;
+    ProTKFprintf(fp,&quot;\n&quot;);
+    for (j=0; j&lt;n_dimids; j++)
+    {
+	ProTKFprintf(fp,&quot;\tSecDim Id: [%d]\n&quot;,dim_ids[j]);
+<a name="anchor-92"></a>
+        for (l=0; l&lt;n_mdldim_ids; l++)
+	    if (dim_ids[j] == secdim_ids[l])
+	    {
+		ProTKFprintf(fp,&quot;\tDimension Id: [%d]\n&quot;,mdldim_ids[l]);
+<a name="anchor-93"></a>		break;
+            }
+
+        status = ProSecdimValueGet(section,dim_ids[j],&amp;value);
+        TEST_CALL_REPORT(&quot;ProSecdimValueGet()&quot;,
+<a name="anchor-94"></a>			 &quot;ProUtilSectionInfoGet()&quot;,
+		         status, 
+                         status != PRO_TK_NO_ERROR);
+
+        if (status != PRO_TK_NO_ERROR) continue;
+<a name="anchor-95"></a>	ProTKFprintf(fp,&quot;\t\tValue: [%4.2lf]\n&quot;,value);
+
+	status = ProSecdimTypeGet(section,dim_ids[j],&amp;dim_type);
+        TEST_CALL_REPORT(&quot;ProSecdimTypeGet()&quot;,
+			 &quot;ProUtilSectionInfoGet()&quot;,
+<a name="anchor-96"></a>		         status, status != PRO_TK_NO_ERROR);
+        if (status != PRO_TK_NO_ERROR) continue;
+
+        switch(dim_type)
+	{
+<a name="anchor-97"></a>	    case PRO_TK_DIM_LINE:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_LINE&quot;);
+		 break;
+            case PRO_TK_DIM_LINE_POINT:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_LINE_POINT&quot;);
+<a name="anchor-98"></a>		 break;
+            case PRO_TK_DIM_RAD:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_RAD&quot;);
+		 break;
+            case PRO_TK_DIM_DIA:
+<a name="anchor-99"></a>		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_DIA&quot;);
+		 break;
+            case PRO_TK_DIM_LINE_LINE:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_LINE_LINE&quot;);
+		 break;
+<a name="anchor-100"></a>            case PRO_TK_DIM_PNT_PNT:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_PNT_PNT&quot;);
+		 break;
+            case PRO_TK_DIM_PNT_PNT_HORIZ:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_PNT_PNT_HORIZ&quot;);
+<a name="anchor-101"></a>		 break;
+            case PRO_TK_DIM_PNT_PNT_VERT:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_PNT_PNT_VERT&quot;);
+		 break;
+            case PRO_TK_DIM_AOC_AOC_TAN_HORIZ:
+<a name="anchor-102"></a>		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_AOC_AOC_TAN_HORIZ&quot;);
+		 break;
+            case PRO_TK_DIM_AOC_AOC_TAN_VERT:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_AOC_AOC_TAN_VERT&quot;);
+		 break;
+<a name="anchor-103"></a>            case PRO_TK_DIM_ARC_ANGLE:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_ARC_ANGLE&quot;);
+		 break;
+            case PRO_TK_DIM_LINES_ANGLE:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_LINES_ANGLE&quot;);
+<a name="anchor-104"></a>		 break;
+            case PRO_TK_DIM_LINE_AOC:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_LINE_AOC&quot;);
+		 break;
+            case PRO_TK_DIM_LINE_CURVE_ANGLE:
+<a name="anchor-105"></a>		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_LINE_CURVE_ANGLE&quot;);
+		 break;
+            case PRO_TK_DIM_CONIC_PARAM:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_CONIC_PARAM&quot;);
+		 break;
+<a name="anchor-106"></a>            case PRO_TK_DIM_NONE:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_NONE&quot;);
+		 break;
+            default:
+		 ProUtilstrcpy(d_type,&quot;PRO_TK_DIM_TYPE_UNKNOWN&quot;);
+<a name="anchor-107"></a>		 break;
+        }
+	ProTKFprintf(fp,&quot;\t\tType: %s\n&quot;,d_type);
+
+        status = ProSecdimReferencesGet(section,dim_ids[j],&amp;ref_ids,
+<a name="anchor-108"></a>					&amp;p_types,&amp;n_ref_ids);
+        TEST_CALL_REPORT(&quot;ProSecdimReferencesGet()&quot;,
+			 &quot;ProUtilSectionInfoGet()&quot;,
+		         status, status != PRO_TK_NO_ERROR);
+        if (status != PRO_TK_NO_ERROR) continue;
+<a name="anchor-109"></a>
+        ProTKFprintf(fp,&quot;\t\tDimension References:\n&quot;);
+        for (k=0; k&lt;n_ref_ids; k++)
+	{
+	    p_type = ProUtilSectionPointTypeStr(p_types[k]);
+<a name="anchor-110"></a>            ProTKFprintf(fp,&quot;\t\t\tRef%d: Entity Id [%d], Point Type %s\n&quot;,
+		    k,ref_ids[k],p_type);
+        }
+
+	status = ProArrayFree((ProArray*)&amp;p_types);
+<a name="anchor-111"></a>        TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+		&quot;ProUtilSectionInfoGet()&quot;, status, status != PRO_TK_NO_ERROR);
+	status = ProArrayFree((ProArray*)&amp;ref_ids);
+        TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+		&quot;ProUtilSectionInfoGet()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-112"></a>	ProTKFprintf(fp,&quot;\n&quot;);
+    }
+
+    status = ProArrayFree((ProArray*)&amp;dim_ids);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+<a name="anchor-113"></a>	    &quot;ProUtilSectionInfoGet()&quot;, status, status != PRO_TK_NO_ERROR);
+
+/*------------------------------------------------*\
+    Section constarins
+\*------------------------------------------------*/
+<a name="anchor-114"></a>#if 1
+    status = ProSectionConstraintsIdsGet(section, &amp;con_ids,&amp;n_conids);
+    TEST_CALL_REPORT(&quot;ProSectionConstraintsIdsGet()&quot;,
+		&quot;ProUtilSectionInfoGet()&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-115"></a>    ProTKFprintf(fp,&quot;\n&quot;);
+    for (j=0; j&lt;n_conids; j++)
+    {
+	ProTKFprintf(fp,&quot;\tConstraint Id: [%d]\n&quot;,con_ids[j]);
+
+<a name="anchor-116"></a>        status = ProSectionConstraintsGet(section, con_ids[j],
+	    &amp;con_type, &amp;con_status, &amp;n_ref_ids, &amp;ref_ids, &amp;p_types);
+	TEST_CALL_REPORT(&quot;ProSectionConstraintsGet()&quot;,
+		&quot;ProUtilSectionInfoGet()&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-117"></a>	if (status != PRO_TK_NO_ERROR)
+	    continue;
+
+        switch(con_type)
+	{
+<a name="anchor-118"></a>	    case PRO_CONSTRAINT_TYPE_UNKNOWN:
+		 c_type = (char*)&quot;PRO_CONSTRAINT_TYPE_UNKNOWN&quot;;
+		 break;
+            case PRO_CONSTRAINT_SAME_POINT:
+		 c_type = (char*)&quot;PRO_CONSTRAINT_SAME_POINT&quot;;
+<a name="anchor-119"></a>		 break;
+            case PRO_CONSTRAINT_HORIZONTAL_ENT:
+		 c_type = (char*)&quot;PRO_CONSTRAINT_HORIZONTAL_ENT&quot;;
+		 break;
+            case PRO_CONSTRAINT_VERTICAL_ENT:
+<a name="anchor-120"></a>		 c_type = (char*)&quot;PRO_CONSTRAINT_VERTICAL_ENT&quot;;
+		 break;
+            case PRO_CONSTRAINT_PNT_ON_ENT:
+		 c_type = (char*)&quot;PRO_CONSTRAINT_PNT_ON_ENT&quot;;
+		 break;
+<a name="anchor-121"></a>            case PRO_CONSTRAINT_TANGENT_ENTS:
+		 c_type = (char*)&quot;PRO_CONSTRAINT_TANGENT_ENTS&quot;;
+		 break;
+            case PRO_CONSTRAINT_PARALLEL_ENTS:
+		 c_type = (char*)&quot;PRO_CONSTRAINT_PARALLEL_ENTS&quot;;
+<a name="anchor-122"></a>		 break;
+            case PRO_CONSTRAINT_ORTHOG_ENTS:
+		 c_type = (char*)&quot;PRO_CONSTRAINT_ORTHOG_ENTS&quot;;
+		 break;
+            case PRO_CONSTRAINT_EQUAL_SEGMENTS:
+<a name="anchor-123"></a>		 c_type = (char*)&quot;PRO_CONSTRAINT_EQUAL_SEGMENTS&quot;;
+		 break;
+            case PRO_CONSTRAINT_EQUAL_RADII:
+		 c_type = (char*)&quot;PRO_CONSTRAINT_EQUAL_RADII&quot;;
+		 break;
+<a name="anchor-124"></a>            case PRO_CONSTRAINT_SYMMETRY:
+		 c_type = (char*)&quot;PRO_CONSTRAINT_SYMMETRY&quot;;
+		 break;
+            case PRO_CONSTRAINT_SAME_COORD:
+		 c_type = (char*)&quot;PRO_CONSTRAINT_SAME_COORD&quot;;
+<a name="anchor-125"></a>		 break;
+            default:
+		 c_type = (char*)&quot;Unknown&quot;;
+		 break;
+        }
+<a name="anchor-126"></a>
+        switch(con_status)
+	{
+	    case PRO_TK_CONSTRAINT_DENIED:
+		c_status = (char*)&quot;PRO_TK_CONSTRAINT_DENIED&quot;;
+<a name="anchor-127"></a>		break;
+	    case PRO_TK_CONSTRAINT_ENABLED:
+		c_status = (char*)&quot;PRO_TK_CONSTRAINT_ENABLED&quot;;
+		break;
+            default:
+<a name="anchor-128"></a>		c_status = (char*)&quot;Unknown&quot;;
+		break;
+	}
+
+	ProTKFprintf(fp,&quot;\t\tType: %-30s Status: %s\n&quot;, c_type, c_status);
+<a name="anchor-129"></a>
+        ProTKFprintf(fp,&quot;\t\tConstraint References:\n&quot;);
+        for (k=0; k&lt;n_ref_ids; k++)
+	{
+	    p_type = ProUtilSectionPointTypeStr(p_types[k]);
+<a name="anchor-130"></a>            ProTKFprintf(fp,&quot;\t\t\tRef%d: Entity Id [%d], Point Type %s\n&quot;,
+		    k,ref_ids[k],p_type);
+        }
+
+	status = ProArrayFree((ProArray*)&amp;p_types);
+<a name="anchor-131"></a>        TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+		&quot;ProUtilSectionInfoGet()&quot;, status, status != PRO_TK_NO_ERROR);
+	status = ProArrayFree((ProArray*)&amp;ref_ids);
+        TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+		&quot;ProUtilSectionInfoGet()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-132"></a>	ProTKFprintf(fp,&quot;\n&quot;);
+    }
+
+    status = ProArrayFree((ProArray*)&amp;con_ids);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+<a name="anchor-133"></a>	    &quot;ProUtilSectionInfoGet()&quot;, status, status != PRO_TK_NO_ERROR);
+#endif
+
+    return(status);
+}
+<a name="anchor-134"></a>
+/*====================================================================*\
+    FUNCTION :	ProUtilSectionRetr
+    PURPOSE  :	Retrieves a 2D section
+\*====================================================================*/
+<a name="anchor-135"></a>ProError ProUtilSectionRetr(ProSection *section)
+{
+    ProFamilyMdlName sec_name;
+    ProError status;
+    char str[PRO_FAMILY_MDLNAME_SIZE];
+<a name="anchor-136"></a>    char *p;
+
+    ProUtilMsgPrint((char*)&quot;gen&quot;,(char*)&quot;TEST %0s&quot;,(char*)&quot;Enter section name to retrieve: &quot;);
+    if (!ProUtilStringGet(sec_name,NULL,PRO_NAME_SIZE-1))
+	 return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-137"></a>
+    ProWstringToString( str, sec_name );
+    if( (p = strchr( str, '.')) != NULL )
+	*p = '\0';
+    ProTKPrintf(&quot;Section name %s.sec\n&quot;,str);
+<a name="anchor-138"></a>    ProStringToWstring( sec_name, str );
+    status = ProMdlnameRetrieve(sec_name,PRO_MDLFILE_2DSECTION,(ProMdl *)section);
+    TEST_CALL_REPORT(&quot;ProMdlnameRetrieve()&quot;, &quot;ProUtilSectionRetr()&quot;,
+		     status, status != PRO_TK_NO_ERROR);
+    return(status);
+<a name="anchor-139"></a>}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilSectionSave
+    PURPOSE  :  Saves a 2D section
+<a name="anchor-140"></a>\*====================================================================*/
+ProError ProUtilSectionSave(ProSection section)
+{
+    ProError status;
+
+<a name="anchor-141"></a>    status = ProMdlSave((ProMdl) section);
+    TEST_CALL_REPORT(&quot;ProMdlSave()&quot;, &quot;ProUtilSectionSave()&quot;,
+                     status, status != PRO_TK_NO_ERROR);
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-142"></a>
+/*====================================================================*\
+    FUNCTION :  ProUtilSectionErase
+    PURPOSE  :  Erases a 2D section
+\*====================================================================*/
+<a name="anchor-143"></a>ProError ProUtilSectionErase(ProSection section)
+{
+    ProError status;
+
+    status = ProMdlErase((ProMdl) section);
+<a name="anchor-144"></a>    TEST_CALL_REPORT(&quot;ProMdlErase()&quot;, &quot;ProUtilSectionErase()&quot;,
+                     status, status != PRO_TK_NO_ERROR);
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-145"></a>/*====================================================================*\
+    FUNCTION :  ProUtilSectionDelete
+    PURPOSE  :  Delete a 2D section
+\*====================================================================*/
+ProError ProUtilSectionDelete(ProSection section)
+<a name="anchor-146"></a>{
+    ProError status;
+
+    status = ProMdlDelete((ProMdl) section);
+    TEST_CALL_REPORT(&quot;ProMdlDelete()&quot;, &quot;ProUtilSectionDelete()&quot;,
+<a name="anchor-147"></a>                     status, status != PRO_TK_NO_ERROR);
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-148"></a>    FUNCTION :	ProUtilLinesParallel
+    PURPOSE  :	Check if two lines are parallel (returns 1) to each other
+\*====================================================================*/
+int ProUtilLinesParallel(double line1[2][3],double line2[2][3])
+{
+<a name="anchor-149"></a>     double vec1[3], vec2[3];
+
+     ProUtilVectorDiff(line1[0],line1[1],vec1);
+     ProUtilVectorDiff(line2[0],line2[1],vec2);
+
+<a name="anchor-150"></a>     ProUtilVectorNormalize(vec1,vec1);
+     ProUtilVectorNormalize(vec2,vec2);
+
+     if ( (1.0-fabs(ProUtilVectorDot(vec1,vec2))) &lt;= EPSM6 )
+	  return(1);
+<a name="anchor-151"></a>
+     return(0);
+}
+
+/*====================================================================*\
+<a name="anchor-152"></a>    FUNCTION :	ProUtilLinesPerpend
+    PURPOSE  :	Check if two lines are perpendicular (returns 1)
+\*====================================================================*/
+int ProUtilLinesPerpend(double line1[2][3],double line2[2][3])
+{
+<a name="anchor-153"></a>     double vec1[3], vec2[3];
+
+     ProUtilVectorDiff(line1[0],line1[1],vec1);
+     ProUtilVectorDiff(line2[0],line2[1],vec2);
+
+<a name="anchor-154"></a>     ProUtilVectorNormalize(vec1,vec1);
+     ProUtilVectorNormalize(vec2,vec2);
+
+     if ( fabs(ProUtilVectorDot(vec1,vec2) ) &lt;= EPSM6 )
+	  return(1);
+<a name="anchor-155"></a>
+     return(0);
+}
+
+/*====================================================================*\
+<a name="anchor-156"></a>    FUNCTION :	ProUtilLineLineX
+    PURPOSE  :	Get the intersection point of two lines
+\*====================================================================*/
+double *ProUtilLineLineX(
+     double l1[2][3],
+<a name="anchor-157"></a>     double l2[2][3],
+     double int_pnt[3])
+{
+     double v1[3], v2[3], v3[3], v4[4];
+     double n[3],n1[3], n2[3];
+<a name="anchor-158"></a>
+     /* if lines parallel return NULL */
+     if ( ProUtilLinesParallel(l1,l2) )
+	 return(NULL);
+
+<a name="anchor-159"></a>     ProUtilVectorDiff(l1[0],l1[1],v1);
+     ProUtilVectorDiff(l2[0],l2[1],v2);
+
+     if ((fabs(l1[0][0]-l2[0][0])&lt;= EPSM6) &amp;&amp;
+         (fabs(l1[0][1]-l2[0][1])&lt;= EPSM6) &amp;&amp;
+<a name="anchor-160"></a>         (fabs(l1[0][2]-l2[0][2])&lt;= EPSM6))
+     {
+	 memcpy(int_pnt,l1[0],3*sizeof(double));
+	 return(int_pnt);
+     }
+<a name="anchor-161"></a>
+     if ((fabs(l1[1][0]-l2[1][0])&lt;= EPSM6) &amp;&amp;
+         (fabs(l1[1][1]-l2[1][1])&lt;= EPSM6) &amp;&amp;
+         (fabs(l1[1][2]-l2[1][2])&lt;= EPSM6))
+     {
+<a name="anchor-162"></a>	 memcpy(int_pnt,l1[1],3*sizeof(double));
+	 return(int_pnt);
+     }
+
+     ProUtilVectorDiff(l1[0],l2[0],v3);
+<a name="anchor-163"></a>     ProUtilVectorDiff(l1[1],l2[1],v4);
+     ProUtilVectorCross(v1,v2,n1);
+     ProUtilVectorCross(v3,v4,n2);
+     ProUtilVectorNormalize(n1,n1);
+     ProUtilVectorNormalize(n2,n2);
+<a name="anchor-164"></a>
+     /* if lines not on same plane return NULL */
+     if ( (1.0 - fabs(ProUtilVectorDot(n1,n2))) >= EPSM6 )
+	  return(NULL);
+
+<a name="anchor-165"></a>     ProUtilVectorNormalize(v1,v1);
+     ProUtilVectorNormalize(v2,v2);
+     ProUtilVectorCross(n1,v1,n);
+     ProUtilPlaneLineX(l1[0],n,l2[0],v2,int_pnt);
+
+<a name="anchor-166"></a>     return(int_pnt);
+
+}
+
+/*====================================================================*\
+<a name="anchor-167"></a>    FUNCTION :	ProUtilParallelLineEntityGet
+    PURPOSE  :	Given sk line ent and array of line ents - finds first
+		parallel entity
+\*====================================================================*/
+ProError ProUtilParallelLineEntityGet(
+<a name="anchor-168"></a>    ProSection section,
+    int ent_id,
+    int ent_ids[],
+    int n_ids,
+    int *parallel_index)
+<a name="anchor-169"></a>{
+    ProError status;
+    Pro2dLinedef *line;
+    int i;
+    double l1[2][3];
+<a name="anchor-170"></a>    double l2[2][3];
+
+    status = ProSectionEntityGet(section,ent_id,(Pro2dEntdef **)&amp;line);
+    TEST_CALL_REPORT(&quot;ProSectionEntityGet()&quot;,
+		     &quot;ProUtilParallelLineEntityGet()&quot;,
+<a name="anchor-171"></a>                     status, status != PRO_TK_NO_ERROR);
+
+    if (!(line->type == PRO_2D_LINE || line->type == PRO_2D_CENTER_LINE))
+	return(PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-172"></a>    l1[0][0] = line->end1[0];
+    l1[0][1] = line->end1[1];
+    l1[1][0] = line->end2[0];
+    l1[1][1] = line->end2[1];
+    l1[0][2] = l1[1][2] = 0.0;
+<a name="anchor-173"></a>
+    for (i=0; i&lt;n_ids; i++)
+    {
+	status = ProSectionEntityGet(section,ent_ids[i],
+				    (Pro2dEntdef **)&amp;line);
+<a name="anchor-174"></a>        TEST_CALL_REPORT(&quot;ProSectionEntityGet()&quot;,
+		         &quot;ProUtilParallelLineEntityGet()&quot;,
+                         status, status != PRO_TK_NO_ERROR);
+
+        if (!(line->type == PRO_2D_LINE || line->type == PRO_2D_CENTER_LINE))
+<a name="anchor-175"></a>	    return(PRO_TK_GENERAL_ERROR);
+
+        l2[0][0] = line->end1[0];
+        l2[0][1] = line->end1[1];
+        l2[1][0] = line->end2[0];
+<a name="anchor-176"></a>        l2[1][1] = line->end2[1];
+        l2[0][2] = l2[1][2] = 0.0;
+
+        if (ProUtilLinesParallel(l1,l2))
+	{
+<a name="anchor-177"></a>	    *parallel_index = i;
+	    return(PRO_TK_NO_ERROR);
+        }
+    }
+
+<a name="anchor-178"></a>    return(PRO_TK_E_NOT_FOUND);
+}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilSketchCsysGet
+<a name="anchor-179"></a>    PURPOSE  :  Gets the sketch csys transform
+\*====================================================================*/
+ProError ProUtilSketchCsysGet(
+    ProTestSectionInfo *p_sketch_refs,
+    double sk_transf[4][4])
+<a name="anchor-180"></a>{
+    ProError status;
+
+    status = ProSectionLocationGet(p_sketch_refs->section,sk_transf);
+    TEST_CALL_REPORT(&quot;ProSectionLocationGet()&quot;,&quot;ProUtilSketchCsysGet()&quot;,
+<a name="anchor-181"></a>		     status, status != PRO_TK_NO_ERROR);
+
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-182"></a>/*====================================================================*\
+    FUNCTION :  UserCreateSecTrfMatrix
+    PURPOSE  :  Set the basic section transformation matrix
+\*====================================================================*/
+ProError UserCreateSecTrfMatrix(SectionMatrix_data *m_data)
+<a name="anchor-183"></a>{
+
+  ProPoint3d origin; 
+  double sel_pnt[3], proj_sel_pnt[3], sel_vect[3]; 
+  double x_plane[3];
+<a name="anchor-184"></a>  ProVector x, y, sk_plane_norm;
+  ProVector d1[2], d2[2], norm;
+  ProError status;
+  ProMatrix inv_sk_mtrx;
+  ProModelitem sk_modelitem;
+<a name="anchor-185"></a>  ProSurface sk_surf;
+  ProUvParam sk_param;
+  /* =============================================================== *\
+   	Project point selected on sketch plane onto section
+\* =============================================================== */
+<a name="anchor-186"></a>
+  ProUtilMatrixInvert(m_data->sk_mtrx, inv_sk_mtrx);
+
+  status = ProSelectionUvParamGet(m_data->sk_plane, sk_param);
+  ERROR_CHECK((char*)&quot;ProSelectionUvParamGet&quot;,(char*) &quot;UserCreateSecTrfMatrix&quot;, status);
+<a name="anchor-187"></a>  status = ProSelectionModelitemGet(m_data->sk_plane, &amp;sk_modelitem);
+  ERROR_CHECK((char*)&quot;ProSelectionModelitemGet&quot;, (char*)&quot;UserCreateSecTrfMatrix&quot;, status);
+  status = ProGeomitemToSurface((ProGeomitem *)&amp;sk_modelitem, &amp;sk_surf);
+  ERROR_CHECK((char*)&quot;ProGeomitemToSurface&quot;, (char*)&quot;UserCreateSecTrfMatrix&quot;, status);
+  status = ProSurfaceXyzdataEval(sk_surf, sk_param, sel_pnt, d1, d2, norm);
+<a name="anchor-188"></a>  ERROR_CHECK((char*)&quot;ProSurfaceXyzdataEval&quot;, (char*)&quot;UserCreateSecTrfMatrix&quot;, status);
+
+  ProUtilPointTrans(inv_sk_mtrx, sel_pnt, proj_sel_pnt);
+  proj_sel_pnt[2] = 0.0;
+
+<a name="anchor-189"></a>  /* =============================================================== *\
+  	Create x and y vectors of transformation matrix such that 
+	selected point on sketch plane is in first quadrant
+\* =============================================================== */
+
+<a name="anchor-190"></a>  ProUtilLineLineX(m_data->x_axis, m_data->y_axis, origin);
+
+  ProUtilVectorDiff(proj_sel_pnt, origin, sel_vect);
+  sel_vect[2] = 0.0;
+  ProUtilVectorNormalize(sel_vect, sel_vect);
+<a name="anchor-191"></a>
+  ProUtilVectorDiff(m_data->x_axis[0], m_data->x_axis[1], x);
+  ProUtilVectorNormalize(x, x);
+
+  ProUtilVectorDiff(m_data->y_axis[0], m_data->y_axis[1], y);
+<a name="anchor-192"></a>  ProUtilVectorNormalize(y, y);	
+	
+/* =========  Selected point should be in first quadrant  ======= */
+
+  if ((ProUtilVectorDot(x,sel_vect)) &lt; 0.0)
+<a name="anchor-193"></a>    ProUtilVectorScale(-1.0, x, x);
+
+  if ((ProUtilVectorDot(y,sel_vect)) &lt; 0.0)
+    ProUtilVectorScale(-1.0, y, y);
+
+<a name="anchor-194"></a>/* ========= Make sure surface normal is properly oriented   ======= */
+/* ========= with respect to x and y   ============================= */
+
+
+  ProUtilVectorCross(x, y, sk_plane_norm);
+<a name="anchor-195"></a>  ProUtilVectorTrans(m_data->sk_mtrx, sk_plane_norm, sk_plane_norm);
+  ProUtilMatrixCopy(NULL, m_data->sec_trf);
+
+  if ((ProUtilVectorDot(sk_plane_norm, m_data->sk_mtrx[2])) &lt; 0.0)
+    {
+<a name="anchor-196"></a>      ProUtilVectorCopy(y, m_data->sec_trf[0]);
+      ProUtilVectorCopy(x, m_data->sec_trf[1]);
+      ProUtilVectorCopy(NULL, m_data->sec_trf[2]);
+      ProUtilVectorCopy(origin, m_data->sec_trf[3]);
+    }
+<a name="anchor-197"></a>
+  else
+    {
+      ProUtilVectorCopy(x, m_data->sec_trf[0]);
+      ProUtilVectorCopy(y, m_data->sec_trf[1]);
+<a name="anchor-198"></a>      ProUtilVectorCopy(NULL, m_data->sec_trf[2]);
+      ProUtilVectorCopy(origin, m_data->sec_trf[3]);
+    }
+		
+  m_data->sec_trf[2][2] = m_data->sec_trf[3][3] = 1.0;
+<a name="anchor-199"></a>
+/* =============================================================== *\
+		Calculate rotation angle  	
+\* =============================================================== */
+  x_plane[0] = 1.0;
+<a name="anchor-200"></a>  x_plane[1] = x_plane[2] = 0.0;
+  ProUtilVectorCross(x_plane, m_data->sk_mtrx[0], norm);
+  ProUtilVectorCross(m_data->sec_trf[0], m_data->sec_trf[1], sk_plane_norm);
+  m_data->angle = fabs(acos(ProUtilVectorDot(x_plane, m_data->sec_trf[0])));
+  if (ProUtilVectorDot(norm, sk_plane_norm) &lt; 0.0)
+<a name="anchor-201"></a>    m_data->angle *= -1.0;
+
+  return(status);
+
+}
+<a name="anchor-202"></a>
+
+/*====================================================================*\
+    FUNCTION :	ProUtilSectCsysTransformGet
+    PURPOSE  :	Given a plane selection and two orthogonal lines on
+<a name="anchor-203"></a>		the plane defining a csys, output transform from this
+		csys to plane csys (selection point is used to determine
+		x and y vectors such that the point is in the first
+		quadrant) (currently works for part mode)
+\*====================================================================*/
+<a name="anchor-204"></a>ProError ProUtilSectCsysTransformGet(
+     ProTestSectionInfo *p_sketch_refs,
+     double sk_transf[4][4],
+     double l1[2][3],
+     double l2[2][3],
+<a name="anchor-205"></a>     double transform[4][4],
+     double *angle)
+{
+
+     ProMatrix inv_sk_transf;
+<a name="anchor-206"></a>     Pro3dPnt origin, sel_pnt, proj_sel_pnt;
+     ProVector n, v, n1, plane_x;
+     ProVector x, y, z_vec={0,0,1};
+     double dot;
+     ProSurface p_plane;
+<a name="anchor-207"></a>     ProModelitem mdlitem;
+     ProError status;
+
+     ProUtilLineLineX(l1,l2,origin);
+
+<a name="anchor-208"></a>     status = ProSelectionModelitemGet(p_sketch_refs->sketch_pln,&amp;mdlitem);
+     TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+		      &quot;ProUtilSectCsysTransformGet()&quot;,
+		      status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-209"></a>     status = ProSurfaceInit(mdlitem.owner,mdlitem.id,&amp;p_plane);
+     TEST_CALL_REPORT(&quot;ProSurfaceInit()&quot;,
+		      &quot;ProUtilSectCsysTransformGet()&quot;,
+		      status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-210"></a>     status = ProSurfaceXyzdataEval(p_plane,p_sketch_refs->sketch_uv,
+				    sel_pnt,NULL,NULL,NULL);
+     TEST_CALL_REPORT(&quot;ProSurfaceXyzdataEval()&quot;,
+		      &quot;ProUtilSectCsysTransformGet()&quot;,
+		      status, status != PRO_TK_NO_ERROR);
+<a name="anchor-211"></a>
+     ProUtilVectorDiff(l1[0],l1[1],x);
+     ProUtilVectorNormalize(x,x);
+     ProUtilVectorDiff(l2[0],l2[1],y);
+     ProUtilVectorNormalize(y,y);
+<a name="anchor-212"></a>
+     ProUtilMatrixInvert(sk_transf,inv_sk_transf);
+     ProUtilPointTrans(inv_sk_transf,sel_pnt,proj_sel_pnt);
+     proj_sel_pnt[2] = 0.0;
+
+<a name="anchor-213"></a>     ProUtilVectorDiff(proj_sel_pnt,origin,v);
+     v[2] = 0.0;
+     ProUtilVectorNormalize(v,v);
+
+     /* make sure sel pnt is in first quadrant */
+<a name="anchor-214"></a>
+     dot = ProUtilVectorDot(v,x);
+     if ( dot &lt; 0.0 )
+	  ProUtilVectorScale(-1.0,x,x);
+     dot = ProUtilVectorDot(v,y);
+<a name="anchor-215"></a>     if ( dot &lt; 0.0 )
+	  ProUtilVectorScale(-1.0,y,y);
+
+     /* make sure x and y are correct relative to plane normal */
+     ProUtilVectorCross(x,y,n);
+<a name="anchor-216"></a>     if ( n[2] &lt; 0.0 )
+     {
+	ProUtilVectorCopy(x, n);
+	ProUtilVectorCopy(y, x);
+	ProUtilVectorCopy(n, y);
+<a name="anchor-217"></a>     }
+
+     status = ProMatrixInit(x, y, z_vec, origin, transform);
+     TEST_CALL_REPORT(&quot;ProMatrixInit()&quot;,
+	&quot;ProUtilSectCsysTransformGet()&quot;,  status, status != PRO_TK_NO_ERROR);
+<a name="anchor-218"></a>
+     /* calculate rotation angle */
+     plane_x[0] = 1.0;
+     plane_x[1] = plane_x[2] = 0.0;
+     ProUtilVectorCross(x,y,n);
+<a name="anchor-219"></a>     ProUtilVectorCross(plane_x,x,n1);
+     *angle = fabs(acos(ProUtilVectorDot(plane_x,x)));
+     if (ProUtilVectorDot(n,n1) &lt; 0.0)
+	  *angle *= -1.0;
+
+<a name="anchor-220"></a>     return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProUtilTwoOrthogEdgesOnPlaneGet
+<a name="anchor-221"></a>    PURPOSE  :	Gets the selection of two orthogonal edges on sketch
+		plane from the user
+\*====================================================================*/
+ProError ProUtilTwoOrthogEdgesOnPlaneGet(
+    ProSection section,
+<a name="anchor-222"></a>    int ent_ids[2],
+    double edge1[2][3],
+    double edge2[2][3])
+{
+
+<a name="anchor-223"></a>    ProError status;
+    double edges[2][2][3];
+    ProSelection *p_sels;
+    int n_edges,i;
+    int error = 0, cont = 1;
+<a name="anchor-224"></a>    Pro2dLinedef *linedef;
+
+    while (cont)
+    {
+         ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Select two orthogonal edges.&quot;);
+<a name="anchor-225"></a>	 status = ProSelect((char*)&quot;edge&quot;,2,NULL,NULL,NULL,NULL,&amp;p_sels,&amp;n_edges);
+	 TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProUtilTwoOrthogEdgesOnPlaneGet()&quot;,
+	                   status, status != PRO_TK_NO_ERROR);
+
+	 if (n_edges &lt; 2) return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-226"></a>
+	 for (i=0; i&lt;2; i++)
+	 {
+              status = ProSectionEntityFromProjection(section,p_sels[i],
+							   &amp;ent_ids[i]);
+<a name="anchor-227"></a>              TEST_CALL_REPORT(&quot;ProSectionEntityFromProjection()&quot;,
+			       &quot;ProUtilTwoOrthogEdgesOnPlaneGet()&quot;,
+			       status, status != PRO_TK_NO_ERROR);
+
+	      if (status == PRO_TK_NO_ERROR)
+<a name="anchor-228"></a>	      {
+                   status = ProSectionEntityGet(section,ent_ids[i],
+						(Pro2dEntdef **)&amp;linedef);
+                   TEST_CALL_REPORT(&quot;ProSectionEntityGet()&quot;,
+				    &quot;ProUtilTwoOrthogEdgesOnPlaneGet()&quot;,
+<a name="anchor-229"></a>				    status, status != PRO_TK_NO_ERROR);
+              }
+	      else
+	      {
+                   ProUtilMsgPrint(&quot;sec&quot;,
+<a name="anchor-230"></a>			&quot;TEST One of the edges is perpendicular to sketch plane.&quot;);
+		   error = 1;
+		   break;
+              }
+
+<a name="anchor-231"></a>	      edges[i][0][0] = linedef->end1[0];
+	      edges[i][0][1] = linedef->end1[1];
+	      edges[i][0][2] = 0.0;
+	      edges[i][1][0] = linedef->end2[0];
+	      edges[i][1][1] = linedef->end2[1];
+<a name="anchor-232"></a>	      edges[i][1][2] = 0.0;
+         }
+	 if (error)
+	 {
+	      error = 0;
+<a name="anchor-233"></a>	      continue;
+         }
+
+         if (!ProUtilLinesPerpend(edges[0],edges[1]))
+	 {
+<a name="anchor-234"></a>	      ProUtilMsgPrint((char *)&quot;sec&quot;, (char *)&quot;TEST Edges are not orthogonal.&quot;);
+              continue;
+         }
+	 else
+	 {
+<a name="anchor-235"></a>	      ProUtilVectorCopy(edges[0][0],edge1[0]);
+	      ProUtilVectorCopy(edges[0][1],edge1[1]);
+	      ProUtilVectorCopy(edges[1][0],edge2[0]);
+	      ProUtilVectorCopy(edges[1][1],edge2[1]);
+              break;
+<a name="anchor-236"></a>         }
+    }
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-237"></a>
+void ProUtil2DPointTrans(
+    double m[4][4],
+    double p2D[2],
+    double out2D[2])
+<a name="anchor-238"></a>{
+    double p3D[3];
+    double out3D[3];
+
+    p3D[0] = p2D[0];
+<a name="anchor-239"></a>    p3D[1] = p2D[1];
+    p3D[2] = 0.0;
+
+    ProUtilPointTrans(m,p3D,out3D);
+
+<a name="anchor-240"></a>    out2D[0] = out3D[0];
+    out2D[1] = out3D[1];
+}
+
+/*====================================================================*\
+<a name="anchor-241"></a>    FUNCTION :	ProUtilXyOffsetsGet
+    PURPOSE  :	Gets xy offsets from the user
+\*====================================================================*/
+ProError ProUtilXyOffsetsGet(
+    double offsets[2])
+<a name="anchor-242"></a>{
+
+    ProUtilMsgPrint((char *)&quot;sec&quot;,
+	(char *)&quot;TEST Enter offset dimension from first reference [%0(6.4)f]: &quot;,&amp;offsets[0]);
+    ProUtilDoubleGet(NULL,&amp;offsets[0],&amp;offsets[0]);
+<a name="anchor-243"></a>    ProUtilMsgPrint((char *)&quot;sec&quot;,
+     (char *)&quot;TEST Enter offset dimension from second reference [%0(6.4)f]: &quot;,&amp;offsets[1]);
+    ProUtilDoubleGet(NULL,&amp;offsets[1],&amp;offsets[1]);
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-244"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProUtilSectEpsModify
+    PURPOSE  :	Allows interactive section epsilon modification
+<a name="anchor-245"></a>\*====================================================================*/
+ProError ProUtilSectEpsModify(
+    ProSection section)
+{
+    double eps;
+<a name="anchor-246"></a>    ProError status;
+
+    status = ProSectionEpsilonGet(section,&amp;eps);
+    TEST_CALL_REPORT(&quot;ProSectionEpsilonGet()&quot;, &quot;ProUtilSectEpsModify()&quot;,
+		     status, status != PRO_TK_NO_ERROR);
+<a name="anchor-247"></a>
+    ProUtilMsgPrint(&quot;sec&quot;,&quot;TEST Enter section solver epsilon [%0(6.4)f]: &quot;,&amp;eps);
+    ProUtilDoubleGet(NULL,&amp;eps,&amp;eps);
+
+    status = ProSectionEpsilonSet(section,eps);
+<a name="anchor-248"></a>    TEST_CALL_REPORT(&quot;ProSectionEpsilonSet()&quot;, &quot;ProUtilSectEpsModify()&quot;,
+		     status, status != PRO_TK_NO_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-249"></a>/*====================================================================*\
+    FUNCTION :	ProUtilSectionUseExisting
+    PURPOSE  :	Top level function for extracting existing section
+		definition and applying it to a new section
+\*====================================================================*/
+<a name="anchor-250"></a>ProError ProUtilSectionUseExisting(ProSection new_section,
+				   ProTestSectionInfo *secinfo)
+{
+    ProSection exist_section;
+    ProError status;
+<a name="anchor-251"></a>    ProSelection *sel = NULL;
+    int proj_ent, n;
+    double transf[4][4];
+    double inv_transf[4][4];
+    ProVector d1,d2;
+<a name="anchor-252"></a>    ProSectionPointType pnt_types[2];
+    ProIntlist ids;
+    int n_ids;
+    double orig_3d[3],origin[3];
+    double ent_origin[3];
+<a name="anchor-253"></a>    double ref_pnt3d[3],ref_pnt[3];
+    int ent_ids[2], id,i;
+    Pro2dPnt dim_pnt;
+    ProVector trans_vector;
+    ProModelitem mdlitem;
+<a name="anchor-254"></a>    ProSurface p_plane;
+    ProBoolean is_proj;
+    Pro2dEntdef *entity;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-255"></a>Retrieve existing section from
+\*--------------------------------------------------------------------*/
+    status = ProUtilSectionRetrieve(&amp;exist_section);
+
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-256"></a>	return(PRO_TK_GENERAL_ERROR);
+#if 0
+    status = ProSectionCheck(exist_section, &amp;sec_error, &amp;sec_info)
+    TEST_CALL_REPORT(&quot;ProSectionEntityIdsGet()&quot;,
+		     &quot;ProUtilSectionUseExisting()&quot;,
+<a name="anchor-257"></a>	             status, status != PRO_TK_NO_ERROR);
+#endif
+
+/*--------------------------------------------------------------------*\
+If 2D section copy the section as is
+<a name="anchor-258"></a>\*--------------------------------------------------------------------*/
+    if (secinfo == NULL)
+    {
+        ProUtilVectorCopy(NULL,trans_vector);
+        status = ProUtilSectionInfoCopy(exist_section,new_section,
+<a name="anchor-259"></a>					trans_vector);
+    }
+/*--------------------------------------------------------------------*\
+Else copy, translate and locate 3D section as necessary
+\*--------------------------------------------------------------------*/
+<a name="anchor-260"></a>    else
+    {
+/*--------------------------------------------------------------------*\
+Get tranform to new section coordinates
+\*--------------------------------------------------------------------*/
+<a name="anchor-261"></a>	status = ProUtilSketchCsysGet(secinfo, transf);
+        ProUtilMatrixInvert(transf, inv_transf);
+
+/*--------------------------------------------------------------------*\
+Find start vertex of first section-defining entity to use to locate sect
+<a name="anchor-262"></a>\*--------------------------------------------------------------------*/
+        status = ProSectionEntityIdsGet(exist_section,&amp;ids,&amp;n_ids);
+	TEST_CALL_REPORT(&quot;ProSectionEntityIdsGet()&quot;,
+			 &quot;ProUtilSectionUseExisting()&quot;,
+	                 status, status != PRO_TK_NO_ERROR);
+<a name="anchor-263"></a>
+        for (i=0; i&lt;n_ids; i++)
+	{
+	    status = ProSectionEntityGet(exist_section,ids[i],
+					          &amp;entity);
+<a name="anchor-264"></a>	    TEST_CALL_REPORT(&quot;ProSectionEntityGet()&quot;,
+			     &quot;ProUtilSectionUseExisting()&quot;,
+	                     status, status != PRO_TK_NO_ERROR);
+            if (entity->type != PRO_2D_CENTER_LINE)
+	    {
+<a name="anchor-265"></a>                status = ProSectionEntityEval(exist_section,ids[i],0.0,
+				          ent_origin,d1,d2);
+	        TEST_CALL_REPORT(&quot;ProSectionEntityEval()&quot;,
+			 &quot;ProUtilSectionUseExisting()&quot;,
+	                 status, status != PRO_TK_NO_ERROR);
+<a name="anchor-266"></a>                break;
+            }
+        }
+
+        status = ProArrayFree( (ProArray *) &amp;ids);
+<a name="anchor-267"></a>	TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+			 &quot;ProUtilSectionUseExisting()&quot;,
+	                 status, status != PRO_TK_NO_ERROR);
+
+     if(secinfo->sketch_pln != NULL)
+<a name="anchor-268"></a>      {
+/*--------------------------------------------------------------------*\
+Get sect location point from selection (new origin)
+\*--------------------------------------------------------------------*/
+        status = ProSelectionModelitemGet(secinfo->sketch_pln,&amp;mdlitem);
+<a name="anchor-269"></a>        TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+		      &quot;ProUtilSectionUseExisting()&quot;,
+		      status, status != PRO_TK_NO_ERROR);
+        status = ProSurfaceInit(mdlitem.owner,mdlitem.id,&amp;p_plane);
+        TEST_CALL_REPORT(&quot;ProSurfaceInit()&quot;,
+<a name="anchor-270"></a>		      &quot;ProUtilSectionUseExisting()&quot;,
+		      status, status != PRO_TK_NO_ERROR);
+        status = ProSurfaceXyzdataEval(p_plane,secinfo->sketch_uv,
+				    orig_3d,NULL,NULL,NULL);
+        TEST_CALL_REPORT(&quot;ProSurfaceXyzdataEval()&quot;,
+<a name="anchor-271"></a>		      &quot;ProUtilSectionUseExisting()&quot;,
+		      status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+Calc trans vector to move first ent pnt to location pnt
+<a name="anchor-272"></a>\*--------------------------------------------------------------------*/
+        ProUtilPointTrans(inv_transf,orig_3d,origin);
+	origin[2] = 0.0;
+        ProUtilVectorDiff(origin,ent_origin,trans_vector);
+       }
+<a name="anchor-273"></a>      else
+       {
+         origin[0] = 0.0;
+         origin[1] = 0.0;
+         origin[2] = 0.0;
+<a name="anchor-274"></a>         ProUtilVectorCopy(NULL,trans_vector);
+       }
+/*--------------------------------------------------------------------*\
+Copy and translate existing section entities to new section
+\*--------------------------------------------------------------------*/
+<a name="anchor-275"></a>        status = ProUtilSectionInfoCopy(exist_section,new_section,
+					trans_vector);
+
+/*--------------------------------------------------------------------*\
+Choose a model vertex to dimension section (first ent start pnt) to
+<a name="anchor-276"></a>\*--------------------------------------------------------------------*/
+        ProUtilMsgPrint((char *)&quot;gen&quot;,(char *)&quot;TEST %0s&quot;,
+			(char *)&quot;Select a vertex as the section location reference.&quot;);
+	status = ProSelect((char *)&quot;edge_end&quot;,1,NULL,NULL,NULL,NULL,&amp;sel,&amp;n);
+	TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProUtilSectionUseExisting()&quot;,
+<a name="anchor-277"></a>	                 status, status != PRO_TK_NO_ERROR);
+
+        if (status != PRO_TK_NO_ERROR) return(PRO_TK_GENERAL_ERROR);
+
+        status = ProSectionEntityFromProjection(new_section,sel[0],
+<a name="anchor-278"></a>						&amp;proj_ent);
+	TEST_CALL_REPORT(&quot;ProSectionEntityFromProjection()&quot;,
+			 &quot;ProUtilSectionUseExisting()&quot;,
+	                 status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-279"></a>        status = ProSelectionPoint3dGet(sel[0],ref_pnt3d);
+	TEST_CALL_REPORT(&quot;ProSelectionPoint3dGet()&quot;,
+			 &quot;ProUtilSectionUseExisting()&quot;,
+	                 status, status != PRO_TK_NO_ERROR);
+        ProUtilPointTrans(inv_transf,ref_pnt3d,ref_pnt);
+<a name="anchor-280"></a>	ref_pnt[2] = 0;
+
+/*--------------------------------------------------------------------*\
+Find the first section defining entity in the new section
+\*--------------------------------------------------------------------*/
+<a name="anchor-281"></a>        status = ProSectionEntityIdsGet(new_section,&amp;ids,&amp;n_ids);
+	TEST_CALL_REPORT(&quot;ProSectionEntityIdsGet()&quot;,
+			 &quot;ProUtilSectionUseExisting()&quot;,
+	                 status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-282"></a>        for (i=0; i&lt;n_ids; i++)
+	{
+	    status = ProSectionEntityGet(new_section,ids[i],
+					          &amp;entity);
+	    TEST_CALL_REPORT(&quot;ProSectionEntityGet()&quot;,
+<a name="anchor-283"></a>			     &quot;ProUtilSectionUseExisting()&quot;,
+	                     status, status != PRO_TK_NO_ERROR);
+	    status = ProSectionEntityIsProjection(new_section,ids[i],
+					          &amp;is_proj);
+	    TEST_CALL_REPORT(&quot;ProSectionEntityIsProjection()&quot;,
+<a name="anchor-284"></a>			     &quot;ProUtilSectionUseExisting()&quot;,
+	                     status, status != PRO_TK_NO_ERROR);
+
+            if (entity->type != PRO_2D_CENTER_LINE &amp;&amp;
+		is_proj == PRO_B_FALSE)
+<a name="anchor-285"></a>	    {
+		ent_ids[1] = ids[i];
+                break;
+            }
+        }
+<a name="anchor-286"></a>
+
+/*--------------------------------------------------------------------*\
+Create horiz and vertical pnt to pnt dims from first ent start pnt
+to projected vertex pnt to locate the section
+<a name="anchor-287"></a>\*--------------------------------------------------------------------*/
+	ent_ids[0] = proj_ent;
+	pnt_types[0] = PRO_ENT_CENTER;
+	pnt_types[1] = PRO_ENT_START;
+	dim_pnt[0] = origin[0] + (ref_pnt[0] - origin[0])/2.0;
+<a name="anchor-288"></a>	dim_pnt[1] = origin[1];
+	status = ProSecdimCreate(new_section,ent_ids,pnt_types,
+			 2,PRO_TK_DIM_PNT_PNT_HORIZ,dim_pnt,&amp;id);
+	TEST_CALL_REPORT(&quot;ProSectionEntityEval()&quot;,
+			 &quot;ProUtilSectionUseExisting()&quot;,
+<a name="anchor-289"></a>	                 status, status != PRO_TK_NO_ERROR);
+	dim_pnt[0] = origin[0];
+	dim_pnt[1] = origin[1] + (ref_pnt[1] - origin[1])/2.0;
+	status = ProSecdimCreate(new_section,ent_ids,pnt_types,
+			 2,PRO_TK_DIM_PNT_PNT_VERT,dim_pnt,&amp;id);
+<a name="anchor-290"></a>	TEST_CALL_REPORT(&quot;ProSectionEntityEval()&quot;,
+			 &quot;ProUtilSectionUseExisting()&quot;,
+	                 status, status != PRO_TK_NO_ERROR);
+
+        ProArrayFree( (ProArray *) &amp;ids);
+<a name="anchor-291"></a>	TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+			 &quot;ProUtilSectionUseExisting()&quot;,
+	                 status, status != PRO_TK_NO_ERROR);
+
+    }
+<a name="anchor-292"></a>
+    status = ProTestSectionSolveRegen(new_section);
+
+    return(status);
+}
+<a name="anchor-293"></a>/*====================================================================*\
+    FUNCTION :	ProUtilSectionInfoCopy
+    PURPOSE  :	Copies section defining entities to a new section
+		applying translation vector
+\*====================================================================*/
+<a name="anchor-294"></a>ProError ProUtilSectionInfoCopy(ProSection exist_section,
+				ProSection new_section,
+				ProVector trans_vector)
+{
+    ProError err;
+<a name="anchor-295"></a>    ProIntlist ent_ids, new_ent_ids;
+    int n_ids,i,j,k;
+    ProBoolean is_proj;
+    Pro2dEntdef *p_entity;
+    ProIntlist dim_ids;
+<a name="anchor-296"></a>    int n_dim_ids,*p_ent_refs;
+    ProSecdimType d_type;
+    ProSectionPointType *p_pnt_types;
+    int n_refs,new_ent_refs[5],dim_id, tmp_id;
+    ProBoolean ref_proj;
+<a name="anchor-297"></a>    ProVector mid_pnt, d1, d2;
+    Pro2dPnt dim_pnt;
+    Pro2dPointdef dim_loc;
+
+    err = ProSectionEntityIdsGet(exist_section,&amp;ent_ids,&amp;n_ids);
+<a name="anchor-298"></a>    TEST_CALL_REPORT(&quot;ProSectionEntityIdsGet()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProArrayAlloc(n_ids,sizeof(ProIntlist),n_ids,
+			(ProArray *)&amp;new_ent_ids);
+<a name="anchor-299"></a>    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    for (i=0; i&lt;n_ids; i++)
+    {
+<a name="anchor-300"></a>	err = ProSectionEntityIsProjection(exist_section,ent_ids[i],
+					   &amp;is_proj);
+        TEST_CALL_REPORT(&quot;ProSectionEntityIsProjection()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-301"></a>        if (is_proj == PRO_B_TRUE)
+	{
+	    new_ent_ids[i] = -1;
+	    continue;
+        }
+<a name="anchor-302"></a>
+        err = ProSectionEntityGet(exist_section,ent_ids[i],&amp;p_entity);
+        TEST_CALL_REPORT(&quot;ProSectionEntityGet()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-303"></a>        if (err != PRO_TK_NO_ERROR)
+	{
+	    ProTKPrintf(
+        &quot;ProUtilSectionInfoCopy Section Entity Id: %d not suppported\n&quot;,
+		   ent_ids[i]);
+<a name="anchor-304"></a>	    continue;
+        }
+
+
+        err = ProSectionEntityAdd(new_section,p_entity,
+<a name="anchor-305"></a>				  &amp;new_ent_ids[i]);
+        TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        err = ProSectionEntityTranslate(new_section,new_ent_ids[i],
+<a name="anchor-306"></a>					trans_vector);
+        TEST_CALL_REPORT(&quot;ProSectionEntityTranslate()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-307"></a>    err = ProSecdimIdsGet(exist_section,&amp;dim_ids,&amp;n_dim_ids);
+    TEST_CALL_REPORT(&quot;ProSecdimIdsGet()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    for (i=0; i&lt;n_dim_ids; i++)
+<a name="anchor-308"></a>    {
+	err = ProSecdimTypeGet(exist_section,dim_ids[i],&amp;d_type);
+        TEST_CALL_REPORT(&quot;ProSecdimTypeGet()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-309"></a>        err = ProSecdimReferencesGet(exist_section,dim_ids[i],
+			      &amp;p_ent_refs,&amp;p_pnt_types,&amp;n_refs);
+        TEST_CALL_REPORT(&quot;ProSecdimReferencesGet()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-310"></a>        ref_proj = PRO_B_FALSE;
+        for (j=0; j&lt;n_refs; j++)
+	{
+	    err = ProSectionEntityIsProjection(exist_section,
+				   p_ent_refs[j],&amp;is_proj);
+<a name="anchor-311"></a>            TEST_CALL_REPORT(&quot;ProSectionEntityFromProjection()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    if ( is_proj == PRO_B_TRUE )
+	    {
+		ref_proj = PRO_B_TRUE;
+<a name="anchor-312"></a>		break;
+            }
+        }
+
+        if (ref_proj == PRO_B_TRUE)
+<a name="anchor-313"></a>	{
+	    ref_proj = PRO_B_FALSE;
+	    continue;
+        }
+
+<a name="anchor-314"></a>        for (j=0; j&lt;n_refs; j++)
+	{
+	    for (k=0; k&lt;n_ids; k++)
+		if ( ent_ids[k] == p_ent_refs[j] )
+		    break;
+<a name="anchor-315"></a>
+	    new_ent_refs[j] = new_ent_ids[k];
+        }
+
+	err = ProSecdimLocationGet(exist_section, dim_ids[i], dim_loc.pnt);
+<a name="anchor-316"></a>        TEST_CALL_REPORT(&quot;ProSecdimLocationGet&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	dim_loc.type = PRO_2D_POINT;
+	err = ProSectionEntityAdd(new_section, (Pro2dEntdef*)&amp;dim_loc, &amp;tmp_id);
+<a name="anchor-317"></a>        TEST_CALL_REPORT(&quot;ProSectionEntityAdd&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        err = ProSectionEntityTranslate(new_section, tmp_id, trans_vector);
+        TEST_CALL_REPORT(&quot;ProSectionEntityTranslate()&quot;,
+<a name="anchor-318"></a>			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        err = ProSectionEntityEval(new_section, tmp_id, 0, mid_pnt, d1, d2);
+        TEST_CALL_REPORT(&quot;ProSectionEntityEval()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-319"></a>
+        err = ProSectionEntityDelete(new_section, tmp_id);
+        TEST_CALL_REPORT(&quot;ProSectionEntityDelete()&quot;,
+			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+        dim_pnt[0] = mid_pnt[0];
+<a name="anchor-320"></a>        dim_pnt[1] = mid_pnt[1];
+
+        err = ProSecdimCreate(new_section,new_ent_refs,
+		   p_pnt_types,n_refs,d_type,dim_pnt,&amp;dim_id);
+        TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;,
+<a name="anchor-321"></a>			  &quot;ProUtilSectionCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+
+    return(err);
+}
+<a name="anchor-322"></a>
+/*====================================================================*\
+    FUNCTION :	ProUtilSectionClean
+    PURPOSE  :	Deletes all dimensions and entities from a section
+\*====================================================================*/
+<a name="anchor-323"></a>ProError ProUtilSectionClean(ProSection section)
+{
+    ProError err;
+    ProIntlist ent_ids, dim_ids, constr_ids;
+    int n_dim_ids, n_ids, i, n_constr_ids;
+<a name="anchor-324"></a>
+#if 1
+    err = ProSectionConstraintsIdsGet(section, &amp;constr_ids, &amp;n_constr_ids);
+    TEST_CALL_REPORT(&quot;ProSectionConstraintsIdsGet()&quot;,
+		     &quot;ProUtilSectionClean()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-325"></a>
+    for (i=0; i&lt;n_constr_ids; i++)
+    {
+	err = ProSectionConstraintDeny(section, constr_ids[i]);
+        TEST_CALL_REPORT(&quot;ProSectionConstraintDeny()&quot;,
+<a name="anchor-326"></a>		     &quot;ProUtilSectionClean()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+
+    err = ProArrayFree( (ProArray *) &amp;constr_ids);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+<a name="anchor-327"></a>		     &quot;ProUtilSectionClean()&quot;, err, err != PRO_TK_NO_ERROR);
+#endif
+    err = ProSecdimIdsGet(section,&amp;dim_ids,&amp;n_dim_ids);
+    TEST_CALL_REPORT(&quot;ProSecdimIdsGet()&quot;,
+		     &quot;ProUtilSectionClean()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-328"></a>
+    for (i=0; i&lt;n_dim_ids; i++)
+    {
+	err = ProSecdimDelete(section,dim_ids[i]);
+        TEST_CALL_REPORT(&quot;ProSecdimDelete()&quot;,
+<a name="anchor-329"></a>		     &quot;ProUtilSectionClean()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+
+    err = ProArrayFree( (ProArray *) &amp;dim_ids);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+<a name="anchor-330"></a>		     &quot;ProUtilSectionClean()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProSectionEntityIdsGet(section,&amp;ent_ids,&amp;n_ids);
+    TEST_CALL_REPORT(&quot;ProSectionEntityIdsGet()&quot;,
+		     &quot;ProUtilSectionClean()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-331"></a>
+    for (i=0; i&lt;n_ids; i++)
+    {
+	err = ProSectionEntityDelete(section,ent_ids[i]);
+        TEST_CALL_REPORT(&quot;ProSectionEntityDelete()&quot;,
+<a name="anchor-332"></a>		     &quot;ProUtilSectionClean()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+
+    err = ProArrayFree( (ProArray *) &amp;dim_ids);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+<a name="anchor-333"></a>		     &quot;ProUtilSectionClean()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return(err);
+}
+
+<a name="anchor-334"></a>
+
+/*====================================================================*\
+FUNCTION : ProUtilStdSectInfoFromElemTreeGet
+PURPOSE  : Nicely gets the pertinent section info from feat elem tree;
+<a name="anchor-335"></a>\*====================================================================*/
+ProError ProUtilStdSectInfoFromElemTreeGet(ProElement std_sect_elem,
+                                        ProTestSectionInfo *secinfo)
+{
+    ProError status;
+<a name="anchor-336"></a>    ElemtreeElement *elements;
+    int elements_num, i;
+
+    ProError ProStdSectVisitAction();
+
+<a name="anchor-337"></a>
+    status = ProUtilCollectElemtreeElements (std_sect_elem, NULL, &amp;elements);
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)elements, &amp;elements_num);
+<a name="anchor-338"></a>        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;,
+            &quot;ProUtilStdSectInfoFromElemTreeGet()&quot;,
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; elements_num; i++)
+        {
+<a name="anchor-339"></a>            status = ProStdSectVisitAction (std_sect_elem,
+                elements[i].p_element,
+                elements[i].p_elempath, (ProAppData)secinfo);
+        }
+        status = ProUtilElemtreeElementArrayFree (&amp;elements);
+<a name="anchor-340"></a>    }
+    return(status);
+}
+
+
+<a name="anchor-341"></a>
+/*====================================================================*\
+FUNCTION : ProStdSectVisitAction
+PURPOSE  : Visit function for getting std section information
+\*====================================================================*/
+<a name="anchor-342"></a>ProError ProStdSectVisitAction(ProElement tree,ProElement element,
+                               ProElempath elem_path,
+                               ProAppData data)
+{
+    ProElemId elem_id;
+<a name="anchor-343"></a>    ProError err;
+    ProTestSectionInfo *secinfo;
+
+    ProError ProUtilElementDataGet();
+
+<a name="anchor-344"></a>
+    err = ProElementIdGet(element,&amp;elem_id);
+    TEST_CALL_REPORT(&quot;ProElementIdGet&quot;,
+                     &quot;ProStdSectVisitAction&quot;,
+                     err, err != PRO_TK_NO_ERROR);
+<a name="anchor-345"></a>
+    secinfo = (ProTestSectionInfo *)data;
+
+    switch(elem_id)
+    {
+<a name="anchor-346"></a>         case PRO_E_SKETCHER:
+              err = ProUtilElementDataGet(element,NULL,0,
+                                          &amp;secinfo->section);
+              break;
+         case PRO_E_STD_SEC_PLANE:
+<a name="anchor-347"></a>              err = ProUtilElementDataGet(element,NULL,0,
+                                          &amp;secinfo->sketch_pln);
+              break;
+         case PRO_E_STD_SEC_PLANE_VIEW_DIR:
+              err = ProUtilElementDataGet(element,NULL,0,
+<a name="anchor-348"></a>                                          &amp;secinfo->view_dir);
+              break;
+         case PRO_E_STD_SEC_PLANE_ORIENT_DIR:
+              err = ProUtilElementDataGet(element,NULL,0,
+                                          &amp;secinfo->orient_dir);
+<a name="anchor-349"></a>              break;
+         case PRO_E_STD_SEC_PLANE_ORIENT_REF:
+              err = ProUtilElementDataGet(element,NULL,0,
+                                          &amp;secinfo->orient_pln);
+              break;
+<a name="anchor-350"></a>     }
+
+     return(err);
+}
+
+<a name="anchor-351"></a>
+
+/*====================================================================*\
+FUNCTION : ProUtilElementDataGet
+PURPOSE  : Gets element single value data given tree and path
+<a name="anchor-352"></a>\*====================================================================*/
+ProError ProUtilElementDataGet(ProElement tree,ProElempathItem *path_items,
+                               int path_size,void *data)
+{
+    ProElempath elem_path;
+<a name="anchor-353"></a>    ProElement element;
+    ProError err;
+    ProValue value;
+    ProValueData vdata;
+    int *i;
+<a name="anchor-354"></a>    double *d;
+    void **p;
+    char **s;
+    wchar_t **w;
+    ProSelection *r;
+<a name="anchor-355"></a>    ProValueDataType data_type;
+
+    if (path_items != NULL)
+    {
+        err = ProElempathAlloc(&amp;elem_path);
+<a name="anchor-356"></a>        TEST_CALL_REPORT(&quot;ProElempathAlloc&quot;,
+                     &quot;ProUtilElementDataGet&quot;,
+                     err,err != PRO_TK_NO_ERROR);
+        err = ProElempathDataSet(elem_path,path_items,path_size);
+        TEST_CALL_REPORT(&quot;ProElempathDataSet&quot;,
+<a name="anchor-357"></a>                     &quot;ProUtilElementDataGet&quot;,
+                     err,err != PRO_TK_NO_ERROR);
+        err = ProElemtreeElementGet(tree,elem_path,
+                                &amp;element);
+        TEST_CALL_REPORT(&quot;ProElemtreeElementGet&quot;,
+<a name="anchor-358"></a>                     &quot;ProUtilElementDataGet&quot;,err,
+                     err != PRO_TK_NO_ERROR);
+    }
+    else element = tree;
+
+<a name="anchor-359"></a>    err = ProElementValuetypeGet(element,&amp;data_type);
+    TEST_CALL_REPORT(&quot;ProElementValuetypeGet&quot;,
+                     &quot;ProUtilElementDataGet&quot;,err,
+                     err != PRO_TK_NO_ERROR);
+
+<a name="anchor-360"></a>    if (err != PRO_TK_NO_ERROR)
+    {
+        *(char*)data = (char)NULL;
+        return(PRO_TK_GENERAL_ERROR);
+    }
+<a name="anchor-361"></a>
+    switch(data_type)
+    {
+        case PRO_VALUE_TYPE_INT:
+	  ProElementIntegerGet(element, NULL, (int*)data);
+<a name="anchor-362"></a>                break;
+        case PRO_VALUE_TYPE_DOUBLE:
+	  ProElementDoubleGet(element, NULL, (double*)data);
+                break;
+        case PRO_VALUE_TYPE_POINTER:
+<a name="anchor-363"></a>                ProElementSpecialvalueGet(element, NULL, (ProAppData*)data);
+                break;
+        case PRO_VALUE_TYPE_STRING:
+	  ProElementStringGet(element, NULL, (char**)data);
+                break;
+<a name="anchor-364"></a>        case PRO_VALUE_TYPE_WSTRING:
+	  ProElementWstringGet(element, NULL, (wchar_t**)data);
+                break;
+        case PRO_VALUE_TYPE_SELECTION:
+	  ProElementReferenceGet(element, NULL, (ProReference*)data);
+<a name="anchor-365"></a>                break;
+    }
+
+    if (path_items != NULL)
+    {
+<a name="anchor-366"></a>        err = ProElempathFree(&amp;elem_path);
+        TEST_CALL_REPORT(&quot;ProElempathFree&quot;,&quot;ProUtilElementDataGet&quot;,
+                      err, err != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-367"></a>    return(err);
+}
+
+/*====================================================================*\
+FUNCTION : ProUtilUseEdge
+<a name="anchor-368"></a>PURPOSE  : Create &quot;TkSect/-Use Edge/&quot; menu
+\*====================================================================*/
+int ProUtilUseEdge(ProAppData app_dt, int act)
+{   
+    int                 ret;
+<a name="anchor-369"></a>    ProError            status;
+    ProUtilMenuButtons  menu [] = 
+    {
+        {&quot;UseEdge&quot;, -1, 0},
+            {&quot;-Use Edge&quot;,       mnUSE_EDGE,         0},
+<a name="anchor-370"></a>            {&quot;-SelEdgeChain&quot;,   mnUSE_EDGE_CHAIN,   0},
+            {&quot;-SelEdgeLoop&quot;,    mnUSE_EDGE_LOOP,    0},
+            {&quot;-SelCurveChain&quot;,  mnUSE_CURVE_CHAIN,  0},
+            {&quot;-SelCurveLoop&quot;,   mnUSE_CURVE_LOOP,   0},
+            {&quot;-Done&quot;,           mnUSE_DONE,         0},
+<a name="anchor-371"></a>        {&quot;&quot;,-1, -1}
+    };
+    ProSection          section = (ProSection)app_dt;
+
+    while(1==1)
+<a name="anchor-372"></a>    {
+        status = ProUtilMenuIntValueSelect (menu, &amp;ret);
+    
+        if (status != PRO_TK_NO_ERROR)
+            break;
+<a name="anchor-373"></a>    
+        switch (ret)
+        {
+        case mnUSE_EDGE : 
+            ret = ProUtilSecEntityUseEdge(section);
+<a name="anchor-374"></a>            break;
+        case mnUSE_EDGE_CHAIN: 
+            ret = ProUtilSecEntityUseEdgeChain(section);
+            break;
+        case mnUSE_EDGE_LOOP : 
+<a name="anchor-375"></a>            ret = ProUtilSecEntityUseEdgeLoop(section);
+            break;
+        case mnUSE_CURVE_LOOP:
+            ret = ProUtilSecEntityUseCurveLoop (section);
+            break;
+<a name="anchor-376"></a>        case mnUSE_CURVE_CHAIN:
+            ret = ProUtilSecEntityUseCurveChain (section);
+            break;
+        case mnUSE_DONE:
+            ProTestSectionSolveRegen (section);
+<a name="anchor-377"></a>            return 0;
+        }
+        
+        if (ret == -1)
+            break;
+<a name="anchor-378"></a>    }
+    return (-1);
+}
+
+/*====================================================================*\
+<a name="anchor-379"></a>FUNCTION : ProUtilSecEntityUseEdge
+PURPOSE  : Simulates behavior of Sketcer/Geom Tools/Use Edge/Sel Edge
+\*====================================================================*/
+int ProUtilSecEntityUseEdge(ProSection section)
+
+<a name="anchor-380"></a>{
+    int             r_ent_id, sel_count, i;
+    ProSelection    *ref_edge, sel;
+    ProError        status;
+
+<a name="anchor-381"></a>    ProUtilMsgPrint ((char *)&quot;sec&quot;, (char *)&quot;TEST %0s&quot;,(char *) &quot;Select edge.&quot;);
+    
+    status = ProSelect((char *)&quot;edge&quot;, -1,NULL,NULL,NULL,NULL, &amp;ref_edge, &amp;sel_count);
+    TEST_CALL_REPORT(&quot;ProSelection&quot;,&quot;ProUtilSecEntityUseEdge&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-382"></a>    if (status!=PRO_TK_NO_ERROR || sel_count &lt; 1)
+        return -1;
+    
+    for (i=0; i&lt;sel_count; i++)
+    {
+<a name="anchor-383"></a>        status = ProSelectionCopy (ref_edge[i], &amp;sel);
+        TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;,&quot;ProUtilSecEntityUseEdge&quot;,
+            status, status != PRO_TK_NO_ERROR);
+
+        status = ProSectionEntityUseEdge(section, sel, &amp;r_ent_id);
+<a name="anchor-384"></a>        TEST_CALL_REPORT(&quot;ProSectionEntityUseEdge&quot;,&quot;ProUtilSecEntityUseEdge&quot;,
+            status, status != PRO_TK_NO_ERROR);
+    }
+
+    return(0);
+<a name="anchor-385"></a>}
+
+/*====================================================================*\
+FUNCTION : ProUtilSecEntityUseEdgeLoop
+PURPOSE  : Simulates behavior of Sketcer/Geom Tools/Use Edge/Sel Loop
+<a name="anchor-386"></a>\*====================================================================*/
+int ProUtilSecEntityUseEdgeLoop(ProSection section)
+{
+    int             r_ent_id, sel_count, i;
+    ProSelection    *sel_ptr = NULL, sel1, sel2;
+<a name="anchor-387"></a>    ProError        status;
+    ProIntlist      p_id_list;
+
+    ProUtilMsgPrint ((char *)&quot;sec&quot;, (char *)&quot;TEST %0s&quot;, (char *)&quot;Select surface.&quot;);
+    
+<a name="anchor-388"></a>    status = ProSelect((char *)&quot;surface&quot;,1,NULL,NULL,NULL,NULL, &amp;sel_ptr, &amp;sel_count);
+    TEST_CALL_REPORT(&quot;ProSelection&quot;,&quot;ProUtilSecEntityUseEdgeLoop&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    if (status!=PRO_TK_NO_ERROR || sel_count &lt; 1)
+<a name="anchor-389"></a>        return -1;
+        
+    status = ProSelectionCopy (*sel_ptr, &amp;sel1);
+    TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;,&quot;ProUtilSecEntityUseEdgeLoop&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-390"></a>    
+    ProUtilMsgPrint ((char *)&quot;sec&quot;, (char *)&quot;TEST %0s&quot;,
+        (char *)&quot;Select edge belonging to the contour of the surface.&quot;);
+    
+    status = ProSelect((char*)&quot;edge&quot;, 1,NULL,NULL,NULL,NULL, &amp;sel_ptr, &amp;sel_count);
+<a name="anchor-391"></a>    TEST_CALL_REPORT(&quot;ProSelection&quot;,&quot;ProUtilSecEntityUseEdgeLoop&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    if (status!=PRO_TK_NO_ERROR || sel_count &lt; 1)
+        return -1;
+<a name="anchor-392"></a>    
+    status = ProSelectionCopy (sel_ptr[0], &amp;sel2);
+    TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;,&quot;ProUtilSecEntityUseEdgeLoop&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-393"></a>    status = ProSectionEntityUseEdgeLoop (
+        section, sel1, sel2, &amp;p_id_list, &amp;r_ent_id);
+    TEST_CALL_REPORT(&quot;ProSectionEntityUseEdgeLoop&quot;,
+        &quot;ProUtilSecEntityUseEdgeLoop&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-394"></a>    ProTKPrintf (&quot;Edge loop IDs:&quot;);
+    for (i=0; i&lt;r_ent_id; i++)
+    {
+        ProTKPrintf (&quot;%d\n&quot;, p_id_list[i]);
+    }
+<a name="anchor-395"></a>    status = ProArrayFree ((ProArray*)&amp;p_id_list);
+    TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;ProUtilSecEntityUseEdgeLoop&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    return(0);
+}
+<a name="anchor-396"></a>
+/*====================================================================*\
+FUNCTION : ProUtilSecEntityUseEdge
+PURPOSE  : Simulates behavior of Sketcer/Geom Tools/Use Edge/Sel Chain
+\*====================================================================*/
+<a name="anchor-397"></a>int ProUtilSecEntityUseEdgeChain(ProSection section)
+{   
+    int             i, num, sel_count;
+    char            *msg[4] = 
+    {
+<a name="anchor-398"></a>    &quot;Select surface from whose contour the chain of entities should be created.&quot;,
+    &quot;Select first edge delimiting the chain.&quot;,
+    &quot;Select second edge delimiting the chain.&quot;,
+    &quot;Select vertex at the end of the chain.&quot;
+    };
+<a name="anchor-399"></a>    char            geomTypes[4][9]={&quot;surface&quot;, &quot;edge&quot;, &quot;edge&quot;, &quot;edge_end&quot;};
+    ProSelection    *sel_ptr, sels[4];
+    ProError        status;
+    ProIntlist       p_id_list;
+
+<a name="anchor-400"></a>    for(i=0; i&lt;4; i++)
+    {
+        ProUtilMsgPrint ((char *)&quot;sec&quot;, (char *)&quot;TEST %0s&quot;, msg[i]);
+        
+        status = ProSelect (geomTypes[i], 1, NULL,NULL,NULL,NULL,
+<a name="anchor-401"></a>            &amp;sel_ptr, &amp;sel_count);
+        TEST_CALL_REPORT(&quot;ProSelection&quot;,
+            &quot;ProUtilSecEntityUseEdgeChain&quot;,
+            status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-402"></a>        if (status!=PRO_TK_NO_ERROR || sel_count &lt; 1)
+            return -1;
+        
+        status = ProSelectionCopy (*sel_ptr, &amp;sels[i]);
+        TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;,&quot;ProUtilSecEntityUseEdgeChain&quot;,
+<a name="anchor-403"></a>            status, status != PRO_TK_NO_ERROR);
+
+    }
+
+    status = ProSectionEntityUseEdgeChain (section, sels[0], sels[1],
+<a name="anchor-404"></a>        sels[2], sels[3], &amp;p_id_list, &amp;num);
+    TEST_CALL_REPORT(&quot;ProSectionEntityUseEdgeChain&quot;,
+    &quot;ProUtilSecEntityUseEdgeChain&quot;, status, status != PRO_TK_NO_ERROR);
+
+    ProTKPrintf (&quot;Edge chain IDs:&quot;);
+<a name="anchor-405"></a>    for (i=0; i&lt;num; i++)
+    {
+        ProTKPrintf (&quot;%d\n&quot;, p_id_list[i]);
+    }
+    status = ProArrayFree ((ProArray*)&amp;p_id_list);
+<a name="anchor-406"></a>    TEST_CALL_REPORT(&quot;ProArrayFree&quot;, &quot;ProUtilSecEntityUseEdgeLoop&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    return(0);
+}
+<a name="anchor-407"></a>
+/*====================================================================*\
+FUNCTION : ProUtilSecEntityUseCurveLoop
+PURPOSE  : Adds loop of entities to the specified section creating them
+   from projections of 3D curve segments (datum curve, IGES, or pipe
+<a name="anchor-408"></a>   segments can be selected) .
+\*====================================================================*/
+int ProUtilSecEntityUseCurveLoop (ProSection section)
+{
+    int             num_ids, sel_count;
+<a name="anchor-409"></a>    ProIntlist      id_list;
+    ProSelection    *sel_ptr, sel;
+    ProError        status;
+    
+    ProUtilMsgPrint (&quot;sec&quot;, &quot;TEST %0s&quot;,
+<a name="anchor-410"></a>        &quot;Select curve belonging to the contour from which&quot; 
+        &quot;the loop of entities should be created.&quot;);
+    
+    status = ProSelect((char*)&quot;curve&quot;, 1,NULL,NULL,NULL,NULL, &amp;sel_ptr, &amp;sel_count);
+    TEST_CALL_REPORT(&quot;ProSelection&quot;,&quot;ProUtilSecEntityUseCurveLoop&quot;,
+<a name="anchor-411"></a>        status, status != PRO_TK_NO_ERROR);
+    
+    if (status!=PRO_TK_NO_ERROR || sel_count &lt; 1)
+        return -1;
+    
+<a name="anchor-412"></a>    status = ProSelectionCopy (sel_ptr[0], &amp;sel);
+    TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;,&quot;ProUtilSecEntityUseCurveLoop&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    
+    status = ProSectionEntityUseCurveLoop (
+<a name="anchor-413"></a>        section, sel, &amp;id_list, &amp;num_ids);
+    TEST_CALL_REPORT(&quot;ProSectionEntityUseCurveLoop&quot;,
+        &quot;ProUtilSecEntityUseCurveLoop&quot;, status, status != PRO_TK_NO_ERROR);
+    return (0);
+}
+<a name="anchor-414"></a>
+/*====================================================================*\
+FUNCTION : ProUtilSecEntityUseCurveChain
+PURPOSE  : AAdds chain of entities to the specified section creating them
+   from projections of 3D curve segments (datum curve, IGES, or pipe
+<a name="anchor-415"></a>   segments can be selected) .
+\*====================================================================*/
+int ProUtilSecEntityUseCurveChain (ProSection section)
+{
+    int             num_ids, sel_count;
+<a name="anchor-416"></a>    ProIntlist      id_list;
+    ProSelection    *sel_ptr,sel1, sel2, sel3;
+    ProError        status;
+    
+    ProUtilMsgPrint ((char *)&quot;sec&quot;, (char *)&quot;TEST %0s&quot;, (char *)&quot;Select first curve.&quot;);
+<a name="anchor-417"></a>    status = ProSelect((char *)&quot;curve&quot;,1,NULL,NULL,NULL,NULL, &amp;sel_ptr, &amp;sel_count);
+    TEST_CALL_REPORT(&quot;ProSelection&quot;, &quot;ProUtilSecEntityUseCurveChain&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    
+    if (status!=PRO_TK_NO_ERROR || sel_count &lt; 1)
+<a name="anchor-418"></a>        return -1;
+    
+    status = ProSelectionCopy (*sel_ptr, &amp;sel1);
+    TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;,&quot;ProUtilSecEntityUseCurveChain&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-419"></a>        
+    ProUtilMsgPrint (&quot;sec&quot;, &quot;TEST %0s&quot;, &quot;Select second curve.&quot;);
+    status = ProSelect((char*)&quot;curve&quot;,1,NULL,NULL,NULL,NULL, &amp;sel_ptr, &amp;sel_count);
+    TEST_CALL_REPORT(&quot;ProSelection&quot;, &quot;ProUtilSecEntityUseCurveChain&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-420"></a>
+    if (status!=PRO_TK_NO_ERROR || sel_count &lt; 1)
+        return -1;
+    
+    status = ProSelectionCopy (*sel_ptr, &amp;sel2);
+<a name="anchor-421"></a>    TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;,&quot;ProUtilSecEntityUseCurveChain&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    ProUtilMsgPrint (&quot;sec&quot;, &quot;TEST %0s&quot;, &quot;Select vertex at end of the chain.&quot;);
+    status = ProSelect((char*)&quot;curve_end&quot;,1,NULL,NULL,NULL,NULL, &amp;sel_ptr, &amp;sel_count);
+<a name="anchor-422"></a>    TEST_CALL_REPORT(&quot;ProSelection&quot;, &quot;ProUtilSecEntityUseCurveChain&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    
+    if (status!=PRO_TK_NO_ERROR || sel_count &lt; 1)
+        return -1;
+<a name="anchor-423"></a>
+    status = ProSelectionCopy (*sel_ptr, &amp;sel3);
+    TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;,&quot;ProUtilSecEntityUseCurveChain&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-424"></a>    status = ProSectionEntityUseCurveChain (
+        section, sel1, sel2, sel3, &amp;id_list, &amp;num_ids);
+    TEST_CALL_REPORT(&quot;ProSectionEntityUseCurveChain&quot;,
+        &quot;ProUtilSecEntityUseCurveChain&quot;, status, status != PRO_TK_NO_ERROR);
+    return (0);
+<a name="anchor-425"></a>}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilInitializeSketch
+    PURPOSE  :  Initialize Sketchch information structure
+<a name="anchor-426"></a>\*====================================================================*/
+ProError ProUtilInitializeSketch(SketchInfo *sketch_info)
+{
+     ProError status; 
+     sketch_info->sket_feature.id = PRO_VALUE_UNUSED; 
+<a name="anchor-427"></a>     sketch_info->solid = NULL;
+     sketch_info->prim_surface = NULL; 
+     sketch_info->ref1.type = GEOM_UNUSED; 
+     sketch_info->ref2.type = GEOM_UNUSED; 
+     sketch_info->orient_dir = PRO_VALUE_UNUSED;
+<a name="anchor-428"></a>     sketch_info->orient_view_dir = PRO_VALUE_UNUSED;
+
+     status = ProArrayAlloc(0, sizeof(SectionConstraintInfo), 1, 
+        (ProArray *)&amp;sketch_info->constraints_info);     
+     status = ProArrayAlloc(0, sizeof(ProEdge), 1, 
+<a name="anchor-429"></a>        (ProArray *)&amp;sketch_info->edges);
+             
+     status = ProArrayAlloc(0, sizeof(Pro2dLinedef), 1, 
+        (ProArray *)&amp;sketch_info->line_entity);
+     status = ProArrayAlloc(0, sizeof(int), 1, 
+<a name="anchor-430"></a>        (ProArray *)&amp;sketch_info->line_ids);
+        
+     status = ProArrayAlloc(0, sizeof(Pro2dClinedef), 1, 
+        (ProArray *)&amp;sketch_info->cline_entity);
+     status = ProArrayAlloc(0, sizeof(int), 1, 
+<a name="anchor-431"></a>        (ProArray *)&amp;sketch_info->cline_ids);
+        
+     status = ProArrayAlloc(0, sizeof(Pro2dArcdef), 1, 
+        (ProArray *)&amp;sketch_info->arc_entity);
+     status = ProArrayAlloc(0, sizeof(int), 1, 
+<a name="anchor-432"></a>        (ProArray *)&amp;sketch_info->arc_ids);
+        
+     status = ProArrayAlloc(0, sizeof(Pro2dConicdef), 1, 
+        (ProArray *)&amp;sketch_info->conic_entity);
+     status = ProArrayAlloc(0, sizeof(int), 1, 
+<a name="anchor-433"></a>        (ProArray *)&amp;sketch_info->conic_ids);
+        
+     status = ProArrayAlloc(0, sizeof(Pro2dCircledef), 1,
+        (ProArray *)&amp;sketch_info->circle_entity);
+     status = ProArrayAlloc(0, sizeof(int), 1, 
+<a name="anchor-434"></a>        (ProArray *)&amp;sketch_info->circle_ids);
+
+     status = ProArrayAlloc(0, sizeof(Pro2dPolylinedef), 1,
+        (ProArray *)&amp;sketch_info->poly_line_ent);
+     status = ProArrayAlloc(0, sizeof(int), 1, 
+<a name="anchor-435"></a>        (ProArray *)&amp;sketch_info->poly_line_ids);
+
+     status = ProArrayAlloc(0, sizeof(Pro2dSplinedef), 1, 
+        (ProArray *)&amp;sketch_info->spline_ent);
+     status = ProArrayAlloc(0, sizeof(int), 1, 
+<a name="anchor-436"></a>        (ProArray *)&amp;sketch_info->spline_ids);
+        
+     status = ProArrayAlloc(0, sizeof(Pro2dEllipsedef), 1, 
+        (ProArray *)&amp;sketch_info->ellipse_ent);
+     status = ProArrayAlloc(0, sizeof(int), 1, 
+<a name="anchor-437"></a>        (ProArray *)&amp;sketch_info->ellipse_ids);
+     return status;
+}
+
+/*====================================================================*\
+<a name="anchor-438"></a>    FUNCTION :  ProUtilFreeSketchInfo
+    PURPOSE  :  Frees the Sketchch information structure
+\*====================================================================*/
+ProError ProUtilFreeSketchInfo(SketchInfo *sketch_info)
+{
+<a name="anchor-439"></a>     ProError status; 
+     status = ProArrayFree((ProArray *)&amp;sketch_info->constraints_info);     
+     status = ProArrayFree((ProArray *)&amp;sketch_info->edges);
+             
+     status = ProArrayFree((ProArray *)&amp;sketch_info->line_entity);
+<a name="anchor-440"></a>     status = ProArrayFree((ProArray *)&amp;sketch_info->line_ids);
+        
+     status = ProArrayFree((ProArray *)&amp;sketch_info->cline_entity);
+     status = ProArrayFree((ProArray *)&amp;sketch_info->cline_ids);
+        
+<a name="anchor-441"></a>     status = ProArrayFree((ProArray *)&amp;sketch_info->arc_entity);
+     status = ProArrayFree((ProArray *)&amp;sketch_info->arc_ids);
+        
+     status = ProArrayFree((ProArray *)&amp;sketch_info->conic_entity);
+     status = ProArrayFree((ProArray *)&amp;sketch_info->conic_ids);
+<a name="anchor-442"></a>        
+     status = ProArrayFree((ProArray *)&amp;sketch_info->circle_entity);
+     status = ProArrayFree((ProArray *)&amp;sketch_info->circle_ids);
+
+     status = ProArrayFree((ProArray *)&amp;sketch_info->poly_line_ent);
+<a name="anchor-443"></a>     status = ProArrayFree((ProArray *)&amp;sketch_info->poly_line_ids);
+
+     status = ProArrayFree((ProArray *)&amp;sketch_info->spline_ent);
+     status = ProArrayFree((ProArray *)&amp;sketch_info->spline_ids);
+        
+<a name="anchor-444"></a>     status = ProArrayFree((ProArray *)&amp;sketch_info->ellipse_ent);
+     status = ProArrayFree((ProArray *)&amp;sketch_info->ellipse_ids);        
+     return status;
+}
+
+<a name="anchor-445"></a>/*====================================================================*\
+    FUNCTION :  ProUtilCopySectionEntities
+    PURPOSE  :  Copies all the section information from a section
+                and stores in the Sketch information structure 
+\*====================================================================*/
+<a name="anchor-446"></a>ProError ProUtilCopySectionEntities(ProSection *section, SketchInfo *sketch_info)
+{
+     ProError status;
+     int i = 0, n_ids = 0;
+     ProIntlist      p_id_list;
+<a name="anchor-447"></a>     Pro2dEntdef *entity;
+           
+     Pro2dLinedef   line_entity;
+     Pro2dArcdef    arc_entity;
+     Pro2dCircledef circle_entity;
+<a name="anchor-448"></a>     Pro2dConicdef conic_entity;
+     Pro2dPolylinedef poly_line_ent; 
+     Pro2dSplinedef   spline_ent;
+     Pro2dEllipsedef  ellipse_ent; 
+     Pro2dPnt	*point_arr;
+<a name="anchor-449"></a>     ProEdge *test_edges;
+
+     status = ProSectionEntityIdsGet(*section, &amp;p_id_list, &amp;n_ids);
+     TEST_CALL_REPORT(&quot;ProSectionEntityIdsGet&quot;, &quot;ProUtilCopySectionEntities&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+<a name="anchor-450"></a>     if(status != PRO_TK_NO_ERROR)
+            return status;
+     /* 
+        First two entities are the 2D-Entities
+        created from the references
+<a name="anchor-451"></a>     */
+     
+     for(i=0; i&lt;n_ids; i++) 
+     {
+     status = ProSectionEntityGet(*section, p_id_list[i],
+<a name="anchor-452"></a>        (Pro2dEntdef **)&amp;entity);
+     TEST_CALL_REPORT(&quot;ProSectionEntityGet&quot;, &quot;ProUtilCopySectionEntities&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+     switch (entity ->type) 
+        {
+<a name="anchor-453"></a>        case  PRO_2D_LINE :
+           status = ProUtilCopy2dEntity(entity, (Pro2dEntdef *)&amp;line_entity);
+           status = ProArrayObjectAdd(
+              (ProArray*)&amp;sketch_info->line_entity,
+              PRO_VALUE_UNUSED, 1, &amp;line_entity);
+<a name="anchor-454"></a>           status = ProArrayObjectAdd(
+              (ProArray*)&amp;sketch_info->line_ids,
+              PRO_VALUE_UNUSED, 1, &amp;p_id_list[i]);
+           break; 
+        case  PRO_2D_ARC  :
+<a name="anchor-455"></a>           status = ProUtilCopy2dEntity(entity, (Pro2dEntdef *)&amp;arc_entity);
+           status = ProArrayObjectAdd(
+              (ProArray*)&amp;sketch_info->arc_entity,
+              PRO_VALUE_UNUSED, 1, &amp;arc_entity);
+           status = ProArrayObjectAdd(
+<a name="anchor-456"></a>              (ProArray*)&amp;sketch_info->arc_ids,
+              PRO_VALUE_UNUSED, 1, &amp;p_id_list[i]);
+           break;
+        case  PRO_2D_CONIC  :
+           status = ProUtilCopy2dEntity(entity, (Pro2dEntdef *)&amp;conic_entity);
+<a name="anchor-457"></a>           status = ProArrayObjectAdd(
+              (ProArray*)&amp;sketch_info->conic_entity,
+              PRO_VALUE_UNUSED, 1, &amp;conic_entity);
+           status = ProArrayObjectAdd(
+              (ProArray*)&amp;sketch_info->conic_ids,
+<a name="anchor-458"></a>              PRO_VALUE_UNUSED, 1, &amp;p_id_list[i]);              
+           break;
+        case  PRO_2D_CIRCLE  :
+           status = ProUtilCopy2dEntity(entity, (Pro2dEntdef *)&amp;circle_entity);
+           status = ProArrayObjectAdd(
+<a name="anchor-459"></a>              (ProArray*)&amp;sketch_info->circle_entity,
+              PRO_VALUE_UNUSED, 1, &amp;circle_entity);
+           status = ProArrayObjectAdd(
+              (ProArray*)&amp;sketch_info->circle_ids,
+              PRO_VALUE_UNUSED, 1, &amp;p_id_list[i]);              
+<a name="anchor-460"></a>           break;
+        case  PRO_2D_SPLINE :
+           status = ProUtilCopy2dEntity(entity, (Pro2dEntdef *)&amp;spline_ent);
+           status = ProArrayObjectAdd(
+              (ProArray*)&amp;sketch_info->spline_ent, 
+<a name="anchor-461"></a>              PRO_VALUE_UNUSED, 1, &amp;spline_ent);
+           status = ProArrayObjectAdd(
+              (ProArray*)&amp;sketch_info->spline_ids,
+              PRO_VALUE_UNUSED, 1, &amp;p_id_list[i]);              
+           break;
+<a name="anchor-462"></a>        case  PRO_2D_ELLIPSE :
+           status = ProUtilCopy2dEntity(entity, (Pro2dEntdef *)&amp;ellipse_ent);
+           status = ProArrayObjectAdd(
+              (ProArray*)&amp;sketch_info->ellipse_ent,
+              PRO_VALUE_UNUSED, 1, &amp;ellipse_ent);
+<a name="anchor-463"></a>           status = ProArrayObjectAdd(
+              (ProArray*)&amp;sketch_info->ellipse_ids,
+              PRO_VALUE_UNUSED, 1, &amp;p_id_list[i]);              
+           break;
+        default :              
+<a name="anchor-464"></a>           break;
+        }
+    }
+    return status;
+}
+<a name="anchor-465"></a>
+/*===============================================================*\
+FUNCTION: ProUtilAddSectionEntities
+PURPOSE:  Add section entities from the sketch information
+\*===============================================================*/
+<a name="anchor-466"></a>ProError ProUtilAddSectionEntities(ProSection section, SketchInfo *sketch_info)   
+{ 	
+    ProError status;
+    ProSelection sel_1, sel_2, cpy_sel;
+    ProMdl model;
+<a name="anchor-467"></a>    int ent_id, edge_num, ent_id1;
+    Pro2dEntdef *entity;
+    int          i, r_ent_id;
+    ProIntlist      p_id_list;
+
+<a name="anchor-468"></a>    Pro2dLinedef   line_entity;
+    Pro2dArcdef    arc_entity;
+    Pro2dCircledef circle_entity;
+    Pro2dConicdef conic_entity;
+    Pro2dPolylinedef poly_line_ent; 
+<a name="anchor-469"></a>    Pro2dSplinedef   spline_ent;
+    Pro2dEllipsedef  ellipse_ent; 
+    Pro2dPnt	*point_arr;
+    ProEdge *test_edges;
+    int item_nums;
+<a name="anchor-470"></a>
+    status = ProArraySizeGet ((ProArray)sketch_info->line_entity,
+       &amp;item_nums);
+    for(i = 0; i &lt; item_nums; i++)
+    {
+<a name="anchor-471"></a>        status = ProSectionEntityAdd(section,
+          (Pro2dEntdef *)&amp;sketch_info->line_entity[i], &amp;ent_id1); 
+    }
+    status = ProArraySizeGet ((ProArray)sketch_info->arc_entity,
+       &amp;item_nums);
+<a name="anchor-472"></a>    for(i = 0; i &lt; item_nums; i++)
+    {
+        status = ProSectionEntityAdd(section,
+          (Pro2dEntdef *)&amp;sketch_info->arc_entity[i], &amp;ent_id1); 
+    }
+<a name="anchor-473"></a>    status = ProArraySizeGet ((ProArray)sketch_info->conic_entity,
+       &amp;item_nums);
+    for(i = 0; i &lt; item_nums; i++)
+    {
+        status = ProSectionEntityAdd(section, 
+<a name="anchor-474"></a>          (Pro2dEntdef *)&amp;sketch_info->conic_entity[i], &amp;ent_id1); 
+    }
+    status = ProArraySizeGet ((ProArray)sketch_info->circle_entity,
+       &amp;item_nums);
+    for(i = 0; i &lt; item_nums; i++)
+<a name="anchor-475"></a>    {
+        status = ProSectionEntityAdd(section, 
+          (Pro2dEntdef *)&amp;sketch_info->circle_entity[i], &amp;ent_id1); 
+    }
+    status = ProArraySizeGet ((ProArray)sketch_info->ellipse_ent, 
+<a name="anchor-476"></a>       &amp;item_nums);
+    for(i = 0; i &lt; item_nums; i++)
+    {
+        status = ProSectionEntityAdd(section, 
+          (Pro2dEntdef *)&amp;sketch_info->ellipse_ent[i], &amp;ent_id1); 
+<a name="anchor-477"></a>    }
+    status = ProArraySizeGet ((ProArray)sketch_info->spline_ent,
+       &amp;item_nums);
+    for(i = 0; i &lt; item_nums; i++)
+    {
+<a name="anchor-478"></a>        status = ProSectionEntityAdd(section,
+          (Pro2dEntdef *)&amp;sketch_info->spline_ent[i], &amp;ent_id1); 
+    }
+    status = ProArraySizeGet ((ProArray)sketch_info->poly_line_ent,
+       &amp;item_nums);
+<a name="anchor-479"></a>    for(i = 0; i &lt; item_nums; i++)
+    {
+        status = ProSectionEntityAdd(section,
+          (Pro2dEntdef *)&amp;sketch_info->poly_line_ent[i], &amp;ent_id1); 
+    }
+<a name="anchor-480"></a>    return status;
+}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilCopy2dEntity
+<a name="anchor-481"></a>    PURPOSE  :  Utility to copy the 2d entity
+\*====================================================================*/
+ProError ProUtilCopy2dEntity(Pro2dEntdef *entity, Pro2dEntdef *copy_entity )
+{
+    int       j,no_points;
+<a name="anchor-482"></a>    ProError  status;
+
+    Pro2dLinedef *line_entity;
+    Pro2dLinedef *o_line_entity;
+
+<a name="anchor-483"></a>    Pro2dClinedef *cline_entity;
+    Pro2dClinedef *o_cline_entity;
+
+    Pro2dArcdef *arc_entity;
+    Pro2dArcdef *o_arc_entity;
+<a name="anchor-484"></a>
+    Pro2dConicdef *conic_entity;
+    Pro2dConicdef *o_conic_entity;
+
+    Pro2dCircledef *circle_entity;
+<a name="anchor-485"></a>    Pro2dCircledef *o_circle_entity;
+
+    Pro2dSplinedef *spline_entity;
+    Pro2dSplinedef *o_spline_entity;
+
+<a name="anchor-486"></a>    Pro2dEllipsedef *ellipse_entity;
+    Pro2dEllipsedef *o_ellipse_entity;
+
+    switch (entity ->type) 
+    {
+<a name="anchor-487"></a>        case PRO_2D_LINE:
+           line_entity = (Pro2dLinedef *)copy_entity;
+           o_line_entity = (Pro2dLinedef *)entity;
+           memcpy( line_entity, o_line_entity, sizeof(Pro2dLinedef) );
+           break;
+<a name="anchor-488"></a>        case PRO_2D_CENTER_LINE:
+           cline_entity = (Pro2dClinedef *)copy_entity;
+           o_cline_entity = (Pro2dClinedef *)entity;
+           memcpy( cline_entity, o_cline_entity, sizeof(Pro2dClinedef) );
+           break;
+<a name="anchor-489"></a>        case PRO_2D_ARC:
+           arc_entity = (Pro2dArcdef *)copy_entity;
+           o_arc_entity = (Pro2dArcdef *)entity;
+           memcpy( arc_entity, o_arc_entity, sizeof(Pro2dArcdef) );
+           break;
+<a name="anchor-490"></a>        case PRO_2D_CONIC:
+           conic_entity = (Pro2dConicdef *)copy_entity;
+           o_conic_entity = (Pro2dConicdef *)entity;
+           memcpy( conic_entity, o_conic_entity, sizeof(Pro2dConicdef) );
+           break;
+<a name="anchor-491"></a>  
+        case PRO_2D_CIRCLE:
+           circle_entity = (Pro2dCircledef *)copy_entity;
+           o_circle_entity = (Pro2dCircledef *)entity;
+           memcpy( circle_entity, o_circle_entity, sizeof(Pro2dCircledef) );
+<a name="anchor-492"></a>           break;
+  
+        case PRO_2D_ELLIPSE:
+           ellipse_entity = (Pro2dEllipsedef *)copy_entity;
+           o_ellipse_entity = (Pro2dEllipsedef *)entity;
+<a name="anchor-493"></a>           memcpy( ellipse_entity, o_ellipse_entity, sizeof(Pro2dEllipsedef) );
+           break;
+  
+        case PRO_2D_SPLINE:
+           spline_entity = (Pro2dSplinedef *)copy_entity;
+<a name="anchor-494"></a>           o_spline_entity = (Pro2dSplinedef *)entity;
+           //memcpy( spline_entity, o_spline_entity, sizeof(Pro2dSplinedef) );
+           no_points = o_spline_entity->n_points;
+           status = ProArrayAlloc( no_points, sizeof(Pro2dPnt), no_points, 
+              (ProArray*)&amp;spline_entity->point_arr );
+<a name="anchor-495"></a>           spline_entity->type = PRO_2D_SPLINE;
+           spline_entity->tangency_type = o_spline_entity->tangency_type;
+           spline_entity->start_tang_angle = o_spline_entity->start_tang_angle;
+           spline_entity->end_tang_angle = o_spline_entity->end_tang_angle;
+           spline_entity->n_points = o_spline_entity->n_points;
+<a name="anchor-496"></a>           for (j=0; j&lt; no_points; j++)
+              {
+              spline_entity->point_arr[j][0] = o_spline_entity->point_arr[j][0];
+              spline_entity->point_arr[j][1] = o_spline_entity->point_arr[j][1];
+              }
+<a name="anchor-497"></a>           break;
+        default :
+           break;
+    }
+    return PRO_TK_NO_ERROR;
+<a name="anchor-498"></a>}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilGetGeomItemToRef
+    PURPOSE  :  Utility to set the geometry reference
+<a name="anchor-499"></a>                (It can be expanded further)     
+\*====================================================================*/
+ProError ProUtilGetGeomItemToRef(ProGeomitem *geom_item, FeatRef *ref)
+{
+    ProError status = PRO_TK_NO_ERROR;
+<a name="anchor-500"></a>    ProSurface surface;
+    ProEdge edge;
+    int id;
+
+    if(geom_item->type == PRO_SURFACE)
+<a name="anchor-501"></a>    {
+        status = ProGeomitemToSurface(geom_item, &amp;surface);
+        status = ProSurfaceIdGet(surface, &amp;id);       
+        TEST_CALL_REPORT(&quot;ProSurfaceIdGet&quot;, &quot;ProUtilGetGeomItemToRef&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+<a name="anchor-502"></a>        ref->type = GEOM_SURFACE;
+    }
+    else if(geom_item->type == PRO_EDGE)
+    {
+        status = ProGeomitemToEdge(geom_item, &amp;edge);
+<a name="anchor-503"></a>        status = ProEdgeIdGet(edge, &amp;id);       
+        TEST_CALL_REPORT(&quot;ProEdgeIdGet&quot;, &quot;ProUtilGetGeomItemToRef&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+        ref->type = GEOM_EDGE;
+    }
+<a name="anchor-504"></a>    else
+        return PRO_TK_NOT_IMPLEMENTED;
+  
+    if(PRO_TK_NO_ERROR == status)
+        ref->id = id;
+<a name="anchor-505"></a>    return status;  
+}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilSectionEntityPropCheck
+<a name="anchor-506"></a>    PURPOSE  :  Verify the two section entities have same
+                geometry or not 
+\*====================================================================*/
+ProError ProUtilSectionEntityPropCheck(Pro2dEntdef *entity_1,
+                                 Pro2dEntdef *entity_2,
+<a name="anchor-507"></a>                                 ProBoolean *isSame)
+{
+    ProError status = PRO_TK_NO_ERROR;
+    int i = 0, j, no_points = 0;
+    ProIntlist      p_id_list;
+<a name="anchor-508"></a>    Pro2dEntdef *entity;
+           
+    Pro2dLinedef *line_entity;
+    Pro2dLinedef *o_line_entity;
+
+<a name="anchor-509"></a>    Pro2dClinedef *cline_entity;
+    Pro2dClinedef *o_cline_entity;
+
+    Pro2dArcdef *arc_entity;
+    Pro2dArcdef *o_arc_entity;
+<a name="anchor-510"></a>
+    Pro2dConicdef *conic_entity;
+    Pro2dConicdef *o_conic_entity;
+
+    Pro2dCircledef *circle_entity;
+<a name="anchor-511"></a>    Pro2dCircledef *o_circle_entity;
+
+    Pro2dSplinedef *spline_entity;
+    Pro2dSplinedef *o_spline_entity;
+
+<a name="anchor-512"></a>    Pro2dEllipsedef *ellipse_entity;
+    Pro2dEllipsedef *o_ellipse_entity;
+
+    Pro2dPnt	*point_arr;
+    ProEdge *test_edges;
+<a name="anchor-513"></a>
+    *isSame = PRO_B_FALSE;
+    if((entity_1->type) != (entity_2->type))
+        return PRO_TK_NO_ERROR;
+         
+<a name="anchor-514"></a>     switch (entity_1->type) 
+        {
+        case PRO_2D_LINE:
+           line_entity = (Pro2dLinedef *)entity_1;
+           o_line_entity = (Pro2dLinedef *)entity_2;
+<a name="anchor-515"></a>           memcpy( line_entity, o_line_entity, sizeof(Pro2dLinedef) );           
+           if(
+              (PRO_B_TRUE == POINT_CMP(line_entity->end1, o_line_entity->end1)) &amp;&amp;
+              (PRO_B_TRUE == POINT_CMP(line_entity->end2, o_line_entity->end2))
+             )
+<a name="anchor-516"></a>             {
+               *isSame = PRO_B_TRUE;
+             }
+           break;
+        case PRO_2D_CENTER_LINE:
+<a name="anchor-517"></a>           cline_entity = (Pro2dClinedef *)entity_1;
+           o_cline_entity = (Pro2dClinedef *)entity_2;
+           if(
+              (PRO_B_TRUE == POINT_CMP(cline_entity->end1, o_cline_entity->end1)) &amp;&amp;
+              (PRO_B_TRUE == POINT_CMP(cline_entity->end2, o_cline_entity->end2))
+<a name="anchor-518"></a>             )
+             {
+               *isSame = PRO_B_TRUE;
+             }
+             break;
+<a name="anchor-519"></a>        case PRO_2D_ARC:
+           arc_entity = (Pro2dArcdef *)entity_1;
+           o_arc_entity = (Pro2dArcdef *)entity_2;
+           if(
+              (PRO_B_TRUE == POINT_CMP(arc_entity->center, o_arc_entity->center)) &amp;&amp;
+<a name="anchor-520"></a>              (PRO_B_TRUE == FLOAT_CMP(arc_entity->start_angle, o_arc_entity->start_angle)) &amp;&amp;
+              (PRO_B_TRUE == FLOAT_CMP(arc_entity->end_angle, o_arc_entity->end_angle)) &amp;&amp;
+              (PRO_B_TRUE == FLOAT_CMP(arc_entity->radius, o_arc_entity->radius))
+             )                            
+             {
+<a name="anchor-521"></a>               *isSame = PRO_B_TRUE;
+             }
+           break;
+        case PRO_2D_CONIC:
+           conic_entity = (Pro2dConicdef *)entity_1;
+<a name="anchor-522"></a>           o_conic_entity = (Pro2dConicdef *)entity_2;
+           if(
+              (PRO_B_TRUE == POINT_CMP(conic_entity->first_end_point, o_conic_entity->first_end_point)) &amp;&amp;
+              (PRO_B_TRUE == POINT_CMP(conic_entity->second_end_point, o_conic_entity->second_end_point)) &amp;&amp;
+              (PRO_B_TRUE == POINT_CMP(conic_entity->shoulder_point, o_conic_entity->shoulder_point)) &amp;&amp;
+<a name="anchor-523"></a>              (PRO_B_TRUE == FLOAT_CMP(conic_entity->parameter, o_conic_entity->parameter)) 
+             )
+             {
+               *isSame = PRO_B_TRUE;
+             }
+<a name="anchor-524"></a>           break;
+        case PRO_2D_CIRCLE:
+           circle_entity = (Pro2dCircledef *)entity_1;
+           o_circle_entity = (Pro2dCircledef *)entity_2;
+           if(
+<a name="anchor-525"></a>              (PRO_B_TRUE == POINT_CMP(circle_entity->center, o_circle_entity->center)) &amp;&amp;
+              (PRO_B_TRUE == FLOAT_CMP(circle_entity->radius, o_circle_entity->radius)) 
+             )
+             {
+               *isSame = PRO_B_TRUE;
+<a name="anchor-526"></a>             }
+           break;
+        case PRO_2D_ELLIPSE:
+           ellipse_entity = (Pro2dEllipsedef *)entity_1;
+           o_ellipse_entity = (Pro2dEllipsedef *)entity_2;
+<a name="anchor-527"></a>           if(
+              (PRO_B_TRUE == POINT_CMP(ellipse_entity->origin, o_ellipse_entity->origin)) &amp;&amp;
+              (PRO_B_TRUE == FLOAT_CMP(ellipse_entity->x_radius, o_ellipse_entity->x_radius)) &amp;&amp;
+              (PRO_B_TRUE == FLOAT_CMP(ellipse_entity->y_radius, o_ellipse_entity->y_radius))                           
+             )
+<a name="anchor-528"></a>             {
+               *isSame = PRO_B_TRUE;
+             }
+           break;
+  
+<a name="anchor-529"></a>        case PRO_2D_SPLINE:
+           spline_entity = (Pro2dSplinedef *)entity_1;
+           o_spline_entity = (Pro2dSplinedef *)entity_2;
+           //memcpy( spline_entity, o_spline_entity, sizeof(Pro2dSplinedef) );
+           if(
+<a name="anchor-530"></a>              (PRO_B_TRUE ==
+FLOAT_CMP((double)spline_entity->tangency_type,(double) o_spline_entity->tangency_type)) &amp;&amp;
+              (PRO_B_TRUE == FLOAT_CMP(spline_entity->start_tang_angle, o_spline_entity->start_tang_angle)) &amp;&amp;
+              (PRO_B_TRUE == FLOAT_CMP(spline_entity->end_tang_angle, o_spline_entity->end_tang_angle)) &amp;&amp;
+              (PRO_B_TRUE == FLOAT_CMP((double)spline_entity->n_points, (double)o_spline_entity->n_points)) &amp;&amp;
+<a name="anchor-531"></a>              (PRO_B_TRUE == FLOAT_CMP(spline_entity->point_arr[0][0], o_spline_entity->point_arr[0][0]))
+             ) 
+             {
+              /*for (j=0; j&lt; no_points; j++)
+              {
+<a name="anchor-532"></a>              spline_entity->point_arr[j][0] = o_spline_entity->point_arr[j][0];
+              spline_entity->point_arr[j][1] = o_spline_entity->point_arr[j][1];
+              }*/
+               *isSame = PRO_B_TRUE;                  
+             }
+<a name="anchor-533"></a>           break;
+        default :
+           break;
+        }
+    return status;
+<a name="anchor-534"></a>}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilFindSketchEntity
+    PURPOSE  :  Find the section entity id which has 
+<a name="anchor-535"></a>                same geometry info in a section  
+\*====================================================================*/
+ProError ProUtilFindSketchEntity(SketchInfo *sketch_info, ProSection *section, int id, int *sec_id)
+{
+    ProError status;
+<a name="anchor-536"></a>    Pro2dEntdef *old_entity;
+    ProBoolean isSame = PRO_B_FALSE;
+    Pro2dEntdef *new_entity;
+    int i, item_nums;
+
+<a name="anchor-537"></a>    status = ProSectionEntityGet(*section, id, (Pro2dEntdef **)&amp;old_entity);    
+    TEST_CALL_REPORT(&quot;ProSectionEntityGet&quot;, &quot;ProUtilFindSketchEntity&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+    switch (old_entity->type)
+    {
+<a name="anchor-538"></a>        case  PRO_2D_LINE :
+            status = ProArraySizeGet ((ProArray)sketch_info->line_entity,
+               &amp;item_nums);
+            for(i = 0; i&lt;item_nums; i++)
+            {
+<a name="anchor-539"></a>               status = ProSectionEntityGet(sketch_info->section,
+                      sketch_info->line_ids[i], (Pro2dEntdef **)&amp;new_entity);
+               TEST_CALL_REPORT(&quot;ProSectionEntityGet&quot;, &quot;ProUtilFindSketchEntity&quot;,  
+			          status, status != PRO_TK_NO_ERROR );                      
+               if(status != PRO_TK_NO_ERROR)                       
+<a name="anchor-540"></a>                   continue;
+               status = ProUtilSectionEntityPropCheck(new_entity, old_entity, &amp;isSame);
+               if((PRO_B_TRUE == isSame) &amp;&amp; (PRO_TK_NO_ERROR == status))
+                   break;
+            }
+<a name="anchor-541"></a>           break; 
+        case  PRO_2D_ARC  :
+            status = ProArraySizeGet ((ProArray)sketch_info->arc_entity,
+               &amp;item_nums);
+            for(i = 0; i&lt;item_nums; i++)
+<a name="anchor-542"></a>            {
+               status = ProSectionEntityGet(sketch_info->section,
+                      sketch_info->arc_ids[i], (Pro2dEntdef **)&amp;new_entity);
+               if(status != PRO_TK_NO_ERROR)                       
+                   continue;
+<a name="anchor-543"></a>               TEST_CALL_REPORT(&quot;ProSectionEntityGet&quot;, &quot;ProUtilFindSketchEntity&quot;,  
+			          status, status != PRO_TK_NO_ERROR );                      
+               status = ProUtilSectionEntityPropCheck(new_entity, old_entity, &amp;isSame);
+               if((PRO_B_TRUE == isSame) &amp;&amp; (PRO_TK_NO_ERROR == status))
+                   break;
+<a name="anchor-544"></a>            }
+           break; 
+        case  PRO_2D_CONIC  :
+            status = ProArraySizeGet ((ProArray)sketch_info->conic_entity,
+               &amp;item_nums);
+<a name="anchor-545"></a>            for(i = 0; i&lt;item_nums; i++)
+            {
+               status = ProSectionEntityGet(sketch_info->section,
+                      sketch_info->conic_ids[i], (Pro2dEntdef **)&amp;new_entity);
+               if(status != PRO_TK_NO_ERROR)                       
+<a name="anchor-546"></a>                   continue;                      
+               TEST_CALL_REPORT(&quot;ProSectionEntityGet&quot;, &quot;ProUtilFindSketchEntity&quot;,  
+		        	    status, status != PRO_TK_NO_ERROR );                                          
+               status = ProUtilSectionEntityPropCheck(new_entity, old_entity, &amp;isSame);
+               if((PRO_B_TRUE == isSame) &amp;&amp; (PRO_TK_NO_ERROR == status))
+<a name="anchor-547"></a>                   break;
+            }
+           break; 
+        case  PRO_2D_CIRCLE  :
+            status = ProArraySizeGet ((ProArray)sketch_info->circle_entity,
+<a name="anchor-548"></a>               &amp;item_nums);
+            for(i = 0; i&lt;item_nums; i++)
+            {
+               status = ProSectionEntityGet(sketch_info->section,
+                      sketch_info->circle_ids[i], (Pro2dEntdef **)&amp;new_entity);
+<a name="anchor-549"></a>               if(status != PRO_TK_NO_ERROR)                       
+                   continue;                      
+               TEST_CALL_REPORT(&quot;ProSectionEntityGet&quot;, &quot;ProUtilFindSketchEntity&quot;,  
+		    	    status, status != PRO_TK_NO_ERROR );                                          
+               status = ProUtilSectionEntityPropCheck(new_entity, old_entity, &amp;isSame);
+<a name="anchor-550"></a>               if((PRO_B_TRUE == isSame) &amp;&amp; (PRO_TK_NO_ERROR == status))
+                   break;
+            }
+           break; 
+        case  PRO_2D_SPLINE :
+<a name="anchor-551"></a>            status = ProArraySizeGet ((ProArray)sketch_info->spline_ent,
+               &amp;item_nums);
+            for(i = 0; i&lt;item_nums; i++)
+            {
+               status = ProSectionEntityGet(sketch_info->section,
+<a name="anchor-552"></a>                      sketch_info->spline_ids[i], (Pro2dEntdef **)&amp;new_entity);
+               if(status != PRO_TK_NO_ERROR)                       
+                   continue;                      
+               TEST_CALL_REPORT(&quot;ProSectionEntityGet&quot;, &quot;ProUtilFindSketchEntity&quot;,  
+	    		    status, status != PRO_TK_NO_ERROR );                                        
+<a name="anchor-553"></a>               status = ProUtilSectionEntityPropCheck(new_entity, old_entity, &amp;isSame);
+               if((PRO_B_TRUE == isSame) &amp;&amp; (PRO_TK_NO_ERROR == status))
+                   break;
+            }
+           break; 
+<a name="anchor-554"></a>        case  PRO_2D_ELLIPSE :
+            status = ProArraySizeGet ((ProArray)sketch_info->ellipse_ent,
+               &amp;item_nums);
+            for(i = 0; i&lt;item_nums; i++)
+            {
+<a name="anchor-555"></a>               status = ProSectionEntityGet(sketch_info->section,
+                      sketch_info->ellipse_ids[i], (Pro2dEntdef **)&amp;new_entity);
+               if(status != PRO_TK_NO_ERROR)                       
+                   continue;                      
+               TEST_CALL_REPORT(&quot;ProSectionEntityGet&quot;, &quot;ProUtilFindSketchEntity&quot;,  
+<a name="anchor-556"></a>	    		    status, status != PRO_TK_NO_ERROR );                                       
+               status = ProUtilSectionEntityPropCheck(new_entity, old_entity, &amp;isSame);
+               if((PRO_B_TRUE == isSame) &amp;&amp; (PRO_TK_NO_ERROR == status))
+                   break;
+            }
+<a name="anchor-557"></a>           break; 
+        default :              
+           break;
+    }    
+    if(PRO_B_TRUE == isSame)
+<a name="anchor-558"></a>        return status;
+    return PRO_TK_E_NOT_FOUND;
+}
+
+/*====================================================================*\
+<a name="anchor-559"></a>    FUNCTION :  ProUtilCopySectionConstraints
+    PURPOSE  :  Utility to fill the constraints information from the 
+                section  
+\*====================================================================*/
+ProError ProUtilCopySectionConstraints(SketchInfo *sketch_info, 
+<a name="anchor-560"></a>                                ProFeature *sk_feat, ProSection *section)
+{
+    ProError status;
+    ProIntlist con_ids;
+    int n_ids, n_conids, j, k, num_constraints;   
+<a name="anchor-561"></a>    int sec_id, constr_id; 
+    int *ref_ids;
+    int *new_ref_ids;   
+    ProWSecerror  sec_error;    
+    ProElement elem_tree_redef;
+<a name="anchor-562"></a>     
+    // Get the section constraints info of the section
+    status = ProSectionConstraintsIdsGet(*section, &amp;con_ids, &amp;n_conids);
+    TEST_CALL_REPORT(&quot;ProSectionConstraintsIdsGet&quot;, &quot;ProUtilCopySectionConstraints&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+<a name="anchor-563"></a>    for (j=0; j&lt;n_conids; j++)
+    {
+        SectionConstraintInfo constraint_info;
+        ProBoolean isFound = PRO_B_TRUE;
+        status = ProSectionConstraintsGet(*section, con_ids[j],
+<a name="anchor-564"></a>            &amp;constraint_info.type, &amp;constraint_info.status, &amp;constraint_info.num_refs,
+            &amp;ref_ids , &amp;constraint_info.p_senses);
+        TEST_CALL_REPORT(&quot;ProSectionConstraintsGet&quot;, &quot;ProUtilCopySectionConstraints&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+        if (status != PRO_TK_NO_ERROR)
+<a name="anchor-565"></a>            continue;
+        status = ProArrayAlloc( 0, sizeof(int),
+                      1, (ProArray *)&amp;constraint_info.p_ent_ids );            
+        for(k=0; k&lt;constraint_info.num_refs; k++) 
+        {
+<a name="anchor-566"></a>            status = ProUtilFindSketchEntity(sketch_info, section, ref_ids[k], &amp;sec_id );
+            if(status != PRO_TK_NO_ERROR)
+            {
+                isFound = PRO_B_FALSE;
+                break;
+<a name="anchor-567"></a>            }
+            status = ProArrayObjectAdd ((ProArray*)&amp;constraint_info.p_ent_ids,
+                   PRO_VALUE_UNUSED, 1, &amp;sec_id);
+            TEST_CALL_REPORT(&quot;ProArrayObjectAdd&quot;, &quot;ProUtilCopySectionConstraints&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+<a name="anchor-568"></a>        }
+        if(isFound == PRO_B_FALSE)
+        {
+            /*
+            status = ProArrayFree((ProArray*)&amp;p_types);
+<a name="anchor-569"></a>            status = ProArrayFree((ProArray*)&amp;ref_ids);
+            status = ProArrayFree((ProArray*)&amp;new_ref_ids);
+            */
+            continue;
+        }
+<a name="anchor-570"></a>        status = ProArrayObjectAdd ((ProArray*)&amp;sketch_info->constraints_info, 
+                     -1, 1, &amp;constraint_info);
+        TEST_CALL_REPORT(&quot;ProArrayObjectAdd+&quot;, &quot;ProUtilCopySectionConstraints&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                                          
+        /*constraint_info.p_ent_ids*/
+<a name="anchor-571"></a>        /*status = ProArrayFree((ProArray*)&amp;p_types);
+        status = ProArrayFree((ProArray*)&amp;ref_ids);*/
+    }
+    /*status = ProArrayFree((ProArray*)&amp;con_ids);*/
+
+<a name="anchor-572"></a>    /* Redefing the feature to add the section entities */
+    status = ProFeatureElemtreeExtract(sk_feat, NULL, PRO_FEAT_EXTRACT_NO_OPTS, &amp;elem_tree_redef);
+    status = ProArraySizeGet((ProArray)sketch_info->constraints_info, &amp;num_constraints);
+    for (j=0; j&lt;n_conids; j++)
+    {
+<a name="anchor-573"></a>        ProSelection *sel_array = NULL;  
+        ProSelection sel_sec_ent;
+        SectionConstraintInfo constraint_info = sketch_info->constraints_info[j];
+        status = ProArrayAlloc(0, sizeof(ProSelection), 1,
+                         (ProArray*)&amp;sel_array);
+<a name="anchor-574"></a>        for(k=0; k&lt;constraint_info.num_refs; k++)                          
+        { 
+            status = ProSectionEntityGetSelected (sketch_info->section, 
+                          constraint_info.p_ent_ids[k], constraint_info.p_senses[k],
+                          NULL, 
+<a name="anchor-575"></a>                          PRO_VALUE_UNUSED, &amp;sel_sec_ent);
+            if(status != PRO_TK_NO_ERROR)
+                break;
+            status = ProArrayObjectAdd ((ProArray*)&amp;sel_array,
+                     PRO_VALUE_UNUSED, 1, &amp;sel_sec_ent);                          
+<a name="anchor-576"></a>        }                
+        
+        if(status == PRO_TK_NO_ERROR)
+        {
+            status = ProSectionConstraintCreate(sketch_info->section, 
+<a name="anchor-577"></a>                    sel_array, 2, constraint_info.type, &amp;constr_id);                    
+            TEST_CALL_REPORT(&quot;ProSectionConstraintCreate&quot;, &quot;ProUtilCopySectionConstraints&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+        }
+    }
+<a name="anchor-578"></a>  /* Free sel_array */    
+  status = ProSecerrorAlloc(&amp;sec_error);
+  status = ProSectionSolve(sketch_info->section, &amp;sec_error);
+  status = ProSecerrorFree(&amp;sec_error);
+  status = ProSecerrorAlloc(&amp;sec_error);
+<a name="anchor-579"></a>  status = ProSectionRegenerate(sketch_info->section, &amp;sec_error);
+  status = ProSecerrorFree(&amp;sec_error);
+  /*Set the updated section pointer back into the feature*/
+  status = ProUtilSketchFeatureReset(sk_feat, &amp;sketch_info->section);
+  return status;
+<a name="anchor-580"></a>}
+
+/*===============================================================*\
+FUNCTION: ProUtilSketchSectionBuild
+PURPOSE:  Creates a 3D section from the sketch ref, orientation 
+<a name="anchor-581"></a>                            and entity information
+\*===============================================================*/
+ProError ProUtilSketchSectionBuild (ProSection section, SketchInfo *sketch_info, 
+                             ProSelection *sketch_refs)
+{
+<a name="anchor-582"></a>    ProSelection          *proj_ents;
+    ProError  			   status;	
+    int                    i, num_errors, err_counter, proj_ids[2];
+    ProWSecerror           sec_errors;
+    Pro2dLinedef          *left_linedef, *btm_linedef;
+<a name="anchor-583"></a>    ProSectionPointType    pt_type[1], proj_pt_type[2];
+    Pro2dArcdef            arc;
+    Pro2dPnt               place_pnt;
+    ProMsg                 wmsg;
+    char                   msg[PRO_PATH_SIZE];
+<a name="anchor-584"></a>    double	   eps;
+    SectionMatrix_data            matrix_data;
+
+    /*---------------------------------------------------------------*\
+    Get the projection entity handles as ProSelection structures.
+<a name="anchor-585"></a>    \*---------------------------------------------------------------*/
+    status = CreateSketchReferences (sketch_info, &amp;proj_ents);
+    if(status != PRO_TK_NO_ERROR)
+        return status;
+
+<a name="anchor-586"></a>    /*---------------------------------------------------------------*\
+    Project the reference edges onto the section.
+    \*---------------------------------------------------------------*/
+    for (i = 0; i &lt; 2; i++)
+    {
+<a name="anchor-587"></a>        status = ProSectionEntityFromProjection (section, proj_ents[i],
+         &amp;proj_ids[i]);
+        TEST_CALL_REPORT(&quot;ProSectionEntityFromProjection&quot;, &quot;ProUtilSketchSectionBuild&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                       
+        if (status != PRO_TK_NO_ERROR)
+<a name="anchor-588"></a>            return (status);
+    }
+
+    /*---------------------------------------------------------------*\
+    Create the section coordinate system from the edges. Get the 
+<a name="anchor-589"></a>    transformation matrix between the sketch plane coordinate system
+    and the section coordinate system.
+    \*---------------------------------------------------------------*/
+    status = ProSectionEntityGet (section, proj_ids[0],
+          (Pro2dEntdef**)&amp;btm_linedef);
+<a name="anchor-590"></a>    TEST_CALL_REPORT(&quot;ProSectionEntityGet&quot;, &quot;ProUtilSketchSectionBuild&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+    for (i = 0; i &lt; 2; i++)
+    {
+        matrix_data.x_axis[0][i] = btm_linedef->end1[i];
+<a name="anchor-591"></a>        matrix_data.x_axis[1][i] = btm_linedef->end2[i];
+        matrix_data.x_axis[i][2] = 0.0; 
+    }
+
+    status = ProSectionEntityGet (section, proj_ids[1],
+<a name="anchor-592"></a>            (Pro2dEntdef**)&amp;left_linedef);
+    TEST_CALL_REPORT(&quot;ProSectionEntityGet&quot;, &quot;ProUtilSketchSectionBuild&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+    for (i = 0; i &lt; 2; i++)
+    {
+<a name="anchor-593"></a>        matrix_data.y_axis[0][i] = left_linedef->end1[i]; 
+        matrix_data.y_axis[1][i] = left_linedef->end2[i];
+        matrix_data.y_axis[i][2] = 0.0; 
+    }
+
+<a name="anchor-594"></a>    status = ProSectionLocationGet (section, matrix_data.sk_mtrx);
+    TEST_CALL_REPORT(&quot;ProSectionLocationGet&quot;, &quot;ProUtilSketchSectionBuild&quot;, 
+			    status, status != PRO_TK_NO_ERROR );                      
+    status = ProSelectionCopy (sketch_refs[0], &amp;(matrix_data.sk_plane));
+    TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;, &quot;ProUtilSketchSectionBuild&quot;,  
+<a name="anchor-595"></a>			    status, status != PRO_TK_NO_ERROR );                       
+    status = UserCreateSecTrfMatrix(&amp;matrix_data);
+
+    status = AddProjectedEdgeSectionEntities(sketch_info->solid,
+                                section, sketch_info->edges);
+<a name="anchor-596"></a>    
+    status = ProUtilAddSectionEntities(section, sketch_info);
+    if(PRO_TK_NO_ERROR != status)
+        return status;
+
+<a name="anchor-597"></a>        
+    /*status = ProSectionEpsilonGet(section, &amp;eps);*/
+    status = ProSectionEpsilonSet(section, sketch_info->eps_val); 
+    TEST_CALL_REPORT(&quot;ProSectionEpsilonSet&quot;, &quot;ProUtilSketchSectionBuild&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                        
+<a name="anchor-598"></a>    
+    status = ProSecerrorAlloc (&amp;sec_errors);
+    TEST_CALL_REPORT(&quot;ProSectionEpsilonSet&quot;, &quot;ProUtilSketchSectionBuild&quot;, 
+			    status, status != PRO_TK_NO_ERROR );                            
+    /* status = ProSectionSolve (section, &amp;sec_errors); */ 
+<a name="anchor-599"></a>    status = ProSectionAutodim (section, &amp;sec_errors);
+   
+    if (status != 0)
+    {
+        status = ProSecerrorCount (&amp;sec_errors, &amp;num_errors);
+<a name="anchor-600"></a>        for (err_counter = 0; err_counter &lt; num_errors; err_counter++)
+        {
+            status = ProSecerrorMsgGet (sec_errors, err_counter, wmsg);
+            ProWstringToString (msg, wmsg);
+        }
+<a name="anchor-601"></a>    return status;
+    }
+    status = ProSecerrorFree (&amp;sec_errors);
+    TEST_CALL_REPORT(&quot;ProSecerrorFree&quot;, &quot;ProUtilSketchSectionBuild&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                           
+<a name="anchor-602"></a>    status = ProSecerrorAlloc (&amp;sec_errors);
+    TEST_CALL_REPORT(&quot;ProSecerrorAlloc&quot;, &quot;ProUtilSketchSectionBuild&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                              
+    status = ProSectionRegenerate (section, &amp;sec_errors);
+    if (status != 0)
+<a name="anchor-603"></a>    {
+        status = ProSecerrorCount (&amp;sec_errors, &amp;num_errors);
+        for (err_counter = 0; err_counter &lt; num_errors; err_counter++)
+        {
+            status = ProSecerrorMsgGet (sec_errors, err_counter, wmsg);
+<a name="anchor-604"></a>            ProWstringToString (msg, wmsg);
+        }
+        return status;
+     }
+    ProSecerrorFree (&amp;sec_errors);
+<a name="anchor-605"></a>    status = ProSelectionFree (&amp;(matrix_data.sk_plane));
+    TEST_CALL_REPORT(&quot;ProSelectionFree&quot;, &quot;ProUtilSketchSectionBuild&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+    return (status);
+}
+<a name="anchor-606"></a>
+/*===============================================================*\
+FUNCTION: AddProjectedEdgeSectionEntities
+PURPOSE:  Add section entities from the sketch information
+\*===============================================================*/
+<a name="anchor-607"></a>ProError AddProjectedEdgeSectionEntities(ProSolid solid, ProSection section, ProEdge *edges)   
+{ 	
+    ProError status;
+    int num_edges;
+    ProSelection sel_edge;
+<a name="anchor-608"></a>    int i, ent_id;
+
+    status = ProArraySizeGet ((ProArray)edges, &amp;num_edges);
+    for(i = 0; i &lt; num_edges; i++)
+    {
+<a name="anchor-609"></a>        status = UtilSelectionFromEdge(solid,
+             edges[i], &amp;sel_edge);   
+        status = ProSectionEntityUseEdge(section, sel_edge, &amp;ent_id); 
+    }
+    return status;
+<a name="anchor-610"></a>}
+
+/*===============================================================*\
+FUNCTION: CreateSketchReferences
+PURPOSE:  Create the selection references from the sketch information
+<a name="anchor-611"></a>\*===============================================================*/
+ProError CreateSketchReferences (SketchInfo *sketch_info, ProSelection **proj_refs_i)
+{
+   ProSelection  sel_entity;
+   ProError status;
+<a name="anchor-612"></a>   ProSelection *temp2 = NULL; 
+
+   temp2 = (ProSelection *)calloc(2, sizeof (ProSelection));
+
+   if(sketch_info->ref1.type == GEOM_EDGE)
+<a name="anchor-613"></a>      {      
+      status = UtilSelectionFromEdgeId ((ProSolid)sketch_info->solid,
+         sketch_info->ref1.id, &amp;sel_entity);
+      }
+   else if(sketch_info->ref1.type == GEOM_SURFACE)
+<a name="anchor-614"></a>      {
+      status = UtilSelectionFromSurfaceId ((ProSolid)sketch_info->solid,
+         sketch_info->ref1.id, &amp;sel_entity);
+      }
+   status = ProSelectionCopy (sel_entity, &amp;temp2[0]);  
+<a name="anchor-615"></a>   status = 	ProSelectionFree( &amp;sel_entity );
+
+   if(sketch_info->ref2.type == GEOM_EDGE)
+      {
+      status = UtilSelectionFromEdgeId ((ProSolid)sketch_info->solid,
+<a name="anchor-616"></a>         sketch_info->ref2.id, &amp;sel_entity);      
+      }
+   if(sketch_info->ref2.type == GEOM_SURFACE)
+      {
+      status = UtilSelectionFromSurfaceId ((ProSolid)sketch_info->solid,
+<a name="anchor-617"></a>         sketch_info->ref2.id, &amp;sel_entity);
+      }
+   status = ProSelectionCopy (sel_entity, &amp;temp2[1]);
+   TEST_CALL_REPORT(&quot;CreateSketchReferences&quot;, &quot;PromptSketchProjectionIds&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+<a name="anchor-618"></a>   
+   status = 	ProSelectionFree( &amp;sel_entity );
+   TEST_CALL_REPORT(&quot;CreateSketchReferences&quot;, &quot;PromptSketchProjectionIds&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+
+<a name="anchor-619"></a>   *proj_refs_i = temp2;
+   return (status);
+}
+
+
+<a name="anchor-620"></a>ProError ProUtilFeatureSectionGet(ProFeature feature, ProSection *section)
+{
+    ProError status;
+    ProElempathItem path_items [] = {{ PRO_ELEM_PATH_ITEM_TYPE_ID, 
+                                       PRO_E_STD_SECTION},
+<a name="anchor-621"></a>                                     { PRO_ELEM_PATH_ITEM_TYPE_ID, 
+                                       PRO_E_SKETCHER}};
+    ProElement   created_elemtree;  
+    ProElement   elem_sketch;
+    ProElempath             path;
+<a name="anchor-622"></a>    ProAsmcomppath          *p_comp_path = NULL;
+
+    status = ProFeatureElemtreeExtract ( &amp;feature, p_comp_path, 
+        PRO_FEAT_EXTRACT_NO_OPTS, &amp;created_elemtree ); 
+    TEST_CALL_REPORT(&quot;ProFeatureElemtreeExtract&quot;, &quot;ProUtilFeatureSectionGet&quot;,  
+<a name="anchor-623"></a>			    status, status != PRO_TK_NO_ERROR );
+    status = ProElempathAlloc (&amp;path);
+    TEST_CALL_REPORT(&quot;ProElempathAlloc&quot;, &quot;ProUtilFeatureSectionGet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                                  
+    status = ProElempathDataSet (path, path_items, 2);
+<a name="anchor-624"></a>    TEST_CALL_REPORT(&quot;ProElempathDataSet&quot;, &quot;ProUtilFeatureSectionGet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                          
+    status = ProElemtreeElementGet ( created_elemtree, path, &amp;elem_sketch);
+    TEST_CALL_REPORT(&quot;ProElemtreeElementGet&quot;, &quot;ProUtilFeatureSectionGet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                        
+<a name="anchor-625"></a>    status = ProElementSpecialvalueGet (elem_sketch, NULL,
+                                                   (ProAppData*)section);
+    TEST_CALL_REPORT(&quot;ProElementSpecialvalueGet&quot;, &quot;ProUtilFeatureSectionGet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                         
+    status = ProElempathFree (&amp;path);
+<a name="anchor-626"></a>    return status;
+}
+</pre>
+</body>
+</html>

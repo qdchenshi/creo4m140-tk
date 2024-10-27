@@ -1,0 +1,1150 @@
+<html>
+<head>
+<title>UgCreoSweepCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>FILE    : UgCreoSweepCreate.c
+PURPOSE : This example shows how to create Sweep using new element tree introduced
+          in Creo 1.0. Element tree is documented in ProSweep.h
+		  Example uses a dashboard to take necessary inputs required for
+		  elements. Initially all non-sketcher elements are filled to create
+<a name="anchor-2"></a>		  incomplete feature &amp; then feature is redefined with section added to
+		  element PRO_E_SKECTHER
+		  To run this example model must be current part or assembly
+		  
+
+<a name="anchor-3"></a>
+#include &lt;UgCreoSweepCreate.h>
+
+#define sweep_create_log(call)  ProTKPrintf (&quot;Status for %s is = %d\n&quot;, call, status);
+
+<a name="anchor-4"></a>static OtkSweepElemtreeValues elemValues;
+static FILE* sweep_create_logfile=NULL;
+static ProFileName sweep_msgfilename;
+/*********************************************/
+ProError UgCreoSweepCreate ()
+<a name="anchor-5"></a>{	
+    ProError status=PRO_TK_NO_ERROR;
+	ProUIDashboardShowOptions options;
+	ProMdl currModel;
+	ProMdlType mdlType;
+<a name="anchor-6"></a>	   
+	sweep_create_logfile = fopen(&quot;Create_Creo_Sweep.log&quot;,&quot;w&quot;);	 
+
+	status = ProMdlCurrentGet(&amp;currModel);
+	sweep_create_log(&quot;ProMdlCurrentGet&quot;);	  	  
+<a name="anchor-7"></a>	
+	if(!currModel)
+     {
+	   ProStringToWstring(sweep_msgfilename,&quot;msg_ugfeatcreat.txt&quot;);
+		 
+<a name="anchor-8"></a>	   status = ProMessageDisplay(sweep_msgfilename,&quot;USER Bad Context:&quot;);
+	   sweep_create_log(&quot;ProMessageDisplay&quot;);
+	   return PRO_TK_BAD_CONTEXT;             
+	 }
+	  
+<a name="anchor-9"></a>	status = ProMdlTypeGet(currModel,&amp;mdlType);
+	sweep_create_log(&quot;ProMdlTypeGet&quot;);
+	 
+	if((mdlType != PRO_MDL_ASSEMBLY) &amp;&amp; (mdlType != PRO_MDL_PART))
+	   {
+<a name="anchor-10"></a>	     status = ProMessageDisplay(sweep_msgfilename,&quot;USER Invalid Type :&quot;);
+	     sweep_create_log(&quot;ProMessageDisplay&quot;);
+	      return PRO_TK_BAD_CONTEXT;             
+	   }
+	  
+<a name="anchor-11"></a>	else
+	 {		
+		/*Fill default values*/
+		elemValues.curvesCollected=0;
+		elemValues.dirReferselected=1;
+<a name="anchor-12"></a>		strcpy(elemValues.PRO_E_STD_FEATURE_NAME_value ,&quot;Creo Sweep&quot;);
+		elemValues.PRO_E_EXT_SURF_CUT_SOLID_TYPE_value = PRO_SWEEP_FEAT_TYPE_SOLID;
+		elemValues.PRO_E_FRM_NORMAL_value = PRO_FRAME_NORM_ORIGIN;
+		elemValues.PRO_E_FRM_USER_X_value = 0;
+
+<a name="anchor-13"></a>		status = UgSweepAppDashboardOptionsSetup (L&quot;TK_Dashboard&quot;, 2, UgSweepAppSetupAllPagesFromFile,NULL,&amp;options);	    
+        
+		if(status==PRO_TK_NO_ERROR)
+	    status = ProUIDashboardShow (options);		
+	  }		
+<a name="anchor-14"></a>
+fclose(sweep_create_logfile);
+	
+ return PRO_TK_NO_ERROR;
+
+<a name="anchor-15"></a>}
+
+ProError  UgSweepAppBuildElementTree ()
+{	
+	
+<a name="anchor-16"></a>   ProError status=PRO_TK_NO_ERROR;
+   ProElement elem_0_0,elem_1_1,elem_1_2,elem_1_3;
+   ProElement elem_2_0,elem_3_0,elem_4_0,elem_4_1,elem_5_0,elem_2_1;
+   ProElement elem_3_1,elem_3_2,elem_4_2,elem_5_1,elem_5_2;
+   ProElement elem_1_4,elem_1_5,elem_1_6,elem_1_7,elem_1_8;
+<a name="anchor-17"></a>   ProElement elem_2_2,elemtree,elem_3_3,elem_3_4,elem_3_5;
+   ProFeature tk_feat;
+   ProMdl currMdl;
+   ProSelection mdlSel;
+   ProModelitem currMdlitem;
+<a name="anchor-18"></a>   ProFeatureCreateOptions *cr_opts=NULL;
+   ProFeatureCreateOptions complete_options[] = {PRO_FEAT_CR_INCOMPLETE_FEAT};
+   ProErrorlist p_errors;
+   ProElempath elemPath;
+   ProElempathItem sktElempathitems[]=   { 
+<a name="anchor-19"></a>		                                    {PRO_ELEM_PATH_ITEM_TYPE_ID,PRO_E_SWEEP_PROF_COMP},
+                                            {PRO_ELEM_PATH_ITEM_TYPE_ID,PRO_E_SWEEP_SECTION},
+                                            {PRO_ELEM_PATH_ITEM_TYPE_ID,PRO_E_SKETCHER}
+	                                      };
+   ProSection sketch;
+<a name="anchor-20"></a>   ProElement sketch_elem;    
+   ProBoolean is_incomplete=PRO_B_FALSE;
+   wchar_t temp_feat_name[PRO_NAME_SIZE];
+				
+   /*PRO_E_FEATURE_TREE */
+<a name="anchor-21"></a>   status = ProElementAlloc(PRO_E_FEATURE_TREE,&amp;elem_0_0);
+   sweep_create_log(&quot;ProElementAlloc&quot;);
+
+   /*PRO_E_FEATURE_FORM*/
+    status = ProElementAlloc(PRO_E_FEATURE_FORM,&amp;elem_1_1);
+<a name="anchor-22"></a>	sweep_create_log(&quot;ProElementAlloc&quot;);
+	
+	status = ProElementIntegerSet(elem_1_1,4);
+	sweep_create_log(&quot;ProElementIntegerSet&quot;);
+	
+<a name="anchor-23"></a>	status = ProElemtreeElementAdd(elem_0_0,NULL,elem_1_1);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+
+    /*PRO_E_SWEEP_TYPE*/
+	status = ProElementAlloc(PRO_E_SWEEP_TYPE,&amp;elem_1_2);
+<a name="anchor-24"></a>    sweep_create_log(&quot;ProElementAlloc&quot;);
+
+	status = ProElementIntegerSet(elem_1_2,PRO_SWEEP_TYPE_MULTI_TRAJ);
+	sweep_create_log(&quot;ProElementIntegerSet&quot;);
+
+<a name="anchor-25"></a>	status = ProElemtreeElementAdd(elem_0_0,NULL,elem_1_2);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+	
+	/*PRO_E_SWEEP_FRAME_COMP*/
+	status = ProElementAlloc(PRO_E_SWEEP_FRAME_COMP,&amp;elem_1_3);
+<a name="anchor-26"></a>    sweep_create_log(&quot;ProElementAlloc&quot;);
+
+    status = ProElemtreeElementAdd(elem_0_0,NULL,elem_1_3);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+	
+<a name="anchor-27"></a>	/*PRO_E_FRM_OPT_TRAJ*/
+	status = ProElementAlloc(PRO_E_FRM_OPT_TRAJ,&amp;elem_2_0);
+    sweep_create_log(&quot;ProElementAlloc&quot;);
+
+    status = ProElemtreeElementAdd(elem_1_3,NULL,elem_2_0);
+<a name="anchor-28"></a>	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+
+	/*PRO_E_OPT_TRAJ*/
+	status = ProElementAlloc(PRO_E_OPT_TRAJ,&amp;elem_3_0);
+    sweep_create_log(&quot;ProElementAlloc&quot;);
+<a name="anchor-29"></a>
+    status = ProElemtreeElementAdd(elem_2_0,NULL,elem_3_0);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+	
+	/*PRO_E_STD_SEC_METHOD*/
+<a name="anchor-30"></a>	status = ProElementAlloc(PRO_E_STD_SEC_METHOD,&amp;elem_4_0);
+    sweep_create_log(&quot;ProElementAlloc&quot;);
+    
+	status = ProElementIntegerSet(elem_4_0,PRO_SEC_SELECT);
+	sweep_create_log(&quot;ProElementIntegerSet&quot;);
+<a name="anchor-31"></a>
+    status = ProElemtreeElementAdd(elem_3_0,NULL,elem_4_0);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+
+	/*PRO_E_STD_SEC_SELECT*/
+<a name="anchor-32"></a>	status = ProElementAlloc(PRO_E_STD_SEC_SELECT,&amp;elem_4_1);
+    sweep_create_log(&quot;ProElementAlloc&quot;);    
+
+    status = ProElemtreeElementAdd(elem_3_0,NULL,elem_4_1);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+<a name="anchor-33"></a>
+	/*PRO_E_STD_CURVE_COLLECTION_APPL*/
+	status = ProElementAlloc(PRO_E_STD_CURVE_COLLECTION_APPL,&amp;elem_5_0);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+
+<a name="anchor-34"></a>	status = ProElementCollectionSet(elem_5_0,elemValues.PRO_E_FRM_OPT_TRAJ_crvColl);
+	sweep_create_log(&quot;ProElementCollectionSet&quot;);
+
+	status = ProElemtreeElementAdd(elem_4_1,NULL,elem_5_0);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+<a name="anchor-35"></a>
+	status = ProCollectionFree(&amp;(elemValues.PRO_E_FRM_OPT_TRAJ_crvColl));
+	sweep_create_log(&quot;ProCollectionFree&quot;);
+
+	/*PRO_E_FRAME_SETUP*/
+<a name="anchor-36"></a>    status = ProElementAlloc(PRO_E_FRAME_SETUP,&amp;elem_2_1);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+
+	status = ProElemtreeElementAdd(elem_1_3,NULL,elem_2_1);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+<a name="anchor-37"></a>
+	/*PRO_E_FRM_NORMAL*/
+	status = ProElementAlloc(PRO_E_FRM_NORMAL,&amp;elem_3_1);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+
+<a name="anchor-38"></a>	status = ProElementIntegerSet(elem_3_1,elemValues.PRO_E_FRM_NORMAL_value);
+	sweep_create_log(&quot;ProElementIntegerSet&quot;);
+
+	status = ProElemtreeElementAdd(elem_1_3,NULL,elem_3_1);
+	sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+<a name="anchor-39"></a>
+	if((elemValues.PRO_E_FRM_NORMAL_value==PRO_FRAME_PIVOT_DIR) || (elemValues.PRO_E_FRM_NORMAL_value==PRO_FRAME_CONST_Z_DIR))
+	  {				
+			  
+		 if(elemValues.PRO_E_FRM_NORMAL_value==PRO_FRAME_PIVOT_DIR)
+<a name="anchor-40"></a>		  {
+			 /*PRO_E_FRM_PIVOT_DIR*/
+			  status = ProElementAlloc(PRO_E_FRM_PIVOT_DIR,&amp;elem_3_2);
+	          sweep_create_log(&quot;ProElementAlloc&quot;);
+		      
+<a name="anchor-41"></a>			  status = ProElemtreeElementAdd(elem_1_3,NULL,elem_3_2);
+	          sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+		   }
+
+		 else if(elemValues.PRO_E_FRM_NORMAL_value==PRO_FRAME_CONST_Z_DIR)
+<a name="anchor-42"></a>		   {
+			  /*PRO_E_FRM_CONST_Z*/
+			  status = ProElementAlloc(PRO_E_FRM_CONST_Z,&amp;elem_3_2);
+	          sweep_create_log(&quot;ProElementAlloc&quot;);
+		      
+<a name="anchor-43"></a>			  status = ProElemtreeElementAdd(elem_1_3,NULL,elem_3_2);
+	          sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+		    }
+
+			 /*PRO_E_DIRECTION_COMPOUND*/
+<a name="anchor-44"></a>		     status = ProElementAlloc(PRO_E_DIRECTION_COMPOUND,&amp;elem_4_2);
+	         sweep_create_log(&quot;ProElementAlloc&quot;);
+
+			 status = ProElemtreeElementAdd(elem_3_2,NULL,elem_4_2);
+	         sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+<a name="anchor-45"></a>			 
+			/*PRO_E_DIRECTION_REFERENCE*/
+            status = ProElementAlloc(PRO_E_DIRECTION_REFERENCE,&amp;elem_5_1);
+	        sweep_create_log(&quot;ProElementAlloc&quot;);
+
+<a name="anchor-46"></a>			status = ProElementReferenceSet(elem_5_1,elemValues.PRO_E_DIRECTION_REFERENCE_value);
+			sweep_create_log(&quot;ProElementReferenceSet&quot;);
+
+			status = ProElemtreeElementAdd(elem_4_2,NULL,elem_5_1);
+			sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+<a name="anchor-47"></a>
+			 /*PRO_E_DIRECTION_FLIP*/
+			status = ProElementAlloc(PRO_E_DIRECTION_REFERENCE,&amp;elem_5_2);
+	        sweep_create_log(&quot;ProElementAlloc&quot;);
+
+<a name="anchor-48"></a>			status = ProElementIntegerSet(elem_5_1,PRO_DIRECTION_FLIP_ALONG );
+			sweep_create_log(&quot;ProElementReferenceSet&quot;);
+
+			status = ProElemtreeElementAdd(elem_4_2,NULL,elem_5_2);
+			sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+<a name="anchor-49"></a>   	    }
+
+	    /*PRO_E_FRM_ORIENT*/
+	    status = ProElementAlloc(PRO_E_FRM_ORIENT,&amp;elem_3_3);
+	    sweep_create_log(&quot;ProElementAlloc&quot;);
+<a name="anchor-50"></a>
+		status = ProElemtreeElementAdd(elem_1_3,NULL,elem_3_3);
+		sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+
+		if(elemValues.PRO_E_FRM_NORMAL_value=PRO_FRAME_PIVOT_DIR)
+<a name="anchor-51"></a>		{
+		  status = ProElementIntegerSet(elem_3_3,PRO_FRAME_CONSTANT);
+	      sweep_create_log(&quot;ProElementReferenceSet&quot;);
+		}
+
+<a name="anchor-52"></a>		else
+		{
+	      status = ProElementIntegerSet(elem_3_3,PRO_FRAME_MIN);
+	      sweep_create_log(&quot;ProElementReferenceSet&quot;);
+
+<a name="anchor-53"></a>		  //PRO_E_FRM_USER_X
+		  status = ProElementAlloc(PRO_E_FRM_USER_X,&amp;elem_3_4);
+	      sweep_create_log(&quot;ProElementAlloc&quot;);
+
+		  status = ProElementIntegerSet(elem_3_4,elemValues.PRO_E_FRM_USER_X_value);
+<a name="anchor-54"></a>		  sweep_create_log(&quot;ProElementIntegerSet&quot;);
+
+		  status = ProElemtreeElementAdd(elem_1_3,NULL,elem_3_4);
+		  sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+		}	
+<a name="anchor-55"></a>
+		/*PRO_E_STD_FEATURE_NAME*/
+	    status = ProElementAlloc(PRO_E_STD_FEATURE_NAME,&amp;elem_1_4);
+	    sweep_create_log(&quot;ProElementAlloc&quot;);
+
+<a name="anchor-56"></a>		ProStringToWstring(temp_feat_name,elemValues.PRO_E_STD_FEATURE_NAME_value);		
+
+		status = ProElementWstringSet(elem_1_4,temp_feat_name);
+		sweep_create_log(&quot;ProElementWstringSet&quot;);
+
+<a name="anchor-57"></a>		status = ProElemtreeElementAdd(elem_0_0,NULL,elem_1_4);
+		sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+
+		/*PRO_E_EXT_SURF_CUT_SOLID_TYPE*/
+		status = ProElementAlloc(PRO_E_EXT_SURF_CUT_SOLID_TYPE,&amp;elem_1_5);
+<a name="anchor-58"></a>	    sweep_create_log(&quot;ProElementAlloc&quot;);
+
+		status = ProElementIntegerSet(elem_1_5,elemValues.PRO_E_EXT_SURF_CUT_SOLID_TYPE_value);
+		sweep_create_log(&quot;ProElementWstringSet&quot;);
+
+<a name="anchor-59"></a>		status = ProElemtreeElementAdd(elem_0_0,NULL,elem_1_5);
+		sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+
+		/*PRO_E_REMOVE_MATERIAL*/
+		status = ProElementAlloc(PRO_E_REMOVE_MATERIAL,&amp;elem_1_6);
+<a name="anchor-60"></a>	    sweep_create_log(&quot;ProElementAlloc&quot;);
+
+		status = ProElementIntegerSet(elem_1_6,elemValues.PRO_E_REMOVE_MATERIAL_value);
+		sweep_create_log(&quot;ProElementWstringSet&quot;);
+
+<a name="anchor-61"></a>		status = ProElemtreeElementAdd(elem_0_0,NULL,elem_1_6);
+		sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+		
+		/*PRO_E_FEAT_FORM_IS_THIN*/
+		status = ProElementAlloc(PRO_E_FEAT_FORM_IS_THIN,&amp;elem_1_7);
+<a name="anchor-62"></a>	    sweep_create_log(&quot;ProElementAlloc&quot;);
+
+		status = ProElementIntegerSet(elem_1_7,elemValues.PRO_E_FEAT_FORM_IS_THIN_value);
+		sweep_create_log(&quot;ProElementWstringSet&quot;);
+
+<a name="anchor-63"></a>		status = ProElemtreeElementAdd(elem_0_0,NULL,elem_1_7);
+		sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+
+		/*PRO_E_SWP_ATTR*/
+		status = ProElementAlloc(PRO_E_SWP_ATTR,&amp;elem_1_8);
+<a name="anchor-64"></a>	    sweep_create_log(&quot;ProElementAlloc&quot;);
+
+		status = ProElemtreeElementAdd(elem_0_0,NULL,elem_1_8);
+		sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+
+<a name="anchor-65"></a>		if(elemValues.PRO_E_EXT_SURF_CUT_SOLID_TYPE_value=PRO_SWEEP_FEAT_TYPE_SURFACE )
+		{
+		  /*PRO_E_END_SRF_ATTR*/
+		  status = ProElementAlloc(PRO_E_END_SRF_ATTR,&amp;elem_2_2);
+	      sweep_create_log(&quot;ProElementAlloc&quot;);
+<a name="anchor-66"></a>
+		  status = ProElementIntegerSet(elem_2_2,elemValues.PRO_E_END_SRF_ATTR_value);
+		  sweep_create_log(&quot;ProElementIntegerSet&quot;);
+
+		  status = ProElemtreeElementAdd(elem_1_8,NULL,elem_2_2);
+<a name="anchor-67"></a>		  sweep_create_log(&quot;ProElemtreeElementAdd&quot;);
+	    }
+
+		/*Create Incomplete feature */
+		status = ProArrayAlloc(0,sizeof(ProFeatureCreateOptions),1,(ProArray*)&amp;cr_opts);
+<a name="anchor-68"></a>	    sweep_create_log(&quot;ProArrayAlloc&quot;);
+
+        status = ProArrayObjectAdd((ProArray*)&amp;cr_opts,PRO_VALUE_UNUSED,1,(void*)&amp;(complete_options[0])); 
+	    sweep_create_log(&quot;ProArrayObjectAdd&quot;);
+
+<a name="anchor-69"></a>		status = ProMdlCurrentGet(&amp;currMdl);
+	    sweep_create_log(&quot;ProMdlCurrentGet&quot;);
+
+		status = ProMdlToModelitem(currMdl,&amp;currMdlitem);
+		sweep_create_log(&quot;ProMdlToModelitem&quot;);
+<a name="anchor-70"></a>
+		status = ProSelectionAlloc(NULL,&amp;currMdlitem,&amp;mdlSel);
+		sweep_create_log(&quot;ProSelectionAlloc&quot;);
+
+		status = ProFeatureWithoptionsCreate(mdlSel,elem_0_0,cr_opts,PRO_REGEN_NO_FLAGS,&amp;tk_feat,&amp;p_errors);
+<a name="anchor-71"></a>		sweep_create_log(&quot;ProFeatureWithoptionsCreate&quot;);
+		
+	 
+	/*Fill PRO_E_SKETCHER &amp; Redfine feature*/
+	status = ProFeatureElemtreeExtract(&amp;tk_feat,NULL,PRO_FEAT_EXTRACT_NO_OPTS,&amp;elemtree);
+<a name="anchor-72"></a>	sweep_create_log(&quot;ProFeatureElemtreeExtract&quot;);
+
+	status = ProElempathAlloc(&amp;elemPath);
+	sweep_create_log(&quot;ProFeatureElemtreeExtract &quot;);
+    
+<a name="anchor-73"></a>	status = ProElempathDataSet(elemPath,sktElempathitems,3); 
+	sweep_create_log(&quot;ProFeatureElemtreeExtract &quot;);
+
+    status = ProElemtreeElementGet(elemtree,elemPath,&amp;sketch_elem);     
+	sweep_create_log(&quot;ProFeatureElemtreeExtract &quot;);
+<a name="anchor-74"></a>    
+	status = ProElementSpecialvalueGet(sketch_elem,NULL,(ProAppData*)&amp;sketch);
+	sweep_create_log(&quot;ProFeatureElemtreeExtract &quot;);
+
+	/* Adding a Circle and a Rectangle */
+<a name="anchor-75"></a>	UgSweepAppAddRectangle (sketch,0);
+	
+	UgSweepAppAddCircle (sketch); 
+
+	 status = ProFeatureWithoptionsRedefine( NULL,&amp;tk_feat,elemtree,cr_opts,PRO_REGEN_NO_FLAGS,&amp;p_errors);
+<a name="anchor-76"></a>	sweep_create_log(&quot;ProFeatureWithoptionsRedefine &quot;);
+
+	/*Add one more Rectangle */
+	UgSweepAppAddRectangle (sketch,30);
+
+<a name="anchor-77"></a>	 status = ProFeatureWithoptionsRedefine( NULL,&amp;tk_feat,elemtree,cr_opts,PRO_REGEN_NO_FLAGS,&amp;p_errors);
+	sweep_create_log(&quot;ProFeatureWithoptionsRedefine &quot;);
+
+
+	/* Add a Ellipse */	
+<a name="anchor-78"></a>	UgSweepAppAddEllipse (sketch);
+    
+    status = ProElementSpecialvalueSet(sketch_elem,(ProAppData)sketch);
+	sweep_create_log(&quot;ProElementSpecialvalueSet &quot;);
+
+<a name="anchor-79"></a>	 status = ProFeatureWithoptionsRedefine( NULL,&amp;tk_feat,elemtree,cr_opts,PRO_REGEN_NO_FLAGS,&amp;p_errors);
+	sweep_create_log(&quot;ProFeatureWithoptionsRedefine &quot;);
+    
+    status = ProFeatureElemtreeExtract(&amp;tk_feat,NULL,PRO_FEAT_EXTRACT_NO_OPTS,&amp;elemtree);
+	sweep_create_log(&quot;ProFeatureElemtreeExtract &quot;);
+<a name="anchor-80"></a>     
+    status = ProFeatureIsIncomplete(&amp;tk_feat,&amp;is_incomplete);
+	sweep_create_log(&quot;ProFeatureIsIncomplete &quot;);
+    
+	if(is_incomplete)      
+<a name="anchor-81"></a>    status = ProElemtreeWrite(elemtree,PRO_ELEMTREE_XML,L&quot;./incomplete_tree.xml&quot;);
+	sweep_create_log(&quot;ProElemtreeWrite &quot;);
+     
+    status = ProElempathFree(&amp;elemPath);
+	sweep_create_log(&quot;ProElempathFree &quot;);
+<a name="anchor-82"></a>
+    status = ProSectionFree(&amp;sketch);    
+	sweep_create_log(&quot;ProSectionFree &quot;);
+    
+	status = ProElementFree(&amp;elemtree);
+<a name="anchor-83"></a>	sweep_create_log(&quot;ProElementFree &quot;);
+    
+	status = ProArrayFree((ProArray*)&amp;cr_opts);
+	sweep_create_log(&quot;ProElemtreeWrite &quot;);	
+
+<a name="anchor-84"></a>	return status;
+}
+
+
+
+<a name="anchor-85"></a>
+ProError UgSweepAppDashboardOptionsSetup (ProName dashboard_name,int num_slideup_panels,
+					                         UgSweepAppDashboardPageSetupProcedure procedure, 
+					                         ProAppData app_data,ProUIDashboardShowOptions* p_options)
+{  
+<a name="anchor-86"></a>	
+  ProUIDashboardPageOptions main_page;
+  ProUIDashboardPageOptions *slideup_pages=NULL;
+  ProUIDashboardShowOptions options;
+  int ii=0;
+<a name="anchor-87"></a>  ProError status = PRO_TK_NO_ERROR;
+
+  /* Setup main page */
+  (*procedure) (dashboard_name, 0, app_data, &amp;main_page);
+  
+<a name="anchor-88"></a>   /* Setup slideup pages */  
+    ProArrayAlloc (2, sizeof (ProUIDashboardPageOptions),2, (ProArray*)&amp;slideup_pages);
+   (*procedure) (dashboard_name, 1, app_data, &amp;(slideup_pages[0]));
+   (*procedure) (dashboard_name,2, app_data, &amp;(slideup_pages[1]));
+  
+<a name="anchor-89"></a>   status = ProUIDashboardshowoptionsAlloc (main_page, slideup_pages,  NULL, &amp;options);
+   sweep_create_log(&quot;ProUIDashboardshowoptionsAlloc &quot;);
+
+   status = ProUIDashboardshowoptionsTitleSet(options,L&quot;Creo Sweep&quot;);
+   sweep_create_log(&quot;ProUIDashboardshowoptionsTitleSet &quot;);
+<a name="anchor-90"></a>
+  *p_options = options;
+
+  return (PRO_TK_NO_ERROR); 
+}
+<a name="anchor-91"></a>
+
+ProError UgSweepAppSetupAllPagesFromFile (ProName dashboard_name, 
+					     int page_no, 
+					     ProAppData appdata, 
+<a name="anchor-92"></a>					     ProUIDashboardPageOptions* p_options)
+{
+  ProCharLine page_name;
+  ProCharLine sec_resource_name;
+  ProUIDashboardPageOptions options;
+<a name="anchor-93"></a>  ProError status = PRO_TK_NO_ERROR;
+
+  
+  UgSweepAppDashboardPageData* page_data = (UgSweepAppDashboardPageData*)calloc (1, sizeof (UgSweepAppDashboardPageData));
+  
+<a name="anchor-94"></a>  page_data->action = (ProUIDashboardpageCallbackFunction)UgSweepAppPageWriteAction;
+  page_data->create_action = (ProUIDashboardpageCallbackFunction)NULL;
+  
+  switch(page_no)
+  { 
+<a name="anchor-95"></a>   case 0:
+   page_data->create_action = (ProUIDashboardpageCallbackFunction)UgSweepDashboardMainPageSetup;  
+   status = ProUIDashboardpageoptionsAlloc (&quot;dashboard_main_page&quot;, &quot;MainPage&quot;, page_data, &amp;options);
+   sweep_create_log(&quot;ProUIDashboardpageoptionsAlloc &quot;);
+   break;
+<a name="anchor-96"></a>
+   case 1:  
+   page_data->create_action = (ProUIDashboardpageCallbackFunction)UgSweepAppDashboardSlideupPageSetup;      
+   status = ProUIDashboardpageoptionsAlloc (&quot;dashboard_reference_page&quot;, &quot;referenceSlidepage&quot;, page_data, &amp;options);
+   sweep_create_log(&quot;ProUIDashboardpageoptionsAlloc &quot;);
+<a name="anchor-97"></a>   break;
+
+   case 2:
+   page_data->create_action = (ProUIDashboardpageCallbackFunction)UgSweepAppDashboardOptionPageSetup;   
+   status = ProUIDashboardpageoptionsAlloc (&quot;dashboard_options_page&quot;, &quot;optionSlidepage&quot;, page_data, &amp;options);
+<a name="anchor-98"></a>   sweep_create_log(&quot;ProUIDashboardpageoptionsAlloc &quot;);
+   break;  
+  }
+  
+   status = ProUIDashboardpageoptionsNotificationSet (options, (ProUIDashboardpageCallbackFunction)UgSweepStdDashboardPageNotification, appdata);
+<a name="anchor-99"></a>   sweep_create_log(&quot;ProUIDashboardpageoptionsNotificationSet &quot;);
+  
+  *p_options = options;
+
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-100"></a>}
+
+
+/* Write the page details. */
+ProError UgSweepAppPageWriteAction (ProUIDashboardPage page,ProUIDashboardPageEventType event_type,
+<a name="anchor-101"></a>	                            ProAppData appdata)
+{
+  ProAppData page_app_data;
+  UgSweepAppDashboardPageData* page_data=NULL;  
+  ProAppData user_data;
+<a name="anchor-102"></a>  ProUIDashboard dashboard;  
+  ProError status = PRO_TK_NO_ERROR;
+
+  status = ProUIDashboardpageUserdataGet (page, &amp;page_app_data);
+  sweep_create_log(&quot;ProUIDashboardpageUserdataGet &quot;);
+<a name="anchor-103"></a> 
+
+  page_data = (UgSweepAppDashboardPageData*)page_app_data;
+
+  if (event_type == PRO_UI_DASHBOARD_PAGE_CREATE || event_type == PRO_UI_DASHBOARD_PAGE_SHOW)
+<a name="anchor-104"></a>    {
+      if (page_data->create_action != (ProUIDashboardpageCallbackFunction)NULL)
+	     (*(page_data->create_action)) (page, event_type, appdata);
+    }
+
+<a name="anchor-105"></a>  if (event_type == PRO_UI_DASHBOARD_PAGE_DESTROY &amp;&amp; appdata!=NULL)
+  { 
+      if(page_data)	
+	  {
+	   free(page_data);	  
+<a name="anchor-106"></a>	  }
+  }
+	  
+
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-107"></a>}
+
+ProError UgSweepStdDashboardPageNotification (ProUIDashboardPage page,ProUIDashboardPageEventType event_type,
+			 	  ProAppData appdata)
+{
+<a name="anchor-108"></a>  ProAppData page_app_data;
+  UgSweepAppDashboardPageData* page_data;
+  ProError status;
+
+  status = ProUIDashboardpageUserdataGet (page, &amp;page_app_data);
+<a name="anchor-109"></a>  sweep_create_log(&quot;ProUIDashboardpageUserdataGet &quot;)
+
+  page_data = (UgSweepAppDashboardPageData*)page_app_data;
+
+  (*page_data->action) (page, event_type, appdata);
+<a name="anchor-110"></a>
+  return (PRO_TK_NO_ERROR);
+}
+
+ProError UgSweepDashboardMainPageSetup (ProUIDashboardPage page,ProUIDashboardEventType event_type,
+<a name="anchor-111"></a>					       ProAppData appdata)
+{
+  char* device_name=NULL;
+  ProUIDashboard dashboard;
+  char* std_layout=NULL;
+<a name="anchor-112"></a>  ProUIGridopts grid_opts;
+  ProError status = PRO_TK_NO_ERROR;
+  char* comp_dashname=NULL;
+  
+ 
+<a name="anchor-113"></a>
+  status = ProUIDashboardpageDevicenameGet (page, &amp;device_name);
+  sweep_create_log(&quot;ProUIDashboardpageDevicenameGet &quot;);
+
+  status = ProUIDashboardpageDashboardGet (page, &amp;dashboard);  
+<a name="anchor-114"></a>  sweep_create_log(&quot;ProUIDashboardpageDashboardGet &quot;);
+
+  status = ProUIDashboardStdlayoutGet (dashboard, &amp;std_layout);
+  sweep_create_log(&quot;ProUIDashboardStdlayoutGet &quot;);
+
+<a name="anchor-115"></a>  elemValues.sweepDashboard = dashboard;
+
+  status = ProUIDashboardpageComponentnameGet(page,&quot;SldorSrf&quot;,&amp;comp_dashname);
+  sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);
+  
+<a name="anchor-116"></a>  status = ProUIRadiogroupSelectActionSet (device_name,comp_dashname,Select_SldorSrf_CB, appdata);
+  sweep_create_log(&quot;ProUIRadiogroupSelectActionSet &quot;);  
+  
+  status = ProUIDashboardpageComponentnameGet(page,&quot;RemoveMat&quot;,&amp;comp_dashname);
+  sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);  
+<a name="anchor-117"></a>  
+  status = ProUICheckbuttonActivateActionSet (device_name,comp_dashname,Activate_RemoveMat_CB, appdata); 
+  sweep_create_log(&quot;ProUICheckbuttonActivateActionSet &quot;);
+  
+  status = ProUIDashboardpageComponentnameGet(page,&quot;ThinFeat&quot;,&amp;comp_dashname);
+<a name="anchor-118"></a>  sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);
+  
+  status = ProUICheckbuttonActivateActionSet (device_name,comp_dashname,Activate_ThinFeat_CB, appdata);
+  sweep_create_log(&quot;ProUICheckbuttonActivateActionSet &quot;);
+
+<a name="anchor-119"></a>  PRO_UI_GRIDOPTS_DEFAULT(grid_opts);
+  grid_opts.row = 0;
+  grid_opts.column = 0;
+  grid_opts.top_offset = 18;
+  grid_opts.left_offset = 13;
+<a name="anchor-120"></a>
+  status = ProUILayoutPushbuttonAdd (device_name, std_layout, &quot;DONE_BTN&quot;,&amp;grid_opts);
+  sweep_create_log(&quot;ProUILayoutPushbuttonAdd &quot;);
+  
+  status = ProUIPushbuttonBitmapSet(device_name,&quot;DONE_BTN&quot;,&quot;dash_done&quot;);
+<a name="anchor-121"></a>  sweep_create_log(&quot;ProUIPushbuttonBitmapSet &quot;);
+  
+  status = ProUIPushbuttonDisable(device_name,&quot;DONE_BTN&quot;);
+  sweep_create_log(&quot;ProUIPushbuttonDisable &quot;);
+  
+<a name="anchor-122"></a>  status = ProUIPushbuttonActivateActionSet (device_name,&quot;DONE_BTN&quot;,Activate_DONE_CB,appdata);
+  sweep_create_log(&quot;ProUIPushbuttonActivateActionSet &quot;);
+  
+  PRO_UI_GRIDOPTS_DEFAULT(grid_opts);
+  grid_opts.row = 0;
+<a name="anchor-123"></a>  grid_opts.column = 1;
+  grid_opts.top_offset = 18;
+  grid_opts.left_offset = 13;
+  grid_opts.right_offset = 13;
+ 
+<a name="anchor-124"></a>  status = ProUILayoutPushbuttonAdd (device_name, std_layout, &quot;CANCEL&quot;,&amp;grid_opts);
+  sweep_create_log(&quot;ProUILayoutPushbuttonAdd &quot;);
+  
+  status = ProUIPushbuttonBitmapSet(device_name,&quot;CANCEL&quot;,&quot;dash_quit&quot;);
+  sweep_create_log(&quot;ProUIPushbuttonBitmapSet &quot;);
+<a name="anchor-125"></a>  
+  status = ProUIPushbuttonActivateActionSet (device_name,&quot;CANCEL&quot;,Activate_Cancel_CB, appdata);
+  sweep_create_log(&quot;ProUIPushbuttonActivateActionSet &quot;);
+ 
+ return PRO_TK_NO_ERROR;
+<a name="anchor-126"></a>}
+
+
+ProError UgSweepAppDashboardSlideupPageSetup (ProUIDashboardPage page,ProUIDashboardEventType event_type,
+					                             ProAppData appdata)
+<a name="anchor-127"></a>
+{
+  char* comp_dashname=NULL;
+  ProError status=PRO_TK_NO_ERROR;
+  char* device_name; 
+<a name="anchor-128"></a>  ProUIDashboard dashboard;
+  
+  
+  status = ProUIDashboardpageDashboardGet (page, &amp;dashboard);
+  sweep_create_log(&quot;ProUIDashboardpageDashboardGet &quot;);
+<a name="anchor-129"></a> 
+  status = ProUIDashboardpageDevicenameGet (page, &amp;device_name);
+  sweep_create_log(&quot;ProUIDashboardpageDevicenameGet &quot;);
+	
+  status = ProUIDashboardpageComponentnameGet(page,&quot;PRO_E_FRM_NORMAL&quot;,&amp;comp_dashname);
+<a name="anchor-130"></a>  sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);
+  
+  status = ProUIOptionmenuSelectActionSet (device_name, comp_dashname,Select_PRO_E_FRM_NORMAL_CB, appdata);
+  sweep_create_log(&quot;ProUIOptionmenuSelectActionSet &quot;);
+
+<a name="anchor-131"></a>  status = ProUIDashboardpageComponentnameGet(page,&quot;CollElemPb&quot;,&amp;comp_dashname);
+  sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);
+
+  status = ProUIPushbuttonActivateActionSet (device_name, comp_dashname,Activate_PushButton3_CB, appdata);
+  sweep_create_log(&quot;ProUIPushbuttonActivateActionSet &quot;);
+<a name="anchor-132"></a>
+  status = ProUIDashboardpageComponentnameGet(page,&quot;DirElemList&quot;,&amp;comp_dashname);
+  sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);
+  
+  status = ProUIListSelectActionSet (device_name, comp_dashname,Activate_DirElemList_CB, appdata);
+<a name="anchor-133"></a>  sweep_create_log(&quot;ProUIListSelectActionSet &quot;);
+
+  status = ProUIDashboardpageComponentnameGet(page,&quot;PBRemove&quot;,&amp;comp_dashname);
+  sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);
+
+<a name="anchor-134"></a>  status = ProUIPushbuttonActivateActionSet (device_name,comp_dashname,Activate_PBRemove_CB, appdata);
+  sweep_create_log(&quot;ProUIPushbuttonActivateActionSet &quot;);
+  
+  return PRO_TK_NO_ERROR;
+
+<a name="anchor-135"></a>}
+
+
+
+ ProError UgSweepAppDashboardOptionPageSetup (ProUIDashboardPage page,
+<a name="anchor-136"></a>					       ProUIDashboardEventType event_type,
+					       ProAppData appdata)
+
+{
+  char* comp_dashname=NULL;
+<a name="anchor-137"></a>  ProError status=PRO_TK_NO_ERROR;
+  char* device_name;
+  ProUIDashboard dashboard;  
+  
+  status = ProUIDashboardpageDashboardGet (page, &amp;dashboard);
+<a name="anchor-138"></a>  sweep_create_log(&quot;ProUIDashboardpageDashboardGet &quot;);
+
+  status = ProUIDashboardpageDevicenameGet (page, &amp;device_name);
+  sweep_create_log(&quot;ProUIDashboardpageDevicenameGet &quot;);
+
+<a name="anchor-139"></a>  status = ProUIDashboardpageComponentnameGet(page,&quot;CapEndCB&quot;,&amp;comp_dashname);
+  sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);
+
+  status = ProUICheckbuttonActivateActionSet (device_name, comp_dashname,
+                                           Activate_CheckButton1_CB, appdata);
+<a name="anchor-140"></a>  sweep_create_log(&quot;ProUICheckbuttonActivateActionSet &quot;);
+   
+  status = ProUIDashboardpageComponentnameGet(page,&quot;FeatNameIP&quot;,&amp;comp_dashname);
+  sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);
+	
+<a name="anchor-141"></a>  status = ProUIInputpanelActivateActionSet (device_name, comp_dashname,
+                                          Activate_InputPanel1_CB, appdata);
+  sweep_create_log(&quot;ProUIInputpanelActivateActionSet &quot;);
+
+
+<a name="anchor-142"></a>  return PRO_TK_NO_ERROR;
+
+}
+
+ void Select_SldorSrf_CB (char *dialog,char *component,ProAppData  appdata)
+<a name="anchor-143"></a>{
+	char** sel_names=NULL;
+	ProError status=PRO_TK_NO_ERROR;
+	int num_sels=0;
+	ProUIDashboardPage page;
+<a name="anchor-144"></a>	char* comp_dashname=NULL;
+	char* deviceName=NULL;
+
+	status = ProUIDashboardPageGet(elemValues.sweepDashboard,&quot;dashboard_options_page&quot;,&amp;page);
+	sweep_create_log(&quot;ProUIDashboardPageGet &quot;);
+<a name="anchor-145"></a>		  
+	status = ProUIDashboardpageComponentnameGet(page,&quot;CapEndCB&quot;,&amp;comp_dashname);
+	sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);
+
+	status = ProUIDashboardpageDevicenameGet(page,&amp;deviceName);
+<a name="anchor-146"></a>	sweep_create_log(&quot;ProUIDashboardpageDevicenameGet &quot;);
+
+	status = ProUIRadiogroupSelectednamesGet(dialog,component,&amp;num_sels,&amp;sel_names);
+	sweep_create_log(&quot;ProUIRadiogroupSelectednamesGet &quot;);
+
+<a name="anchor-147"></a>	if(!status)
+	{
+		if (strcmp (sel_names[0],&quot;PRO_SWEEP_FEAT_TYPE_SOLID&quot;) == 0)
+		{
+          elemValues.PRO_E_EXT_SURF_CUT_SOLID_TYPE_value = PRO_SWEEP_FEAT_TYPE_SOLID;
+<a name="anchor-148"></a>
+		  status = ProUICheckbuttonDisable(deviceName,comp_dashname);
+		  sweep_create_log(&quot;ProUICheckbuttonEnable &quot;);
+
+		}
+<a name="anchor-149"></a>
+		else if (strcmp (sel_names[0],&quot;PRO_SWEEP_FEAT_TYPE_SURFACE&quot;) == 0)
+		{ 
+		  elemValues.PRO_E_EXT_SURF_CUT_SOLID_TYPE_value = PRO_SWEEP_FEAT_TYPE_SURFACE;
+
+<a name="anchor-150"></a>		  status = ProUICheckbuttonEnable(deviceName,comp_dashname);
+		  sweep_create_log(&quot;ProUICheckbuttonEnable &quot;);
+  
+		}
+	}
+<a name="anchor-151"></a>
+	return;
+}
+
+
+<a name="anchor-152"></a> void Activate_RemoveMat_CB (char *dialog,char *component,ProAppData  appdata)
+
+{
+	ProBoolean checked = PRO_B_FALSE;
+	ProError status=PRO_TK_NO_ERROR;
+<a name="anchor-153"></a>		
+	status = ProUICheckbuttonGetState (dialog, component, &amp;checked);
+	sweep_create_log(&quot;ProUICheckbuttonGetState &quot;);
+
+	if(checked)
+<a name="anchor-154"></a>    	elemValues.PRO_E_REMOVE_MATERIAL_value = PRO_SWEEP_MATERIAL_REMOVE;
+
+	else
+		elemValues.PRO_E_REMOVE_MATERIAL_value = PRO_SWEEP_MATERIAL_ADD;
+}
+<a name="anchor-155"></a>
+
+
+ void Activate_ThinFeat_CB (char *dialog,char *component,ProAppData  appdata)
+
+<a name="anchor-156"></a>{
+	ProBoolean checked = PRO_B_FALSE;
+	ProError status=PRO_TK_NO_ERROR;
+		
+	status = ProUICheckbuttonGetState (dialog, component, &amp;checked);
+<a name="anchor-157"></a>	sweep_create_log(&quot;ProUICheckbuttonGetState &quot;);
+
+	if(checked)
+    elemValues.PRO_E_FEAT_FORM_IS_THIN_value = PRO_SWEEP_FEAT_FORM_THIN;
+
+<a name="anchor-158"></a>	else
+	elemValues.PRO_E_FEAT_FORM_IS_THIN_value = PRO_SWEEP_FEAT_FORM_NO_THIN;
+
+	return;
+}
+<a name="anchor-159"></a>
+ void Activate_DONE_CB (char *dialog,char *component,ProAppData  appData)
+
+{
+	ProError status=PRO_TK_NO_ERROR;
+<a name="anchor-160"></a>
+	status = UgSweepAppBuildElementTree();	
+	sweep_create_log(&quot;UgSweepAppBuildElementTree&quot;);
+
+	status = ProUIDashboardDestroy(elemValues.sweepDashboard);
+<a name="anchor-161"></a>	sweep_create_log(&quot;ProUIDashboardDestroy &quot;); 
+}
+
+ void Activate_Cancel_CB (char *dialog,char *component,ProAppData  appData)
+
+<a name="anchor-162"></a>{
+	ProError status=PRO_TK_NO_ERROR;
+	
+	status = ProUIDashboardDestroy(elemValues.sweepDashboard);
+	sweep_create_log(&quot;ProUIDashboardDestroy &quot;);
+<a name="anchor-163"></a>
+}
+
+void Select_PRO_E_FRM_NORMAL_CB (char *dialog, char *component,ProAppData  appdata)
+
+<a name="anchor-164"></a>{
+	ProError status = PRO_TK_NO_ERROR;
+    int num_sels=0;
+	char** sel_names=NULL;
+	ProUIDashboardPage page;
+<a name="anchor-165"></a>	char* comp_dashname=NULL;
+	
+	status = ProUIOptionmenuSelectednamesGet (dialog, component, &amp;num_sels, &amp;sel_names);
+	sweep_create_log(&quot;ProUIDashboardDestroy &quot;);
+
+<a name="anchor-166"></a>	if (strcmp (sel_names[0],&quot;PRO_FRAME_NORM_ORIGIN&quot;) == 0)
+	elemValues.PRO_E_FRM_NORMAL_value = PRO_FRAME_NORM_ORIGIN;
+
+	else if (strcmp (sel_names[0],&quot;PRO_FRAME_PIVOT_DIR&quot;) == 0)     
+	elemValues.PRO_E_FRM_NORMAL_value = PRO_FRAME_PIVOT_DIR;
+<a name="anchor-167"></a>	
+	else if (strcmp (sel_names[0],&quot;PRO_FRAME_CONST_Z_DIR&quot;) == 0)
+	elemValues.PRO_E_FRM_NORMAL_value = PRO_FRAME_CONST_Z_DIR;	
+
+	status = ProUIDashboardPageGet(elemValues.sweepDashboard,&quot;dashboard_reference_page&quot;,&amp;page);
+<a name="anchor-168"></a>	sweep_create_log(&quot;ProUIDashboardPageGet &quot;);
+    
+	status = ProUIDashboardpageComponentnameGet(page,&quot;DirElemList&quot;,&amp;comp_dashname);
+	sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);
+
+<a name="anchor-169"></a>	if(strcmp (sel_names[0],&quot;PRO_FRAME_PIVOT_DIR&quot;) == 0 || strcmp (sel_names[0],&quot;PRO_FRAME_CONST_Z_DIR&quot;) == 0)	    
+  	{
+	   status = ProUIListEnable(dialog,comp_dashname);
+
+	   status = ProUIDashboardPageGet(elemValues.sweepDashboard,&quot;dashboard_main_page&quot;,&amp;page);	 
+<a name="anchor-170"></a>	   sweep_create_log(&quot;ProUIDashboardPageGet &quot;);
+
+	   elemValues.dirReferselected=0;
+	   EnableDonebutton(&amp;page);
+	}
+<a name="anchor-171"></a>
+
+	else
+	{
+     status = ProUIListDisable(dialog,comp_dashname);	
+<a name="anchor-172"></a>	 elemValues.dirReferselected=1;
+	 
+	 status = ProUIDashboardPageGet(elemValues.sweepDashboard,&quot;dashboard_main_page&quot;,&amp;page);	 
+	 sweep_create_log(&quot;ProUIDashboardPageGet &quot;);
+
+<a name="anchor-173"></a>	  EnableDonebutton(&amp;page);
+	}
+
+}
+
+<a name="anchor-174"></a>
+ void Activate_PushButton3_CB (char* dialog, char* component, ProAppData appData)
+{
+
+
+<a name="anchor-175"></a> ProChaincollUIControl collection_types [] = {PRO_CHAINCOLLUI_ALLOW_ALL};
+ ProSelection *crvSels=NULL;
+ int n_crvSels=0;
+ ProError status=PRO_TK_NO_ERROR;
+ char device_name[PRO_NAME_SIZE];
+<a name="anchor-176"></a> ProUIDashboardPage page;
+
+ status = ProCrvcollectionAlloc(&amp;(elemValues.PRO_E_FRM_OPT_TRAJ_crvColl));
+ sweep_create_log(&quot;ProCrvcollectionAlloc &quot;);
+
+<a name="anchor-177"></a> status = ProSelbufferClear();
+ sweep_create_log(&quot;ProSelbufferClear &quot;);
+	 
+ status = ProCurvesCollect(collection_types,1,NULL,NULL,&amp;(elemValues.PRO_E_FRM_OPT_TRAJ_crvColl),&amp;crvSels,&amp;n_crvSels);
+ sweep_create_log(&quot;ProCurvesCollect &quot;)
+<a name="anchor-178"></a>
+ if(!status) 
+ {
+	 elemValues.curvesCollected = 1;
+	 
+<a name="anchor-179"></a>	 status = ProUIDashboardPageGet(elemValues.sweepDashboard,&quot;dashboard_main_page&quot;,&amp;page);
+	 sweep_create_log(&quot;ProUIDashboardPageGet &quot;);
+
+	 EnableDonebutton(&amp;page);
+ }
+<a name="anchor-180"></a>
+ status = ProSelectionarrayFree(crvSels);
+ sweep_create_log(&quot;ProSelectionarrayFree &quot;);
+}
+
+<a name="anchor-181"></a> void Activate_DirElemList_CB (char *dialog, char *component, ProAppData  appData)
+{
+	ProError status = PRO_TK_NO_ERROR;
+ 	wchar_t w_name[PRO_NAME_SIZE+15];
+	char label[PRO_NAME_SIZE+15]=&quot;\0&quot;;
+<a name="anchor-182"></a>	char ItemName[PRO_NAME_SIZE]=&quot;\0&quot;;
+	ProUIDashboardPage page;
+	ProSelection *sels=NULL;
+	int num_sels=0;
+	ProModelitem mdlItem;
+<a name="anchor-183"></a>	wchar_t *label_arr=NULL;
+	
+	status = ProSelect(&quot;edge,curve,csys,surface,axis&quot;,1,NULL,NULL,NULL,NULL,&amp;sels,&amp;num_sels);
+	sweep_create_log(&quot;ProSelect&quot;);
+
+<a name="anchor-184"></a>	if(!status)
+	{
+	   status = ProSelectionToReference(sels[0],&amp;(elemValues.PRO_E_DIRECTION_REFERENCE_value));
+	  sweep_create_log(&quot;ProSelectionToReference&quot;);
+		 
+<a name="anchor-185"></a>	  status = ProSelectionModelitemGet(sels[0],&amp;mdlItem);
+      sweep_create_log(&quot;ProSelectionModelitemGet&quot;);
+
+	  status = ProModelitemNameGet(&amp;mdlItem,w_name);
+	  sweep_create_log(&quot;ProModelitemNameGet&quot;);
+<a name="anchor-186"></a>
+	  if(!status)
+	  ProWstringToString(ItemName,w_name);
+
+	  sprintf(label,&quot;Type: %d Id: %d Name:%s&quot;,(int)mdlItem.type,mdlItem.id,ItemName);
+<a name="anchor-187"></a>
+	  ProStringToWstring(w_name,label);
+
+	  label_arr= w_name;
+
+<a name="anchor-188"></a>	  status = ProUIListLabelsSet(dialog,component,1,&amp;label_arr);
+	  sweep_create_log(&quot;ProUIListLabelsSet &quot;)
+
+	  elemValues.dirReferselected=1;
+
+<a name="anchor-189"></a>	  status = ProUIDashboardPageGet(elemValues.sweepDashboard,&quot;dashboard_main_page&quot;,&amp;page);
+	  sweep_create_log(&quot;ProUIDashboardPageGet &quot;)
+
+	  EnableDonebutton(&amp;page);
+
+<a name="anchor-190"></a>    }
+   
+}
+
+ void Activate_CheckButton1_CB (char *dialog,char *component,ProAppData  appData)
+<a name="anchor-191"></a>{
+
+	ProBoolean checked = PRO_B_FALSE;
+	ProError status=PRO_TK_NO_ERROR;
+	
+<a name="anchor-192"></a>	status = ProUICheckbuttonGetState (dialog, component, &amp;checked);
+	sweep_create_log(&quot;ProUICheckbuttonGetState &quot;);
+
+	if(checked)
+    elemValues.PRO_E_END_SRF_ATTR_value = PRO_SWEEP_END_SRF_CAPPED;
+<a name="anchor-193"></a>
+	else
+	elemValues.PRO_E_END_SRF_ATTR_value = PRO_SWEEP_END_SRF_OPEN;
+
+}
+<a name="anchor-194"></a> void Activate_InputPanel1_CB (char *dialog,char *component, ProAppData  appData)
+{
+	ProError status=PRO_TK_NO_ERROR;
+	wchar_t* w_name=NULL;
+
+<a name="anchor-195"></a>	status = ProUIInputpanelWidestringGet(dialog,component,&amp;w_name);
+	sweep_create_log(&quot;ProUIInputpanelWidestringGet &quot;);
+
+	if(!status)
+	{
+<a name="anchor-196"></a>	 ProWstringToString(elemValues.PRO_E_STD_FEATURE_NAME_value,w_name);
+	 
+	 status = ProWstringFree(w_name);
+	 sweep_create_log(&quot;ProWstringFree &quot;);
+	}
+<a name="anchor-197"></a>
+}
+
+ void Activate_PBRemove_CB (char *dialog,char *component, ProAppData  appData)
+{
+<a name="anchor-198"></a>	ProError status=PRO_TK_NO_ERROR;
+	ProUIDashboardPage page;
+	char* comp_dashname=NULL;
+	wchar_t* w_label = L&quot;&lt;iB1> Select 1 item&quot;;
+
+<a name="anchor-199"></a>	elemValues.PRO_E_DIRECTION_REFERENCE_value=0;
+    
+	status = ProUIDashboardPageGet(elemValues.sweepDashboard,&quot;dashboard_reference_page&quot;,&amp;page);
+	sweep_create_log(&quot;ProUIDashboardPageGet &quot;);
+
+<a name="anchor-200"></a>	status = ProUIDashboardpageComponentnameGet(page,&quot;DirElemList&quot;,&amp;comp_dashname);
+    sweep_create_log(&quot;ProUIDashboardpageComponentnameGet &quot;);
+	
+	status = ProUIListLabelsSet(dialog,comp_dashname,1,&amp;w_label);
+	sweep_create_log(&quot;ProUIListLabelsSet &quot;);
+<a name="anchor-201"></a>
+	status = ProUIDashboardPageGet(elemValues.sweepDashboard,&quot;dashboard_main_page&quot;,&amp;page);
+	sweep_create_log(&quot;ProUIDashboardPageGet &quot;);
+
+	elemValues.dirReferselected=0;
+<a name="anchor-202"></a>
+	EnableDonebutton(&amp;page);
+}
+
+ void EnableDonebutton(ProUIDashboard* page)
+<a name="anchor-203"></a>{
+	ProError status=PRO_TK_NO_ERROR;
+	char* device_name=NULL;
+	char* comp_name=NULL;
+	ProUIDashboard dashboard;
+<a name="anchor-204"></a>
+	status = ProUIDashboardpageDashboardGet(*page,&amp;dashboard);
+    sweep_create_log(&quot;ProUIDashboardpageDashboardGet &quot;);
+	
+	status = ProUIDashboardpageDevicenameGet(*page,&amp;device_name);
+<a name="anchor-205"></a>	sweep_create_log(&quot;ProUIDashboardpageDevicenameGet &quot;);
+	
+	if(elemValues.curvesCollected &amp;&amp; elemValues.dirReferselected)
+	{
+		status = ProUIPushbuttonEnable(device_name,&quot;DONE_BTN&quot;);
+<a name="anchor-206"></a>		sweep_create_log(&quot;ProUIPushbuttonEnable &quot;);
+	}
+	
+	else
+	{
+<a name="anchor-207"></a>		status = ProUIPushbuttonDisable(device_name,&quot;DONE_BTN&quot;);
+		sweep_create_log(&quot;ProUIPushbuttonEnable &quot;);
+
+	}
+
+<a name="anchor-208"></a>	return;
+
+}
+
+
+<a name="anchor-209"></a>ProError UgSweepAppAddRectangle (ProSection nsketch,int offset)
+{
+	Pro2dLinedef rect_entity1,rect_entity2,rect_entity3,rect_entity4;
+	int ent_id=0;
+
+<a name="anchor-210"></a>	rect_entity1.type = PRO_2D_LINE;
+    rect_entity1.end1[0] = -50 + (-offset);
+	rect_entity1.end1[1] = 40 + offset;
+	rect_entity1.end2[0] = 50 + offset;
+	rect_entity1.end2[1] = 40 + offset;
+<a name="anchor-211"></a>	
+	rect_entity2.type = PRO_2D_LINE;
+    rect_entity2.end1[0] = 50 + offset;
+	rect_entity2.end1[1] = 40 + offset;
+	rect_entity2.end2[0] = 50 + offset;
+<a name="anchor-212"></a>	rect_entity2.end2[1] = -40 + (-offset);
+	
+	rect_entity3.type = PRO_2D_LINE;
+    rect_entity3.end1[0] = 50 + offset;
+	rect_entity3.end1[1] = -40 + (-offset);
+<a name="anchor-213"></a>	rect_entity3.end2[0] = -50 + (-offset);
+	rect_entity3.end2[1] = -40 + (-offset);
+	
+	rect_entity4.type = PRO_2D_LINE;
+    rect_entity4.end1[0] = -50 + (-offset);
+<a name="anchor-214"></a>	rect_entity4.end1[1] = -40 + (-offset);
+	rect_entity4.end2[0] = -50 + (-offset);
+	rect_entity4.end2[1] = 40 + offset;	     
+
+	status = ProSectionEntityAdd(nsketch,(Pro2dEntdef*)&amp;(rect_entity1),&amp;ent_id);
+<a name="anchor-215"></a>	sweep_create_log(&quot;ProSectionEntityAdd &quot;);
+
+	status = ProSectionEntityAdd(nsketch,(Pro2dEntdef*)&amp;(rect_entity2),&amp;ent_id);
+	sweep_create_log(&quot;ProSectionEntityAdd &quot;);
+
+<a name="anchor-216"></a>	status = ProSectionEntityAdd(nsketch,(Pro2dEntdef*)&amp;(rect_entity3),&amp;ent_id);
+	sweep_create_log(&quot;ProSectionEntityAdd &quot;);
+
+	status = ProSectionEntityAdd(nsketch,(Pro2dEntdef*)&amp;(rect_entity4),&amp;ent_id);
+	sweep_create_log(&quot;ProSectionEntityAdd &quot;);
+<a name="anchor-217"></a>
+	status = ProSectionIntentManagerModeSet(nsketch, PRO_B_TRUE);
+	sweep_create_log(&quot;ProSectionIntentManagerModeSet &quot;);
+
+	status = ProSectionIntentManagerModeSet(nsketch, PRO_B_FALSE);
+<a name="anchor-218"></a>	sweep_create_log(&quot;ProSectionIntentManagerModeSet &quot;);
+
+	return;
+
+}
+<a name="anchor-219"></a>
+ProError UgSweepAppAddCircle (ProSection nsketch)
+{
+	Pro2dCircledef circle_entity;
+    int ent_id=0;
+<a name="anchor-220"></a>
+	circle_entity.type = PRO_2D_CIRCLE;
+    circle_entity.center[0] = 0.0;
+    circle_entity.center[1] = 0.0;
+    circle_entity.radius = 30.00;
+<a name="anchor-221"></a>
+	status = ProSectionEntityAdd(nsketch,(Pro2dEntdef*)&amp;(circle_entity),&amp;ent_id);
+	sweep_create_log(&quot;ProSectionEntityAdd &quot;);
+
+	status = ProSectionIntentManagerModeSet(nsketch, PRO_B_TRUE);
+<a name="anchor-222"></a>	sweep_create_log(&quot;ProSectionIntentManagerModeSet &quot;);
+
+	status = ProSectionIntentManagerModeSet(nsketch, PRO_B_FALSE);
+	sweep_create_log(&quot;ProSectionIntentManagerModeSet &quot;);
+
+<a name="anchor-223"></a>	return;
+
+}
+
+ProError UgSweepAppAddEllipse (ProSection nsketch)
+<a name="anchor-224"></a>{
+	Pro2dEllipsedef ellipse_entity;
+	int ent_id=0;
+
+	ellipse_entity.type = PRO_2D_ELLIPSE;
+<a name="anchor-225"></a>	ellipse_entity.origin[0] = 0;
+	ellipse_entity.origin[1] = 0;
+	ellipse_entity.x_radius = 150;
+	ellipse_entity.y_radius = 100;
+
+<a name="anchor-226"></a>	status = ProSectionEntityAdd(nsketch,(Pro2dEntdef*)&amp;(ellipse_entity),&amp;ent_id);
+	sweep_create_log(&quot;ProSectionEntityAdd &quot;);
+
+	status = ProSectionIntentManagerModeSet(nsketch, PRO_B_TRUE);
+	sweep_create_log(&quot;ProSectionIntentManagerModeSet &quot;);
+<a name="anchor-227"></a>
+	status = ProSectionIntentManagerModeSet(nsketch, PRO_B_FALSE);
+	sweep_create_log(&quot;ProSectionIntentManagerModeSet &quot;);
+
+	return;
+<a name="anchor-228"></a>
+}
+</pre>
+</body>
+</html>

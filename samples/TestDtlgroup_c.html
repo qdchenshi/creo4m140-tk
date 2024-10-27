@@ -1,0 +1,636 @@
+<html>
+<head>
+<title>TestDtlgroup.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+    Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProArray.h>
+#include &lt;ProMdl.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProMenu.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>#include &lt;ProDtlgroup.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-4"></a>#include &quot;TestError.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-5"></a>
+#define GRP_EDIT_ADD        1
+#define GRP_EDIT_REMOVE     2
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-6"></a>    Functions declaration
+\*---------------------------------------------------------------------*/
+int ProTestDtlGroupCreate (void*, int);
+int ProTestDtlGroupSuppress (void*, int);
+int ProTestDtlGroupResume (void*, int);
+<a name="anchor-7"></a>int ProTestDtlGroupExplode (void*, int);
+int ProTestDtlGroupEditMenu (void*, int);
+int ProTestDtlGroupEdit (void*, int);
+int ProTestDtlGroupList (void*, int);
+int ProTestDtlGroupSelect (ProDrawing, ProDtlgroup*);
+<a name="anchor-8"></a>int ProTestDtlGroupSelectMenu (ProDrawing, ProDtlgroup*);
+int ProTestDtlGroupSelectByName (ProDrawing, ProDtlgroup*);
+int ProTestDtlitemsCompare (ProDtlitem*, ProDtlitem*);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-9"></a>    Function:    ProTestDtlGroupMenu()
+    Purpose:    On-button function. Set up the dtl group menu
+    Returns:    0 - success; -1 - error.
+\*---------------------------------------------------------------------*/
+int ProTestDtlGroupMenu( ProDrawing drawing )
+<a name="anchor-10"></a>{
+    ProError    status;
+    int         menu_id;    /* The identifier of the created menu */
+    int         action;
+
+<a name="anchor-11"></a>    /*---------------------------------*\
+    Create new menu Group
+    \*---------------------------------*/
+
+    /* Load base menu from file */
+<a name="anchor-12"></a>    status = ProMenuFileRegister( (char*)&quot;Group&quot;, (char*)&quot;tkdtlgroup.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestDtlGroupMenu()&quot;, 
+        status, status != PRO_TK_NO_ERROR );
+
+    /* Define menu buttons */
+<a name="anchor-13"></a>    ProMenubuttonActionSet( (char*)&quot;Group&quot;, (char*)&quot;Create&quot;, 
+        (ProMenubuttonAction)ProTestDtlGroupCreate, drawing, 0);
+    ProMenubuttonActionSet( (char*)&quot;Group&quot;, (char*)&quot;Suppress&quot;, 
+        (ProMenubuttonAction)ProTestDtlGroupSuppress, drawing, 0);
+    ProMenubuttonActionSet( (char*)&quot;Group&quot;, (char*)&quot;Resume&quot;, 
+<a name="anchor-14"></a>        (ProMenubuttonAction)ProTestDtlGroupResume, drawing, 0);
+    ProMenubuttonActionSet( (char*)&quot;Group&quot;, (char*)&quot;Explode&quot;, 
+        (ProMenubuttonAction)ProTestDtlGroupExplode, drawing, 0);
+    ProMenubuttonActionSet( (char*)&quot;Group&quot;, (char*)&quot;Edit&quot;, 
+        (ProMenubuttonAction)ProTestDtlGroupEditMenu, drawing, 0 );
+<a name="anchor-15"></a>    ProMenubuttonActionSet( (char*)&quot;Group&quot;, (char*)&quot;List&quot;, 
+        (ProMenubuttonAction)ProTestDtlGroupList, drawing, 0 );
+    ProMenubuttonActionSet( (char*)&quot;Group&quot;, (char*)&quot;Group&quot;, 
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+<a name="anchor-16"></a>
+    /*--------------------------*\
+    Run menu Disp List
+    \*--------------------------*/
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;Group&quot;, &amp;menu_id );
+<a name="anchor-17"></a>    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestDtlGroupMenu()&quot;, 
+        status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+        status = ProMenuProcess( (char*)&quot;Group&quot;, &amp;action );
+<a name="anchor-18"></a>        TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestDtlGroupMenu()&quot;, 
+            status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_FOUND);
+    }
+
+    return 0;
+<a name="anchor-19"></a>}
+
+/*---------------------------------------------------------------------*\
+    Function:    ProTestDtlGroupSelectMenu()
+    Purpose:    selection menu
+<a name="anchor-20"></a>    Returns:    0 - success; -1 - error or selection canceled
+\*---------------------------------------------------------------------*/
+int ProTestDtlGroupSelectMenu (
+    ProDrawing drawing, 
+    ProDtlgroup*    p_group)
+<a name="anchor-21"></a>{
+    ProError err = PRO_TK_NO_ERROR;
+    wchar_t **menu_strs;
+    int action, status;
+
+<a name="anchor-22"></a>    err = ProUtilMenuStringsAlloc (&amp;menu_strs);
+    err = ProUtilMenuStringsStrAdd (&amp;menu_strs, (char*)&quot;Select&quot;);
+    err = ProUtilMenuStringsStrAdd (&amp;menu_strs, (char*)&quot;By Name&quot;);
+    
+    err = ProUtilMenuStringsIntValueSelect ((char*)&quot;SelectGroup&quot;, menu_strs, &amp;action);
+<a name="anchor-23"></a>    if (err != PRO_TK_NO_ERROR)
+        return -1;
+
+    err = ProUtilMenuStringsFree (&amp;menu_strs);
+    
+<a name="anchor-24"></a>    if (action == 0)
+        status = ProTestDtlGroupSelect (drawing, p_group);
+    else if (action == 1)
+        status = ProTestDtlGroupSelectByName (drawing, p_group);
+    else
+<a name="anchor-25"></a>        status = -1;
+
+    return status;
+}
+
+<a name="anchor-26"></a>/*---------------------------------------------------------------------*\
+    Function:    ProTestDtlGroupSelectByName()
+    Purpose:    selection menu
+    Returns:    0 - success; -1 - error or selection canceled
+\*---------------------------------------------------------------------*/
+<a name="anchor-27"></a>int ProTestDtlGroupSelectByName (
+    ProDrawing drawing, 
+    ProDtlgroup* p_group)
+{
+    ProError err = PRO_TK_NO_ERROR;
+<a name="anchor-28"></a>    wchar_t **menu_strs;
+    ProDtlgroup *p_groups;
+    ProDtlgroupdata group_data;
+    ProName name;
+    int action = -1, group_num = 0, i = 0, sheet = -1;
+<a name="anchor-29"></a>
+    err = ProDrawingCurrentSheetGet (drawing, &amp;sheet);
+    TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;, &quot;ProTestDtlGroupSelectByName()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-30"></a>    err = ProDrawingDtlgroupsCollect (drawing, sheet, &amp;p_groups); 
+    TEST_CALL_REPORT (&quot;ProDrawingDtlgroupsCollect()&quot;, &quot;ProTestDtlGroupSelectByName()&quot;,
+        err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+    if (err != PRO_TK_NO_ERROR)
+        return -1;
+<a name="anchor-31"></a>
+    ProArraySizeGet (p_groups, &amp;group_num);
+
+    err = ProUtilMenuStringsAlloc (&amp;menu_strs);
+
+<a name="anchor-32"></a>    for (i = 0; i &lt; group_num; i++)
+    {
+        err = ProDtlgroupDataGet (&amp;p_groups[i], &amp;group_data);
+        TEST_CALL_REPORT (&quot;ProDtlgroupDataGet()&quot;, &quot;ProTestDtlGroupSelectByName()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+<a name="anchor-33"></a>        if (err != PRO_TK_NO_ERROR)
+            return -1;
+        err = ProDtlgroupdataNameGet (group_data, name);
+        TEST_CALL_REPORT (&quot;ProDtlgroupdataNameGet()&quot;, &quot;ProTestDtlGroupSelectByName()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+<a name="anchor-34"></a>
+        err = ProUtilMenuStringsWstrAdd (&amp;menu_strs, name);
+
+        err = ProDtlgroupdataFree (group_data);
+        TEST_CALL_REPORT (&quot;ProDtlgroupdataFree()&quot;, &quot;ProTestDtlGroupSelectByName()&quot;,
+<a name="anchor-35"></a>            err, err != PRO_TK_NO_ERROR);
+    }
+
+    err = ProUtilMenuStringsIntValueSelect ((char*)&quot;SelectGroup&quot;, menu_strs, &amp;action);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-36"></a>        return -1;
+
+    err = ProUtilMenuStringsFree (&amp;menu_strs);
+
+    memcpy (p_group, &amp;p_groups[action], sizeof (ProDtlgroup));
+<a name="anchor-37"></a>
+    ProArrayFree ((ProArray*)&amp;p_groups);
+
+    return 0;
+}
+<a name="anchor-38"></a>
+/*---------------------------------------------------------------------*\
+    Function:    ProTestDtlGroupList()
+    Purpose:    Prints info about all groups for qcr comporison
+    Returns:    0 - success; -1 - error
+<a name="anchor-39"></a>\*---------------------------------------------------------------------*/
+int ProTestDtlGroupList (void* app_data, int int_dummy)
+{
+    ProDrawing drawing = (ProDrawing)app_data;
+    ProError err = PRO_TK_NO_ERROR;
+<a name="anchor-40"></a>    ProDtlgroup *p_groups;
+    ProDtlgroupdata group_data;
+    ProDtlitem *p_group_items;
+    ProName name;
+    char info_file_name[] = &quot;group_info.txt&quot;, str[PRO_NAME_SIZE];
+<a name="anchor-41"></a>    FILE *fptr;
+    int group_num = 0, i = 0, j = 0, sheet = -1, id = -1, items_num;
+
+    err = ProDrawingCurrentSheetGet (drawing, &amp;sheet);
+    TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;, &quot;ProTestDtlGroupList()&quot;,
+<a name="anchor-42"></a>        err, err != PRO_TK_NO_ERROR);
+
+    err = ProDrawingDtlgroupsCollect (drawing, sheet, &amp;p_groups); 
+    TEST_CALL_REPORT (&quot;ProDrawingDtlgroupsCollect()&quot;, &quot;ProTestDtlGroupList()&quot;,
+        err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+<a name="anchor-43"></a>
+    ProArraySizeGet (p_groups, &amp;group_num);
+
+    if ((fptr = PTApplsUnicodeFopen (info_file_name, &quot;w&quot;)) == NULL)
+    {
+<a name="anchor-44"></a>        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Can't open info file for writing&quot;);
+        return -1;
+    }
+
+    for (i = 0; i &lt; group_num; i++)
+<a name="anchor-45"></a>    {
+        err = ProDtlgroupDataGet(&amp;p_groups[i], &amp;group_data);
+        TEST_CALL_REPORT (&quot;ProDtlgroupDataGet()&quot;, &quot;ProTestDtlGroupList()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-46"></a>        err = ProDtlgroupdataNameGet (group_data, name);
+        TEST_CALL_REPORT (&quot;ProDtlgroupdataNameGet()&quot;, &quot;ProTestDtlGroupList()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+        ProWstringToString (str, name);
+
+<a name="anchor-47"></a>        err = ProDtlgroupdataIdGet (group_data, &amp;id);
+        TEST_CALL_REPORT (&quot;ProDtlgroupdataIdGet()&quot;, &quot;ProTestDtlGroupList()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+
+        ProTKFprintf (fptr, &quot;\nGroup name: %s\nGroup Id: %d\n&quot;, str, id);
+<a name="anchor-48"></a>        
+        err = ProDtlgroupdataItemsCollect (group_data, &amp;p_group_items);
+        TEST_CALL_REPORT (&quot;ProDtlgroupdataItemsCollect()&quot;, &quot;ProTestDtlGroupList()&quot;,
+            err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-49"></a>        ProArraySizeGet (p_group_items, &amp;items_num);
+        
+        ProTKFprintf (fptr, &quot;hold %d items:\n&quot;, items_num);
+        
+        for (j = 0; j &lt; items_num; j++)
+<a name="anchor-50"></a>        {
+            switch (p_group_items[j].type)
+            {
+            case PRO_NOTE:
+                ProTKFprintf (fptr, &quot;PRO_NOTE\n&quot;);
+<a name="anchor-51"></a>                break;
+            case PRO_DRAFT_ENTITY:
+                ProTKFprintf (fptr, &quot;PRO_DRAFT_ENTITY\n&quot;);
+                break;
+            case PRO_SYMBOL_INSTANCE:
+<a name="anchor-52"></a>                ProTKFprintf (fptr, &quot;PRO_SYMBOL_INSTANCE\n&quot;);
+                break;
+            default:
+                ProTKFprintf (fptr, &quot;Unknown type %d\n&quot;, p_group_items[j].type);
+                break;
+<a name="anchor-53"></a>            }
+        }
+
+        ProArrayFree ((ProArray*)&amp;p_group_items);
+
+<a name="anchor-54"></a>        err = ProDtlgroupdataFree (group_data);
+        TEST_CALL_REPORT (&quot;ProDtlgroupdataFree()&quot;, &quot;ProTestDtlGroupList()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-55"></a>    ProArrayFree ((ProArray*)&amp;p_groups);
+
+    fclose (fptr);
+    
+    err = ProInfoWindowDisplay (ProStringToWstring (name, info_file_name), 
+<a name="anchor-56"></a>        NULL, NULL);
+    TEST_CALL_REPORT (&quot;ProInfoWindowDisplay()&quot;, &quot;ProTestDtlGroupList()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+            
+    return 0;
+<a name="anchor-57"></a>}
+
+/*---------------------------------------------------------------------*\
+    Function:    ProTestDtlGroupSelect()
+    Purpose:    selects dtlgroup
+<a name="anchor-58"></a>    Returns:    0 - success; -1 - error or selection canceled
+\*---------------------------------------------------------------------*/
+int ProTestDtlGroupSelect (
+    ProDrawing        drawing,
+    ProDtlgroup*    p_group)            /*in: ProDtlgroup*/
+<a name="anchor-59"></a>{
+    int group_num = 0, n_sel = 0, i = 0, j = 0,
+        sheet = -1, items_num;
+    ProDtlitem group_item, *p_group_items;
+    ProDtlgroup *p_groups;
+<a name="anchor-60"></a>    ProDtlgroupdata group_data;
+    ProSelection *p_sel = NULL;
+    ProError err = PRO_TK_NO_ERROR;
+    
+    if (p_group == NULL)
+<a name="anchor-61"></a>        return -1;
+
+    err = ProDrawingCurrentSheetGet (drawing, &amp;sheet);
+    TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;, &quot;ProTestDtlGroupSelect()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-62"></a>
+    err = ProDrawingDtlgroupsCollect (drawing, sheet, &amp;p_groups); 
+    TEST_CALL_REPORT (&quot;ProDrawingDtlgroupsCollect()&quot;, &quot;ProTestDtlGroupSelect()&quot;,
+        err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-63"></a>    err = ProArraySizeGet (p_groups, &amp;group_num);
+    TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;, &quot;ProTestDtlGroupSelect()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+
+    while (1)
+<a name="anchor-64"></a>    {
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select group&quot; );
+    err = ProSelect ((char*)&quot;any_note,draft_ent,dtl_symbol&quot;, 1, 
+        NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+    TEST_CALL_REPORT (&quot;ProSelect()&quot;, &quot;ProTestDtlGroupSelect()&quot;,
+<a name="anchor-65"></a>        err, err != PRO_TK_NO_ERROR);
+    
+    if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+        return -1;
+
+<a name="anchor-66"></a>    err = ProSelectionModelitemGet (p_sel[0], &amp;group_item);
+    TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestDtlGroupSelect()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+    for (i = 0; i &lt; group_num; i++)
+<a name="anchor-67"></a>    {
+        err = ProDtlgroupDataGet(&amp;p_groups[0], &amp;group_data);
+        TEST_CALL_REPORT (&quot;ProDtlgroupDataGet()&quot;, &quot;ProTestDtlGroupSelect()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-68"></a>        err = ProDtlgroupdataItemsCollect (group_data, &amp;p_group_items);
+        TEST_CALL_REPORT (&quot;ProDtlgroupdataItemsCollect()&quot;, &quot;ProTestDtlGroupSelect()&quot;,
+            err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+
+        err = ProArraySizeGet (p_group_items, &amp;items_num);
+<a name="anchor-69"></a>        TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;, &quot;ProTestDtlGroupSelect()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+
+        for (j = 0; j &lt; items_num; j++)
+        {
+<a name="anchor-70"></a>            if (ProTestDtlitemsCompare (&amp;group_item, &amp;p_group_items[j]) == 0)
+                break;
+        }
+
+        err = ProArrayFree ((ProArray*)&amp;p_group_items);
+<a name="anchor-71"></a>        TEST_CALL_REPORT (&quot;ProArrayFree()&quot;, &quot;ProTestDtlGroupSelect()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+
+        err = ProDtlgroupdataFree (group_data);
+        TEST_CALL_REPORT (&quot;ProDtlgroupdataFree()&quot;, &quot;ProTestDtlGroupSelect()&quot;,
+<a name="anchor-72"></a>            err, err != PRO_TK_NO_ERROR);
+
+        if (j != items_num)
+            break;
+    }
+<a name="anchor-73"></a>    if (i != group_num)
+        break;
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;This item is not a group item&quot; );
+    }
+        
+<a name="anchor-74"></a>    memcpy (p_group, &amp;p_groups[i], sizeof (ProDtlgroup));
+
+    err = ProArrayFree ((ProArray*)&amp;p_groups);
+    TEST_CALL_REPORT (&quot;ProArrayFree()&quot;, &quot;ProTestDtlGroupSelect()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+<a name="anchor-75"></a>    
+    return 0;
+}
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-76"></a>    Function:    ProTestDtlGroupCreate()
+    Purpose:    creates dtlgroup
+    Returns:    0 - success; -1 - error.
+\*---------------------------------------------------------------------*/
+int ProTestDtlGroupCreate (void* app_data, int int_dummy)
+<a name="anchor-77"></a>{
+    ProDrawing drawing = (ProDrawing)app_data;
+    ProSelection *p_sel = NULL;
+    ProDtlgroupdata group_data;
+    ProDtlgroup group;
+<a name="anchor-78"></a>    ProDtlitem group_item;
+    ProName name, default_name;
+    int i = 0, n_sel;
+    ProError err = PRO_TK_NO_ERROR;
+
+<a name="anchor-79"></a>    ProStringToWstring (default_name, (char*)&quot;group&quot;);
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter group name:&quot; );
+    ProUtilStringGet (name, default_name, PRO_NAME_SIZE);
+
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select note, entity or symbol&quot; );
+<a name="anchor-80"></a>    
+    err = ProSelect ((char*)&quot;any_note,draft_ent,dtl_symbol&quot;, -1, NULL, NULL, NULL, 
+        NULL, &amp;p_sel, &amp;n_sel);
+    TEST_CALL_REPORT (&quot;ProSelect()&quot;, &quot;ProTestDtlGroupCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-81"></a>        
+    if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+        return -1;
+
+    err = ProDtlgroupdataAlloc (drawing, name, &amp;group_data);
+<a name="anchor-82"></a>    TEST_CALL_REPORT (&quot;ProDtlgroupdataAlloc()&quot;, &quot;ProTestDtlGroupCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+    for (i = 0; i &lt; n_sel; i++)
+    {
+<a name="anchor-83"></a>        err = ProSelectionModelitemGet (p_sel[i], &amp;group_item);
+        TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestDtlGroupCreate()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+
+        err = ProDtlgroupdataItemAdd (group_data, &amp;group_item);
+<a name="anchor-84"></a>        TEST_CALL_REPORT (&quot;ProDtlgroupdataItemAdd()&quot;, &quot;ProTestDtlGroupCreate()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+    }
+
+    err = ProDtlgroupCreate (drawing, group_data, &amp;group);
+<a name="anchor-85"></a>    TEST_CALL_REPORT (&quot;ProDtlgroupCreate()&quot;, &quot;ProTestDtlGroupCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+    err = ProDtlgroupdataFree (group_data);
+    TEST_CALL_REPORT (&quot;ProDtlgroupdataFree()&quot;, &quot;ProTestDtlGroupCreate()&quot;,
+<a name="anchor-86"></a>        err, err != PRO_TK_NO_ERROR);
+
+    return 0;
+}
+
+<a name="anchor-87"></a>/*---------------------------------------------------------------------*\
+    Function:    ProTestDtlGroupSuppress()
+    Purpose:    suppresses dtlgroup
+    Returns:    0 - success; -1 - error.
+\*---------------------------------------------------------------------*/
+<a name="anchor-88"></a>int  ProTestDtlGroupSuppress (void* app_data, int int_dummy)
+{
+    ProDrawing drawing = (ProDrawing)app_data;
+    ProDtlgroup group;
+    ProError err = PRO_TK_NO_ERROR;
+<a name="anchor-89"></a>
+    if (ProTestDtlGroupSelectMenu (drawing, &amp;group) == -1)
+        return -1;
+    
+    err = ProDtlgroupErase (&amp;group);
+<a name="anchor-90"></a>    TEST_CALL_REPORT (&quot;ProDtlgroupErase()&quot;, &quot;ProTestDtlGroupSuppress()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+    return 0;
+}
+<a name="anchor-91"></a>
+/*---------------------------------------------------------------------*\
+    Function:    ProTestDtlGroupResume()
+    Purpose:    resume dtlgroup
+    Returns:    0 - success; -1 - error.
+<a name="anchor-92"></a>\*---------------------------------------------------------------------*/
+int ProTestDtlGroupResume (void* app_data, int int_dummy)
+{
+    ProDrawing drawing = (ProDrawing)app_data;
+    ProDtlgroup group;
+<a name="anchor-93"></a>    ProError err = PRO_TK_NO_ERROR;
+
+    if (ProTestDtlGroupSelectMenu (drawing, &amp;group) == -1)
+        return -1;
+    
+<a name="anchor-94"></a>    err = ProDtlgroupDraw (&amp;group);
+    TEST_CALL_REPORT (&quot;ProDtlgroupDraw()&quot;, &quot;ProTestDtlGroupResume()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+    return 0;
+<a name="anchor-95"></a>}
+
+/*---------------------------------------------------------------------*\
+    Function:    ProTestDtlGroupExplode()
+    Purpose:    Explode dtlgroup
+<a name="anchor-96"></a>    Returns:    0 - success; -1 - error.
+\*---------------------------------------------------------------------*/
+int ProTestDtlGroupExplode (void* app_data, int int_dummy)
+{
+    ProDrawing drawing = (ProDrawing)app_data;
+<a name="anchor-97"></a>    ProDtlgroup group;
+    ProError err = PRO_TK_NO_ERROR;
+
+    if (ProTestDtlGroupSelectMenu (drawing, &amp;group) == -1)
+        return -1;
+<a name="anchor-98"></a>    
+    err = ProDtlgroupDelete (&amp;group);
+    TEST_CALL_REPORT (&quot;ProDtlgroupDelete()&quot;, &quot;ProTestDtlGroupExplode()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-99"></a>    return 0;
+}
+
+/*---------------------------------------------------------------------*\
+    Function:    ProTestDtlGroupEditMenu()
+<a name="anchor-100"></a>    Purpose:    Menu for edititing
+    Returns:    0 - success; -1 - error.
+\*---------------------------------------------------------------------*/
+int ProTestDtlGroupEditMenu (void* app_data, int int_dummy)
+{
+<a name="anchor-101"></a>    ProDrawing drawing = (ProDrawing)app_data;
+    int            menu_id;   
+    int            action;
+    ProError    err = PRO_TK_NO_ERROR;
+
+<a name="anchor-102"></a>    err = ProMenuFileRegister( (char*)&quot;Edit&quot;, (char*)&quot;tkdtlgroupedit.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestDtlEditMenu()&quot;, 
+            err, err != PRO_TK_NO_ERROR );
+
+    /* Define menu buttons */
+<a name="anchor-103"></a>    ProMenubuttonActionSet( (char*)&quot;Edit&quot;, (char*)&quot;Add&quot;, 
+        (ProMenubuttonAction)ProTestDtlGroupEdit, drawing, GRP_EDIT_ADD);
+    ProMenubuttonActionSet( (char*)&quot;Edit&quot;, (char*)&quot;Remove&quot;, 
+        (ProMenubuttonAction)ProTestDtlGroupEdit, drawing, GRP_EDIT_REMOVE);
+    ProMenubuttonActionSet( (char*)&quot;Edit&quot;, (char*)&quot;Edit&quot;, 
+<a name="anchor-104"></a>        (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+    /*--------------------------*\
+    Run menu Disp List
+    \*--------------------------*/
+<a name="anchor-105"></a>    err = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;Edit&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestDtlEditMenu()&quot;, 
+        err, err != PRO_TK_NO_ERROR );
+    if( err == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-106"></a>        err = ProMenuProcess( (char*)&quot;Edit&quot;, &amp;action );
+        TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestDtlEditMenu()&quot;, 
+            err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_E_FOUND);
+    }
+
+<a name="anchor-107"></a>    return 0;
+}
+
+/*---------------------------------------------------------------------*\
+    Function:    ProTestDtlitemsCompare()
+<a name="anchor-108"></a>    Purpose:    Compares two dtlitems
+    Returns:    0 - success; -1 - error.
+\*---------------------------------------------------------------------*/
+int ProTestDtlitemsCompare (ProDtlitem *item1, ProDtlitem *item2)
+{
+<a name="anchor-109"></a>    if (item1->type != item2->type)
+        return -1;
+    return (item1->id == item2->id)? 0 : -1;
+}
+
+<a name="anchor-110"></a>/*---------------------------------------------------------------------*\
+    Function:    ProTestDtlGroupEdit()
+    Purpose:    Edit
+    Returns:    0 - success; -1 - error.
+\*---------------------------------------------------------------------*/
+<a name="anchor-111"></a>int ProTestDtlGroupEdit (void* app_data, int action)
+{
+    ProDrawing drawing = (ProDrawing)app_data;
+    ProDtlgroup group;
+    ProDtlgroupdata group_data;
+<a name="anchor-112"></a>    ProDtlitem *p_group_items, group_item;
+    ProError err = PRO_TK_NO_ERROR;
+    ProSelection *p_sel = NULL;
+    int items_num = 0, i = 0, j = 0, n_sel;
+
+<a name="anchor-113"></a>    if (ProTestDtlGroupSelectMenu (drawing, &amp;group) == -1)
+        return -1;
+
+    err = ProDtlgroupDataGet (&amp;group, &amp;group_data);
+    TEST_CALL_REPORT (&quot;ProDtlgroupDataGet()&quot;, &quot;ProTestDtlGroupEdit()&quot;,
+<a name="anchor-114"></a>        err, err != PRO_TK_NO_ERROR);
+    err = ProDtlgroupdataItemsCollect (group_data, &amp;p_group_items);
+    TEST_CALL_REPORT (&quot;ProDtlgroupdataItemsCollect()&quot;, &quot;ProTestDtlGroupEdit()&quot;,
+        err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-115"></a>    err = ProArraySizeGet (p_group_items, &amp;items_num);
+
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select draft items&quot; );
+    err = ProSelect ((char*)&quot;any_note,draft_ent,dtl_symbol&quot;, -1, NULL, NULL, NULL, 
+        NULL, &amp;p_sel, &amp;n_sel);
+<a name="anchor-116"></a>    TEST_CALL_REPORT (&quot;ProSelect()&quot;, &quot;ProTestDtlGroupEdit()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+        
+    if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+        return -1;
+<a name="anchor-117"></a>
+    for (i = 0; i &lt; n_sel; i++)
+    {
+        err = ProSelectionModelitemGet (p_sel[i], &amp;group_item);
+        TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestDtlGroupEdit()&quot;,
+<a name="anchor-118"></a>            err, err != PRO_TK_NO_ERROR);
+        for (j = 0; j &lt; items_num; j++)
+        {
+            if (ProTestDtlitemsCompare (&amp;group_item, &amp;p_group_items[j]) == 0)
+                break;
+<a name="anchor-119"></a>        }
+        /*item is found*/
+        if ((j != items_num) &amp;&amp; (action == GRP_EDIT_REMOVE))
+        {
+            err = ProArrayObjectRemove ((ProArray*)&amp;p_group_items, j, 1);
+<a name="anchor-120"></a>            TEST_CALL_REPORT (&quot;ProArrayObjectRemove()&quot;, &quot;ProTestDtlGroupEdit()&quot;,
+                err, err != PRO_TK_NO_ERROR);
+            ProArraySizeGet (p_group_items, &amp;items_num);
+        }
+        /*item is not found*/
+<a name="anchor-121"></a>        else if ((j == items_num) &amp;&amp; (action == GRP_EDIT_ADD))
+        {
+            ProArrayObjectAdd ((ProArray*)&amp;p_group_items, 
+                PRO_VALUE_UNUSED, 1, &amp;group_item);
+            TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;, &quot;ProTestDtlGroupEdit()&quot;,
+<a name="anchor-122"></a>                err, err != PRO_TK_NO_ERROR);
+            ProArraySizeGet (p_group_items, &amp;items_num);
+        }
+    }
+
+<a name="anchor-123"></a>    err = ProDtlgroupdataItemsSet (group_data, p_group_items);
+    TEST_CALL_REPORT (&quot;ProDtlgroupdataItemsSet()&quot;, &quot;ProTestDtlGroupEdit()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+    err = ProDtlgroupModify (&amp;group, group_data);
+    TEST_CALL_REPORT (&quot;ProDtlgroupModify()&quot;, &quot;ProTestDtlGroupEdit()&quot;,
+<a name="anchor-124"></a>        err, err != PRO_TK_NO_ERROR);
+
+    err = ProDtlgroupdataFree (group_data);
+    TEST_CALL_REPORT (&quot;ProDtlgroupdataFree()&quot;, &quot;ProTestDtlGroupEdit()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-125"></a>
+    return 0;
+}
+</pre>
+</body>
+</html>

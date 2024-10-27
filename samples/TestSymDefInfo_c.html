@@ -1,0 +1,506 @@
+<html>
+<head>
+<title>TestSymDefInfo.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProDtlitem.h>
+#include &lt;ProDtlsymdef.h>
+<a name="anchor-2"></a>#include &lt;ProDtlsyminst.h>
+#include &lt;ProDtlnote.h>
+#include &lt;ProWindows.h>
+#include &lt;ProMessage.h>
+#include &lt;ProMdl.h>
+<a name="anchor-3"></a>#include &lt;ProModelitem.h>
+
+#include &quot;TestError.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+<a name="anchor-4"></a>#include &quot;UtilNames.h&quot;
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+
+#define BOOL_TO_STR(a)  (a)?(&quot;TRUE&quot;):(&quot;FALSE&quot;)
+<a name="anchor-5"></a>
+/*=========================================================================*\
+    Function:	ProTestSymDefInfoAttach()
+    Purpose:    Print info about all attache from symdata
+    Returns:	PRO_TK_NO_ERROR if success;
+<a name="anchor-6"></a>\*=========================================================================*/
+ProError ProTestSymDefInfoAttach(FILE *fp, ProDtlsymdefdata symdata)
+{
+    ProError error;
+    int n_attache;
+<a name="anchor-7"></a>    ProDtlsymdefattach *attaches;
+    double entity_parameter;
+    ProVector location;
+    int entity_id, n;
+    ProCharLine astr;
+<a name="anchor-8"></a>    ProDtlsymdefattachType type;
+
+    /*-------------------------------------------------------------*\
+        Check data
+    \*-------------------------------------------------------------*/
+<a name="anchor-9"></a>    if((fp==NULL)||(symdata==NULL))
+        return(PRO_TK_BAD_INPUTS);
+
+    error = ProDtlsymdefdataAttachGet(symdata,	&amp;attaches);
+    TEST_CALL_REPORT (&quot;ProDtlsymdefdataAttachGet()&quot;,
+<a name="anchor-10"></a>                      &quot;ProTestSymDefInfoAttach()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    if(error!=PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-11"></a>    /*-------------------------------------------------------------*\
+        Calculate attaches count
+    \*-------------------------------------------------------------*/
+    error = ProArraySizeGet((ProArray)attaches, &amp;n_attache);
+    TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+<a name="anchor-12"></a>                      &quot;ProTestSymDefInfoAttach()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    if(error!=PRO_TK_NO_ERROR)
+        n_attache = 0;
+
+<a name="anchor-13"></a>    ProTKFprintf(fp,&quot;\t\tAttaches count:%d\n&quot;, n_attache);
+    if(n_attache>0)
+        for(n=0; n&lt;n_attache; n++)
+        {
+            /*-------------------------------------------------------------*\
+<a name="anchor-14"></a>            	Get attaches information from current symdef
+            \*-------------------------------------------------------------*/
+            error = ProDtlsymdefattachGet(attaches[n],
+                                          &amp;type, &amp;entity_id, &amp;entity_parameter, location);
+            TEST_CALL_REPORT (&quot;ProDtlsymdefattachGet()&quot;,
+<a name="anchor-15"></a>                              &quot;ProTestSymDefInfoAttach()&quot;, error, error != PRO_TK_NO_ERROR);
+
+            if(error!=PRO_TK_NO_ERROR)
+                continue;
+            /*-------------------------------------------------------------*\
+<a name="anchor-16"></a>            	Print attaches type
+            \*-------------------------------------------------------------*/
+            switch(type)
+            {
+            case PROSYMDEFATTACHTYPE_FREE :
+<a name="anchor-17"></a>                ProTKSprintf(astr,&quot;%s&quot;,&quot;Free&quot;);
+                break;
+            case PROSYMDEFATTACHTYPE_LEFT_LEADER :
+                ProTKSprintf(astr,&quot;%s&quot;,&quot;Left Leader&quot;);
+                break;
+<a name="anchor-18"></a>            case PROSYMDEFATTACHTYPE_RIGHT_LEADER :
+                ProTKSprintf(astr,&quot;%s&quot;,&quot;Right Leader&quot;);
+                break;
+            case PROSYMDEFATTACHTYPE_RADIAL_LEADER :
+                ProTKSprintf(astr,&quot;%s&quot;,&quot;Radial Leader&quot;);
+<a name="anchor-19"></a>                break;
+            case PROSYMDEFATTACHTYPE_ON_ITEM :
+                ProTKSprintf(astr,&quot;%s&quot;,&quot;On item&quot;);
+                break;
+            case PROSYMDEFATTACHTYPE_NORM_ITEM :
+<a name="anchor-20"></a>                ProTKSprintf(astr,&quot;%s&quot;,&quot;Normal item&quot;);
+                break;
+            default:
+                ProTKSprintf(astr,&quot;%s&quot;,&quot;None&quot;);
+            }/* switch */
+<a name="anchor-21"></a>
+            /*-------------------------------------------------------------*\
+            	Print attache entity information
+            \*-------------------------------------------------------------*/
+            if(type != PROSYMDEFATTACHTYPE_FREE)
+<a name="anchor-22"></a>            {
+                ProTKFprintf(fp,&quot;\t\t\t[%d] Attache type: %s\n&quot;,n, astr);
+                ProTKFprintf(fp,&quot;\t\t\tEntity id: %d \n&quot;, entity_id);
+                ProTKFprintf(fp,&quot;\t\t\tParameter: %3.3f\n&quot;, entity_parameter);
+                ProTKFprintf(fp,&quot;\t\t\tLocation : (%3.3f, %3.3f, %3.3f)\n&quot;,
+<a name="anchor-23"></a>                        location[0], location[1], location[2]);
+            }
+        }/* for n */
+
+    /*-------------------------------------------------------------*\
+<a name="anchor-24"></a>    	Free attaches array	
+    \*-------------------------------------------------------------*/
+    if(attaches!=NULL)
+    {
+        error = ProArrayFree((ProArray*)&amp;attaches);
+<a name="anchor-25"></a>        TEST_CALL_REPORT (&quot;ProArrayFree()&quot;,
+                          &quot;ProTestSymDefInfoAttach()&quot;, error, error != PRO_TK_NO_ERROR);
+    }
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-26"></a>}
+
+/*=========================================================================*\
+    Function:	ProTestSymDefInfoNote()
+    Purpose:    Print info about all notes from symdata
+<a name="anchor-27"></a>    Returns:	PRO_TK_NO_ERROR if success;
+\*=========================================================================*/
+ProError ProTestSymDefInfoNote(FILE *fp, ProDrawing drawing, int sheet,
+                               ProDtlsymdef *symbol, ProDtlsymdefdata symdata)
+{
+<a name="anchor-28"></a>    ProError error;
+    ProCharLine astr;
+    ProLine     wline;
+    ProDtlnote *notes;
+    int n_notes, note_id,
+<a name="anchor-29"></a>    n_line, n_text,
+    k, m, l;
+    ProDtlnotedata notedata;
+    ProDtlnoteline *note_lines;
+    ProDtlnotetext *note_text;
+<a name="anchor-30"></a>
+    /*-------------------------------------------------------------*\
+    	Check input 
+    \*-------------------------------------------------------------*/
+    if((drawing==NULL)||(fp==NULL)||(symbol==NULL)||(symdata==NULL))
+<a name="anchor-31"></a>        return(PRO_TK_BAD_INPUTS);
+
+    /*-------------------------------------------------------------*\
+    	Collect all notes for current symdef
+    \*-------------------------------------------------------------*/
+<a name="anchor-32"></a>    error = ProDrawingDtlnotesCollect(drawing, symbol, sheet, &amp;notes);
+    TEST_CALL_REPORT (&quot;ProDrawingDtlnotesCollect()&quot;,
+                      &quot;ProTestSymDefInfoNote()&quot;, error, error != PRO_TK_NO_ERROR &amp;&amp;
+                      error != PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-33"></a>    if(error!=PRO_TK_NO_ERROR)
+        return(error);
+
+    /*-------------------------------------------------------------*\
+    	Calculate notes count
+<a name="anchor-34"></a>    \*-------------------------------------------------------------*/
+
+    error = ProArraySizeGet((ProArray)notes, &amp;n_notes);
+    TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+                      &quot;ProTestSymDefInfoNote()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-35"></a>
+    if(error!=PRO_TK_NO_ERROR)
+        n_notes = 0;
+
+    /*-------------------------------------------------------------*\
+<a name="anchor-36"></a>    	Print info for all notes in current symdef
+    \*-------------------------------------------------------------*/
+    if(n_notes>0)
+    {
+        ProTKFprintf(fp,&quot;\t\t\t\tNote count: %d\n&quot;,n_notes);
+<a name="anchor-37"></a>        for(k=0; k&lt;n_notes; k++)
+        {
+            error = ProDtlnoteDataGet(&amp;notes[k], symbol,
+                                      PRODISPMODE_SYMBOLIC, &amp;notedata);
+            TEST_CALL_REPORT (&quot;ProDtlnoteDataGet()&quot;,
+<a name="anchor-38"></a>                              &quot;ProTestSymDefInfoNote()&quot;, error, error != PRO_TK_NO_ERROR);
+
+            error = ProDtlnotedataIdGet(notedata, &amp;note_id);
+            TEST_CALL_REPORT (&quot;ProDtlnotedataIdGet()&quot;,
+                              &quot;ProTestSymDefInfoNote()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-39"></a>            /*-------------------------------------------------------------*\
+            	    Collect all lines in the current note
+            \*-------------------------------------------------------------*/
+            error = ProDtlnotedataLinesCollect(notedata, &amp;note_lines);
+            TEST_CALL_REPORT (&quot;ProDtlnotedataLinesCollect()&quot;,
+<a name="anchor-40"></a>                &quot;ProTestSymDefInfoNote()&quot;, error, 
+                error != PRO_TK_NO_ERROR &amp;&amp; error != PRO_TK_E_NOT_FOUND);
+            error = ProArraySizeGet((ProArray)note_lines, &amp;n_line);
+            TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+                              &quot;ProTestSymDefInfoNote()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-41"></a>
+            if(error==PRO_TK_NO_ERROR)
+            {
+                ProTKFprintf(fp,&quot;\t\t\t\t\t[%d] lines count: %d\n&quot;,k, n_line);
+                for(l=0;l&lt;n_line; l++)
+<a name="anchor-42"></a>                {
+                    /*-------------------------------------------------------------*\
+                    		Collect all texts in the current line
+                    \*-------------------------------------------------------------*/
+                    error = ProDtlnotelineTextsCollect(note_lines[l],
+<a name="anchor-43"></a>                                                       &amp;note_text);
+                    TEST_CALL_REPORT (&quot;ProDtlnotelineTextsCollect()&quot;,
+                        &quot;ProTestSymDefInfoNote()&quot;, error, 
+                        error != PRO_TK_NO_ERROR &amp;&amp; error != PRO_TK_E_NOT_FOUND);
+                    error = ProArraySizeGet((ProArray)note_lines, &amp;n_text);
+<a name="anchor-44"></a>                    if(error==PRO_TK_NO_ERROR)
+                    {
+                        for(m=0; m&lt;n_text; m++)
+                        {
+                            /*-------------------------------------------------------------*\
+<a name="anchor-45"></a>                            		    Collect all strings in the current text
+                            \*-------------------------------------------------------------*/
+                            if (note_text[m] != NULL)
+                            {
+                                error = ProDtlnotetextStringGet(note_text[m], wline);
+<a name="anchor-46"></a>                                TEST_CALL_REPORT (&quot;ProDtlnotetextStringGet()&quot;,
+                                              &quot;ProTestSymDefInfoNote()&quot;, error, error != PRO_TK_NO_ERROR);
+
+                                if(error==PRO_TK_NO_ERROR)
+                                    ProTKFprintf(fp,&quot;\t\t\t\t\t\t%s\n&quot;,ProWstringToString(astr, wline));
+<a name="anchor-47"></a>                            }
+                        } /* for m*/
+
+                        /*-------------------------------------------------------------*\
+                        		Free note_text array
+<a name="anchor-48"></a>                        \*-------------------------------------------------------------*/
+                        for (m=0; m&lt;n_text; m++)
+                        {
+                            if (note_text[m] != NULL)
+                            {
+<a name="anchor-49"></a>                                error = ProDtlnotetextFree (note_text[m]);
+                                TEST_CALL_REPORT(&quot;ProDtlnotetextFree()&quot;,
+                                             &quot;ProTestDtlNoteInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+                            }
+                        }
+<a name="anchor-50"></a>                        if(note_text!=NULL)
+                        {
+                            error = ProArrayFree((ProArray*)&amp;note_text);
+                            TEST_CALL_REPORT (&quot;ProArrayFree()&quot;,
+                                              &quot;ProTestSymDefInfoNote()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-51"></a>                        }
+                    }
+                }/* for l*/
+                /*-------------------------------------------------------------*\
+                		Free note_lines array
+<a name="anchor-52"></a>                \*-------------------------------------------------------------*/
+                for (l=0;l&lt; n_line; l++)
+                {
+                    error = ProDtlnotelineFree (note_lines[l]);
+                    TEST_CALL_REPORT(&quot;ProDtlnotelineFree()&quot;,
+<a name="anchor-53"></a>                                     &quot;ProTestDtlNoteInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+                }
+                if(note_lines!=NULL)
+                {
+                    error = ProArrayFree((ProArray*)&amp;note_lines);
+<a name="anchor-54"></a>                    TEST_CALL_REPORT (&quot;ProArrayFree()&quot;,
+                                      &quot;ProTestSymDefInfoNote()&quot;, error, error != PRO_TK_NO_ERROR);
+                }
+            }
+        }/* for k*/
+<a name="anchor-55"></a>    }/* if (n_notes>0) */
+
+    /*-------------------------------------------------------------*\
+    		Free notes array
+    \*-------------------------------------------------------------*/
+<a name="anchor-56"></a>
+    if(notes!=NULL)
+    {
+        error = ProArrayFree((ProArray*)&amp;notes);
+        TEST_CALL_REPORT (&quot;ProArrayFree()&quot;,
+<a name="anchor-57"></a>                          &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+        notes = NULL;
+    }
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-58"></a>}
+
+ProError ProTestSymDefInfo()
+{
+    ProError error;
+<a name="anchor-59"></a>    FILE *fp=NULL;
+    ProPath wstr;
+    ProCharLine astr;
+    char file_name[] = &quot;DrwSymDef.info&quot;;
+    ProDrawing drawing;
+<a name="anchor-60"></a>    int i, j;
+    int n_symdef, n_sheets;
+    int entity, line, text;
+    int id;
+    ProDtlsymdef *symdefs;
+<a name="anchor-61"></a>    ProDtlsymdefdata symdata;
+    ProBoolean elbow, angle_fixed;
+    double height;
+    ProDtlsymdefdataHeighttype type;
+    int	current_sheet;
+<a name="anchor-62"></a>
+    /*-------------------------------------------------------------*\
+       Get handle to the current drawing
+    \*-------------------------------------------------------------*/
+    error = ProMdlCurrentGet((ProMdl*)&amp;drawing);
+<a name="anchor-63"></a>    TEST_CALL_REPORT (&quot;ProMdlCurrentGet()&quot;,
+                      &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    if(error!=PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-64"></a>    /*-------------------------------------------------------------*\
+        Open file for print symdef information 
+    \*-------------------------------------------------------------*/
+    if ((fp = PTApplsUnicodeFopen(file_name, &quot;w&quot;)) == NULL)
+    {
+<a name="anchor-65"></a>        ProTKPrintf(&quot;Cannot open output file\n&quot;);
+        return (PRO_TK_GENERAL_ERROR);
+    }
+
+    /*-------------------------------------------------------------*\
+<a name="anchor-66"></a>        Get sheets count in the current drawing
+    \*-------------------------------------------------------------*/
+    error = ProDrawingSheetsCount(drawing, &amp;n_sheets);
+    TEST_CALL_REPORT (&quot;ProDrawingSheetsCount()&quot;,
+                      &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-67"></a>
+    /*-------------------------------------------------------------*\
+	Store current sheet id
+    \*-------------------------------------------------------------*/
+    error = ProDrawingCurrentSheetGet( drawing, &amp;current_sheet );
+<a name="anchor-68"></a>    TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;,
+	&quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    ProTKFprintf(fp,&quot;Sheets count: %d\n&quot;, n_sheets);
+    for(i=0; i&lt;n_sheets; i++)
+<a name="anchor-69"></a>    {
+	error = ProDrawingCurrentSheetSet( drawing, i );
+	TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetSet()&quot;,
+	    &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-70"></a>        /*-------------------------------------------------------------*\
+        	Collect all symdefs in the current sheet
+        \*-------------------------------------------------------------*/
+        error = ProDrawingDtlsymdefsCollect(drawing, &amp;symdefs);
+        TEST_CALL_REPORT (&quot;ProDrawingDtlsymdefsCollect()&quot;,
+<a name="anchor-71"></a>                          &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+        if(error!=PRO_TK_NO_ERROR)
+            continue;
+
+<a name="anchor-72"></a>        error = ProArraySizeGet((ProArray)symdefs, &amp;n_symdef);
+        TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+                          &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+        if((error!=PRO_TK_NO_ERROR)||(n_symdef&lt;=0))
+<a name="anchor-73"></a>        {
+            error = ProArrayFree((ProArray*)&amp;symdefs);
+            TEST_CALL_REPORT (&quot;ProArrayFree()&quot;,
+                              &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+            continue;
+<a name="anchor-74"></a>        }
+        /*-------------------------------------------------------------*\
+        	Print symdef information for all sheets 
+        	in current drawing
+        \*-------------------------------------------------------------*/
+<a name="anchor-75"></a>        ProTKFprintf(fp,&quot;\tSheet %d, symdef count: %d\n&quot;, i, n_symdef);
+        for(j=0; j&lt;n_symdef; j++)
+        {
+            /*-------------------------------------------------------------*\
+            	    Get symdef data for current symdef
+<a name="anchor-76"></a>            \*-------------------------------------------------------------*/
+            error = ProDtlsymdefDataGet(&amp;symdefs[j], &amp;symdata);
+            TEST_CALL_REPORT (&quot;ProDtlsymdefDataGet()&quot;,
+                              &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-77"></a>            if(error!=PRO_TK_NO_ERROR)
+                continue;
+
+            error = ProDtlsymdefdataIdGet(symdata, &amp;id);
+            TEST_CALL_REPORT (&quot;ProDtlsymdefdataIdGet()&quot;,
+<a name="anchor-78"></a>                              &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+            ProTKFprintf(fp,&quot;\t\t[%d] Symdef id: %d\n&quot;, j, id);
+#if 0
+            /*-------------------------------------------------------------*\
+<a name="anchor-79"></a>            	    Get symdef name
+            \*-------------------------------------------------------------*/
+            error = ProDtlsymdefdataPathGet(symdata, wstr);
+            TEST_CALL_REPORT (&quot;ProDtlsymdefdataPathGet()&quot;,
+                              &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-80"></a>#endif
+
+            ProTKFprintf(fp,&quot;\t\t\tSymdef path: %s\n&quot;,ProWstringToString(astr, wstr));
+            /*-------------------------------------------------------------*\
+            	    Get symdef Elbow flag
+<a name="anchor-81"></a>            \*-------------------------------------------------------------*/
+            error = ProDtlsymdefdataElbowGet(symdata, &amp;elbow);
+            TEST_CALL_REPORT (&quot;ProDtlsymdefdataElbowGet()&quot;,
+                              &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-82"></a>            ProTKFprintf(fp,&quot;\t\t\tElbow : %s\n&quot;, BOOL_TO_STR(elbow));
+            /*-------------------------------------------------------------*\
+            	    Get symdef text angle property.
+            \*-------------------------------------------------------------*/
+            error = ProDtlsymdefdataTextangfixedGet(symdata, &amp;angle_fixed);
+<a name="anchor-83"></a>            TEST_CALL_REPORT (&quot;ProDtlsymdefdataTextangfixedGet()&quot;,
+                              &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+            ProTKFprintf(fp,&quot;\t\t\tText angle fixed: %s\n&quot;, BOOL_TO_STR(angle_fixed));
+
+<a name="anchor-84"></a>            /*-------------------------------------------------------------*\
+            	    Get symdef height type.
+            \*-------------------------------------------------------------*/
+            error = ProDtlsymdefdataHeighttypeGet(symdata, &amp;type);
+            TEST_CALL_REPORT (&quot;ProDtlsymdefdataHeighttypeGet()&quot;,
+<a name="anchor-85"></a>                              &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+            ProTKFprintf(fp,&quot;\t\t\tHeight type: %s\n&quot;,
+                    (type==PRODTLSYMDEFHGHTTYPE_FIXED)?(&quot;Fixed&quot;):
+                    ((type==PRODTLSYMDEFHGHTTYPE_VARIABLE)?(&quot;Variable&quot;):(&quot;Text related&quot;)));
+<a name="anchor-86"></a>
+            /*-------------------------------------------------------------*\
+            	    Get symdef height 
+            \*-------------------------------------------------------------*/	
+            error = ProDtlsymdefdataScaledheightGet(symdata,&amp;height);
+<a name="anchor-87"></a>            TEST_CALL_REPORT (&quot;ProDtlsymdefdataScaledheightGet()&quot;,
+                              &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+            ProTKFprintf(fp,&quot;\t\t\tHeight: %3.3f\n&quot;, height);
+
+<a name="anchor-88"></a>            if(type==PRODTLSYMDEFHGHTTYPE_TEXTRELATED)
+            {
+
+                /*-------------------------------------------------------------*\
+                	    Get symdef height type - text related 
+<a name="anchor-89"></a>                	    then print information about related note.
+                \*-------------------------------------------------------------*/
+                error = ProDtlsymdefdataTextrefGet(symdata, &amp;entity, &amp;line, &amp;text);
+                TEST_CALL_REPORT (&quot;ProDtlsymdefdataTextrefGet()&quot;,
+                                  &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-90"></a>                if(error==PRO_TK_NO_ERROR)
+                {
+                    ProTKFprintf(fp, &quot;\t\t\tRef text entity id : %d\n&quot;, entity);
+                    ProTKFprintf(fp, &quot;\t\t\tRef text line      : %d\n&quot;, line);
+                    ProTKFprintf(fp, &quot;\t\t\tRef text index     : %d\n&quot;, text);
+<a name="anchor-91"></a>                }
+            }
+            /*-------------------------------------------------------------*\
+            	   Print information about all notes in current symdef
+            \*-------------------------------------------------------------*/
+<a name="anchor-92"></a>            error = ProTestSymDefInfoNote(fp, drawing, i, &amp;symdefs[j], symdata);
+
+            /*-------------------------------------------------------------*\
+            	   Print information about all attaches 
+            	   in the current symdef
+<a name="anchor-93"></a>            \*-------------------------------------------------------------*/
+            error = ProTestSymDefInfoAttach(fp, symdata);
+
+            ProTKFprintf(fp,&quot;---------------------------------------------------------------------\n&quot;);
+        }
+<a name="anchor-94"></a>
+        if(symdefs!=NULL)
+        {
+            error = ProArrayFree((ProArray*)&amp;symdefs);
+            TEST_CALL_REPORT (&quot;ProArrayFree()&quot;,
+<a name="anchor-95"></a>                              &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+        }
+    }
+
+    /*-------------------------------------------------------------*\
+<a name="anchor-96"></a>	Restore current sheet
+    \*-------------------------------------------------------------*/
+    error = ProDrawingCurrentSheetSet( drawing, current_sheet );
+    TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetSet()&quot;, &quot;ProTestSymDefInfo()&quot;, 
+	error, error != PRO_TK_NO_ERROR);
+<a name="anchor-97"></a>
+    /*-------------------------------------------------------------*\
+    	   Close file and
+    	   show it in the information window.
+    \*-------------------------------------------------------------*/
+<a name="anchor-98"></a>    fclose(fp);
+    error = ProInfoWindowDisplay(ProStringToWstring(wstr,file_name), NULL, NULL);
+    TEST_CALL_REPORT (&quot;ProInfoWindowDisplay()&quot;,
+                      &quot;ProTestSymDefInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-99"></a>    return(PRO_TK_NO_ERROR);
+}
+
+</pre>
+</body>
+</html>

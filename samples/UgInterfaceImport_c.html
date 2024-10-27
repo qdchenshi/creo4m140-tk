@@ -1,0 +1,202 @@
+<html>
+<head>
+<title>UgInterfaceImport.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMenu.h>
+#include &lt;ProMdl.h>
+#include &lt;ProIntfimport.h>
+
+#include &lt;ProUI.h>
+<a name="anchor-3"></a>#include &lt;ProUIDialog.h>
+#include &lt;ProUIPushbutton.h>
+#include &lt;ProUIInputpanel.h>
+#include &lt;ProMessage.h>
+#include &lt;ProUtil.h>
+<a name="anchor-4"></a>
+/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+#include &lt;UgUtilUI.h>
+#include &lt;UtilString.h>
+<a name="anchor-5"></a>
+#define MSGFIL L##&quot;msg_uginterface.txt&quot;
+
+int UserIGESImportNewModelViaFilter(ProPath input_file, 
+									ProMdlName new_model_name, 
+<a name="anchor-6"></a>									ProName excluded_layer, 
+									ProMdl* model);
+/*====================================================================*\
+FUNCTION: UserIGESImportViaFilter()
+PURPOSE:  Import an IGES model into session and display it 
+<a name="anchor-7"></a>\*====================================================================*/
+int UserIGESImportViaFilter()
+{
+  	ProError status;
+	ProMdl model;
+<a name="anchor-8"></a>	ProPath input_file;
+	ProMdlName new_model_name;
+	ProName excluded_layer;
+	ProLine filter_string;
+	wchar_t* input;
+<a name="anchor-9"></a>
+/*--------------------------------------------------------------------*\
+	Prompt for IGES file to import
+\*--------------------------------------------------------------------*/
+	ProMessageDisplay (MSGFIL, &quot;USER Select an IGES file to import&quot;);
+<a name="anchor-10"></a>
+	ProStringToWstring (filter_string, &quot;*.igs&quot;);
+	status = ProFileMdlnameOpen (NULL, filter_string, NULL, NULL, NULL, NULL, 
+							input_file);
+	if (status != PRO_TK_NO_ERROR)
+<a name="anchor-11"></a>		return status;
+
+/*--------------------------------------------------------------------*\
+	Prompt for new model name
+\*--------------------------------------------------------------------*/
+<a name="anchor-12"></a>	status = UserPromptUI (&quot;Create new model&quot;, 
+							&quot;Enter new model name for IGES import&quot;, 
+							PRO_NAME_SIZE, &amp;input);
+	if (status != PRO_TK_NO_ERROR)
+		return status;
+<a name="anchor-13"></a>	else
+	{
+		ProUtilWstrcpy (new_model_name, input);
+		ProWstringFree (input);
+	}
+<a name="anchor-14"></a>
+/*--------------------------------------------------------------------*\
+	Prompt for the name of a layer that should be blanked
+\*--------------------------------------------------------------------*/
+	status = UserPromptUI (&quot;Import layer filter&quot;, 
+<a name="anchor-15"></a>							&quot;Enter name of imported layer to blank&quot;, 
+							PRO_NAME_SIZE, &amp;input);
+	if (status != PRO_TK_NO_ERROR)
+		return status;
+	else
+<a name="anchor-16"></a>	{
+		ProUtilWstrcpy (excluded_layer, input);
+		ProWstringFree (input);
+	}
+
+<a name="anchor-17"></a>	status = UserIGESImportNewModelViaFilter (input_file, new_model_name, 
+												excluded_layer, &amp;model);
+		
+	if (status == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-18"></a>		ProMdlDisplay (model);
+	}
+	
+	return(PRO_TK_NO_ERROR);	
+}
+<a name="anchor-19"></a>
+
+/*====================================================================*\
+STRUCTURE: UserImportLayerFilterdata
+PURPOSE:   Contains user data to be passed to the import layer filter 
+<a name="anchor-20"></a>				function.
+\*====================================================================*/
+typedef struct 
+{
+	ProName find_layer;
+<a name="anchor-21"></a>} UserImportLayerFilterdata;
+
+/*====================================================================*\
+FUNCTION: UserLayerFilter
+PURPOSE:  Blanks and renames an unneeded layer
+<a name="anchor-22"></a>\*====================================================================*/
+ProError UserLayerFilter  ( ProLayerfilterdata data, 
+					       ProAppData  application_data)
+{
+	ProName layer_name;
+<a name="anchor-23"></a>	ProError status;
+	UserImportLayerFilterdata* filterdata = 
+				(UserImportLayerFilterdata*)application_data;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-24"></a>	Check if the current layer is the target
+\*--------------------------------------------------------------------*/
+	status = ProLayerfilterdataNameGet (data, layer_name);
+
+	if (ProUtilWstrcmp (filterdata->find_layer, layer_name) == 0)
+<a name="anchor-25"></a>	{
+/*--------------------------------------------------------------------*\
+	Blank the found layer
+\*--------------------------------------------------------------------*/
+		status = ProLayerfilterdataActionSet (data, 
+<a name="anchor-26"></a>												PRO_LAYER_IMPORT_BLANK);
+
+/*--------------------------------------------------------------------*\
+	Rename the found layer
+\*--------------------------------------------------------------------*/
+<a name="anchor-27"></a>		status = ProLayerfilterdataNameSet (data, L&quot;FOUND&quot;);
+	}
+
+	return PRO_TK_NO_ERROR;
+}
+<a name="anchor-28"></a>
+
+/*====================================================================*\
+FUNCTION: UserIGESImportNewModelViaFilter()
+PURPOSE:  Imports an IGES assembly file to an new model while filtering layers
+<a name="anchor-29"></a>\*====================================================================*/
+int UserIGESImportNewModelViaFilter(ProPath input_file, 
+									ProMdlName new_model_name, 
+									ProName excluded_layer, 
+									ProMdl* model)
+<a name="anchor-30"></a>{
+	ProError status;
+	ProMdl created_model;
+        ProIntfImportType import_type = PRO_INTF_IMPORT_IGES;
+        ProMdlType mdl_type;
+<a name="anchor-31"></a>
+/*--------------------------------------------------------------------*\
+	Set up the layer filter data - search for needed layer
+\*--------------------------------------------------------------------*/
+	UserImportLayerFilterdata data;
+<a name="anchor-32"></a>	ProUtilWstrcpy (data.find_layer, excluded_layer);
+
+	*model = NULL;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-33"></a>	Check for proper import model type
+\*--------------------------------------------------------------------*/	
+        status = ProIntfimportSourceTypeGet (input_file, import_type, &amp;mdl_type);
+        
+         if (status != PRO_TK_NO_ERROR)
+<a name="anchor-34"></a>         	return PRO_TK_GENERAL_ERROR;
+                
+/*--------------------------------------------------------------------*\
+	Import IGES file
+\*--------------------------------------------------------------------*/
+<a name="anchor-35"></a>	status = ProIntfimportModelWithOptionsMdlnameCreate(input_file, NULL,
+					   import_type, 
+					   mdl_type, PRO_IMPORTREP_MASTER,
+					   new_model_name, 
+					   UserLayerFilter, &amp;data,
+<a name="anchor-36"></a>					   &amp;created_model);
+
+	if (status == PRO_TK_NO_ERROR)
+	{
+		*model = created_model;
+<a name="anchor-37"></a>		return PRO_TK_NO_ERROR;
+	}
+	else
+		return status;
+}
+<a name="anchor-38"></a>
+#undef MSGFIL
+
+
+</pre>
+</body>
+</html>

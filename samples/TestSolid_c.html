@@ -1,0 +1,385 @@
+<html>
+<head>
+<title>TestSolid.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+<a name="anchor-2"></a>#include &quot;ProObjects.h&quot;
+#include &quot;ProGraphic.h&quot;
+#include &quot;ProMdl.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProMessage.h&quot;
+<a name="anchor-3"></a>#include &quot;ProSolid.h&quot;
+#include &quot;ProUtil.h&quot;
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-4"></a>
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+<a name="anchor-5"></a>#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilFiles.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-6"></a>#include &lt;ProTKRunTime.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProSurface.h>
+/*--------------------------------------------------------------------*\
+Application macros
+<a name="anchor-7"></a>\*--------------------------------------------------------------------*/
+#define SOLID_FILE &quot;.sld&quot;
+/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+<a name="anchor-8"></a>
+/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-9"></a>ProError ProTestRayIntersectionCompute(  ProSolid		p_solid,
+                                         FILE    		*fp );
+    
+
+/*====================================================================*\
+<a name="anchor-10"></a>  Function : ProTestSolidFunc()
+  Purpose  : to test some functions
+\*====================================================================*/
+int ProTestSolidFunc()
+{
+<a name="anchor-11"></a>    ProError status;
+    ProSolid solid, solid2;
+    ProMdl   model;
+    ProMdlType model_type;
+    ProMdlName name;
+<a name="anchor-12"></a>    ProCharLine string;
+    ProAccuracyType a_type;
+    ProMassProperty mass_prop;
+    Pro3dPnt outline[2];
+    static ProMatrix matrix={{1,0,0,0},{0,1,0,0},{0,0,1,0},{0,0,0,1}};
+<a name="anchor-13"></a>    double accuracy;
+    int p_id;
+    FILE *fp;
+    ProSolidOutlExclTypes excl[1] = {PRO_OUTL_EXC_NOT_USED};
+
+<a name="anchor-14"></a>    status  =  ProMdlCurrentGet(&amp;model);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestSolidFunc()&quot;, 
+	    status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_BAD_CONTEXT);
+    if (status !=  PRO_TK_NO_ERROR) 
+	return (0);
+<a name="anchor-15"></a>
+    status = ProMdlTypeGet(model, &amp;model_type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestSolidFunc()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+    if (model_type != PRO_MDL_PART &amp;&amp; model_type != PRO_MDL_ASSEMBLY)
+<a name="anchor-16"></a>	return (0);
+    status = ProMdlMdlnameGet(model, name);
+    TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProTestSolidFunc()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+    ProTestQcrName(&amp;model, (char *)SOLID_FILE, string);
+<a name="anchor-17"></a>    
+    fp = (FILE *)PTApplsUnicodeFopen (string, &quot;w&quot;);
+    ProTKFprintf(fp, &quot;File %s\n\n&quot;, string);
+
+    ProTKFprintf(fp, &quot;Model %s.%s\n&quot;, ProWstringToString(string, name),
+<a name="anchor-18"></a>		model_type == PRO_MDL_PART ? &quot;prt&quot; : &quot;asm&quot;);
+#ifndef PT_PRODUCTS_BUILD
+    status = ProSolidMdlnameInit(name, (ProMdlfileType)model_type, &amp;solid);
+    TEST_CALL_REPORT(&quot;ProSolidMdlnameInit()&quot;, &quot;ProTestSolidFunc()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-19"></a>    status = ProSolidAccuracyGet(solid, &amp;a_type, &amp;accuracy);
+    TEST_CALL_REPORT(&quot;ProSolidAccuracyGet()&quot;, &quot;ProTestSolidFunc()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp, &quot;Accuracy %10.6f\n&quot;, accuracy);
+    accuracy /= 2;
+<a name="anchor-20"></a>    status = ProSolidAccuracySet(solid, a_type, accuracy);
+    TEST_CALL_REPORT(&quot;ProSolidAccuracySet()&quot;, &quot;ProTestSolidFunc()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+    status = ProSolidRegenerate(solid, PRO_REGEN_NO_FLAGS);
+    TEST_CALL_REPORT(&quot;ProSolidRegenerate()&quot;, &quot;ProTestSolidFunc()&quot;, 
+<a name="anchor-21"></a>					    status, status != PRO_TK_NO_ERROR);
+    status = ProSolidAccuracyGet(solid, &amp;a_type, &amp;accuracy);
+    TEST_CALL_REPORT(&quot;ProSolidAccuracyGet()&quot;, &quot;ProTestSolidFunc()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp, &quot;Accuracy %10.6f\n\n&quot;, accuracy);
+<a name="anchor-22"></a>#endif /* #ifndef PT_PRODUCTS_BUILD */
+
+    status = ProSolidMassPropertyGet(solid, NULL, &amp;mass_prop);
+    TEST_CALL_REPORT(&quot;ProSolidMassPropertyGet()&quot;, &quot;ProTestSolidFunc()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-23"></a>    ProTKFprintf(fp, &quot;Mass properties\n&quot;);
+    ProTKFprintf(fp, &quot;Volume = %f\n&quot;, mass_prop.volume);
+    ProTKFprintf(fp, &quot;Surface area = %f\n&quot;,  mass_prop.surface_area);
+    ProTKFprintf(fp, &quot;Density = %f\n&quot;,  mass_prop.density);
+    ProTKFprintf(fp, &quot;Mass = %f\n&quot;,  mass_prop.mass);
+<a name="anchor-24"></a>    ProTKFprintf(fp, &quot;Center of gravity with respect to default CSYS\n&quot;);
+    ProTKFprintf(fp, &quot;X Y Z    %f  %f  %f\n&quot;,  mass_prop.center_of_gravity[0],
+		mass_prop.center_of_gravity[1], mass_prop.center_of_gravity[2]);
+    ProTKFprintf(fp, &quot;Inertia at Center of gravity with respect to default CSYS\n&quot;);  
+    ProTKFprintf(fp, &quot;Inertia tensor\n&quot;);
+<a name="anchor-25"></a>    ProTKFprintf(fp, &quot;Ixx Ixy Ixz   %f  %f  %f\n&quot;,
+		mass_prop.coor_sys_inertia_tensor[0][0],
+		mass_prop.coor_sys_inertia_tensor[0][1],
+		mass_prop.coor_sys_inertia_tensor[0][2]);
+    ProTKFprintf(fp, &quot;Iyx Iyy Iyz   %f  %f  %f\n&quot;,
+<a name="anchor-26"></a>		mass_prop.coor_sys_inertia_tensor[1][0],
+		mass_prop.coor_sys_inertia_tensor[1][1],
+		mass_prop.coor_sys_inertia_tensor[1][2]);
+    ProTKFprintf(fp, &quot;Izx Izy Izz   %f  %f  %f\n&quot;,
+		mass_prop.coor_sys_inertia_tensor[2][0],
+<a name="anchor-27"></a>		mass_prop.coor_sys_inertia_tensor[2][1],
+		mass_prop.coor_sys_inertia_tensor[2][2]);
+    ProTKFprintf(fp, &quot;Principal moments of inertia\n&quot;);
+    ProTKFprintf(fp, &quot;I1  I2  I3    %f  %f  %f\n&quot;,mass_prop.principal_moments[0],
+	    mass_prop.principal_moments[1],mass_prop.principal_moments[2]);
+<a name="anchor-28"></a>    ProTKFprintf(fp, &quot;Rotation matrix from default orientation to principal axes\n&quot;);
+    ProTKFprintf(fp, &quot;              %f  %f  %f\n&quot;,mass_prop.principal_axes[0][0],
+	     mass_prop.principal_axes[0][1], mass_prop.principal_axes[0][2]);
+    ProTKFprintf(fp, &quot;              %f  %f  %f\n&quot;,mass_prop.principal_axes[1][0],
+	     mass_prop.principal_axes[1][1], mass_prop.principal_axes[1][2]);
+<a name="anchor-29"></a>    ProTKFprintf(fp, &quot;              %f  %f  %f\n&quot;,mass_prop.principal_axes[2][0],
+    	     mass_prop.principal_axes[2][1], mass_prop.principal_axes[2][2]);
+
+
+    status = ProSolidOutlineGet(solid, outline);
+<a name="anchor-30"></a>    TEST_CALL_REPORT(&quot;ProSolidOutlineGet()&quot;, &quot;ProTestSolidFunc()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp, &quot;\nOutline :\n&quot;);
+    ProTKFprintf(fp, &quot;\t%f  %f  %f\n&quot;, outline[0][0], outline[0][1], outline[0][2]);
+    ProTKFprintf(fp, &quot;\t%f  %f  %f\n&quot;, outline[1][0], outline[1][1], outline[1][2]);
+<a name="anchor-31"></a>
+    status = ProSolidOutlineCompute(solid, matrix, excl, 1, outline);
+    TEST_CALL_REPORT(&quot;ProSolidOutlineCompute()&quot;, &quot;ProTestSolidFunc()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp, &quot;\nOutline :\n&quot;);
+<a name="anchor-32"></a>    ProTKFprintf(fp, &quot;\t%f  %f  %f\n&quot;, outline[0][0], outline[0][1], outline[0][2]);
+    ProTKFprintf(fp, &quot;\t%f  %f  %f\n&quot;, outline[1][0], outline[1][1], outline[1][2]);
+    
+    status = ProSolidToPostfixId(solid, &amp;p_id);
+    TEST_CALL_REPORT(&quot;ProSolidToPostfixId()&quot;, &quot;ProTestSolidFunc()&quot;, 
+<a name="anchor-33"></a>					    status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp, &quot;\nPostfix id = %d\n&quot;, p_id);
+    status = ProPostfixIdToSolid(p_id, &amp;solid2);
+    TEST_CALL_REPORT(&quot;ProPostfixIdToSolid()&quot;, &quot;ProTestSolidFunc()&quot;, 
+					    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-34"></a>    ProTKFprintf(fp, &quot;PostfixId to Solid %s\n&quot;, solid == solid2 ? &quot;Ok&quot; : &quot;Error&quot;);
+
+    ProTestRayIntersectionCompute( solid, fp );
+
+    fclose(fp);
+<a name="anchor-35"></a>    return (0);
+}
+   
+
+
+<a name="anchor-36"></a>/*====================================================================*\
+  Function : ProTestRayIntersectionCompute()
+  Purpose  : ProSolidRayIntersectionCompute test
+\*====================================================================*/
+ProError ProTestRayIntersectionCompute( 
+<a name="anchor-37"></a>    ProSolid		p_solid,
+    FILE		*fp
+)
+{
+    ProError		status;
+<a name="anchor-38"></a>    int			i;
+    ProRay 		ray;
+    ProSelection 	*p_sel;
+    int 		n_sel;
+    ProPoint3d 		point;
+<a name="anchor-39"></a>    ProColor	old_color;
+	ProColor	letter_color, highlite_color, drawing_color;
+
+
+    ray.start_point[0] = ray.start_point[1] = ray.start_point[2] = 0.0;
+<a name="anchor-40"></a>    for( i=0; i&lt;3; i++ )
+    {
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, 
+		&quot;Enter the start point coord [0.0]: &quot; );
+        status = ProMessageDoubleRead( NULL, ray.start_point+i );
+<a name="anchor-41"></a>	TEST_CALL_REPORT( &quot;ProMessageDoubleRead()&quot;,
+         	&quot;ProTestSolidFunc()&quot;, status, status != PRO_TK_NO_ERROR );
+	if( status != PRO_TK_NO_ERROR )
+	    return PRO_TK_USER_ABORT;
+
+<a name="anchor-42"></a>	ProGraphicsCircleDraw( ray.start_point, 0.1 );
+        TEST_CALL_REPORT( &quot;ProGraphicsCircleDraw()&quot;,
+            &quot;ProTestSolidFunc()&quot;, PRO_TK_NO_ERROR, 0 );
+    }
+
+<a name="anchor-43"></a>    ray.dir_vector[0] = ray.dir_vector[1] = ray.dir_vector[2] = 0.0;
+    for( i=0; i&lt;3; i++ )
+    {
+        ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;,
+                &quot;Enter the dir vector coord [0.0]: &quot; );
+<a name="anchor-44"></a>        status = ProMessageDoubleRead( NULL, ray.dir_vector+i );
+        TEST_CALL_REPORT( &quot;ProMessageDoubleRead()&quot;,
+                &quot;ProTestSolidFunc()&quot;, status, status != PRO_TK_NO_ERROR );
+        if( status != PRO_TK_NO_ERROR )
+            return PRO_TK_USER_ABORT;
+<a name="anchor-45"></a>
+        ProGraphicsPenPosition( ray.start_point );
+        TEST_CALL_REPORT( &quot;ProGraphicsPenPosition()&quot;,
+            &quot;ProTestSolidFunc()&quot;, PRO_TK_NO_ERROR, 0 );
+
+<a name="anchor-46"></a>        ProGraphicsLineDraw( ray.dir_vector );
+        TEST_CALL_REPORT( &quot;ProGraphicsLineDraw()&quot;,
+            &quot;ProTestSolidFunc()&quot;, PRO_TK_NO_ERROR, 0 );
+    }
+
+<a name="anchor-47"></a>    status = ProWindowRepaint( PRO_VALUE_UNUSED );
+    TEST_CALL_REPORT( &quot;ProWindowRepaint()&quot;,
+        &quot;ProTestSolidFunc()&quot;, status, status != PRO_TK_NO_ERROR );
+
+    status = ProSolidRayIntersectionCompute( p_solid, 0.0, &amp;ray, 
+<a name="anchor-48"></a>	&amp;p_sel, &amp;n_sel );
+    TEST_CALL_REPORT( &quot;ProSolidRayIntersectionCompute()&quot;, 
+	&quot;ProTestSolidFunc()&quot;, status, status != PRO_TK_NO_ERROR );
+	
+	letter_color.method = PRO_COLOR_METHOD_TYPE;
+<a name="anchor-49"></a>	letter_color.value.type = PRO_COLOR_LETTER;
+
+    status = ProGraphicsColorModify( &amp;letter_color, &amp;old_color );
+    TEST_CALL_REPORT( &quot;ProGraphicsColorModify()&quot;,
+        &quot;ProTestSolidFunc()&quot;, status, status != PRO_TK_NO_ERROR );
+<a name="anchor-50"></a>
+    for( i=0; i&lt;n_sel; i++ )
+    {
+        status = ProSelectionPoint3dGet( p_sel[i], point );
+	TEST_CALL_REPORT( &quot;ProSelectionPoint3dGet()&quot;,
+<a name="anchor-51"></a>            &quot;ProTestSolidFunc()&quot;, status, status != PRO_TK_NO_ERROR );
+
+	ProGraphicsCircleDraw( point, 0.1 );
+        TEST_CALL_REPORT( &quot;ProSelectionPoint3dGet()&quot;,
+            &quot;ProTestSolidFunc()&quot;, PRO_TK_NO_ERROR, 0 );
+<a name="anchor-52"></a>
+        ProGraphicsPenPosition( ray.start_point );
+        TEST_CALL_REPORT( &quot;ProGraphicsPenPosition()&quot;,
+            &quot;ProTestSolidFunc()&quot;, PRO_TK_NO_ERROR, 0 );
+
+<a name="anchor-53"></a>        ProGraphicsLineDraw( point );
+        TEST_CALL_REPORT( &quot;ProGraphicsLineDraw()&quot;,
+            &quot;ProTestSolidFunc()&quot;, PRO_TK_NO_ERROR, 0 );
+    }
+
+<a name="anchor-54"></a>    highlite_color.method = PRO_COLOR_METHOD_TYPE;
+	highlite_color.value.type = PRO_COLOR_HIGHLITE;
+
+    status = ProGraphicsColorModify( &amp;highlite_color, &amp;old_color );	
+    TEST_CALL_REPORT( &quot;ProGraphicsColorModify()&quot;,
+<a name="anchor-55"></a>        &quot;ProTestSolidFunc()&quot;, status, status != PRO_TK_NO_ERROR );
+
+    ProGraphicsCircleDraw( ray.start_point, 0.1 );
+    TEST_CALL_REPORT( &quot;ProGraphicsCircleDraw()&quot;,
+        &quot;ProTestSolidFunc()&quot;, PRO_TK_NO_ERROR, 0 );
+<a name="anchor-56"></a>
+    drawing_color.method = PRO_COLOR_METHOD_TYPE;
+	drawing_color.value.type = PRO_COLOR_DRAWING;
+
+    status = ProGraphicsColorModify( &amp;drawing_color, &amp;old_color );		
+<a name="anchor-57"></a>    TEST_CALL_REPORT( &quot;ProGraphicsColorModify()&quot;,
+        &quot;ProTestSolidFunc()&quot;, status, status != PRO_TK_NO_ERROR );
+
+    /* Write the ray data to the file */
+    if( fp != NULL )
+<a name="anchor-58"></a>    {
+	ProTKFprintf( fp, &quot;\n!   Ray Intersection Data\n&quot; );
+        ProTKFprintf( fp, &quot;Ray start point: %f %f %f\n&quot;, 
+		ray.start_point[0], ray.start_point[1], ray.start_point[2] ); 
+        ProTKFprintf( fp, &quot;Ray vector dir: %f %f %f\n&quot;,
+<a name="anchor-59"></a>                ray.dir_vector[0], ray.dir_vector[1], ray.dir_vector[2] );
+
+        ProTKFprintf( fp, &quot;Ray intersection points:\n&quot; );
+    	
+	for( i=0; i&lt;n_sel; i++ )
+<a name="anchor-60"></a>    	{
+            status = ProSelectionPoint3dGet( p_sel[i], point );
+            TEST_CALL_REPORT( &quot;ProSelectionPoint3dGet()&quot;,
+            	&quot;ProTestSolidFunc()&quot;, status, status != PRO_TK_NO_ERROR );
+	    ProTKFprintf( fp, &quot;%f %f %f\n&quot;, point[0], point[1], point[2] );
+<a name="anchor-61"></a>	}
+    }
+
+
+    return PRO_TK_NO_ERROR;
+<a name="anchor-62"></a>}
+ 
+/*====================================================================*\
+  Function : ProTestRayIntersectionCompute()
+  Purpose  : ProSolidRayIntersectionCompute test
+<a name="anchor-63"></a>\*====================================================================*/
+int ProTestSolidProject()
+{
+    ProError status;
+    ProMdl owner;
+<a name="anchor-64"></a>    ProSurface surface;
+    ProUvParam uv_point;
+    double tolerance;
+    Pro3dPnt xyz;
+    ProSelection *p_sel;
+<a name="anchor-65"></a>    int n_sel, id;
+    ProSrftype type;
+    FILE *qcr_fp;
+    ProUtilCname fname;
+    ProModelitem srf_modelitem;
+<a name="anchor-66"></a>   
+    ProUtilMsgPrint ( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter tolerance&quot; );
+    status = ProMessageDoubleRead (NULL, &amp;tolerance);
+    TEST_CALL_REPORT( &quot;ProMessageDoubleRead()&quot;,
+        &quot;ProTestSolidProject()&quot;, status, status != PRO_TK_NO_ERROR );
+<a name="anchor-67"></a>    if(status != PRO_TK_NO_ERROR) 
+        return(0);
+  
+    ProUtilMsgPrint ( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select surface&quot; );
+    status = ProSelect ((char*)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel,
+<a name="anchor-68"></a>        &amp;n_sel);
+    TEST_CALL_REPORT( &quot;ProSelect()&quot;,
+        &quot;ProTestSolidProject()&quot;, status, status != PRO_TK_NO_ERROR );
+    if (status != PRO_TK_NO_ERROR || n_sel != 1)
+        return (0);
+<a name="anchor-69"></a>    status = ProSelectionModelitemGet (p_sel[0], &amp;srf_modelitem);
+    TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;,
+        &quot;ProTestSolidProject()&quot;, status, status != PRO_TK_NO_ERROR );
+    status = ProModelitemMdlGet (&amp;srf_modelitem, &amp;owner);
+    TEST_CALL_REPORT( &quot;ProModelitemMdlGet()&quot;,
+<a name="anchor-70"></a>        &quot;ProTestSolidProject()&quot;, status, status != PRO_TK_NO_ERROR );
+        
+    ProTestQcrName(&amp;owner, (char*)&quot;.prj&quot;, fname);
+    qcr_fp = (FILE *)PTApplsUnicodeFopen(fname,&quot;a&quot;);
+    
+<a name="anchor-71"></a>    status = ProSelectionPoint3dGet(p_sel[0], xyz);
+    TEST_CALL_REPORT( &quot;ProSelectionPoint3dGet()&quot;,
+        &quot;ProTestSolidProject()&quot;, status, status != PRO_TK_NO_ERROR );
+    status= ProSolidProjectPoint ((ProSolid)owner, xyz, tolerance, &amp;surface, 
+        uv_point);
+<a name="anchor-72"></a>    TEST_CALL_REPORT( &quot;ProSolidProjectPoint()&quot;,
+        &quot;ProTestSolidProject()&quot;, status, status != PRO_TK_NO_ERROR );
+        
+    status = ProSurfaceIdGet(surface, &amp;id);
+    TEST_CALL_REPORT( &quot;ProSurfaceIdGet()&quot;,
+<a name="anchor-73"></a>        &quot;ProTestSolidProject()&quot;, status, status != PRO_TK_NO_ERROR );
+    status = ProSurfaceTypeGet(surface, &amp;type);
+    TEST_CALL_REPORT( &quot;ProSurfaceTypeGet()&quot;,
+        &quot;ProTestSolidProject()&quot;, status, status != PRO_TK_NO_ERROR );
+    
+<a name="anchor-74"></a>    ProTKFprintf(qcr_fp, &quot;\n Surface : type: %d, id: %d&quot;, type, id);
+    ProTKFprintf(qcr_fp, &quot;\n UV_param : uv_point[1] = %f, uv_point[2] = %f&quot;, 
+            uv_point[0], uv_point[1]);
+    fclose(qcr_fp);
+    
+<a name="anchor-75"></a>    return(0);
+}
+</pre>
+</body>
+</html>

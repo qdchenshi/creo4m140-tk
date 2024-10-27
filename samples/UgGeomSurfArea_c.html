@@ -1,0 +1,158 @@
+<html>
+<head>
+<title>UgGeomSurfArea.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProCollect.h>
+#include &lt;ProParameter.h>
+<a name="anchor-2"></a>#include &lt;ProParamval.h>
+#include &lt;ProSrfcollection.h>
+
+/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+<a name="anchor-3"></a>
+/*---------------------- Function Prototypes -------------------------*/
+ProError UserSurfArea();
+
+/*---------------------- Static variables -------------------------*/
+<a name="anchor-4"></a>
+static int srf_entry_count; 
+
+/*============================================================================*\
+	Function: UserSurfArea()
+<a name="anchor-5"></a>	Purpose: Compute Area of the Surface Collection
+\*============================================================================*/
+ProError UserSurfArea()
+{
+  int sel_count;
+<a name="anchor-6"></a>  ProError status;
+  ProCharName name;
+  ProModelitem model_item;
+  ProFileName msgfile;
+  ProName w_name;
+<a name="anchor-7"></a>  ProCollection collection; 
+  ProSelection * regen_sels; 
+  int n_regen_sels; 
+  double total_area = 0; 
+
+<a name="anchor-8"></a>  ProParameter param; 
+  ProParamvalue param_value; 
+  ProName param_name; 
+  char param_name_s[PRO_NAME_SIZE]; 
+  ProSelection * coll_sels; 
+<a name="anchor-9"></a>  int coll_sels_size; 
+  ProUnititem units;
+  ProCollectioninstrType coll_filters[] = { PRO_SURFCOLL_SINGLE_SURF }; 
+    
+  srf_entry_count++; 
+<a name="anchor-10"></a>
+/*----------------------------------------------------------------------------*\
+	Prompt user for Surface Collection
+\*----------------------------------------------------------------------------*/
+  ProStringToWstring(msgfile,&quot;msg_uggeom.txt&quot;);
+<a name="anchor-11"></a>
+  status = ProMessageDisplay(msgfile,&quot;USER Collect Surfaces to find total area:&quot;);
+  ERROR_CHECK(&quot;UserSurfArea&quot;,&quot;ProMessageDisplay&quot;,status);
+  
+  status = ProSrfcollectionAlloc ( &amp;collection );
+<a name="anchor-12"></a>  ERROR_CHECK( &quot;UserSurfArea&quot;, &quot;ProSrfcollectionAlloc&quot;, status );
+ 
+/*----------------------------------------------------------------------------*\
+	Interactive Surface Collection
+\*----------------------------------------------------------------------------*/    
+<a name="anchor-13"></a>  status = ProSurfacesCollect ( coll_filters, 
+				0, 
+				( ProCollFilter ) NULL, 
+				( ProAppData ) NULL, 
+				collection, 
+<a name="anchor-14"></a>				&amp;coll_sels, 
+				&amp;coll_sels_size ); 
+
+  ERROR_CHECK( &quot;UserSurfArea&quot;, &quot;ProSurfacesCollect&quot;, status );
+
+<a name="anchor-15"></a>/*----------------------------------------------------------------------------*\
+       Regenerating the returned collection to get the list of 
+       constituent surfaces
+\*----------------------------------------------------------------------------*/   
+  status = ProSrfcollectionRegenerate ( collection, 
+<a name="anchor-16"></a>					&amp;regen_sels, &amp;n_regen_sels ); 
+
+  if ( ( status != PRO_TK_NO_ERROR ) || ( n_regen_sels &lt;= 0 ) )
+    return PRO_TK_GENERAL_ERROR; 
+
+<a name="anchor-17"></a>/*----------------------------------------------------------------------------*\
+       Evaluating the overall area from surface collection &amp; assigning parameters
+       to the individual surfaces
+\*----------------------------------------------------------------------------*/ 
+  for ( sel_count = 0; sel_count &lt; n_regen_sels; sel_count++ )
+<a name="anchor-18"></a>    {
+      ProSurface surface; 
+      double area; 
+
+      status = ProSelectionModelitemGet ( regen_sels[sel_count], 
+<a name="anchor-19"></a>					  &amp;model_item ); 
+      ERROR_CHECK( &quot;UserSurfArea&quot;, &quot;ProSelectionModelitemGet&quot;, status );
+
+      status = ProGeomitemToSurface ( &amp;model_item, &amp;surface ); 
+      ERROR_CHECK( &quot;UserSurfArea&quot;, &quot;ProGeomitemToSurface&quot;, status );
+<a name="anchor-20"></a>
+/*----------------------------------------------------------------------------*\
+       Evaluating the area of individual surface
+\*----------------------------------------------------------------------------*/  
+      status = ProSurfaceAreaEval ( surface, &amp;area ); 
+<a name="anchor-21"></a>      ERROR_CHECK( &quot;UserSurfArea&quot;, &quot;ProSurfaceAreaEval&quot;, status );
+
+      total_area = total_area + area; 
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-22"></a>       Initializing Parameter value
+\*----------------------------------------------------------------------------*/  
+      param_value.type = PRO_PARAM_DOUBLE; 
+      param_value.value.d_val = area; 
+	  ProStringToWstring(units.name,&quot;meter&quot;);
+<a name="anchor-23"></a>      ProTKSprintf ( param_name_s, &quot;%s_%d&quot;, &quot;srf_dbl&quot;, 
+		srf_entry_count+sel_count ); 
+      ProStringToWstring ( param_name, param_name_s ); 
+
+      status = ProModelitemNameSet ( &amp;model_item, param_name ); 
+<a name="anchor-24"></a>      ERROR_CHECK( &quot;UserSurfArea&quot;, &quot;ProModelitemNameSet&quot;, status );
+
+/*----------------------------------------------------------------------------*\
+       Creating Parameter for surface
+\*----------------------------------------------------------------------------*/ 
+<a name="anchor-25"></a>      status = ProParameterWithUnitsCreate( &amp;model_item, param_name, &amp;param_value,
+				    &amp;units,&amp;param ); 
+      ERROR_CHECK( &quot;UserSurfArea&quot;, &quot;ProParameterWithUnitsCreate&quot;, status );
+
+    }
+<a name="anchor-26"></a>
+  status = ProMessageDisplay(msgfile,&quot;USER Total Surface Area is %0f&quot;,
+			     &amp;total_area);
+  ERROR_CHECK( &quot;UserSurfArea&quot;, &quot;ProMessageDisplay&quot;, status );
+
+<a name="anchor-27"></a>/*----------------------------------------------------------------------------*\
+       Freeing Memory
+\*----------------------------------------------------------------------------*/ 
+  status = ProCollectionFree ( &amp;collection ); 
+  ERROR_CHECK( &quot;UserSurfArea&quot;, &quot;ProCollectionFree&quot;, status );
+<a name="anchor-28"></a>
+  status = ProSelectionarrayFree ( regen_sels ); 
+  ERROR_CHECK( &quot;UserSurfArea&quot;, &quot;ProSelectionarrayFree&quot;, status );
+
+  status = ProSelectionarrayFree ( coll_sels ); 
+<a name="anchor-29"></a>  ERROR_CHECK( &quot;UserSurfArea&quot;, &quot;ProSelectionarrayFree&quot;, status );
+
+  ProMessageClear();
+  return(status);
+}
+</pre>
+</body>
+</html>

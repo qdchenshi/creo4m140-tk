@@ -1,0 +1,252 @@
+<html>
+<head>
+<title>PTWCServerUtils.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProUIMessage.h>
+#include &lt;ProWstring.h>
+#include &lt;stdio.h>
+#include &lt;wchar.h>
+<a name="anchor-2"></a>
+
+static ProBoolean s_interactive = PRO_B_TRUE;
+
+/*====================================================================*\
+<a name="anchor-3"></a>  FUNCTION: PTWCUtilSetInteractive
+  PURPOSE:	Set the mode of the application to be interactive or 
+			non-interactive
+\*====================================================================*/
+ProError PTWCUtilSetInteractive (ProBoolean interactive)
+<a name="anchor-4"></a>{
+	s_interactive = interactive;
+
+	return PRO_TK_NO_ERROR;
+}
+<a name="anchor-5"></a>
+/*====================================================================*\
+  FUNCTION: PTWCUtilGetInteractive
+  PURPOSE:  Identifies if the application is in interactive mode or not
+\*====================================================================*/
+<a name="anchor-6"></a>ProBoolean PTWCUtilGetInteractive ()
+{
+	return s_interactive;
+}
+
+<a name="anchor-7"></a>/*====================================================================*\
+  FUNCTION: PTWCUtilConflictReport
+  PURPOSE:  Inform the user of the description of the latest checkout 
+			conflict, and log it as well.
+\*====================================================================*/
+<a name="anchor-8"></a>ProError PTWCUtilConflictReport (ProServerConflicts conflicts)
+{
+	wchar_t* description;
+	char* c_description;
+	int length;
+<a name="anchor-9"></a>				
+	ProServerconflictsDescriptionGet (conflicts, &amp;description);
+
+	ProWstringLengthGet (description, &amp;length);
+
+<a name="anchor-10"></a>	/* Allow for the potential of multibyte characters in the conflict
+	   description. */
+	length = length * 3;
+	length++;
+
+<a name="anchor-11"></a>	c_description = (char*) calloc (length, sizeof (char));
+
+	ProWstringToString (c_description, description);
+
+	fprintf (errlog_fp, c_description);
+<a name="anchor-12"></a>	fprintf (errlog_fp, &quot;\n&quot;);
+
+	if (PTWCUtilGetInteractive ())
+	{
+		ProUIMessageButton* buttons;
+<a name="anchor-13"></a>		ProUIMessageButton result;
+		ProArrayAlloc (1, sizeof (ProUIMessageButton), 1, (ProArray*)&amp;buttons);
+		buttons[0] = PRO_UI_MESSAGE_OK;
+
+		ProUIMessageDialogDisplay (PROUIMESSAGE_ERROR, L&quot;Conflict occurred&quot;,
+<a name="anchor-14"></a>									description, buttons, buttons[0], &amp;result);
+	}
+
+	ProWstringFree (description);
+	free (&amp;c_description);
+<a name="anchor-15"></a>
+	return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+<a name="anchor-16"></a>  FUNCTION: PTWCUtilRemoveAllFromWS
+  PURPOSE:  Remove all objects from the workspace 
+\*====================================================================*/
+ProError PTWCUtilRemoveAllFromWS (wchar_t* alias, wchar_t* ws_name)
+{
+<a name="anchor-17"></a>	ProServerRemoveConflicts conflicts = NULL;
+	wchar_t* current_ws_name;
+	int result;
+
+	status = ProServerWorkspaceGet (alias, &amp;current_ws_name);
+<a name="anchor-18"></a>	PT_TEST_LOG_SUCC (&quot;ProServerWorkspaceGet()&quot;);
+
+	ProWstringCompare (ws_name, current_ws_name, PRO_VALUE_UNUSED, &amp;result);
+	if (result != 0)
+	{
+<a name="anchor-19"></a>		status = ProServerWorkspaceSet (alias, ws_name);
+		PT_TEST_LOG_SUCC (&quot;ProServerWorkspaceSet()&quot;);
+	}
+
+	status = ProServerObjectsRemove (NULL, &amp;conflicts);
+<a name="anchor-20"></a>	PT_TEST_LOG_SUCC (&quot;ProServerObjectsRemove()&quot;);
+
+	if (status != PRO_TK_NO_ERROR &amp;&amp; conflicts != NULL)
+	{
+		PTWCUtilConflictReport (conflicts);
+<a name="anchor-21"></a>		ProServerconflictsFree (conflicts);
+	}
+
+	if (result != 0)
+	{
+<a name="anchor-22"></a>		status = ProServerWorkspaceSet (alias, current_ws_name);
+		PT_TEST_LOG_SUCC (&quot;ProServerWorkspaceSet()&quot;);
+	}
+
+	ProWstringFree (current_ws_name);
+<a name="anchor-23"></a>
+	return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+<a name="anchor-24"></a>  FUNCTION: PTWCUtilBuildWSPath
+  PURPOSE:  Construct the path to the workspace, given the server and 
+			workspace name.
+\*====================================================================*/
+ProError PTWCUtilBuildWSPath (wchar_t* server, wchar_t* ws_name,
+<a name="anchor-25"></a>							  ProPath folder)
+{
+	ProStringToWstring (folder, &quot;wtws://&quot;);
+	ProWstringConcatenate (server, folder, PRO_VALUE_UNUSED);
+	ProWstringConcatenate (L&quot;/&quot;, folder, PRO_VALUE_UNUSED);
+<a name="anchor-26"></a>	ProWstringConcatenate (ws_name, folder, PRO_VALUE_UNUSED);
+
+	return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-27"></a>/*====================================================================*\
+  FUNCTION: PTWCUtilBuildPJLFolder
+  PURPOSE:  Construct the path to the ProjectLink folder, given the 
+			server name, project name, and folder name in the project.
+\*====================================================================*/
+<a name="anchor-28"></a>ProError PTWCUtilBuildPJLFolder (wchar_t* server, wchar_t* project, 
+										char* foldername, ProPath folder)
+{
+	ProPath w_foldername;
+
+<a name="anchor-29"></a>	ProStringToWstring (folder, &quot;wtpub://&quot;);
+	ProWstringConcatenate (server, folder, PRO_VALUE_UNUSED);
+	ProWstringConcatenate (L&quot;/Projects/&quot;, folder, PRO_VALUE_UNUSED);
+	ProWstringConcatenate (project, folder, PRO_VALUE_UNUSED);
+	ProWstringConcatenate (L&quot;/&quot;, folder, PRO_VALUE_UNUSED);
+<a name="anchor-30"></a>	ProStringToWstring (w_foldername, foldername);
+	ProWstringConcatenate (w_foldername, folder, PRO_VALUE_UNUSED);
+
+	return  PRO_TK_NO_ERROR;
+}
+<a name="anchor-31"></a>
+/*====================================================================*\
+  FUNCTION: PTWCUtilBuildServerFolder
+  PURPOSE:  Construct a commonspace folder using a location.
+\*====================================================================*/
+<a name="anchor-32"></a>ProError PTWCUtilBuildServerFolder (wchar_t* server, 
+									wchar_t* folderpath, ProPath folder)
+{
+	ProPath w_foldername;
+
+<a name="anchor-33"></a>	ProStringToWstring (folder, &quot;wtpub://&quot;);
+	ProWstringConcatenate (server, folder, PRO_VALUE_UNUSED);
+	ProWstringConcatenate (folderpath, folder, PRO_VALUE_UNUSED);
+
+	return  PRO_TK_NO_ERROR;
+<a name="anchor-34"></a>}
+
+/*====================================================================*\
+  FUNCTION: PTWCUtilCheckinWSToFolder
+  PURPOSE:  Checkin the entire workspace.  If folder is supplied it
+<a name="anchor-35"></a>			will be used as the new object &quot;default location&quot;.
+\*====================================================================*/
+extern ProError PTWCUtilCheckinWSToFolder (wchar_t* ws_name, ProPath folder)
+{
+	ProServerCheckinOptions options;
+<a name="anchor-36"></a>	ProServerCheckinConflicts conflicts = NULL;
+
+	status = ProServercheckinoptsAlloc (&amp;options);
+	PT_TEST_LOG_SUCC (&quot;ProServercheckinoptsAlloc()&quot;);
+
+<a name="anchor-37"></a>	if (folder != NULL)
+	{
+		status = ProServercheckinoptsDeflocationSet (options, folder);
+		PT_TEST_LOG_SUCC (&quot;ProServercheckinoptsDeflocationSet()&quot;);
+	}
+<a name="anchor-38"></a>
+	status = ProServerObjectsCheckin (NULL, options, &amp;conflicts);
+	PT_TEST_LOG_SUCC (&quot;ProServerObjectsCheckin()&quot;);
+
+	if (status != PRO_TK_NO_ERROR &amp;&amp; conflicts != NULL)
+<a name="anchor-39"></a>	{
+		PTWCUtilConflictReport (conflicts);
+		ProServerconflictsFree (conflicts);
+	}
+
+<a name="anchor-40"></a>	return PRO_TK_NO_ERROR;
+}
+
+uiCmdAccessState PTWCUtilAccessIfWCServer ()
+{
+<a name="anchor-41"></a>	wchar_t* server;
+	wchar_t* server_class;
+	int result;
+
+	status = ProServerActiveGet (&amp;server);
+<a name="anchor-42"></a>
+	if (status != PRO_TK_NO_ERROR)
+		return ACCESS_REMOVE;
+
+	status = ProServerClassGet (server, &amp;server_class);
+<a name="anchor-43"></a>	
+	ProWstringCompare (L&quot;Windchill&quot;, server_class, PRO_VALUE_UNUSED, &amp;result);
+
+	ProWstringFree (server);
+	ProWstringFree (server_class);
+<a name="anchor-44"></a>
+	if (result != 0)
+		return ACCESS_REMOVE;
+
+	return ACCESS_AVAILABLE;
+<a name="anchor-45"></a>}
+
+void PTWCUtilWstringToLower (wchar_t* str)
+{
+	char buff [1000];
+<a name="anchor-46"></a>	char* result;
+	int i = 0;
+
+	ProWstringToString (buff, str);
+
+<a name="anchor-47"></a>
+    while ( buff[i] != '\0')
+    {
+        buff[i] = (char)tolower(buff[i]);
+        i++;
+<a name="anchor-48"></a>    }
+
+	ProStringToWstring  (str, buff);
+}
+</pre>
+</body>
+</html>

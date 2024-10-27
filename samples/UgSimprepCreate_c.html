@@ -1,0 +1,153 @@
+<html>
+<head>
+<title>UgSimprepCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProSizeConst.h>
+#include &lt;ProSimprep.h>
+#include &lt;ProSimprepdata.h>
+<a name="anchor-2"></a>#include &lt;ProSelection.h>
+#include &lt;ProUtil.h>
+#include &lt;ProSolid.h>
+#include &lt;ProAsmcomppath.h>
+#include &lt;ProMessage.h>
+<a name="anchor-3"></a>
+#include &lt;TestError.h>
+
+ProLine msg_fil21;
+#define MSG_FIL ProStringToWstring(msg_fil21,&quot;msg_ugsrep.txt&quot;)
+<a name="anchor-4"></a>
+
+/*====================================================================*\
+Function : UserSimpRepCreate
+Purpose  : Create a simple simplified represenation
+<a name="anchor-5"></a>\*====================================================================*/
+int UserSimpRepCreate ()
+{
+    ProMdl		 owner;
+    ProMdlType		 mdl_type;
+<a name="anchor-6"></a>    ProSelection        *sels;
+    ProSimprepAction     sr_action;
+    ProSimprepitem       item;
+    ProSimprep           simp_rep;
+    ProSimprepdata      *data;
+<a name="anchor-7"></a>    ProAsmcomppath       comp_path;
+    ProModelitem         model_item;
+    ProError             status = PRO_TK_NO_ERROR;
+    wchar_t              wname[PRO_NAME_SIZE];
+    char                 selecting[20];
+<a name="anchor-8"></a>    wchar_t              wselecting[20];
+    int                  num, i;
+
+/*--------------------------------------------------------------------*\
+    What is going to be selected?
+<a name="anchor-9"></a>\*--------------------------------------------------------------------*/
+    selecting[0] = '\0';
+
+
+    status = ProMdlCurrentGet(&amp;owner);
+<a name="anchor-10"></a>    ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProMdlCurrentGet&quot;,status);
+    if (status != 0) return (PRO_TK_GENERAL_ERROR);
+
+    status = ProMdlTypeGet(owner, &amp;mdl_type);
+    ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProMdlTypeGet&quot;,status);
+<a name="anchor-11"></a>
+    if (status != PRO_TK_NO_ERROR) return (status);
+    else if ( PRO_PART == mdl_type )
+	strcpy(selecting, &quot;feature&quot;);
+    else if ( PRO_ASSEMBLY == mdl_type )
+<a name="anchor-12"></a>	strcpy(selecting, &quot;part&quot;);
+    else return (PRO_TK_GENERAL_ERROR);
+	
+    ProStringToWstring (wselecting, selecting );
+    ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProStringToWstring&quot;,status);
+<a name="anchor-13"></a>    ProStringToWstring (wname, &quot;SIMP_EXPLE&quot;);
+    ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProStringToWstring&quot;,status);
+
+/*--------------------------------------------------------------------*\
+    Initialize the simplified rep to include by default and be permanent.
+<a name="anchor-14"></a>\*--------------------------------------------------------------------*/
+    status = ProSimprepdataAlloc(wname,PRO_B_FALSE,PRO_SIMPREP_INCLUDE,&amp;data);
+    ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProSimprepdataAlloc&quot;,status);
+
+    if (PRO_TK_NO_ERROR == status )
+<a name="anchor-15"></a>    {
+	status = ProMessageDisplay(MSG_FIL, 
+		&quot;USER Select a %0w to exclude from the simplified rep&quot;,
+		wselecting );
+	ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProMessageDisplay&quot;,status);
+<a name="anchor-16"></a>	status = ProSelect (selecting, -1, NULL,NULL,NULL,NULL, &amp;sels, &amp;num);
+    	ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProSelect&quot;,status);
+
+        if (status == PRO_TK_NO_ERROR &amp;&amp; num > 0)
+        {
+<a name="anchor-17"></a>/*--------------------------------------------------------------------*\
+            Reverse the default rule, so in this case the component or 
+            feature will be excluded.
+\*--------------------------------------------------------------------*/
+            status = ProSimprepActionInit (PRO_SIMPREP_REVERSE,NULL,&amp;sr_action);
+<a name="anchor-18"></a>	    ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProSimprepActionInit&quot;,status);
+
+            if (status == PRO_TK_NO_ERROR)
+            {
+                for (i = 0; i &lt; num; i++)
+<a name="anchor-19"></a>                {
+		    status = ProSelectionAsmcomppathGet(sels[i], &amp;comp_path); 
+		    ERROR_CHECK(&quot;UserSimpRepCreate&quot;,
+		    		&quot;ProSelectionAsmcomppathGet&quot;,status);
+
+<a name="anchor-20"></a>		    status = ProSelectionModelitemGet(sels[i], &amp;model_item);
+		    ERROR_CHECK(&quot;UserSimpRepCreate&quot;,
+		    			&quot;ProSelectionModelitemGet&quot;,status);
+		    
+                    status = ProSimprepdataitemInit( comp_path.comp_id_table,
+<a name="anchor-21"></a>                                comp_path.table_num, model_item.id, &amp;sr_action,
+				&amp;item);
+		    ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProSimprepdataitemInit&quot;,
+							    	    status);
+
+<a name="anchor-22"></a>                    if (status == PRO_TK_NO_ERROR)
+		    {
+                        status = ProSimprepdataitemAdd (data, &amp;item);
+			ERROR_CHECK(&quot;UserSimpRepCreate&quot;,
+					&quot;ProSimprepdataitemAdd&quot;,status);
+<a name="anchor-23"></a>
+		    }
+                }
+
+                status = ProSimprepCreate ((ProSolid)owner, data, &amp;simp_rep);
+<a name="anchor-24"></a>		ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProSimprepCreate&quot;, status);
+            }
+
+            if (status == PRO_TK_NO_ERROR)
+	    {
+<a name="anchor-25"></a>                status = ProSimprepActivate ((ProSolid)owner, &amp;simp_rep);
+		ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProSimprepActivate&quot;, status);
+	    }
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-26"></a>            Once activated the a call to ProSolidDisplay() must be made
+            to display the simplified rep.
+\*--------------------------------------------------------------------*/
+            status = ProSolidDisplay ((ProSolid)owner);
+	    ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProSolidDisplay&quot;, status);
+<a name="anchor-27"></a>        }
+
+        status = ProSimprepdataFree (&amp;data);
+	ERROR_CHECK(&quot;UserSimpRepCreate&quot;,&quot;ProSimprepdataFree&quot;, status);
+    }
+<a name="anchor-28"></a>
+    return status;
+}
+
+#undef MSG_FIL
+</pre>
+</body>
+</html>

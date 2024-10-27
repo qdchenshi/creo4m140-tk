@@ -1,0 +1,464 @@
+<html>
+<head>
+<title>TestMoldLayout.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProObjects.h>
+#include &lt;ProMfg.h>
+#include &lt;ProMenu.h>
+<a name="anchor-2"></a>#include &lt;ProNotify.h>
+#include &lt;ProRmdt.h>
+#include &lt;UtilFiles.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-3"></a>#include &lt;ProUtil.h>
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+<a name="anchor-4"></a>
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+#define USER_ON	    1
+<a name="anchor-5"></a>#define USER_OFF    0
+/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+static FILE *log_file;
+<a name="anchor-6"></a>static int preaction_status = USER_OFF;
+
+/*=============================================================*\
+  FUNCTION: ProTestMoldLayoutInfo
+  PURPOSE:  Test Mold Layout info functions 
+<a name="anchor-7"></a>\*=============================================================*/
+int ProTestMoldLayoutInfo(ProMdl *model)
+{
+    ProError status;
+    ProMoldLayout mold_layout;   
+<a name="anchor-8"></a>    FILE *fp;
+    int i, cor, num_p;
+    char **p_par_nam, line[256];
+    wchar_t **pw_par_val, *w_name;
+    double xyz_p[3], xyz_m[3], xyz_t[3];
+<a name="anchor-9"></a>    ProPath w_path;
+    char fname[PRO_FILE_NAME_SIZE];
+
+    ProTestQcrName(model, (char*)&quot;.inf&quot;, fname);
+    fp = PTApplsUnicodeFopen(fname, &quot;w&quot;);
+<a name="anchor-10"></a>    ProStringToWstring(w_path, fname);
+   
+    status = ProMfgMoldLayoutGet((ProMfg)*model, &amp;mold_layout);
+    TEST_CALL_REPORT(&quot;ProMfgMoldLayoutGet()&quot;, &quot;ProTestMoldLayoutInfo()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-11"></a>    if (status != PRO_TK_NO_ERROR)
+      	return (0);
+   
+    ProTKFprintf(fp, (char*)&quot;IMM\n&quot;);
+    status = ProRmdtImmInfoGet(mold_layout, &amp;w_name, &amp;p_par_nam, &amp;pw_par_val, 
+<a name="anchor-12"></a>	&amp;num_p);
+    TEST_CALL_REPORT(&quot;ProRmdtImmInfoGet()&quot;, &quot;ProTestMoldLayoutInfo()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+    if (status == PRO_TK_NO_ERROR) {
+	if (w_name != NULL) 
+<a name="anchor-13"></a>	{
+      	    ProWstringToString(line, w_name);
+      	    ProTKFprintf(fp, (char*)&quot;    %-20s %s\n&quot;, (char*)&quot;Name&quot;, line);
+	}
+      	for (i=0; i&lt;num_p; i++)
+<a name="anchor-14"></a>      	{
+	    if (pw_par_val[i] == NULL || p_par_nam[i] == NULL)
+		continue; 
+	    ProWstringToString(line, pw_par_val[i]);
+	    ProTKFprintf(fp, (char*)&quot;    %-20s %s\n&quot;, p_par_nam[i], line);
+<a name="anchor-15"></a>      	}
+    }
+    else
+	ProTKFprintf(fp, (char*)&quot;    Unspecified\n&quot;);
+
+<a name="anchor-16"></a>    ProTKFprintf(fp, (char*)&quot;\nMaterial\n&quot;);
+    status = ProRmdtMaterialInfoGet(mold_layout, &amp;p_par_nam, &amp;pw_par_val,
+	 &amp;num_p);
+    TEST_CALL_REPORT(&quot;ProRmdtMaterialInfoGet()&quot;, &quot;ProTestMoldLayoutInfo()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-17"></a>    if (status == PRO_TK_NO_ERROR) {
+      	for (i=0; i&lt;num_p; i++)
+        {
+	    if (pw_par_val[i] == NULL || p_par_nam[i] == NULL)
+		continue; 
+<a name="anchor-18"></a>	    ProWstringToString(line, pw_par_val[i]);
+	    ProTKFprintf(fp, (char*)&quot;    %-20s %s\n&quot;, p_par_nam[i], line);
+      	}
+    }
+    else
+<a name="anchor-19"></a>	ProTKFprintf(fp, (char*)&quot;    Unspecified\n&quot;);
+
+
+    ProTKFprintf(fp, (char*)&quot;\nMold Base\n&quot;);
+    status = ProRmdtMoldBaseInfoGet(mold_layout, &amp;p_par_nam, &amp;pw_par_val,
+<a name="anchor-20"></a>				   &amp;num_p, &amp;cor);
+    TEST_CALL_REPORT(&quot;ProRmdtMoldBaseInfoGet()&quot;, &quot;ProTestMoldLayoutInfo()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+    if (status == PRO_TK_NO_ERROR) {
+      	for (i=0; i&lt;num_p; i++)
+<a name="anchor-21"></a>      	{
+	    if (pw_par_val[i] == NULL || p_par_nam[i] == NULL)
+		continue; 
+	    ProWstringToString(line, pw_par_val[i]);
+	    ProTKFprintf(fp, (char*)&quot;    %-20s %s\n&quot;, p_par_nam[i], line);
+<a name="anchor-22"></a>      	}
+      	ProTKFprintf(fp, (char*)&quot;    Corner %d\n&quot;, cor);
+    }
+    else
+	ProTKFprintf(fp, (char*)&quot;    Unspecified\n&quot;);
+<a name="anchor-23"></a>
+    ProTKFprintf(fp, (char*)&quot;\nRef Model\n&quot;); 
+    for (i=0;;i++)
+    {
+      	status = ProRmdtRefModelInfoGet(mold_layout, i, xyz_p, xyz_m, xyz_t);
+<a name="anchor-24"></a>      	if (status!=PRO_TK_NO_ERROR)
+	    break;
+        TEST_CALL_REPORT(&quot;ProRmdtRefModelInfoGet()&quot;, &quot;ProTestMoldLayoutInfo()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+      	ProTKFprintf(fp, (char*)&quot;    %3d   +   %7.2f %7.2f %7.2f\n&quot;
+<a name="anchor-25"></a>	            &quot;          -   %7.2f %7.2f %7.2f\n&quot;
+	            &quot;       Total  %7.2f %7.2f %7.2f\n&quot;,
+	      i,  xyz_p[0], xyz_p[1], xyz_p[2],
+	          xyz_m[0], xyz_m[1], xyz_m[2],
+	          xyz_t[0], xyz_t[1], xyz_t[2]);
+<a name="anchor-26"></a>    }
+    if (i&lt;=0)
+	ProTKFprintf(fp, (char*)&quot;    Unspecified\n&quot;);
+   
+    ProTKFprintf(fp, (char*)&quot;\nWorkpiece\n&quot;); 
+<a name="anchor-27"></a>    for (i=0;;i++)
+    {
+      	status = ProRmdtWorkpieceInfoGet(mold_layout, i, xyz_p, xyz_m, xyz_t);
+      	if (status!=PRO_TK_NO_ERROR)
+	    break;
+<a name="anchor-28"></a>        TEST_CALL_REPORT(&quot;ProRmdtWorkpieceInfoGet()&quot;,
+	    &quot;ProTestMoldLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+      	ProTKFprintf(fp, (char*)&quot;    %3d   +   %7.2f %7.2f %7.2f\n&quot;
+	            &quot;          -   %7.2f %7.2f %7.2f\n&quot;
+	            &quot;       Total  %7.2f %7.2f %7.2f\n&quot;,
+<a name="anchor-29"></a>	      i,  xyz_p[0], xyz_p[1], xyz_p[2],
+	          xyz_m[0], xyz_m[1], xyz_m[2],
+	          xyz_t[0], xyz_t[1], xyz_t[2]);
+    }
+    if (i&lt;=0)
+<a name="anchor-30"></a>	ProTKFprintf(fp, (char*)&quot;    Unspecified\n&quot;);
+   
+    fclose(fp);
+   
+    ProInfoWindowDisplay(w_path, NULL, NULL);
+<a name="anchor-31"></a>    return 0;
+}
+
+/*=============================================================*\
+  FUNCTION: ProUtilLogFileWrite
+<a name="anchor-32"></a>  PURPOSE:  write one line into log file
+\*=============================================================*/
+static void ProUtilLogFileWrite(char *line)
+{
+    if (log_file != NULL)
+<a name="anchor-33"></a>    {
+	ProTKFprintf(log_file, (char*)&quot;%s function called\n&quot;, line);
+    }
+}
+
+<a name="anchor-34"></a>/*=============================================================*\
+  FUNCTION: ProTestRmdtCreateWpPreAction
+  PURPOSE:  Preaction function.  Called before workpice created 
+\*=============================================================*/
+ProError ProTestRmdtCreateWpPreAction(
+<a name="anchor-35"></a>    ProMoldLayout mold_layout)
+{
+    ProDlgWorkpieceData  wp_def_sets;
+    int  i, j;
+    ProError  err;
+<a name="anchor-36"></a>
+    TEST_CALL_REPORT(&quot;ProRmdtCreateWpPreAction()&quot;, 
+				    &quot;ProTestRmdtCreateWpPreAction()&quot;, (ProError)0, 0);
+
+    ProUtilLogFileWrite((char*)&quot;PRO_RMDT_CREATE_WP_PRE&quot;);
+<a name="anchor-37"></a>
+    memset(&amp;wp_def_sets, '\0', sizeof(wp_def_sets));
+    wp_def_sets.IsRect = PRO_B_TRUE;
+    wp_def_sets.IsSym  = PRO_B_TRUE;
+    wp_def_sets.rect_dim[0] = 100.0;
+<a name="anchor-38"></a>    wp_def_sets.rect_dim[1] = 200.0;
+    wp_def_sets.rect_dim[2] = 300.0;
+    wp_def_sets.radial_z = 150.0;
+    wp_def_sets.radial_diam = 120.0;
+    for (i = 0; i &lt; 2; i++)
+<a name="anchor-39"></a>	for (j = 0; j &lt; 3; j++)
+	    wp_def_sets.allowance[i][j] = 10.0;
+    err = ProRmdtDlgWorkpieceSet(mold_layout, &amp;wp_def_sets);
+    TEST_CALL_REPORT(&quot;ProRmdtDlgWorkpieceSet()&quot;, 
+		&quot;ProTestRmdtCreateWpPreAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-40"></a>
+    return err;
+}
+
+/*=============================================================*\
+<a name="anchor-41"></a>  FUNCTION: ProTestRmdtCreateImmPreAction
+  PURPOSE:  Preaction function.  Called before workpice created 
+\*=============================================================*/
+ProError ProTestRmdtCreateImmPreAction(
+    ProMoldLayout mold_layout)
+<a name="anchor-42"></a>{
+    ProError  err;
+    ProName w_name;
+
+    TEST_CALL_REPORT(&quot;ProRmdtCreateImmPreAction()&quot;, 
+<a name="anchor-43"></a>				    &quot;ProTestRmdtCreateImmPreAction()&quot;, (ProError)0, 0);
+
+    ProUtilLogFileWrite((char*)&quot;PRO_RMDT_CREATE_IMM_PRE&quot;);
+
+    ProStringToWstring(w_name, (char*)&quot;IMM_14x14&quot;);
+<a name="anchor-44"></a>
+    err = ProRmdtDlgImmSet(mold_layout, w_name);
+    TEST_CALL_REPORT(&quot;ProRmdtDlgImmSet()&quot;, 
+		&quot;ProTestRmdtCreateImmPreAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-45"></a>    return (err);
+}
+
+/*=============================================================*\
+  FUNCTION: ProTestRmdtBoundBoxPreAction
+<a name="anchor-46"></a>  PURPOSE:  Preaction function. 
+\*=============================================================*/
+ProError ProTestRmdtBoundBoxPreAction(
+    ProMoldLayout mold_layout)
+{
+<a name="anchor-47"></a>    ProError err;
+    ProMatrix matrix = {{1,0,0,0},{0,1,0,0},{0,0,1,0},{0,0,0,1}};
+
+    TEST_CALL_REPORT(&quot;ProRmdtBoundBoxPreAction()&quot;, 
+				    &quot;ProTestRmdtBoundBoxPreAction()&quot;, (ProError)0, 0);
+<a name="anchor-48"></a>
+    ProUtilLogFileWrite((char*)&quot;PRO_RMDT_BOUND_BOX_PRE&quot;);
+
+    err = ProRmdtDlgRefModelOrientSet(mold_layout, matrix);
+    TEST_CALL_REPORT(&quot;ProRmdtDlgRefModelOrientSet()&quot;, 
+<a name="anchor-49"></a>		&quot;ProTestRmdtBoundBoxPreAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    return (err);
+}
+
+/*=============================================================*\
+<a name="anchor-50"></a>  FUNCTION: ProTestRmdtCavLayoutPreAction
+  PURPOSE:  Preaction function. 
+\*=============================================================*/
+ProError ProTestRmdtCavLayoutPreAction(
+    ProMoldLayout mold_layout)
+<a name="anchor-51"></a>{
+    ProError err;
+    ProDlgCavityLayoutData cavdata;
+
+    TEST_CALL_REPORT(&quot;ProRmdtCavLayoutPreAction()&quot;, 
+<a name="anchor-52"></a>				    &quot;ProTestRmdtCavLayoutPreAction()&quot;, (ProError)0, 0);
+    ProUtilLogFileWrite((char*)&quot;PRO_RMDT_CAV_LAYOUT_PRE&quot;);
+
+    memset(&amp;cavdata, '\0', sizeof(cavdata));
+    cavdata.cavity_layout_type = 0;
+<a name="anchor-53"></a>    cavdata.is_symmetric = PRO_B_TRUE;
+    cavdata.mirror_type = 0;
+    cavdata.num = 9;
+    cavdata.num_x = 3;
+    cavdata.num_y = 3;
+<a name="anchor-54"></a>    cavdata.offset_x = 2.0;
+    cavdata.offset_y = 2.0;
+    cavdata.inc_x = 2.0;
+    cavdata.inc_y = 2.0;
+
+<a name="anchor-55"></a>    err = ProRmdtDlgCavityLayoutSet(mold_layout, &amp;cavdata);
+    TEST_CALL_REPORT(&quot;ProRmdtDlgCavityLayoutSet()&quot;, 
+		&quot;ProTestRmdtCavLayoutPreAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return (err);
+<a name="anchor-56"></a>}
+
+/*=============================================================*\
+  FUNCTION: ProTestRmdtMaterialPreAction
+  PURPOSE:  Preaction function. 
+<a name="anchor-57"></a>\*=============================================================*/
+ProError ProTestRmdtMaterialPreAction(
+    ProMoldLayout mold_layout)
+{
+    ProError err;
+<a name="anchor-58"></a>    ProName w_gentype, w_mfg, w_trade, w_grade;
+
+    TEST_CALL_REPORT(&quot;ProRmdtMaterialPreAction()&quot;, 
+				    &quot;ProTestRmdtMaterialPreAction()&quot;, (ProError)0, 0);
+    ProUtilLogFileWrite((char*)&quot;PRO_RMDT_MATERIAL_PRE&quot;);
+<a name="anchor-59"></a>
+    ProStringToWstring(w_gentype, (char*)&quot;Policarbonate&quot;);
+    ProStringToWstring(w_mfg, (char*)&quot;GE_plastics&quot;);
+    ProStringToWstring(w_trade, (char*)&quot;Lexan&quot;);
+    ProStringToWstring(w_grade, (char*)&quot;101R&quot;);
+<a name="anchor-60"></a>
+    err = ProRmdtDlgMaterialSet(mold_layout, w_gentype, w_mfg, w_trade,
+	w_grade);
+    TEST_CALL_REPORT(&quot;ProRmdtDlgMaterialSet()&quot;, 
+		&quot;ProTestRmdtMaterialPreAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-61"></a>
+    return (err);
+}
+
+/*=============================================================*\
+<a name="anchor-62"></a>  FUNCTION: ProTestRmdtBaseSelectPreAction
+  PURPOSE:  Preaction function. 
+\*=============================================================*/
+ProError ProTestRmdtBaseSelectPreAction(
+    ProMoldLayout mold_layout)
+<a name="anchor-63"></a>{
+    ProError err;
+    ProName w_vendor, w_series, w_length, w_width;
+
+    TEST_CALL_REPORT(&quot;ProRmdtMBaseSelectPreAction()&quot;, 
+<a name="anchor-64"></a>				    &quot;ProTestRmdtBaseSelectPreAction()&quot;, (ProError)0, 0);
+    ProUtilLogFileWrite((char*)&quot;PRO_RMDT_MBASE_SELECT_PRE&quot;);
+
+    ProStringToWstring(w_vendor, (char*)&quot;Futaba&quot;);
+    ProStringToWstring(w_series, (char*)&quot;SA&quot;);
+<a name="anchor-65"></a>    ProStringToWstring(w_length, (char*)&quot;200&quot;);
+    ProStringToWstring(w_width, (char*)&quot;200&quot;);
+
+    err = ProRmdtDlgMoldBaseSet(mold_layout, w_vendor, w_series, w_length, 
+	w_width);
+<a name="anchor-66"></a>    TEST_CALL_REPORT(&quot;ProRmdtDlgMoldBaseSet()&quot;, 
+	    &quot;ProTestRmdtBaseSelectPreAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return (err);
+}
+<a name="anchor-67"></a>
+/*====================================================================*\
+    FUNCTION :  ProTestRmdtPreactionSet()
+    PURPOSE  :  Set/unset preaction functions for ProRmdt actions
+\*====================================================================*/
+<a name="anchor-68"></a>int ProTestRmdtPreactionSet(
+    ProMdl *mdl,
+    int action)
+{
+    ProError err;
+<a name="anchor-69"></a>
+    preaction_status = action;
+    if (action == USER_OFF)
+    {
+	err = ProMenubuttonActivate((char*)&quot;TkMoldLayout&quot;,(char*)&quot;Preaction on&quot;);
+<a name="anchor-70"></a>	TEST_CALL_REPORT(&quot;ProMenubuttonActivate()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProMenubuttonDeactivate((char*)&quot;TkMoldLayout&quot;,(char*)&quot;Preaction off&quot;);
+	TEST_CALL_REPORT(&quot;ProMenubuttonDeactivate()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-71"></a>
+	if (log_file != NULL)
+	{
+	    fclose(log_file);
+	    log_file = 0;
+<a name="anchor-72"></a>	}
+
+	err = ProNotificationUnset(PRO_RMDT_CREATE_IMM_PRE);
+	TEST_CALL_REPORT(&quot;ProNotificationUnset()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-73"></a>	err = ProNotificationUnset(PRO_RMDT_BOUND_BOX_PRE);
+	TEST_CALL_REPORT(&quot;ProNotificationUnset()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProNotificationUnset(PRO_RMDT_CAV_LAYOUT_PRE);
+	TEST_CALL_REPORT(&quot;ProNotificationUnset()&quot;, 
+<a name="anchor-74"></a>		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProNotificationUnset(PRO_RMDT_CREATE_WP_PRE);
+	TEST_CALL_REPORT(&quot;ProNotificationUnset()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProNotificationUnset(PRO_RMDT_MATERIAL_PRE);
+<a name="anchor-75"></a>	TEST_CALL_REPORT(&quot;ProNotificationUnset()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProNotificationUnset(PRO_RMDT_MBASE_SELECT_PRE);
+	TEST_CALL_REPORT(&quot;ProNotificationUnset()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-76"></a>    }
+    else
+    {
+	err = ProMenubuttonActivate((char*)&quot;TkMoldLayout&quot;,(char*)&quot;Preaction off&quot;);
+	TEST_CALL_REPORT(&quot;ProMenubuttonActivate()&quot;, 
+<a name="anchor-77"></a>		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProMenubuttonDeactivate((char*)&quot;TkMoldLayout&quot;,(char*)&quot;Preaction on&quot;);
+	TEST_CALL_REPORT(&quot;ProMenubuttonDeactivate()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-78"></a>	if (log_file == NULL)
+	{
+	    log_file = PTApplsUnicodeFopen(&quot;rmdt_notify.log&quot;, &quot;w&quot;);
+	}
+
+<a name="anchor-79"></a>	err = ProNotificationSet(PRO_RMDT_CREATE_IMM_PRE,
+	    (ProFunction)ProTestRmdtCreateImmPreAction);
+	TEST_CALL_REPORT(&quot;ProNotificationSet()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProNotificationSet(PRO_RMDT_BOUND_BOX_PRE,
+<a name="anchor-80"></a>	    (ProFunction)ProTestRmdtBoundBoxPreAction);
+	TEST_CALL_REPORT(&quot;ProNotificationSet()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProNotificationSet(PRO_RMDT_CAV_LAYOUT_PRE,
+	    (ProFunction)ProTestRmdtCavLayoutPreAction);
+<a name="anchor-81"></a>	TEST_CALL_REPORT(&quot;ProNotificationSet()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProNotificationSet(PRO_RMDT_CREATE_WP_PRE,
+	    (ProFunction)ProTestRmdtCreateWpPreAction);
+	TEST_CALL_REPORT(&quot;ProNotificationSet()&quot;, 
+<a name="anchor-82"></a>		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProNotificationSet(PRO_RMDT_MATERIAL_PRE,
+	    (ProFunction)ProTestRmdtMaterialPreAction);
+	TEST_CALL_REPORT(&quot;ProNotificationSet()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-83"></a>	err = ProNotificationSet(PRO_RMDT_MBASE_SELECT_PRE,
+	    (ProFunction)ProTestRmdtBaseSelectPreAction);
+	TEST_CALL_REPORT(&quot;ProNotificationSet()&quot;, 
+		    &quot;ProTestRmdtPreactionSet()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-84"></a>
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-85"></a>    FUNCTION :  ProTestMoldLayoutMenu()
+    PURPOSE  :  Define and activate menu of Toolkit Test commands Mold  layout
+\*====================================================================*/
+int ProTestMoldLayoutMenu()
+{
+<a name="anchor-86"></a>    ProError status;
+    ProMdl   model;
+    int action;
+
+    status = ProMdlCurrentGet(&amp;model);
+<a name="anchor-87"></a>    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestMoldLayoutMenu()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+    ProMenuFileRegister((char*)&quot;TkMoldLayout&quot;,(char*)&quot;tkrmdt.mnu&quot;, NULL);
+    ProMenubuttonActionSet((char*)&quot;TkMoldLayout&quot;,(char*)&quot;TkMoldLayout&quot;,
+<a name="anchor-88"></a>                           (ProMenubuttonAction)ProMenuDelete, NULL,  0);
+    ProMenubuttonActionSet((char*)&quot;TkMoldLayout&quot;,(char*)&quot;Preaction on&quot;,
+	    (ProMenubuttonAction)ProTestRmdtPreactionSet, &amp;model, USER_ON);
+    ProMenubuttonActionSet((char*)&quot;TkMoldLayout&quot;,(char*)&quot;Preaction off&quot;,
+            (ProMenubuttonAction)ProTestRmdtPreactionSet, &amp;model, USER_OFF);
+<a name="anchor-89"></a>    ProMenubuttonActionSet((char*)&quot;TkMoldLayout&quot;,(char*)&quot;-Info&quot;,
+                        (ProMenubuttonAction)ProTestMoldLayoutInfo, &amp;model, 0);
+    ProMenubuttonActionSet((char*)&quot;TkMoldLayout&quot;,(char*)&quot;Done TkML&quot;,
+                        (ProMenubuttonAction)ProMenuDelete, NULL,  0);
+
+<a name="anchor-90"></a>    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkMoldLayout&quot;, NULL);
+    ProTestRmdtPreactionSet(&amp;model, preaction_status);
+    ProMenuProcess((char*)&quot;&quot;, &amp;action);
+
+    return (0);
+<a name="anchor-91"></a>}
+</pre>
+</body>
+</html>

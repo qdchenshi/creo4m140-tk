@@ -1,0 +1,619 @@
+<html>
+<head>
+<title>PTMechExLoadMenu.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+  Pro/Toolkit includes -- include this first
+\*--------------------------------------------------------------------*/
+#include &lt;ProMenu.h>
+<a name="anchor-2"></a>#include &lt;ProToolkit.h>
+#include &lt;ProUtil.h>
+
+/*--------------------------------------------------------------------*\
+  Application includes
+<a name="anchor-3"></a>\*--------------------------------------------------------------------*/
+#include &lt;ProMechItem.h>
+#include &lt;ProMechLoad.h>
+#include &lt;ProMessage.h>
+#include &lt;PTMechExamples.h>
+<a name="anchor-4"></a>
+static ProFileName msgfile;
+
+/*=============================================================*\
+  FUNCTION : PTMechExForceLoad 
+<a name="anchor-5"></a>  PURPOSE  : To create force load.
+\*=============================================================*/
+ProError PTMechExForceLoad()
+{
+   ProMdl model;
+<a name="anchor-6"></a>   ProMechItem load_item;
+   ProMechForceData f_data;
+   ProMechVectoredValue f_vector, m_vector;
+   ProMechStatus mech_status;
+  
+<a name="anchor-7"></a>   ProMechExpression force_vector[] = {L&quot;10&quot;, L&quot;0&quot;, L&quot;45&quot;};
+   ProMechExpression moment_vector [] = {L&quot;20&quot;, L&quot;10&quot;, L&quot;25&quot;};
+   ProStringToWstring (msgfile, &quot;msg_load.txt&quot;);           
+   
+   status = ProMdlCurrentGet (&amp;model);
+<a name="anchor-8"></a>   PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet&quot;);   
+  
+   /* Set references to the mechItem */
+   status = PTMechExReferencesSet (model, &quot;tk_new_load_force&quot;, &amp;load_item);
+   PT_TEST_LOG (&quot;PTMechExReferencesSet&quot;, status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_BAD_INPUTS);
+<a name="anchor-9"></a>   
+   if (status != PRO_TK_NO_ERROR)
+   	return PRO_TK_BAD_INPUTS;
+        
+   status = ProMechforcedataAlloc (&amp;f_data);
+<a name="anchor-10"></a>   PT_TEST_LOG_SUCC (&quot;ProMechforcedataAlloc&quot;);   
+  
+   /* Set the force type */
+   status = ProMechforcedataTypeSet (f_data, PRO_MECH_FORCE_TOTAL);
+   PT_TEST_LOG_SUCC (&quot;ProMechforcedataTypeSet&quot;);   
+<a name="anchor-11"></a>  
+  /* create the vectored value for the Force component */
+   status = PTMechExComponentsVectoredValueCreate (3, force_vector, &amp;f_vector);
+   PT_TEST_LOG_SUCC (&quot;PTMechExComponentsVectoredValueCreate&quot;);   
+  
+<a name="anchor-12"></a>   /* assigns the force components */
+   status = ProMechforcedataForceSet (f_data, f_vector);
+   PT_TEST_LOG_SUCC (&quot;ProMechforcedataForceSet&quot;);   
+   
+   if (status != PRO_TK_NO_ERROR)
+<a name="anchor-13"></a>   	return PRO_TK_GENERAL_ERROR;
+  
+   /* create the vectored value for the Moment component */        
+   status = PTMechExComponentsVectoredValueCreate (3, moment_vector, &amp;m_vector);
+   PT_TEST_LOG_SUCC (&quot;PTMechExComponentsVectoredValueCreate&quot;);   
+<a name="anchor-14"></a>  
+   /* assigns the moment components */
+   status = ProMechforcedataMomentSet (f_data, m_vector);
+   PT_TEST_LOG_SUCC (&quot;ProMechforcedataMomentSet&quot;);
+ 
+<a name="anchor-15"></a>   if (status != PRO_TK_NO_ERROR)
+   	return PRO_TK_GENERAL_ERROR;
+  
+   /* sets the force data to the item 
+   	else returns CANT_ACCESS if not in proper Mechanica mode */     
+<a name="anchor-16"></a>   status = ProMechloadForcedataSet (&amp;load_item, f_data);
+   PT_TEST_LOG (&quot;ProMechloadForcedataSet&quot;, status, status != PRO_TK_NO_ERROR 
+   						&amp;&amp; status != PRO_TK_CANT_ACCESS);  
+
+   PTMechExItemProcess (model, status, load_item); 
+<a name="anchor-17"></a>  
+   status = ProMechforcedataFree (f_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechforcedataFree&quot;); 
+
+   return PRO_TK_NO_ERROR;
+<a name="anchor-18"></a>}
+
+/*=============================================================*\
+  FUNCTION : PTMechExPressureLoad 
+  PURPOSE  : To create pressure load.
+<a name="anchor-19"></a>\*=============================================================*/
+ProError PTMechExPressureLoad()
+{
+   ProMdl model;
+   ProMechItem load_item;
+<a name="anchor-20"></a>   ProMechPressureData p_data;
+   ProMechValue mech_val;
+   ProMechStatus mech_status;
+
+   ProStringToWstring (msgfile, &quot;msg_load.txt&quot;);
+<a name="anchor-21"></a>   
+   status = ProMdlCurrentGet (&amp;model);
+   PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet&quot;);   
+
+   /* Set references to the mechItem */ 
+<a name="anchor-22"></a>   status = PTMechExReferencesSet (model, &quot;tk_new_load_press&quot;, &amp;load_item);
+   PT_TEST_LOG (&quot;PTMechExReferencesSet&quot;, status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_BAD_INPUTS);
+   
+   if (status != PRO_TK_NO_ERROR)
+   	return PRO_TK_BAD_INPUTS;
+<a name="anchor-23"></a>     
+   status = ProMechpressuredataAlloc (&amp;p_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechpressuredataAlloc&quot;); 
+   
+   status = PTMechExValueByExpressionCreate (L&quot;75&quot;, &amp;mech_val);
+<a name="anchor-24"></a>   PT_TEST_LOG_SUCC (&quot;PTMechExValueByExpressionCreate&quot;);
+  
+   /* Set the value to pressure data */
+   status = ProMechpressuredataValueSet (p_data, mech_val);
+   PT_TEST_LOG_SUCC (&quot;ProMechpressuredataValueSet&quot;);
+<a name="anchor-25"></a>   
+   if (status != PRO_TK_NO_ERROR)
+   	return PRO_TK_GENERAL_ERROR;
+  
+   /* sets the pressure data to the item 
+<a name="anchor-26"></a>   	else returns CANT_ACCESS if not in proper Mechanica mode */
+   status = ProMechloadPressuredataSet (&amp;load_item, p_data);
+   PT_TEST_LOG (&quot;ProMechloadPressuredataSet&quot;, status, status != PRO_TK_NO_ERROR 
+   						&amp;&amp; status != PRO_TK_CANT_ACCESS);  
+
+<a name="anchor-27"></a>   PTMechExItemProcess (model, status, load_item);
+
+   status = ProMechpressuredataFree (p_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechpressuredataFree&quot;); 
+   
+<a name="anchor-28"></a>   return PRO_TK_NO_ERROR;
+}
+
+/*=============================================================*\
+  FUNCTION : PTMechExBearingLoad 
+<a name="anchor-29"></a>  PURPOSE  : To create bearing load.
+\*=============================================================*/
+ProError PTMechExBearingLoad()
+{
+   ProMdl model;
+<a name="anchor-30"></a>   ProMechItem load_item;
+   ProMechBearingData b_data;
+   ProMechVectoredValue f_vector;
+   ProMechStatus mech_status;
+  
+<a name="anchor-31"></a>   ProMechExpression force_vector[] = {L&quot;15&quot;, L&quot;40&quot;, L&quot;35&quot;};
+   ProStringToWstring (msgfile, &quot;msg_load.txt&quot;);           
+   
+   status = ProMdlCurrentGet (&amp;model);
+   PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet&quot;);   
+<a name="anchor-32"></a>   
+   /* Set references to the mechItem */
+   status = PTMechExReferencesSet (model, &quot;tk_new_load_bear&quot;, &amp;load_item);
+   PT_TEST_LOG (&quot;PTMechExReferencesSet&quot;, status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_BAD_INPUTS);
+   
+<a name="anchor-33"></a>   if (status != PRO_TK_NO_ERROR)
+   	return PRO_TK_BAD_INPUTS;
+     
+   status = ProMechbearingdataAlloc (&amp;b_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechbearingdataAlloc&quot;);  
+<a name="anchor-34"></a> 
+  /* create the vectored value for the Force component */  
+   status = PTMechExComponentsVectoredValueCreate (3, force_vector, &amp;f_vector);
+   PT_TEST_LOG_SUCC (&quot;PTMechExComponentsVectoredValueCreate&quot;);   
+  
+<a name="anchor-35"></a>   /* Set the value for bearing data */
+   status = ProMechbearingdataValueSet (b_data, f_vector);
+   PT_TEST_LOG_SUCC (&quot;ProMechbearingdataValueSet&quot;);
+   
+   if (status != PRO_TK_NO_ERROR)
+<a name="anchor-36"></a>   	return PRO_TK_GENERAL_ERROR;
+  
+   /* sets the bearing data to the item 
+   	else returns CANT_ACCESS if not in proper Mechanica mode */
+   status = ProMechloadBearingdataSet (&amp;load_item, b_data);
+<a name="anchor-37"></a>   PT_TEST_LOG (&quot;ProMechloadBearingdataSet&quot;, status, status != PRO_TK_NO_ERROR 
+   						&amp;&amp; status != PRO_TK_CANT_ACCESS);  
+   
+   PTMechExItemProcess (model, status, load_item);
+
+<a name="anchor-38"></a>   status = ProMechbearingdataFree (b_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechbearingdataFree&quot;);  
+
+   return PRO_TK_NO_ERROR;
+}
+<a name="anchor-39"></a>
+/*=============================================================*\
+  FUNCTION : PTMechExGravityLoad 
+  PURPOSE  : To create gravity load.
+\*=============================================================*/
+<a name="anchor-40"></a>ProError PTMechExGravityLoad()
+{
+   ProMdl model;
+   PTMechExGeomRef g_ref[] = {{PRO_MECH_MODEL, -1, -1, NULL}};
+   ProMechGeomref *n_surf;
+<a name="anchor-41"></a>   ProMechItem load_item;
+   ProMechGravityData g_data;
+   ProName tk_load_name;
+   ProMechStatus mech_status;
+   ProMechVectoredValue g_value;
+<a name="anchor-42"></a>
+   ProMechExpression gravity_vector[] = {L&quot;0&quot;, L&quot;1&quot;, L&quot;0&quot;};
+   ProStringToWstring (msgfile, &quot;msg_load.txt&quot;);
+   
+   status = ProMdlCurrentGet (&amp;model);
+<a name="anchor-43"></a>   PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet&quot;);   
+  
+   status = ProMechitemCreate ((ProSolid)model, PRO_SIMULATION_LOAD, &amp;load_item);
+   PT_TEST_LOG_SUCC (&quot;ProMechitemCreate&quot;);
+   
+<a name="anchor-44"></a>   ProStringToWstring (tk_load_name, &quot;tk_new_load_gravity&quot;);
+   status = ProMechitemNameSet (&amp;load_item, tk_load_name);
+   PT_TEST_LOG (&quot;ProMechitemNameSet&quot;, status, status != PRO_TK_NO_ERROR 
+   					&amp;&amp; status != PRO_TK_GENERAL_ERROR);
+ 
+<a name="anchor-45"></a>   status = PTMechExGeomReferenceArrayCreate (1, g_ref, &amp;n_surf);
+   PT_TEST_LOG_SUCC (&quot;PTMechExGeomReferenceArrayCreate&quot;);  
+  
+   /* Set the references to the mech item */  
+   status = ProMechloadReferencesSet (&amp;load_item, n_surf);
+<a name="anchor-46"></a>   PT_TEST_LOG_SUCC (&quot;ProMechloadReferencesSet&quot;);
+  
+   if (status != PRO_TK_NO_ERROR)
+   	return PRO_TK_BAD_INPUTS;
+        
+<a name="anchor-47"></a>   status = ProMechgravitydataAlloc (&amp;g_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechgravitydataAlloc&quot;);   
+  
+  /* create the directional vectored value of the gravity component */
+   status = PTMechExDirVectorMagnitudeValueCreate (3, gravity_vector, L&quot;40&quot;, &amp;g_value);
+<a name="anchor-48"></a>   PT_TEST_LOG_SUCC (&quot;PTMechExDirVectorMagnitudeValueCreate&quot;);	
+  
+   /* Set the value to the gravity data */
+   status = ProMechgravitydataValueSet (g_data, g_value);
+   PT_TEST_LOG_SUCC (&quot;ProMechgravitydataValueSet&quot;); 
+<a name="anchor-49"></a>   
+   if (status != PRO_TK_NO_ERROR)
+   	return PRO_TK_GENERAL_ERROR;
+   
+   /* sets the gravity data to the item 
+<a name="anchor-50"></a>   	else returns CANT_ACCESS if not in proper Mechanica mode */
+   status = ProMechloadGravitydataSet (&amp;load_item, g_data);
+   PT_TEST_LOG (&quot;ProMechloadGravitydataSet&quot;, status, status != PRO_TK_NO_ERROR 
+   						&amp;&amp; status != PRO_TK_CANT_ACCESS);  
+   
+<a name="anchor-51"></a>   PTMechExItemProcess (model, status, load_item);
+
+   status = ProMechgravitydataFree (g_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechgravitydataFree&quot;);   
+
+<a name="anchor-52"></a>   return PRO_TK_NO_ERROR;
+}
+
+/*=============================================================*\
+  FUNCTION : PTMechExCentrifLoad 
+<a name="anchor-53"></a>  PURPOSE  : To create centrifugal load.
+\*=============================================================*/
+ProError PTMechExCentrifLoad()
+{
+   ProMdl model;
+<a name="anchor-54"></a>   ProMechGeomref *n_surf;
+   ProMechItem load_item;
+   ProMechCentrifugalData c_data;
+   ProName tk_load_name;
+   ProMechValue mech_val;
+<a name="anchor-55"></a>   ProMechStatus mech_status;
+   ProMechVectoredValue v_value, a_value;
+   PTMechExGeomRef g_ref[] = {{PRO_MECH_MODEL, -1, -1, NULL}};
+   ProMechExpression c_vel[] = {L&quot;1&quot;, L&quot;0.5&quot;, L&quot;-1&quot;};
+   ProMechExpression acc_exp[] = {L&quot;0&quot;, L&quot;1&quot;, L&quot;1&quot;};
+<a name="anchor-56"></a>
+   ProStringToWstring (msgfile, &quot;msg_load.txt&quot;);
+   
+   status = ProMdlCurrentGet (&amp;model);
+   PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet&quot;);    
+<a name="anchor-57"></a>   /* creates the mech item */
+   status = ProMechitemCreate ((ProSolid)model, PRO_SIMULATION_LOAD, &amp;load_item);
+   PT_TEST_LOG_SUCC (&quot;ProMechitemCreate&quot;);
+   
+   /* sets the name to mech item */
+<a name="anchor-58"></a>   ProStringToWstring (tk_load_name, &quot;tk_new_load_centrif&quot;);
+   status = ProMechitemNameSet (&amp;load_item, tk_load_name);
+   PT_TEST_LOG (&quot;ProMechitemNameSet&quot;, status, status != PRO_TK_NO_ERROR 
+   					&amp;&amp; status != PRO_TK_GENERAL_ERROR);
+ 
+<a name="anchor-59"></a>   status = PTMechExGeomReferenceArrayCreate (1, g_ref, &amp;n_surf);
+   PT_TEST_LOG_SUCC (&quot;PTMechExGeomReferenceArrayCreate&quot;);  
+  
+  /* Set the references to the mechitem */   
+   status = ProMechloadReferencesSet (&amp;load_item, n_surf);
+<a name="anchor-60"></a>   PT_TEST_LOG_SUCC (&quot;ProMechloadReferencesSet&quot;);
+   
+   if (status != PRO_TK_NO_ERROR)
+   	return PRO_TK_BAD_INPUTS;
+        
+<a name="anchor-61"></a>   status = ProMechcentrifugaldataAlloc (&amp;c_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechcentrifugaldataAlloc&quot;); 
+
+  /* create the directional vectored value for the Velocity component */
+   status = PTMechExDirVectorMagnitudeValueCreate (3, c_vel, L&quot;40&quot;, &amp;v_value);
+<a name="anchor-62"></a>   PT_TEST_LOG_SUCC (&quot;PTMechExDirVectorMagnitudeValueCreate&quot;);	
+
+   status = ProMechcentrifugaldataVelocitySet (c_data, v_value);
+   PT_TEST_LOG_SUCC (&quot;ProMechcentrifugaldataVelocitySet&quot;);  
+  
+<a name="anchor-63"></a>  /* create the directional vectored value for the Acceleration component */
+   status = PTMechExComponentsVectoredValueCreate (3, acc_exp, &amp;a_value);
+   PT_TEST_LOG_SUCC (&quot;PTMechExComponentsVectoredValueCreate&quot;);
+  
+   status = ProMechcentrifugaldataAccelerationSet (c_data, a_value);
+<a name="anchor-64"></a>   PT_TEST_LOG_SUCC (&quot;ProMechcentrifugaldataAccelerationSet&quot;);
+
+   if (status != PRO_TK_NO_ERROR)
+   	return PRO_TK_GENERAL_ERROR;
+  
+<a name="anchor-65"></a>   /* sets the centrifugal data to the item 
+   	else return CANT_ACCESS if not in proper Mechanica mode */ 
+   status = ProMechloadCentrifugaldataSet (&amp;load_item, c_data);
+   PT_TEST_LOG (&quot;ProMechloadCentrifugaldataSet&quot;, status, status != PRO_TK_NO_ERROR 
+   						&amp;&amp; status != PRO_TK_CANT_ACCESS);  
+<a name="anchor-66"></a>  
+   PTMechExItemProcess (model, status, load_item);
+
+   status = ProMechcentrifugaldataFree (c_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechcentrifugaldataFree&quot;);
+<a name="anchor-67"></a>
+   return PRO_TK_NO_ERROR;
+}
+
+/*=============================================================*\
+<a name="anchor-68"></a>  FUNCTION : PTMechExStructtempLoad 
+  PURPOSE  : To create structural temperature load.
+\*=============================================================*/
+ProError PTMechExStructtempLoad()
+{
+<a name="anchor-69"></a>   ProMdl model;
+   ProMechGeomref *n_surf;
+   ProMechItem load_item;
+   ProMechStructtempData t_data;
+   ProName tk_load_name;
+<a name="anchor-70"></a>   ProMechValue mech_val;
+   ProMechStatus mech_status;
+   PTMechExGeomRef t_ref[] = {{PRO_MECH_MODEL, -1, -1, NULL}};
+   ProStringToWstring (msgfile, &quot;msg_load.txt&quot;);
+   
+<a name="anchor-71"></a>   status = ProMdlCurrentGet (&amp;model);
+   PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet&quot;);    
+   
+   status = ProMechitemCreate ((ProSolid)model, PRO_SIMULATION_LOAD, &amp;load_item);
+   PT_TEST_LOG_SUCC (&quot;ProMechitemCreate&quot;);
+<a name="anchor-72"></a>   
+   ProStringToWstring (tk_load_name, &quot;tk_new_load_structtemp&quot;);
+   status = ProMechitemNameSet (&amp;load_item, tk_load_name);
+   PT_TEST_LOG (&quot;ProMechitemNameSet&quot;, status, status != PRO_TK_NO_ERROR 
+   					&amp;&amp; status != PRO_TK_GENERAL_ERROR);
+<a name="anchor-73"></a> 
+   status = PTMechExGeomReferenceArrayCreate (1, t_ref, &amp;n_surf);
+   PT_TEST_LOG_SUCC (&quot;PTMechExGeomReferenceArrayCreate&quot;);  
+  
+  /* Set the references to the mechitem */   
+<a name="anchor-74"></a>   status = ProMechloadReferencesSet (&amp;load_item, n_surf);
+   PT_TEST_LOG_SUCC (&quot;ProMechloadReferencesSet&quot;);
+       
+   if (status != PRO_TK_NO_ERROR)
+   	return PRO_TK_BAD_INPUTS;
+<a name="anchor-75"></a>        
+   status = ProMechstructtempdataAlloc (&amp;t_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechstructtempdataAlloc&quot;); 
+  
+   /* sets the temperature to the data */
+<a name="anchor-76"></a>   status = ProMechstructtempdataReftempSet (t_data, L&quot;90&quot;);
+   PT_TEST_LOG_SUCC (&quot;ProMechstructtempdataReftempSet&quot;);
+
+   status = PTMechExValueByExpressionCreate (L&quot;30&quot;, &amp;mech_val);
+   PT_TEST_LOG_SUCC (&quot;PTMechExValueByExpressionCreate&quot;);
+<a name="anchor-77"></a>  
+  /* Set the value to the structural temperature data */  
+   status = ProMechstructtempdataValueSet (t_data, mech_val);
+   PT_TEST_LOG_SUCC (&quot;ProMechstructtempdataValueSet&quot;);
+
+<a name="anchor-78"></a>   if (status != PRO_TK_NO_ERROR)
+   	return PRO_TK_GENERAL_ERROR;
+  
+   /* seta the temperature data to the item else 
+	return CANT_ACCESS if not in proper Mechanica mode */
+<a name="anchor-79"></a>   status = ProMechloadStructtempdataSet (&amp;load_item, t_data);
+   PT_TEST_LOG(&quot;ProMechloadStructtempdataSet&quot;, status, status != PRO_TK_NO_ERROR 
+   						&amp;&amp; status != PRO_TK_CANT_ACCESS);  
+     
+   PTMechExItemProcess (model, status, load_item);   
+<a name="anchor-80"></a>
+   status = ProMechstructtempdataFree (t_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechstructtempdataFree&quot;); 
+
+   return PRO_TK_NO_ERROR;
+<a name="anchor-81"></a>}
+
+/*=============================================================*\
+  FUNCTION : PTMechExHeatLoad 
+  PURPOSE  : To create heat load.
+<a name="anchor-82"></a>\*=============================================================*/
+ProError PTMechExHeatLoad()
+{
+   ProMdl model;
+   ProMechItem load_item;
+<a name="anchor-83"></a>   ProMechHeatData h_data;
+   ProMechValue mech_val;
+   ProMechStatus mech_status;
+
+   ProStringToWstring (msgfile, &quot;msg_load.txt&quot;);
+<a name="anchor-84"></a>   
+   status = ProMdlCurrentGet (&amp;model);
+   PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet&quot;);   
+  
+  /* Set the references to the mechitem */ 
+<a name="anchor-85"></a>   status = PTMechExReferencesSet (model, &quot;tk_new_load_heat&quot;, &amp;load_item);
+   PT_TEST_LOG (&quot;PTMechExReferencesSet&quot;, status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_BAD_INPUTS);
+   
+   if (status != PRO_TK_NO_ERROR) 
+   	return PRO_TK_BAD_INPUTS;
+<a name="anchor-86"></a>        
+   status = ProMechheatdataAlloc (&amp;h_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechheatdataAlloc&quot;); 
+  
+   /* Set the heat data type */
+<a name="anchor-87"></a>   status = ProMechheatdataTypeSet (h_data, PRO_MECH_HEAT_TOTAL);
+   PT_TEST_LOG_SUCC (&quot;ProMechheatdataTypeSet&quot;);
+
+   status = PTMechExValueByExpressionCreate (L&quot;60&quot;, &amp;mech_val);
+   PT_TEST_LOG_SUCC (&quot;PTMechExValueByExpressionCreate&quot;);
+<a name="anchor-88"></a>  
+  /* Set the value to the heat data */   
+   status = ProMechheatdataValueSet (h_data, mech_val);
+   PT_TEST_LOG_SUCC (&quot;ProMechheatdataValueSet&quot;);
+   
+<a name="anchor-89"></a>   /* sets the heat data to the item 
+	else return CANT_ACCESS if not in proper Mechanica mode */   
+   status = ProMechloadHeatdataSet (&amp;load_item, h_data);
+   PT_TEST_LOG (&quot;ProMechloadHeatdataSet&quot;, status, status != PRO_TK_NO_ERROR 
+   						&amp;&amp; status != PRO_TK_CANT_ACCESS);  
+<a name="anchor-90"></a>       
+   if (status == PRO_TK_NO_ERROR)
+   {
+      PTMechExLoadsetCreate((ProSolid)model, &quot;ThermLoadSet1&quot;);
+      /* check the existence of loadset or create the required */
+<a name="anchor-91"></a>      status = PTMechExAddLoadinLoadset (model, &quot;ThermLoadSet1&quot;, &amp;load_item);
+      PT_TEST_LOG_SUCC (&quot;PTMechExAddLoadinLoadset&quot;);
+
+      status = ProMechitemStatusGet (&amp;load_item, &amp;mech_status);
+      PT_TEST_LOG_SUCC (&quot;ProMechitemStatusGet&quot;); 
+<a name="anchor-92"></a>      if (mech_status == PRO_MECH_ACTIVE)     
+      { /* Update the model with the created mech item */
+        status = ProMechitemUpdateComplete (&amp;load_item);
+        PT_TEST_LOG_SUCC (&quot;ProMechitemUpdateComplete&quot;);
+	if (status == PRO_TK_NO_ERROR)
+<a name="anchor-93"></a>	{
+	   status = ProMessageDisplay (msgfile, &quot;PTMechExLoad - Mechload created successfully&quot;, msgbuf);
+   	   PT_TEST_LOG_SUCC (&quot;ProMessageDisplay&quot;);
+	}
+      }
+<a name="anchor-94"></a>   }
+   else if (status == PRO_TK_CANT_ACCESS)
+   {
+      /* check for the invalid mechanica mode */
+      status = ProMessageDisplay (msgfile, &quot;PTMechExLoad - Invalid Mechanica mode&quot;, msgbuf);
+<a name="anchor-95"></a>      PT_TEST_LOG_SUCC (&quot;ProMessageDisplay&quot;);      
+   }
+   status = ProMechheatdataFree (h_data);
+   PT_TEST_LOG_SUCC (&quot;ProMechheatdataFree&quot;);
+
+<a name="anchor-96"></a>   return PRO_TK_NO_ERROR;
+}
+
+/*=============================================================*\
+  FUNCTION : PTMechExItemProcess 
+<a name="anchor-97"></a>  PURPOSE  : To process mechitem.
+\*=============================================================*/
+ProError PTMechExItemProcess (ProMdl model, ProError status, ProMechItem item)
+{
+   ProMechStatus mech_status;
+<a name="anchor-98"></a>
+   if (status == PRO_TK_NO_ERROR)
+   { /* check the existence of loadset or create the required */
+      PTMechExLoadsetCreate((ProSolid)model, &quot;LoadSet1&quot;);
+
+<a name="anchor-99"></a>      status = PTMechExAddLoadinLoadset (model, &quot;LoadSet1&quot;, &amp;item);
+      PT_TEST_LOG_SUCC (&quot;PTMechExAddLoadinLoadset&quot;);
+
+      status = ProMechitemStatusGet (&amp;item, &amp;mech_status);
+      PT_TEST_LOG_SUCC (&quot;ProMechitemStatusGet&quot;); 
+<a name="anchor-100"></a>      if (mech_status == PRO_MECH_ACTIVE)     
+      { /* Update the model for the created mech item */
+        status = ProMechitemUpdateComplete (&amp;item);
+        PT_TEST_LOG_SUCC (&quot;ProMechitemUpdateComplete&quot;);
+	if (status == PRO_TK_NO_ERROR)
+<a name="anchor-101"></a>	{
+	   status = ProMessageDisplay (msgfile, &quot;PTMechExLoad - Mechload created successfully&quot;, msgbuf);
+   	   PT_TEST_LOG_SUCC (&quot;ProMessageDisplay&quot;);
+	}
+      }
+<a name="anchor-102"></a>   }
+   else if (status == PRO_TK_CANT_ACCESS)
+   { /* check for the invalid mechanica mode */
+      status = ProMessageDisplay (msgfile, &quot;PTMechExLoad - Invalid Mechanica mode&quot;, msgbuf);
+      PT_TEST_LOG_SUCC (&quot;ProMessageDisplay&quot;);   
+<a name="anchor-103"></a>      return PRO_TK_BAD_INPUTS;   
+   }
+   return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-104"></a>/*=============================================================*\
+  FUNCTION : PTMechExReferencesSet 
+  PURPOSE  : To set reference to mechitem.
+\*=============================================================*/
+ProError PTMechExReferencesSet (ProMdl mdl, char* load_name, ProMechItem *item)
+<a name="anchor-105"></a>{
+   ProMdlType m_type;
+   ProMechGeomref *n_surf;
+   PTMechExGeomRef g_ref;
+   ProMechItem l_item;
+<a name="anchor-106"></a>   ProName tk_load_name;
+   ProSelection *sel;
+   ProAsmcomppath comp_path, *c_path = NULL;
+   int n_sel;     
+   
+<a name="anchor-107"></a>   ProStringToWstring (msgfile, &quot;msg_load.txt&quot;);   
+   
+   status = ProMdlTypeGet (mdl, &amp;m_type);
+   PT_TEST_LOG_SUCC (&quot;ProMdlTypeGet&quot;);
+        
+<a name="anchor-108"></a>   status = ProMessageDisplay (msgfile, &quot;PTMechExLoad - Select surface for load&quot;, msgbuf);
+   PT_TEST_LOG_SUCC (&quot;ProMessageDisplay&quot;);
+   
+   /* select the reference for item */ 
+   status = ProSelect (&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+<a name="anchor-109"></a>   PT_TEST_LOG (&quot;ProSelect&quot;, status, (status != PRO_TK_NO_ERROR 
+   					&amp;&amp; status != PRO_TK_USER_ABORT));
+    
+   if (status == PRO_TK_USER_ABORT)    
+   {
+<a name="anchor-110"></a>   	status = ProMessageDisplay (msgfile, &quot;PTMechExLoad - Invalid selection&quot;, msgbuf);
+        PT_TEST_LOG_SUCC (&quot;ProMessageDisplay&quot;);
+   }
+   if (status != PRO_TK_NO_ERROR || n_sel &lt;= 0)
+      return PRO_TK_BAD_INPUTS;
+<a name="anchor-111"></a>      
+   /* Get the modelitem of the selection */
+   status = ProSelectionModelitemGet (sel[0], &amp;l_item);
+   PT_TEST_LOG_SUCC (&quot;ProSelectionModelitemGet&quot;);
+     
+<a name="anchor-112"></a>   if (status != PRO_TK_NO_ERROR)
+      return PRO_TK_BAD_INPUTS;
+      
+   /* Assign the selection item id to the geom reference */  
+   g_ref.type = PRO_MECH_SURFACE;
+<a name="anchor-113"></a>   g_ref.subtype = PRO_MECH_SURFACE_NORMAL;   
+   g_ref.id = l_item.id;
+   
+   /* check for the model type */ 
+   if (m_type == PRO_MDL_ASSEMBLY)
+<a name="anchor-114"></a>   {
+     /* Check for the assembly type of model to get the path */
+      status = ProSelectionAsmcomppathGet (sel[0], &amp;comp_path);
+      PT_TEST_LOG_SUCC (&quot;ProSelectionAsmcomppathGet&quot;);
+
+<a name="anchor-115"></a>      if (comp_path.table_num == 0)
+	 c_path = NULL;
+      else
+      {
+         c_path = (ProAsmcomppath *)&amp;comp_path;
+<a name="anchor-116"></a>	 g_ref.path = c_path;
+      }
+   }
+   else
+      g_ref.path = NULL;       
+<a name="anchor-117"></a>
+   if (status != PRO_TK_NO_ERROR)
+   {      
+       status = ProMessageDisplay (msgfile, &quot;PTMechExLoad - Invalid selection&quot;, msgbuf);
+       PT_TEST_LOG_SUCC (&quot;ProMessageDisplay&quot;);
+<a name="anchor-118"></a>	return PRO_TK_BAD_INPUTS;
+   }
+   /* creates the mech item */
+   status = ProMechitemCreate ((ProSolid)mdl, PRO_SIMULATION_LOAD, &amp;l_item);
+   PT_TEST_LOG_SUCC (&quot;ProMechitemCreate&quot;);
+<a name="anchor-119"></a>   
+   /* assigns the specified item name */
+   ProStringToWstring (tk_load_name, load_name);
+   status = ProMechitemNameSet (&amp;l_item, tk_load_name);
+   PT_TEST_LOG (&quot;ProMechitemNameSet&quot;, status, status != PRO_TK_NO_ERROR 
+<a name="anchor-120"></a>   					&amp;&amp; status != PRO_TK_GENERAL_ERROR);
+   
+   status = PTMechExGeomReferenceArrayCreate (1, &amp;g_ref, &amp;n_surf);
+   PT_TEST_LOG_SUCC (&quot;PTMechExGeomReferenceArrayCreate&quot;);  
+   /* Set the above references to the created item */
+<a name="anchor-121"></a>   status = ProMechloadReferencesSet (&amp;l_item, n_surf);
+   PT_TEST_LOG_SUCC (&quot;ProMechloadReferencesSet&quot;);
+   
+   *item = l_item;
+   return PRO_TK_NO_ERROR;
+<a name="anchor-122"></a>}
+</pre>
+</body>
+</html>

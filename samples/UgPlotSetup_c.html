@@ -1,0 +1,112 @@
+<html>
+<head>
+<title>UgPlotSetup.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProPlotdriver.h>
+<a name="anchor-2"></a>#include &lt;ProArray.h>
+#include &lt;ProColor.h>
+#include &quot;ProMenu.h&quot;
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProMessage.h>
+<a name="anchor-3"></a>#include &lt;ProUtil.h>
+
+/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+#include &lt;string.h>
+<a name="anchor-4"></a>
+/*---------------------- Function Prototypes -------------------------*/
+int user_Demo_Plot();
+/*------------------------- External Data ----------------------------*/
+extern int UserMenuDeleteAndPop();
+<a name="anchor-5"></a>
+extern ProError user_plot(FILE *fp, char *driver_name);
+
+/*------------------------- Global Data -----------------------------*/
+static FILE *demo_plot_file;
+<a name="anchor-6"></a>
+/*====================================================================*
+Function : UserPlotSetup()
+Purpose  : Set up the Customized Plot Menu
+\*====================================================================*/
+<a name="anchor-7"></a>int UserPlotSetup()
+{
+  int menu_id, action;
+  ProMdl model;
+  ProError status;
+<a name="anchor-8"></a>
+  status = ProMenuFileRegister(&quot;UGPLOT&quot;, &quot;ugplot.mnu&quot;, &amp;menu_id);
+  ERROR_CHECK( &quot;UserPlotSetup&quot;, &quot;ProMenuFileRegister&quot;, status );
+
+  status = ProMenubuttonActionSet(&quot;UGPLOT&quot;,&quot;-Plot Demo&quot;,
+<a name="anchor-9"></a>                   user_Demo_Plot, NULL, 0);
+  ERROR_CHECK( &quot;UserPlotSetup&quot;, &quot;ProMenubuttonActionSet&quot;, status );
+
+  status = ProMenubuttonActionSet(&quot;UGPLOT&quot;, &quot;-Done/Return&quot;,
+                                  (ProMenubuttonAction)UserMenuDeleteAndPop, NULL,0);
+<a name="anchor-10"></a>  ERROR_CHECK( &quot;UserPlotSetup&quot;, &quot;ProMenubuttonActionSet&quot;, status );
+
+  status = ProMenubuttonActionSet(&quot;UGPLOT&quot;, &quot;UGPLOT&quot;,
+                                  (ProMenubuttonAction)UserMenuDeleteAndPop, NULL, 0);
+  ERROR_CHECK( &quot;UserPlotSetup&quot;, &quot;ProMenubuttonActionSet&quot;, status );
+<a name="anchor-11"></a>
+  status = ProMenuCreate(PROMENUTYPE_MAIN, &quot;UGPLOT&quot;, &amp;menu_id);
+  ERROR_CHECK( &quot;UserPlotSetup&quot;, &quot;ProMenuCreate&quot;, status );
+
+  status = ProMenuProcess(&quot;UGPLOT&quot;, &amp;action);
+<a name="anchor-12"></a>  ERROR_CHECK( &quot;UserPlotSetup&quot;, &quot;ProMenuProcess&quot;, status );
+
+  return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-13"></a>/*===========================================================*\
+    Command function to invoke a plot of type &quot;demo&quot;
+\*===========================================================*/
+int user_Demo_Plot()
+{
+<a name="anchor-14"></a>    int		status;
+    wchar_t     w_fname[PRO_NAME_SIZE];
+    char        fname[PRO_NAME_SIZE];
+    ProFileName msgfil;
+
+<a name="anchor-15"></a>/*-----------------------------------------------------------*\
+    Get the output plot file name.
+\*-----------------------------------------------------------*/
+    ProStringToWstring( msgfil, &quot;msg_ugfund.txt&quot; );
+    status = ProMessageDisplay (msgfil, &quot;USER Demo plot filename [QUIT] : &quot;);
+<a name="anchor-16"></a>    ERROR_CHECK(&quot;user_Demo_Plot&quot;,&quot;ProMessageDisplay&quot;,status);
+
+    status = ProMessageStringRead (PRO_NAME_SIZE, w_fname) ; 
+    ERROR_CHECK(&quot;user_Demo_Plot&quot;,&quot;ProMessageStringRead&quot;,status);
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-17"></a>        return(status);
+
+    ProWstringToString (fname, w_fname);
+    demo_plot_file = PTApplsUnicodeFopen (fname, &quot;w&quot;);
+    status = user_plot(demo_plot_file, &quot;MY DRIVER&quot;);
+<a name="anchor-18"></a>/*-----------------------------------------------------------*\
+    Close the plot file.
+\*-----------------------------------------------------------*/
+    fclose (demo_plot_file);
+  
+<a name="anchor-19"></a>/*-----------------------------------------------------------*\
+    Display the plot file.
+\*-----------------------------------------------------------*/
+    status = ProInfoWindowDisplay (w_fname, NULL, NULL);
+    ERROR_CHECK(&quot;user_Demo_Plot&quot;,&quot;ProInfoWindowDisplay&quot;,status);
+<a name="anchor-20"></a>
+    return (PRO_TK_NO_ERROR);
+}
+
+</pre>
+</body>
+</html>

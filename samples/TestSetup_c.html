@@ -1,0 +1,1214 @@
+<html>
+<head>
+<title>TestSetup.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes -- include this first
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProArray.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProFeature.h>
+#include &lt;ProMdl.h>
+<a name="anchor-3"></a>#include &lt;ProMenu.h>
+#include &lt;ProMessage.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProNote.h>
+#include &lt;ProObjects.h>
+<a name="anchor-4"></a>#include &lt;ProSelection.h>
+#include &lt;ProSizeConst.h>
+#include &lt;ProUtil.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-5"></a>#include &lt;UtilFiles.h>
+#include &lt;ProAnnotation.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-6"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestSetup.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+<a name="anchor-7"></a>#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilTypes.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;UtilMath.h&quot;
+#include &quot;UtilMatrix.h&quot;
+<a name="anchor-8"></a>
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+#ifndef TRUE
+<a name="anchor-9"></a>#define TRUE 1
+#endif
+
+#ifndef FALSE
+#define FALSE 0
+<a name="anchor-10"></a>#endif
+
+#define ADD_NOTE        0 
+#define DELETE_NOTE     1
+#define SHOW_NOTE       2
+<a name="anchor-11"></a>#define TEXT_STYLE	3
+#define DISPLAY_NOTE	4
+#define EREASE_NOTE	5
+
+#define MODIFY_HEIGHT	10
+<a name="anchor-12"></a>#define MODIFY_WIDTH	11
+#define MODIFY_ANGLE	12
+#define MODIFY_THIKNESS	13
+#define MODIFY_MIRROR	14
+#define MODIFY_UNDERLINE	16
+<a name="anchor-13"></a>#define MODIFY_FONTANGLE	18
+
+#define MAX_NUM_LINES   120
+
+#define	GET_NAME	1
+<a name="anchor-14"></a>#define	SET_NAME	2
+
+/*====================================================================*\
+FUNCTION : ProTestSetupMnu
+PURPOSE  : Top level menu for the Setup Menu testing.
+<a name="anchor-15"></a>\*====================================================================*/
+int ProTestSetupMnu(ProMdl *model)
+{
+  ProMdlType model_type;
+  int ProTestNoteMnu(ProMdl model);
+<a name="anchor-16"></a>  ProError TestGtolMainMenu();
+  ProError status;
+  int id;
+
+    status = ProMdlTypeGet(*model, &amp;model_type);
+<a name="anchor-17"></a>    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestSetupMnu()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+    
+	status = ProMenuFileRegister((char*)&quot;TkSetup&quot;, (char*)&quot;tksetup.mnu&quot;, &amp;id);
+        TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, &quot;ProTestSetupMnu()&quot;, status,
+<a name="anchor-18"></a>		     status != PRO_TK_NO_ERROR);
+	status = ProMenubuttonActionSet((char*)&quot;TkSetup&quot;, (char*)&quot;TkSetup&quot;,
+	                        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestSetupMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-19"></a>	status = ProMenubuttonActionSet((char*)&quot;TkSetup&quot;, (char*)&quot;Names&quot;, 
+	                        (ProMenubuttonAction)ProTestSetupNameMnu, *model, 0);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestSetupMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+           
+<a name="anchor-20"></a>	status = ProMenubuttonActionSet((char*)&quot;TkSetup&quot;, (char*)&quot;-Notes&quot;, 
+	                        (ProMenubuttonAction)ProTestNoteMnu, *model, 0);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestSetupMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-21"></a>
+	status = ProMenubuttonActionSet((char*)&quot;TkSetup&quot;, (char*)&quot;-Gtol&quot;, 
+	                        (ProMenubuttonAction)TestGtolMainMenu, NULL, 0);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestSetupMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-22"></a>
+           
+	status = ProMenubuttonActionSet((char*)&quot;TkSetup&quot;, (char*)&quot;-Done/Return&quot;,
+	                        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestSetupMnu()&quot;,
+<a name="anchor-23"></a>           status, status != PRO_TK_NO_ERROR);
+
+	status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkSetup&quot;, &amp;id);
+        TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;, &quot;ProTestSetupMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-24"></a>	status = ProMenuProcess((char*)&quot;TkSetup&quot;, &amp;id);
+        TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;, &quot;ProTestSetupMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+	return (0);
+<a name="anchor-25"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestFeatMnu
+PURPOSE  : Top level menu for the Note testing.
+<a name="anchor-26"></a>\*====================================================================*/
+int ProTestNoteMnu(ProMdl model)
+{
+#ifndef PT_PRODUCTS_BUILD
+  ProMdlType model_type;
+<a name="anchor-27"></a>  int ProTestNote(ProMdl model, int action);
+  ProError status;
+  int id;
+
+    status = ProMdlTypeGet(model, &amp;model_type);
+<a name="anchor-28"></a>    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestNoteMnu()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+
+	status = ProMenuFileRegister((char*)&quot;TkNote&quot;, (char*)&quot;tknote.mnu&quot;, &amp;id);
+        TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, &quot;ProTestNoteMnu()&quot;, status,
+<a name="anchor-29"></a>		     status != PRO_TK_NO_ERROR);
+	status = ProMenubuttonActionSet((char*)&quot;TkNote&quot;, (char*)&quot;TkNote&quot;,
+	                        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestNoteMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-30"></a>	status = ProMenubuttonActionSet((char*)&quot;TkNote&quot;, (char*)&quot;-Add Note&quot;, 
+	                        (ProMenubuttonAction)ProTestNote, model, ADD_NOTE);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestNoteMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+	status = ProMenubuttonActionSet((char*)&quot;TkNote&quot;, (char*)&quot;-Delete Note&quot;, 
+<a name="anchor-31"></a>	                        (ProMenubuttonAction)ProTestNote, model, DELETE_NOTE);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestNoteMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+	status = ProMenubuttonActionSet((char*)&quot;TkNote&quot;, (char*)&quot;-Show Note&quot;, 
+	                        (ProMenubuttonAction)ProTestNote, model, SHOW_NOTE);
+<a name="anchor-32"></a>        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestNoteMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonActionSet((char*)&quot;TkNote&quot;, (char*)&quot;-Display notes&quot;, 
+	                        (ProMenubuttonAction)ProTestNote, model, DISPLAY_NOTE);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestNoteMnu()&quot;,
+<a name="anchor-33"></a>           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonActionSet((char*)&quot;TkNote&quot;, (char*)&quot;-Erease notes&quot;, 
+	                        (ProMenubuttonAction)ProTestNote, model, EREASE_NOTE);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestNoteMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-34"></a>        status = ProMenubuttonActionSet((char*)&quot;TkNote&quot;, (char*)&quot;-Text style&quot;, 
+	                        (ProMenubuttonAction)ProTestNote, model, TEXT_STYLE);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestNoteMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-35"></a>	status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkNote&quot;, &amp;id);
+        TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;, &quot;ProTestNoteMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+	status = ProMenuProcess((char*)&quot;TkNote&quot;, &amp;id);
+        TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;, &quot;ProTestNoteMnu()&quot;,
+<a name="anchor-36"></a>           status, status != PRO_TK_NO_ERROR);
+
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+	return (0);
+
+<a name="anchor-37"></a>}
+
+#ifndef PT_PRODUCTS_BUILD
+/*====================================================================*\
+    FUNCTION :	ProTestSelectAttr()
+<a name="anchor-38"></a>    PURPOSE  :  Action function for selecting attach attrs.
+\*====================================================================*/
+int ProTestSelectAttr(
+    ProMdl model,
+    int action)
+<a name="anchor-39"></a>{
+    ProMenuDeleteWithStatus (action);
+    return (0);
+} 
+
+<a name="anchor-40"></a>/*====================================================================*\
+    FUNCTION :	ProTestNote()
+    PURPOSE  :  General action function for the Note testing.
+\*====================================================================*/
+int ProTestNote(
+<a name="anchor-41"></a>    ProMdl model,
+    int action)
+{
+  ProError status;
+  ProModelitem note_item, *notes;
+<a name="anchor-42"></a>  wchar_t** p_text;
+  int i, j, n_lines=0, p_size=0, n_notes=0, num_note = 0;
+  wchar_t w_line[PRO_LINE_SIZE];
+  char str[PRO_LINE_SIZE];
+  int id, attrib;
+<a name="anchor-43"></a>  FILE *note_fp;
+  char filename[] = &quot;note_test.inf&quot;;
+  wchar_t wfilename[PRO_LINE_SIZE];
+  char opt[] = &quot;edge&quot;;
+  int max_count = -1, num_attach;
+<a name="anchor-44"></a>  ProSelection *sel_attach, *sel_note , *note_plane;
+  ProNoteAttach note_attach;
+  wchar_t  wstr_url [500];
+  ProTextStyle text_style;
+  ProMouseButton mouse_button;
+<a name="anchor-45"></a>  ProPoint3d free_point, note_point, outline[2];
+  double text_double;
+  int text_int;
+  ProMatrix matrix, inv_matrix;
+  ProMatrix def_matrix = {{1.0, 0.0, 0.0, 0.0},
+<a name="anchor-46"></a>			  {0.0, 1.0, 0.0, 0.0},
+			  {0.0, 0.0, 1.0, 0.0},
+			  {0.0, 0.0, 0.0, 1.0}};
+  ProDrawMode draw_mode = PRO_DRAW_NO_MODE;
+  ProModelitem note_owner;
+<a name="anchor-47"></a>  int length;
+  wchar_t* tmp_wchar_ptr;
+  wchar_t *getUrl = NULL;
+  ProVector annotPlaneUnit = {1.00,1.00,1.00};
+  ProAnnotationPlane annotPlane;
+<a name="anchor-48"></a>  
+
+    switch(action)
+    {
+    case ADD_NOTE :
+<a name="anchor-49"></a>
+        status = ProArrayAlloc(1, sizeof(wchar_t*), 1, (ProArray*)&amp;p_text);
+        TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProTestNote()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-50"></a>            /* Get several lines of text */
+        while(n_lines &lt; MAX_NUM_LINES)
+        {
+            ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Enter note text [QUIT]:&quot;);
+            if(ProUtilStringGet(w_line, NULL, PRO_LINE_SIZE) == 0)
+<a name="anchor-51"></a>        	    break;
+
+	    ProWstringLengthGet (w_line, &amp;length);
+
+            if(n_lines == 0)
+<a name="anchor-52"></a>	    {
+	        p_text [0] = (wchar_t*) calloc (length + 1, sizeof (wchar_t));
+	    }
+	    else
+	    {
+<a name="anchor-53"></a>		tmp_wchar_ptr =  (wchar_t*) calloc (length + 1, sizeof (wchar_t));
+                status = ProArrayObjectAdd ((ProArray*)&amp;p_text, -1, 1, &amp;tmp_wchar_ptr);
+                TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestNote()&quot;,
+                                  status, status != PRO_TK_NO_ERROR);
+            }
+<a name="anchor-54"></a>	    ProWstringCopy (w_line, p_text [n_lines], PRO_VALUE_UNUSED);
+            n_lines++;
+        }
+
+        if(n_lines == 0)
+<a name="anchor-55"></a>            return(0);
+/*--------------------------------------------------------------------------*\
+        Creates a note (test ProSolidNoteCreate) 
+\*--------------------------------------------------------------------------*/
+        status = ProSolidNoteCreate(model, NULL, p_text, &amp;note_item);
+<a name="anchor-56"></a>        TEST_CALL_REPORT(&quot;ProSolidNoteCreate()&quot;, &quot;ProTestNote()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+
+	for (i = 0; i &lt; n_lines; i++)
+	{
+<a name="anchor-57"></a>	    free (p_text [i]);
+	}
+
+        ProArrayFree((ProArray*)&amp;p_text);
+        
+<a name="anchor-58"></a>/*--------------------------------------------------------------------------*\
+        Sets URL (test ProNoteURLSet, ProNoteURLGet)
+\*--------------------------------------------------------------------------*/
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Enter URL [QUIT]:&quot;);
+        status = ProMessageStringRead (500, (wchar_t*)wstr_url);
+<a name="anchor-59"></a>        if (status == PRO_TK_NO_ERROR)
+        {
+            status = ProNoteURLWstringSet (&amp;note_item, wstr_url);
+            TEST_CALL_REPORT(&quot;ProNoteURLWstringSet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+<a name="anchor-60"></a>		    status, status != PRO_TK_NO_ERROR);
+        }
+        
+/*--------------------------------------------------------------------------*\
+        Menu for attachment attributes
+<a name="anchor-61"></a>\*--------------------------------------------------------------------------*/
+        status = ProMenuFileRegister((char*)&quot;Attach attr&quot;,(char*)&quot;tkattr.mnu&quot;,&amp;id);
+        TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;,
+		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-62"></a>		    
+        status = ProMenubuttonActionSet((char*)&quot;Attach attr&quot;,(char*)&quot;-None&quot;,
+                    (ProMenubuttonAction)ProTestSelectAttr,NULL, 
+	            PRO_NOTE_ATT_NONE);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+<a name="anchor-63"></a>		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+		    
+        status = ProMenubuttonActionSet((char*)&quot;Attach attr&quot;,(char*)&quot;-Normal&quot;,
+                    (ProMenubuttonAction)ProTestSelectAttr,NULL, 
+<a name="anchor-64"></a>	            PRO_NOTE_ATT_NORMAL);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+		    
+<a name="anchor-65"></a>	status = ProMenubuttonActionSet((char*)&quot;Attach attr&quot;,(char*)&quot;-Tangent&quot;,
+                    (ProMenubuttonAction)ProTestSelectAttr,NULL, 
+	            PRO_NOTE_ATT_TANGENT);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+		    &quot;ProTestNote()&quot;,
+<a name="anchor-66"></a>		    status, status != PRO_TK_NO_ERROR);
+		    
+        status = ProMenubuttonActionSet((char*)&quot;Attach attr&quot;,(char*)&quot;Attach attr&quot;,
+		     (ProMenubuttonAction)ProMenuDelete,NULL,0);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+<a name="anchor-67"></a>		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+		    
+        status = ProMenuCreate(PROMENUTYPE_MAIN,(char*)&quot;Attach attr&quot;,&amp;id);
+        TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;,
+<a name="anchor-68"></a>		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+        status = ProMenuProcess((char*)&quot;&quot;,&amp;attrib);
+        TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;,
+		    &quot;ProTestNote()&quot;,
+<a name="anchor-69"></a>		    status, status != PRO_TK_NO_ERROR);
+	
+/*--------------------------------------------------------------------------*\
+        Select leaders for attachment
+\*--------------------------------------------------------------------------*/	    
+<a name="anchor-70"></a>        status = ProSelect (opt, max_count, NULL, NULL, NULL, NULL, 
+            &amp;sel_attach, &amp;num_attach);
+        if (status != PRO_TK_NO_ERROR || num_attach &lt; 1)
+        	return (0);
+/*--------------------------------------------------------------------------*\
+<a name="anchor-71"></a>        Allocate memory for note attachment (test ProNoteAttachAlloc)
+\*--------------------------------------------------------------------------*/
+        status = ProNoteAttachAlloc (&amp;note_attach);
+        TEST_CALL_REPORT(&quot;ProNoteAttachAlloc()&quot;,
+		    &quot;ProTestNote()&quot;,
+<a name="anchor-72"></a>		    status, status != PRO_TK_NO_ERROR);
+        for (i = 0; i &lt; num_attach; i++)
+        {
+/*--------------------------------------------------------------------------*\
+            Add leader to attachment
+<a name="anchor-73"></a>
+\*--------------------------------------------------------------------------*/
+       status = ProNoteAttachAddend(note_attach, sel_attach[i],    
+                 (ProNoteAttachAttr)attrib);
+       TEST_CALL_REPORT(&quot;ProNoteAttachAddend()&quot;,
+<a name="anchor-74"></a>            &quot;ProTestNote()&quot;, status, status != PRO_TK_NO_ERROR);
+        }
+/*--------------------------------------------------------------------------*\
+		Assign annotation plane
+\*--------------------------------------------------------------------------*/
+<a name="anchor-75"></a>		  ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Select annotation plane for note&quot;);
+
+		status = ProSelect(&quot;datum&quot;,1,NULL,NULL,NULL,NULL,&amp;note_plane,&amp;num_attach);
+		TEST_CALL_REPORT(&quot;ProSelect()&quot;,
+            &quot;ProTestNote()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-76"></a>		
+		status = ProAnnotationplaneCreate(note_plane[0],annotPlaneUnit,&amp;annotPlane);
+			TEST_CALL_REPORT(&quot;ProAnnotationplaneCreate()&quot;,
+            &quot;ProTestNote()&quot;, status, status != PRO_TK_NO_ERROR);
+		status = ProNoteAttachPlaneSet(note_attach,&amp;annotPlane);
+<a name="anchor-77"></a>		TEST_CALL_REPORT(&quot;ProNoteAttachPlaneSet()&quot;,
+            &quot;ProTestNote()&quot;, status, status != PRO_TK_NO_ERROR);
+
+
+/*--------------------------------------------------------------------------*\
+<a name="anchor-78"></a>        Select location for note and translate screen coordinates in params
+\*--------------------------------------------------------------------------*/
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Select location for note&quot;);
+        status = ProMousePickGet (PRO_LEFT_BUTTON, &amp;mouse_button, free_point);
+        TEST_CALL_REPORT(&quot;ProMousePickGet()&quot;,
+<a name="anchor-79"></a>	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+	ProViewMatrixGet (model, NULL, matrix);
+	ProUtilMatrixInvert (matrix, inv_matrix);
+	ProUtilPointTrans (inv_matrix, free_point, note_point);
+<a name="anchor-80"></a>	ProSolidDispoutlineGet ((ProSolid)model, def_matrix, outline);
+/*--------------------------------------------------------------------------*\
+        Sets location for note text (test PtoNoteAttachFreeSet, 
+        ProNoteAttachFreeGet)
+\*--------------------------------------------------------------------------*/
+<a name="anchor-81"></a>        note_point[0] = (note_point[0]-outline[0][0])/(outline[1][0]-outline[0][0]);
+        note_point[1] = (note_point[1]-outline[0][1])/(outline[1][1]-outline[0][1]);
+        note_point[2] = (note_point[2]-outline[0][2])/(outline[1][2]-outline[0][2]);
+        status = ProNoteAttachFreeSet (note_attach, 
+            note_point[0], note_point[1], note_point[2]);
+<a name="anchor-82"></a>        TEST_CALL_REPORT(&quot;ProNoteAttachFreeSet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------------*\
+<a name="anchor-83"></a>        Sets placement for note (test ProNotePlacementSet, ProNotePlacementGet)
+\*--------------------------------------------------------------------------*/		    		    
+        status = ProNotePlacementSet (&amp;note_item, note_attach);
+        TEST_CALL_REPORT(&quot;ProNotePlacementSet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+<a name="anchor-84"></a>		    status, status != PRO_TK_NO_ERROR);
+    
+/*--------------------------------------------------------------------------*\
+        Display note (test ProNoteDisplay)
+\*--------------------------------------------------------------------------*/		
+<a name="anchor-85"></a>	status = ProAnnotationShow (&amp;note_item,NULL , NULL);
+	TEST_CALL_REPORT(&quot;ProAnnotationShow()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+		    
+<a name="anchor-86"></a>		    
+/*--------------------------------------------------------------------------*\
+        Release attachment (test ProNoteAttachRelease)
+\*--------------------------------------------------------------------------*/			    	    
+        status = ProNoteAttachRelease (&amp;note_attach);
+<a name="anchor-87"></a>        TEST_CALL_REPORT(&quot;ProNoteAttachRelease()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+        
+        break;
+<a name="anchor-88"></a>
+
+    case DELETE_NOTE :
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Select note for delete&quot;);
+
+<a name="anchor-89"></a>        status = ProSelect ((char*)&quot;note_3d&quot; ,1 , NULL, NULL, NULL, NULL,
+            &amp;sel_note, &amp;num_note);
+        if (status != PRO_TK_NO_ERROR || num_note != 1)
+            return (0);
+        
+<a name="anchor-90"></a>        status = ProSelectionModelitemGet (sel_note[0], &amp;note_item);
+        TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+	if (status != PRO_TK_NO_ERROR)
+<a name="anchor-91"></a>	    break;
+            
+        status = ProNoteDelete(&amp;note_item);
+        TEST_CALL_REPORT(&quot;ProNoteDelete()&quot;, &quot;ProTestNote()&quot;, status,
+                                                    status != PRO_TK_NO_ERROR);
+<a name="anchor-92"></a>
+        break;
+
+
+
+<a name="anchor-93"></a>    case SHOW_NOTE :
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Select note for show&quot;);
+
+        status = ProSelect ((char*)&quot;note_3d&quot; ,1 , NULL, NULL, NULL, NULL,
+            &amp;sel_note, &amp;num_note);
+<a name="anchor-94"></a>        if (status != PRO_TK_NO_ERROR || num_note != 1)
+            return (0);
+        
+        status = ProSelectionModelitemGet (sel_note[0], &amp;note_item);
+        
+<a name="anchor-95"></a>
+        status = ProNoteTextGet(&amp;note_item, PRODISPMODE_SYMBOLIC, &amp;p_text);
+        TEST_CALL_REPORT(&quot;ProNoteTextGet()&quot;, &quot;ProTestNote()&quot;, status,
+            status != PRO_TK_NO_ERROR);
+
+<a name="anchor-96"></a>        status = ProArraySizeGet((ProArray*)p_text, &amp;p_size);
+
+/* Set obtained notes only to test this function */
+	status = ProNoteTextSet(&amp;note_item, p_text );
+        TEST_CALL_REPORT( &quot;ProNoteTextSet()&quot;, &quot;ProTestNote()&quot;, 
+<a name="anchor-97"></a>	    status, status != PRO_TK_NO_ERROR);
+	    
+        if ( (note_fp = PTApplsUnicodeFopen(filename,&quot;w&quot;)) == NULL)
+        {
+            ProTKFprintf(stderr,(char*)&quot;Error opening file for writing\n&quot;);
+<a name="anchor-98"></a>            return -1;
+        }
+        for(j= 0; j&lt; p_size; j++)
+       	    ProTKFprintf(note_fp,(char*)&quot;%s\n&quot;, ProWstringToString(str, p_text[j]) );
+
+<a name="anchor-99"></a>	ProWstringproarrayFree (p_text);
+                	
+		
+        status = ProNoteURLWstringGet (&amp;note_item, &amp;getUrl);
+        TEST_CALL_REPORT(&quot;ProNoteURLWstringGet()&quot;,
+<a name="anchor-100"></a>  	    &quot;ProTestNote()&quot;,
+	    status, status != PRO_TK_NO_ERROR); 
+	status = ProNoteOwnerGet (&amp;note_item, &amp;note_owner);
+	TEST_CALL_REPORT(&quot;ProNoteOwnerGet()&quot;,
+  	    &quot;ProTestNote()&quot;,
+<a name="anchor-101"></a>	    status, status != PRO_TK_NO_ERROR); 
+	
+	ProTKFprintf (note_fp, (char*)&quot;URL: %s\n&quot;, ProWstringToString (str, getUrl));
+	/*status = ProModelitemNameGet (&amp;note_owner, wstr_url);
+	TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;,
+<a name="anchor-102"></a>  	    &quot;ProTestNote()&quot;,
+	    status, status != PRO_TK_NO_ERROR);
+	if (status == PRO_TK_E_NOT_FOUND)
+	    fprintf (note_fp, &quot;Owner does not have a name&quot;);
+	else if (status == PRO_TK_NO_ERROR)
+<a name="anchor-103"></a>	    fprintf (note_fp, &quot;Owner: %s\n&quot;, 
+	        ProWstringToString (str, wstr_url));*/
+	        
+	status = ProTextStyleAlloc (&amp;text_style);
+	TEST_CALL_REPORT(&quot;ProTextStyleAlloc()&quot;,
+<a name="anchor-104"></a>  	    &quot;ProTestNote()&quot;,
+	    status, status != PRO_TK_NO_ERROR);
+	status =  ProAnnotationTextstyleGet (&amp;note_item,NULL,NULL,NULL, &amp;text_style);
+	TEST_CALL_REPORT(&quot;ProAnnotationTextstyleGet()&quot;,
+  	    &quot;ProTestNote()&quot;,
+<a name="anchor-105"></a>	    status, status != PRO_TK_NO_ERROR);
+	status = ProTextStyleHeightGet (text_style, &amp;text_double);
+     	TEST_CALL_REPORT(&quot;ProTextStyleHeightGet()&quot;,
+       	    &quot;ProTestNote()&quot;,
+ 	    status, status != PRO_TK_NO_ERROR &amp;&amp; 
+<a name="anchor-106"></a>            status != PRO_TK_GENERAL_ERROR); 
+       	if (status == -1)
+	    ProTKFprintf (note_fp, (char*)&quot;Height DEFAULT\n&quot;);
+        else if (status == PRO_TK_NO_ERROR)
+            ProTKFprintf (note_fp, (char*)&quot;Height %f\n&quot;, text_double);  
+<a name="anchor-107"></a>        status = ProTextStyleWidthGet (text_style, &amp;text_double);
+     	TEST_CALL_REPORT(&quot;ProTextStyleWidthGet()&quot;,
+       	    &quot;ProTestNote()&quot;,
+ 	    status, status != PRO_TK_NO_ERROR &amp;&amp;
+            status != PRO_TK_GENERAL_ERROR); 
+<a name="anchor-108"></a>       	if (status == -1)
+	    ProTKFprintf (note_fp, (char*)&quot;Width DEFAULT\n&quot;);
+        else if (status == PRO_TK_NO_ERROR)
+            ProTKFprintf (note_fp, (char*)&quot;Width %f\n&quot;, text_double);  
+        status = ProTextStyleAngleGet (text_style, &amp;text_double);
+<a name="anchor-109"></a>     	TEST_CALL_REPORT(&quot;ProTextStyleAngleGet()&quot;,
+       	    &quot;ProTestNote()&quot;,
+ 	    status, status != PRO_TK_NO_ERROR); 
+       	ProTKFprintf (note_fp, (char*)&quot;Angle %f\n&quot;, text_double);
+       	status = ProTextStyleSlantAngleGet (text_style, &amp;text_double);
+<a name="anchor-110"></a>     	TEST_CALL_REPORT(&quot;ProTextStyleSlantAngleGet()&quot;,
+       	    &quot;ProTestNote()&quot;,
+ 	    status, status != PRO_TK_NO_ERROR); 
+       	ProTKFprintf (note_fp, (char*)&quot;Slant angle %f\n&quot;, text_double);
+       	status = ProTextStyleThicknessGet (text_style, &amp;text_double);
+<a name="anchor-111"></a>     	TEST_CALL_REPORT(&quot;ProTextStyleThicknessGet()&quot;,
+       	    &quot;ProTestNote()&quot;,
+ 	    status, status != PRO_TK_NO_ERROR &amp;&amp;
+            status != PRO_TK_GENERAL_ERROR); 
+       	if (status == -1)
+<a name="anchor-112"></a>	    ProTKFprintf (note_fp, (char*)&quot;Thickness DEFAULT\n&quot;);
+        else if (status == PRO_TK_NO_ERROR)
+            ProTKFprintf (note_fp, (char*)&quot;Thickness %f\n&quot;, text_double);
+        status = ProTextStyleMirrorGet (text_style, &amp;text_int);
+     	TEST_CALL_REPORT(&quot;ProTextStyleMirrorGet()&quot;,
+<a name="anchor-113"></a>       	    &quot;ProTestNote()&quot;,
+ 	    status, status != PRO_TK_NO_ERROR); 
+       	ProTKFprintf (note_fp, (char*)&quot;Mirror %s\n&quot;, text_int ? &quot;On&quot; : &quot;Off&quot;);
+       	status = ProTextStyleUnderlineGet (text_style, &amp;text_int);
+     	TEST_CALL_REPORT(&quot;ProTextStyleUnderlineGet()&quot;,
+<a name="anchor-114"></a>       	    &quot;ProTestNote()&quot;,
+ 	    status, status != PRO_TK_NO_ERROR); 
+       	ProTKFprintf (note_fp, (char*)&quot;Underline %s\n&quot;, text_int ? &quot;On&quot; : &quot;Off&quot;);
+	status = ProTextStyleFree (&amp;text_style);
+	TEST_CALL_REPORT(&quot;ProTextStyleFree()&quot;,
+<a name="anchor-115"></a>  	    &quot;ProTestNote()&quot;,
+	    status, status != PRO_TK_NO_ERROR);
+               
+        fclose(note_fp);
+        ProInfoWindowDisplay (ProStringToWstring(wfilename, filename),
+<a name="anchor-116"></a>            NULL, NULL);
+
+
+        break;
+        
+<a name="anchor-117"></a>    case DISPLAY_NOTE:
+        draw_mode = PRO_DRAW_SET_MODE;
+        break;
+    case EREASE_NOTE:
+        status = ProUtilCollectModelNotes(model, &amp;notes);
+<a name="anchor-118"></a>	if (status != PRO_TK_NO_ERROR)
+	    break;
+        status = ProArraySizeGet((ProArray*)notes, &amp;n_notes);
+        for(i= 0; i&lt; n_notes; i++)
+        {
+<a name="anchor-119"></a>            status = ProNoteDisplay (&amp;(notes[i]), draw_mode);
+            TEST_CALL_REPORT(&quot;ProNoteDelete()&quot;, &quot;ProTestNote()&quot;, status,
+                                                    status != PRO_TK_NO_ERROR);
+        }
+        
+<a name="anchor-120"></a>        ProArrayFree((ProArray*)&amp;notes);
+   
+        break;
+        
+    case TEXT_STYLE:
+<a name="anchor-121"></a>    
+/*--------------------------------------------------------------------------*\
+        Menu for text style operations
+\*--------------------------------------------------------------------------*/
+        status = ProMenuFileRegister((char*)&quot;-Text style&quot;,(char*)&quot;tktextstyle.mnu&quot;,&amp;id);
+<a name="anchor-122"></a>        TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;,
+		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+		    
+        status = ProMenubuttonActionSet((char*)&quot;-Text style&quot;,(char*)&quot;-Height&quot;,
+<a name="anchor-123"></a>                    (ProMenubuttonAction)ProTestSelectAttr,NULL, 
+	            MODIFY_HEIGHT);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-124"></a>		    
+        status = ProMenubuttonActionSet((char*)&quot;-Text style&quot;,(char*)&quot;-Width&quot;,
+                    (ProMenubuttonAction)ProTestSelectAttr,NULL, 
+	            MODIFY_WIDTH);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+<a name="anchor-125"></a>		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+		    
+	status = ProMenubuttonActionSet((char*)&quot;-Text style&quot;,(char*)&quot;-Angle&quot;,
+                    (ProMenubuttonAction)ProTestSelectAttr,NULL, 
+<a name="anchor-126"></a>	            MODIFY_ANGLE);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+		    
+<a name="anchor-127"></a>	status = ProMenubuttonActionSet((char*)&quot;-Text style&quot;,(char*)&quot;-Slant angle&quot;,
+                    (ProMenubuttonAction)ProTestSelectAttr,NULL, 
+	            MODIFY_FONTANGLE);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+		    &quot;ProTestNote()&quot;,
+<a name="anchor-128"></a>		    status, status != PRO_TK_NO_ERROR);
+	
+	status = ProMenubuttonActionSet((char*)&quot;-Text style&quot;,(char*)&quot;-Thikness&quot;,
+                    (ProMenubuttonAction)ProTestSelectAttr,NULL, 
+	            MODIFY_THIKNESS);
+<a name="anchor-129"></a>        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+		    
+	status = ProMenubuttonActionSet((char*)&quot;-Text style&quot;,(char*)&quot;-Mirror&quot;,
+<a name="anchor-130"></a>                    (ProMenubuttonAction)ProTestSelectAttr,NULL, 
+	            MODIFY_MIRROR);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-131"></a>		    
+	status = ProMenubuttonActionSet((char*)&quot;-Text style&quot;,(char*)&quot;-Underline&quot;,
+                    (ProMenubuttonAction)ProTestSelectAttr,NULL, 
+	            MODIFY_UNDERLINE);
+        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+<a name="anchor-132"></a>		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+		    
+        status = ProMenubuttonActionSet((char*)&quot;-Text style&quot;,(char*)&quot;-Text style&quot;,
+		     (ProMenubuttonAction)ProMenuDelete,NULL,0);
+<a name="anchor-133"></a>        TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;,
+		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+		    
+        status = ProMenuCreate(PROMENUTYPE_MAIN,(char*)&quot;-Text style&quot;,&amp;id);
+<a name="anchor-134"></a>        TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;,
+		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+        status = ProMenuProcess((char*)&quot;&quot;,&amp;attrib);
+        TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;,
+<a name="anchor-135"></a>		    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Select note for change text style.&quot;);
+
+<a name="anchor-136"></a>        status = ProSelect ((char*)&quot;note_3d&quot; ,1 , NULL, NULL, NULL, NULL,
+            &amp;sel_note, &amp;num_note);
+        if (status != PRO_TK_NO_ERROR || num_note != 1)
+            return (0);
+        
+<a name="anchor-137"></a>        status = ProSelectionModelitemGet (sel_note[0], &amp;note_item);
+        
+      	status = ProTextStyleAlloc (&amp;text_style);
+	TEST_CALL_REPORT(&quot;ProTextStyleAlloc()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+<a name="anchor-138"></a>		    status, status != PRO_TK_NO_ERROR);
+	status = ProAnnotationTextstyleGet (&amp;note_item,NULL,NULL,NULL, &amp;text_style);
+	TEST_CALL_REPORT(&quot;ProAnnotationTextstyleGet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR); 	    
+<a name="anchor-139"></a>	switch (attrib)
+	{
+	
+        case MODIFY_HEIGHT:
+            status = ProTextStyleHeightGet (text_style, &amp;text_double);
+<a name="anchor-140"></a>            TEST_CALL_REPORT(&quot;ProTextStyleHeightGet()&quot;,
+        	    &quot;ProTestNote()&quot;,
+	 	    status, status != PRO_TK_NO_ERROR &amp;&amp;
+                    status != PRO_TK_GENERAL_ERROR); 
+            if (status == -1)
+<a name="anchor-141"></a>	        ProTKSprintf (str, (char*)&quot;Enter height [DEFAULT]:&quot;);
+            else if (status == PRO_TK_NO_ERROR)
+	        ProTKSprintf (str, (char*)&quot;Enter height [%f]&quot;, text_double);
+	    else 
+	        return (0);
+<a name="anchor-142"></a>	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+	    if(ProUtilDoubleGet(NULL, NULL, &amp;text_double) == 0)
+                break;
+	    status = ProTextStyleHeightSet (text_style, text_double);
+	    TEST_CALL_REPORT(&quot;ProTextStyleHeightSet()&quot;,
+<a name="anchor-143"></a>	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+
+	    break;
+	    
+<a name="anchor-144"></a>	case MODIFY_WIDTH:
+            status = ProTextStyleWidthGet (text_style, &amp;text_double);
+            TEST_CALL_REPORT(&quot;ProTextStyleWidthGet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR &amp;&amp;
+<a name="anchor-145"></a>                    status != PRO_TK_GENERAL_ERROR); 
+	    if (status == -1)
+	        ProTKSprintf (str, (char*)&quot;Enter width [DEFAULT]&quot;);
+            else if (status == PRO_TK_NO_ERROR)
+	        ProTKSprintf (str, (char*)&quot;Enter width [%f]&quot;, text_double);
+<a name="anchor-146"></a>	    else 
+	        return (0);
+	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+	    if(ProUtilDoubleGet(NULL, NULL, &amp;text_double) == 0)
+                break;
+<a name="anchor-147"></a>            status = ProTextStyleWidthSet (text_style, text_double);
+            TEST_CALL_REPORT(&quot;ProTextStyleWidthSet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+	    break;
+<a name="anchor-148"></a>	    
+	case MODIFY_ANGLE:	    
+            status = ProTextStyleAngleGet (text_style, &amp;text_double);
+            TEST_CALL_REPORT(&quot;ProTextStyleAngleGet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+<a name="anchor-149"></a>		    status, status != PRO_TK_NO_ERROR); 
+            if (status == PRO_TK_NO_ERROR)
+                ProTKSprintf (str, (char*)&quot;Enter angle [%f]&quot;, text_double);
+            else 
+	        return (0);
+<a name="anchor-150"></a>	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+	    if(ProUtilDoubleGet(NULL, NULL, &amp;text_double) == 0)
+                break;
+	    status = ProTextStyleAngleSet (text_style, text_double);
+	    TEST_CALL_REPORT(&quot;ProTextStyleAngleSet()&quot;,
+<a name="anchor-151"></a>	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+	    break;
+	    
+	case MODIFY_FONTANGLE:	    
+<a name="anchor-152"></a>            status = ProTextStyleSlantAngleGet (text_style, &amp;text_double);
+            TEST_CALL_REPORT(&quot;ProTextStyleSlantAngleGet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR); 
+            if (status == PRO_TK_NO_ERROR)
+<a name="anchor-153"></a>                ProTKSprintf (str, (char*)&quot;Enter slant angle [%f]&quot;, text_double);
+            else 
+	        return (0);
+	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+	    if(ProUtilDoubleGet(NULL, NULL, &amp;text_double) == 0)
+<a name="anchor-154"></a>                break;
+	    status = ProTextStyleSlantAngleSet (text_style, text_double);
+	    TEST_CALL_REPORT(&quot;ProTextStyleSlantAngleSet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-155"></a>	    break;
+	    
+        case MODIFY_THIKNESS:
+	    status = ProTextStyleThicknessGet (text_style, &amp;text_double);
+            TEST_CALL_REPORT(&quot;ProTextStyleThicknessGet()&quot;,
+<a name="anchor-156"></a>	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR &amp;&amp;
+                    status != PRO_TK_GENERAL_ERROR); 
+	    if (status == -1)
+	        ProTKSprintf (str, (char*)&quot;Enter thickness [DEFAULT]&quot;);
+<a name="anchor-157"></a>	    else if (status == PRO_TK_NO_ERROR)
+	        ProTKSprintf (str, (char*)&quot;Enter thickness [%f]&quot;, text_double);
+	    else 
+	        return (0);
+	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+<a name="anchor-158"></a>	    if(ProUtilDoubleGet(NULL, NULL, &amp;text_double) == 0)
+                break;
+	    status = ProTextStyleThicknessSet (text_style, text_double);
+	    TEST_CALL_REPORT(&quot;ProTextStyleThicknessSet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+<a name="anchor-159"></a>		    status, status != PRO_TK_NO_ERROR);
+	    break;
+	    
+	case MODIFY_MIRROR:
+	    status = ProTextStyleMirrorGet (text_style, &amp;text_int);
+<a name="anchor-160"></a>	    TEST_CALL_REPORT(&quot;ProTextStyleMirrorGet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR); 
+	    if (status == PRO_TK_NO_ERROR)
+	        ProTKSprintf (str, (char*)&quot;Mirror on(1)/off(0) [%s]&quot;, text_int ? &quot;on&quot; : &quot;off&quot;);
+<a name="anchor-161"></a>            else 
+	        return (0);
+	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+	    if(ProUtilIntGet(NULL, NULL, &amp;text_int) == 0)
+                break;
+<a name="anchor-162"></a>            status = ProTextStyleMirrorSet (text_style, text_int);
+	    TEST_CALL_REPORT(&quot;ProTextStyleMirrorSet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+	    break;
+<a name="anchor-163"></a>	    
+	case MODIFY_UNDERLINE:
+            status = ProTextStyleUnderlineGet (text_style, &amp;text_int);
+            TEST_CALL_REPORT(&quot;ProTextStyleUnderlineGet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+<a name="anchor-164"></a>		    status, status != PRO_TK_NO_ERROR); 
+	    if (status == PRO_TK_NO_ERROR)
+	        ProTKSprintf (str, (char*)&quot;Underline on(1)/off(0) [%s]&quot;, text_int ? &quot;on&quot; : &quot;off&quot;);
+	    else 
+	        return (0);
+<a name="anchor-165"></a>	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+	    if(ProUtilIntGet(NULL, NULL, &amp;text_int) == 0)
+                break;
+	    status = ProTextStyleUnderlineSet (text_style, text_int);
+	    TEST_CALL_REPORT(&quot;ProTextStyleUnderlineSet()&quot;,
+<a name="anchor-166"></a>	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+	    break;
+	}
+	
+<a name="anchor-167"></a>/*      calls ProNoteTextStyleSet for test */
+	status = ProAnnotationTextstyleSet (&amp;note_item,NULL,NULL,NULL, text_style);
+	TEST_CALL_REPORT(&quot;ProAnnotationTextstyleSet()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-168"></a>	status = ProTextStyleFree (&amp;text_style);
+	TEST_CALL_REPORT(&quot;ProTextStyleFree()&quot;,
+	  	    &quot;ProTestNote()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-169"></a>        break;
+
+    }
+
+  return(0);
+<a name="anchor-170"></a>}
+
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+
+/*====================================================================*\
+<a name="anchor-171"></a>FUNCTION : ProTestSetupNameMnu
+PURPOSE  : Top level menu for the Name Setup testing.
+\*====================================================================*/
+int ProTestSetupNameMnu(ProMdl model)
+{
+<a name="anchor-172"></a>    ProError	status;
+    ProMdlType	model_type;
+    int	id;
+
+    status = ProMdlTypeGet(model, &amp;model_type);
+<a name="anchor-173"></a>    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestSetupNameMnu()&quot;, status,
+		     status != PRO_TK_NO_ERROR);
+
+    status = ProMenuFileRegister((char*)&quot;TkSetupName&quot;, (char*)&quot;tksetupnm.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, &quot;ProTestSetupNameMnu()&quot;, status,
+<a name="anchor-174"></a>		     status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkSetupName&quot;, (char*)&quot;Feature&quot;,
+		      (ProMenubuttonAction)ProTestNameMnu, model, PRO_FEATURE);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestSetupNameMnu()&quot;,
+       status, status != PRO_TK_NO_ERROR);
+<a name="anchor-175"></a>    status = ProMenubuttonActionSet((char*)&quot;TkSetupName&quot;, (char*)&quot;Others&quot;,
+		      (ProMenubuttonAction)ProTestNameMnu, model, -1);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestSetupNameMnu()&quot;,
+       status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkSetupName&quot;, (char*)&quot;List Names&quot;,
+<a name="anchor-176"></a>		      (ProMenubuttonAction)ProTestListAllNames, model, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestSetupNameMnu()&quot;,
+       status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkSetupName&quot;, (char*)&quot;TkSetupName&quot;,
+		      (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-177"></a>    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestSetupNameMnu()&quot;,
+       status, status != PRO_TK_NO_ERROR);
+    status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkSetupName&quot;, &amp;id);
+    TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;, &quot;ProTestSetupNameMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-178"></a>    status = ProMenuProcess((char*)&quot;TkSetupName&quot;, &amp;id);
+    TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;, &quot;ProTestSetupNameMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+    return(0);
+<a name="anchor-179"></a>
+}   /* End of ProTestSetupNameMnu() */
+
+/*====================================================================*\
+FUNCTION : ProTestNameMnu
+<a name="anchor-180"></a>PURPOSE  : Top level menu for the Name testing.
+\*====================================================================*/
+int ProTestNameMnu(ProMdl model, int item_type)
+{
+    ProError	status;
+<a name="anchor-181"></a>    ProMdlType	model_type;
+    int id;
+
+    status = ProMdlTypeGet(model, &amp;model_type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestNameMnu()&quot;, status,
+<a name="anchor-182"></a>		     status != PRO_TK_NO_ERROR);
+
+    status = ProMenuFileRegister((char*)&quot;TkName&quot;, (char*)&quot;tkname.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestNameMnu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-183"></a>    status = ProMenubuttonGenactionSet((char*)&quot;TkName&quot;, (char*)&quot;Get Name&quot;,
+	(ProMenubuttonGenaction)ProTestSetupName, model, 
+      (ProAppData)item_type, (ProAppData)GET_NAME,  NULL, NULL, NULL);
+    TEST_CALL_REPORT(&quot;ProMenubuttonGenactionSet()&quot;, &quot;ProTestNameMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-184"></a>    status = ProMenubuttonGenactionSet((char*)&quot;TkName&quot;, (char*)&quot;Set Name&quot;,
+	(ProMenubuttonGenaction)ProTestSetupName, model, 
+	(ProAppData)item_type, (ProAppData)SET_NAME, NULL, NULL, NULL);
+    TEST_CALL_REPORT(&quot;ProMenubuttonGenactionSet()&quot;, &quot;ProTestNameMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-185"></a>    status = ProMenubuttonActionSet((char*)&quot;TkName&quot;, (char*)&quot;TkName&quot;,
+		      (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestNameMnu()&quot;, status,
+		     status != PRO_TK_NO_ERROR);
+    status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkName&quot;, &amp;id);
+<a name="anchor-186"></a>    TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;, &quot;ProTestNameMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess((char*)&quot;TkName&quot;, &amp;id);
+    TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;, &quot;ProTestNameMnu()&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-187"></a>
+    return(0);
+
+}   /* End of ProTestNameMnu() */
+
+<a name="anchor-188"></a>/*====================================================================*\
+   FUNCTION :  ProTestSetupName()
+   PURPOSE  :  General action function for the Name Setup testing.
+\*====================================================================*/
+int ProTestSetupName(ProMdl model, int item_type, int action)
+<a name="anchor-189"></a>
+{
+    ProError	status;
+    ProMdlType	model_type;
+    char	*msg, *options;
+<a name="anchor-190"></a>    ProSelection *sel_list;
+    int		n_sels, ret, cont = 1;
+    ProModelitem sel_item;
+    ProName	o_name, n_name, d_name;
+
+<a name="anchor-191"></a>    status = ProMdlTypeGet(model, &amp;model_type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestSetupName()&quot;, status,
+		     status != PRO_TK_NO_ERROR);
+
+    if (item_type == PRO_FEATURE)
+<a name="anchor-192"></a>    {
+	msg = (char*)&quot;Select a feature.&quot;;
+	options = (char*)&quot;feature&quot;;
+    }
+    else
+<a name="anchor-193"></a>    {
+	msg = (char*)&quot;Select an item.&quot;;
+	options = (char*)&quot;edge,csys,axis,point,curve,dtmqlt,surface&quot;;
+    }
+
+<a name="anchor-194"></a>    while ( cont )
+    {
+	ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, msg);
+	status = ProSelect(options, 1, NULL, NULL, NULL, NULL,
+			   &amp;sel_list, &amp;n_sels);
+<a name="anchor-195"></a>	TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestSetupName()&quot;, status,
+			 status == PRO_TK_COMM_ERROR);
+	if (status != PRO_TK_NO_ERROR)
+	    return(-1);
+
+<a name="anchor-196"></a>	status = ProSelectionModelitemGet(sel_list[0], &amp;sel_item);
+	TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestSetupName()&quot;,
+			 status, status != PRO_TK_NO_ERROR);
+
+	status = ProModelitemNameGet(&amp;sel_item, o_name);
+<a name="anchor-197"></a>	TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, &quot;ProTestSetupName()&quot;, status,
+			 status != PRO_TK_NO_ERROR &amp;&amp;
+                         status != PRO_TK_E_NOT_FOUND);
+
+	ret = 0;
+<a name="anchor-198"></a>	switch (action)
+	{
+	case GET_NAME:
+	    if (o_name[0] == NULL_WCHAR)
+		ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+<a name="anchor-199"></a>				&quot;The selected item does not have a name.&quot;);
+	    else
+		ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST The selected item's name is : %0w&quot;,
+				o_name);
+	break;
+<a name="anchor-200"></a>	case SET_NAME:
+	    if (o_name[0] == NULL_WCHAR)
+		ProStringToWstring(d_name, (char*)&quot;QUIT&quot;);
+	    else
+		ProUtilWstrcpy(d_name, o_name);
+<a name="anchor-201"></a>
+	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST Enter the new name [%0w] : &quot;,
+				d_name);
+
+            status = ProMessageStringRead(PRO_NAME_SIZE, n_name);
+<a name="anchor-202"></a>	    if (status != PRO_TK_NO_ERROR)
+		ret = -1;
+	    else if ( ProUtilWstrCmp(n_name, o_name) != 0 )
+	    {
+		status = ProModelitemNameSet(&amp;sel_item, n_name);
+<a name="anchor-203"></a>		TEST_CALL_REPORT(&quot;ProModelitemNameSet()&quot;, &quot;ProTestSetupName()&quot;,
+		                  status, status != PRO_TK_NO_ERROR);
+	    }
+	break;
+	}
+<a name="anchor-204"></a>
+	status = ProSelectionUnhighlight(sel_list[0]);
+	TEST_CALL_REPORT(&quot;ProSelectionUnhighlight()&quot;, &quot;ProTestSetupName()&quot;,
+				      status, status != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-205"></a>
+    return(ret);
+
+}   /* End of ProTestSetupName() */
+
+<a name="anchor-206"></a>/*====================================================================*\
+   FUNCTION :  ProTestListAllNames()
+   PURPOSE  :  General action function for the Name Listing.
+\*====================================================================*/
+    int
+<a name="anchor-207"></a>ProTestListAllNames(ProMdl model)
+
+{
+    int		status;
+    ProMdlType	model_type;
+<a name="anchor-208"></a>    ProCharName	filename;
+    ProName	wfilename;
+    FILE	*fp;
+
+    status = ProMdlTypeGet(model, &amp;model_type);
+<a name="anchor-209"></a>    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestListAllNames()&quot;, (ProError)status,
+		     status != PRO_TK_NO_ERROR);
+
+    ProTestQcrName(&amp;model, (char*)NAMES, filename);
+    fp = PTApplsUnicodeFopen(filename, &quot;w&quot;);
+<a name="anchor-210"></a>
+    status = ProTestListNames(( ProSolid )model, fp);
+
+    fclose(fp);
+
+<a name="anchor-211"></a>    status = ProInfoWindowDisplay( ProStringToWstring(wfilename, filename),
+				   NULL, NULL );
+    TEST_CALL_REPORT(&quot;ProInfoWindowDisplay()&quot;, &quot;ProTestListAllNames()&quot;,
+    				(ProError)status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-212"></a>    return(0);
+
+}   /* End of ProTestListAllNames() */
+
+/*====================================================================*\
+<a name="anchor-213"></a>    FUNCTION :  ProTestListName()
+    PURPOSE  :  Generalized action function for visiting notes.
+\*====================================================================*/
+    int
+ProTestListNames(ProMdl model, FILE *fp)
+<a name="anchor-214"></a>
+{
+    int		status;
+    ProMdlType	model_type;
+    ProMdlName	model_name;
+<a name="anchor-215"></a>    ProFeature *features;
+    int features_num, i;
+
+    status = ProMdlTypeGet(model, &amp;model_type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestListAllNames()&quot;, (ProError)status,
+<a name="anchor-216"></a>		     status != PRO_TK_NO_ERROR);
+
+    status = ProMdlMdlnameGet(model, model_name);
+    TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProTestListNames()&quot;, (ProError)status,
+		     status != PRO_TK_NO_ERROR);
+<a name="anchor-217"></a>
+    ProTKFprintf(fp, (char*)&quot;\n********************************************************\n&quot;);
+    ProTKFprintf(fp, (char*)&quot;MODEL NAME: %S, MODEL TYPE: %d\n\n&quot;, model_name, model_type);
+    ProTKFprintf(fp, (char*)&quot;  ID TYPE               NAME\n&quot;);
+    ProTKFprintf(fp, (char*)&quot;==== ================== ================================\n&quot;);
+<a name="anchor-218"></a>    
+    status = ProUtilCollectSolidFeatures ((ProSolid)model, &amp;features);
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)features, &amp;features_num);
+<a name="anchor-219"></a>        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestListNames()&quot;, 
+            (ProError)status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; features_num; i++)
+        {
+            status = ProTestListNameAction (features+i,
+<a name="anchor-220"></a>                PRO_TK_NO_ERROR, (ProAppData)fp);
+        }
+        status = ProArrayFree ((ProArray*)&amp;features);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestListNames()&quot;, 
+            (ProError)status, status != PRO_TK_NO_ERROR );
+<a name="anchor-221"></a>    }
+
+    return( PRO_TK_NO_ERROR );
+
+}   /* End of ProTestListNames() */
+<a name="anchor-222"></a>
+/*====================================================================*\
+    FUNCTION :  ProTestListNameAction()
+    PURPOSE  :  Generalized action function for visiting notes.
+\*====================================================================*/
+<a name="anchor-223"></a>    ProError
+ProTestListNameAction(ProFeature *p_feat, ProError stat, ProAppData app_data)
+
+{
+    int		status, feat_type;
+<a name="anchor-224"></a>    ProCharName	type_str;
+    FILE	*fp;
+    ProMdl	model;
+    ProName	feat_name;
+    ProGeomitem *geomitems;
+<a name="anchor-225"></a>    int geomitems_num, i;
+
+    status = ProFeatureTypeGet(p_feat, &amp;feat_type);
+    if (status != PRO_TK_NO_ERROR)
+	return((ProError)status);
+<a name="anchor-226"></a>
+    fp = ( FILE * )app_data;
+
+    if (feat_type == PRO_FEAT_COMPONENT)
+    {
+<a name="anchor-227"></a>	status = ProAsmcompMdlGet(( ProAsmcomp * )p_feat, &amp;model);
+	TEST_CALL_REPORT(&quot;ProAsmcompMdlGet()&quot;, &quot;ProTestListNameAction()&quot;,
+			 (ProError)status, status != PRO_TK_NO_ERROR);
+
+	status = ProTestListNames(( ProSolid )model, fp);
+<a name="anchor-228"></a>	TEST_CALL_REPORT(&quot;ProTestListNames()&quot;, &quot;ProTestListNameAction()&quot;,
+			 (ProError)status, status != PRO_TK_NO_ERROR);
+	return( PRO_TK_NO_ERROR );
+    }
+
+<a name="anchor-229"></a>    status = ProModelitemNameGet(p_feat, feat_name);
+    TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, &quot;ProTestListNameAction()&quot;, (ProError)status,
+		     status != PRO_TK_NO_ERROR);
+
+    if (feat_name[0] != NULL_WCHAR)
+<a name="anchor-230"></a>    {
+	status = ProUtilFeattypeStr(feat_type, type_str);
+	TEST_CALL_REPORT(&quot;ProUtilFeattypeStr()&quot;, &quot;ProTestListNameAction()&quot;,
+			 (ProError)status, status != PRO_TK_NO_ERROR);
+	ProTKFprintf(fp, (char*)&quot;%4d %-18s %-32S\n&quot;, p_feat->id, type_str, feat_name);
+<a name="anchor-231"></a>    }
+
+    status = ProUtilCollectFeatureGeomitems (p_feat, PRO_TYPE_UNUSED, &amp;geomitems);
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-232"></a>        status = ProArraySizeGet ((ProArray)geomitems, &amp;geomitems_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestListNameAction()&quot;, 
+            (ProError)status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; geomitems_num; i++)
+        {
+<a name="anchor-233"></a>            status = ProTestListGeomAction (geomitems+i,
+	        PRO_TK_NO_ERROR, (ProAppData)fp);
+        }
+        status = ProArrayFree ((ProArray*)&amp;geomitems);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestListNameAction()&quot;, 
+<a name="anchor-234"></a>            (ProError)status, status != PRO_TK_NO_ERROR );
+    }
+
+    return( PRO_TK_NO_ERROR );
+
+<a name="anchor-235"></a>}   /* End of ProTestListNameAction() */
+
+/*====================================================================*\
+    FUNCTION :  ProTestListNameAction()
+    PURPOSE  :  Generalized action function for visiting notes.
+<a name="anchor-236"></a>\*====================================================================*/
+    ProError
+ProTestListGeomAction(ProModelitem *p_item, ProError stat, ProAppData app_data)
+
+{
+<a name="anchor-237"></a>    int		status;
+    ProName	item_name;
+    ProCharName	type_str;
+    FILE	*fp;
+
+<a name="anchor-238"></a>    status = ProModelitemNameGet(p_item, item_name);
+    TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, &quot;ProTestListGeomAction()&quot;, (ProError)status,
+		     status != PRO_TK_NO_ERROR);
+
+    if (item_name[0] != NULL_WCHAR)
+<a name="anchor-239"></a>    {
+	status = ProUtilObjtypeStr(p_item->type, type_str);
+	TEST_CALL_REPORT(&quot;ProUtilObjtypeStr()&quot;, &quot;ProTestListGeomAction()&quot;,
+			 (ProError)status, status != PRO_TK_NO_ERROR);
+	fp = ( FILE * )app_data;
+<a name="anchor-240"></a>	ProTKFprintf(fp, (char*)&quot;%4d %-18s %-32S\n&quot;, p_item->id, type_str, item_name);
+    }
+
+    return( PRO_TK_NO_ERROR );
+
+<a name="anchor-241"></a>}   /* End of ProTestListGeomAction() */
+</pre>
+</body>
+</html>

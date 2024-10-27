@@ -1,0 +1,242 @@
+<html>
+<head>
+<title>UgXsecMassProps.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProMdl.h&quot;
+#include &quot;ProModelitem.h&quot;
+<a name="anchor-2"></a>#include &quot;ProSelection.h&quot;
+#include &quot;ProMessage.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProSurface.h&quot;
+#include &quot;ProCsys.h&quot;
+<a name="anchor-3"></a>#include &quot;ProFeature.h&quot;
+#include &quot;ProDisplist.h&quot;
+#include &quot;ProGraphic.h&quot;
+#include &quot;ProXsec.h&quot;
+
+<a name="anchor-4"></a>#include &quot;UtilMatrix.h&quot;
+/*---------------------- Application Includes ------------------------*/
+#include &quot;UtilMath.h&quot;
+
+/*------------------------- Global Data -----------------------------*/
+<a name="anchor-5"></a>static ProName msgfil;
+
+/*---------------------- Function Prototypes -------------------------*/
+int user_Neutral_Axis();
+void UsrPolylineDraw();
+<a name="anchor-6"></a>
+/*====================================================================*
+Function : user_Neutral_Axis()
+Purpose  : Example for Calculating the Mass Properties of Cross Sections 
+\*====================================================================*/
+<a name="anchor-7"></a>int user_Neutral_Axis()
+{
+    ProError status;
+    ProPart part;
+    int n_sel;
+<a name="anchor-8"></a>    ProSelection *sel;
+    ProModelitem surface_modelitem, csys_modelitem;
+    ProSurface surface;
+    ProSrftype stype;
+    ProPoint3d finish, normal, pos, cross, xpos, cog;
+<a name="anchor-9"></a>    ProUvParam uv;
+    double dist, absdist, offset;
+    ProCsys csys;
+    ProGeomitemdata *csys_geomdata;
+    ProCsysdata *csys_data;
+<a name="anchor-10"></a>    ProMatrix transf, nulltransf;
+    ProName w_csys_name, w_name;
+    int n_steps, id=-1, surf_id;
+    ProXsec xsec;
+    ProDimension dimension;
+<a name="anchor-11"></a>    ProMassProperty  mprop;
+    ProPoint3d points[100];
+    int n_points=0;
+    ProFeature feature;
+    ProFeatureDeleteOptions *delete_opts = 0;
+<a name="anchor-12"></a>    int *feat_ids = NULL;
+
+    ProStringToWstring(msgfil,&quot;msg_ugxsec.txt&quot;);
+    ProMdlCurrentGet((ProMdl*)&amp;part);
+
+<a name="anchor-13"></a>/*-----------------------------------------------------------*\
+    Select a starting plane for the cross section.
+\*-----------------------------------------------------------*/
+    ProMessageDisplay(msgfil, &quot;USER Pick the start plane&quot;);
+    status = ProSelect(&quot;face&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+<a name="anchor-14"></a>    if(status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+        return(0);
+
+    ProSelectionModelitemGet(sel[0], &amp;surface_modelitem);
+    ProSurfaceInit(part, surface_modelitem.id, &amp;surface);
+<a name="anchor-15"></a>    ProSurfaceTypeGet(surface, &amp;stype);
+    if(stype != PRO_SRF_PLANE)
+	return(0);
+
+/*-----------------------------------------------------------*\
+<a name="anchor-16"></a>    Select a finish point.
+\*-----------------------------------------------------------*/
+    ProMessageDisplay(msgfil, &quot;USER Pick the end position&quot;);
+    status = ProSelect(&quot;face,edge&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+    if(status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+<a name="anchor-17"></a>        return(0);
+    ProSelectionPoint3dGet(sel[0], finish);
+
+/*-----------------------------------------------------------*\
+    Get the geometry of the start plane.
+<a name="anchor-18"></a>\*-----------------------------------------------------------*/
+    uv[0]=uv[1]=0.0;
+    ProSurfaceXyzdataEval(surface, uv, pos, NULL, NULL, normal);
+    dist = ProUtilPointPlaneDist(finish, pos, normal);
+
+<a name="anchor-19"></a>/*-----------------------------------------------------------*\
+    Select a Csys Datum whose X and Y are parallel to the
+    start plane.
+\*-----------------------------------------------------------*/
+    ProMessageDisplay(msgfil, &quot;USER Pick the csys&quot;);
+<a name="anchor-20"></a>    while (1)
+    {
+	status = ProSelect(&quot;csys&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+	if(status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+            return(0);
+<a name="anchor-21"></a>	ProSelectionModelitemGet(sel[0], &amp;csys_modelitem);
+	ProCsysInit(part, csys_modelitem.id, &amp;csys);
+	ProCsysDataGet(csys, &amp;csys_geomdata);
+	csys_data = csys_geomdata->data.p_csys_data;
+
+<a name="anchor-22"></a>        ProUtilVectorCross(normal, csys_data->z_vector, cross);
+        if (fabs(ProUtilVectorLength(cross)) > EPSM6)
+            ProMessageDisplay(msgfil, &quot;USER Csys has wrong orientation&quot;);
+        else
+            break;
+<a name="anchor-23"></a>    }
+
+/*-----------------------------------------------------------*\
+    Get the name and location of the coordinate system.
+\*-----------------------------------------------------------*/
+<a name="anchor-24"></a>    ProMatrixInit(csys_data->x_vector,
+		  csys_data->y_vector,
+		  csys_data->z_vector,
+		  csys_data->origin, transf);
+    ProModelitemNameGet(&amp;csys_modelitem, w_csys_name);
+<a name="anchor-25"></a>
+/*-----------------------------------------------------------*\
+    Get the number of steps in the analysis.
+\*-----------------------------------------------------------*/
+    ProMessageDisplay(msgfil, &quot;USER Number of steps [QUIT] : &quot;);
+<a name="anchor-26"></a>    if(ProMessageIntegerRead(NULL, &amp;n_steps) != PRO_TK_NO_ERROR)
+        return(0);
+
+/*-----------------------------------------------------------*\
+    Create an initial cross section half-way down.
+<a name="anchor-27"></a>\*-----------------------------------------------------------*/
+    ProStringToWstring(w_name, &quot;ZZZ&quot;);
+    status = ProSurfaceIdGet (surface, &amp;surf_id);
+    status =  ProXsecParallelCreate((ProSolid)part, w_name, surf_id, dist / 2.0, 
+                                    &amp;xsec, &amp;dimension);
+<a name="anchor-28"></a>/*-----------------------------------------------------------*\
+    Step from start plane to finish.
+\*-----------------------------------------------------------*/
+    absdist = fabs(dist);
+    for (offset = 0.0; offset &lt;= absdist; offset += 
+<a name="anchor-29"></a>         absdist / n_steps)
+    {
+/*-----------------------------------------------------------*\
+        Modify the cross-sectional offset dimension to move
+        it to the right position.
+<a name="anchor-30"></a>\*-----------------------------------------------------------*/
+       ProDimensionValueSet(&amp;dimension, offset);
+/*-----------------------------------------------------------*\
+        Regenerate the cross section, and calculate the
+        mass properties.
+<a name="anchor-31"></a>\*-----------------------------------------------------------*/
+       status = ProSolidRegenerate((ProSolid)part, PRO_REGEN_NO_FLAGS);
+       status = ProXsecRegenerate(&amp;xsec);
+        status = ProXsecMassPropertyCompute(&amp;xsec, w_csys_name, &amp;mprop);
+        if (PRO_TK_NO_ERROR != status)
+<a name="anchor-32"></a>            continue;
+/*-----------------------------------------------------------*\
+        Transform the COG to model coordinates.
+\*-----------------------------------------------------------*/
+        ProPntTrfEval(mprop.center_of_gravity, transf, cog);
+<a name="anchor-33"></a>
+/*-----------------------------------------------------------*\
+        Shift the cross COG from the XY-plane of the
+        coordinate system to the plane of the cross section.
+\*-----------------------------------------------------------*/
+<a name="anchor-34"></a>        xpos[0] = pos[0] - normal[0] * offset;
+        xpos[1] = pos[1] - normal[1] * offset;
+        xpos[2] = pos[2] - normal[2] * offset;
+
+        ProUtilPlaneLineX(xpos, normal, cog, normal, cog);
+<a name="anchor-35"></a>        ProUtilVectorCopy (cog, points[n_points++]);
+    }
+
+/*-----------------------------------------------------------*\
+    Delete the cross section and the owning feature (a datum 
+<a name="anchor-36"></a>    plane).
+\*-----------------------------------------------------------*/
+    ProDimensionFeatureGet (&amp;dimension, &amp;feature);
+    status = ProXsecDelete(&amp;xsec);
+
+<a name="anchor-37"></a>    status = ProArrayAlloc(1,sizeof(ProFeatureDeleteOptions),
+        1, (ProArray*)&amp;delete_opts);
+
+    delete_opts[0] = PRO_FEAT_DELETE_CLIP;
+
+<a name="anchor-38"></a>    status = ProArrayAlloc(1,sizeof(int),
+        1, (ProArray*)&amp;feat_ids);
+
+    feat_ids[0] = feature.id;
+
+<a name="anchor-39"></a>    ProFeatureWithoptionsDelete(part, feat_ids, 
+      delete_opts, PRO_REGEN_NO_FLAGS);
+
+    status = ProArrayFree((ProArray*)&amp;delete_opts);
+    status = ProArrayFree((ProArray*)&amp;feat_ids);
+<a name="anchor-40"></a>
+
+/*-----------------------------------------------------------*\
+    Display the line of the COG as a 3D list of vectors.
+\*-----------------------------------------------------------*/
+<a name="anchor-41"></a>    ProDisplist3dCreate(id, UsrPolylineDraw, points,
+         &amp;n_points, NULL, NULL, NULL, NULL);
+    ProUtilMatrixCopy(NULL, nulltransf);
+    ProDisplist3dDisplay(id++, nulltransf);
+    ProWindowRepaint(-1);
+<a name="anchor-42"></a>
+    return (0);
+}
+
+/*===========================================================*\
+<a name="anchor-43"></a>    Function to draw a polyline, with arguments suitable 
+    for acting as a callback to ProDisplist3dCreate()
+\*===========================================================*/
+void UsrPolylineDraw(
+    ProPoint3d *points,
+<a name="anchor-44"></a>    int *n_points)
+{
+    ProColor old_color, warning_color;
+	
+	warning_color.method = PRO_COLOR_METHOD_TYPE;
+<a name="anchor-45"></a>	warning_color.value.type = PRO_COLOR_WARNING;
+	
+	ProGraphicsColorModify (&amp;warning_color, &amp;old_color);
+	    
+    ProGraphicsPolylineDraw(points, *n_points);
+<a name="anchor-46"></a>    
+	ProGraphicsColorModify(&amp;old_color, NULL);
+}
+
+</pre>
+</body>
+</html>

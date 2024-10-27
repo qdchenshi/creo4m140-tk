@@ -1,0 +1,332 @@
+<html>
+<head>
+<title>UgMain.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMenuBar.h>
+<a name="anchor-2"></a>#include &lt;ProUtil.h>
+#include &lt;PTApplsUnicodeUtils.h>
+/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+
+<a name="anchor-3"></a>
+
+/*---------------------- Function Prototypes -------------------------*/
+int user_initialize(int argc, char *argv[], char *proe_vsn, char *build);
+void user_terminate();
+<a name="anchor-4"></a>
+/*------------------------- External Data ----------------------------*/
+extern int UserPartSetup();
+extern int UserAssemblySetup();
+extern int UserMechanicaSetup();
+<a name="anchor-5"></a>extern int UserUnicodeToNativeAndLegacy();
+extern int UserUnicodeToUnicode();
+extern int UserReadNativeToUnicode();
+extern int UserReadUnicodeToUnicode(); 
+extern int UserManufactureSetup();
+<a name="anchor-6"></a>extern int UserDrawingSetup();
+extern ProError UserREADMESetup();
+extern ProError UserGuideMain();
+extern int UserNewDrawingMenuSetup();
+extern int UserUIMenuSetup();
+<a name="anchor-7"></a>
+extern int UserPopupmenusSetup();
+extern int UserCustomRelFunctionsDefine();
+extern int UserCustomModelChecksDefine();
+extern int UserSolidNoteCreate();
+<a name="anchor-8"></a>
+/*====================================================================*\
+Function : user_initialize
+Purpose  : Initialize Pro/TOOLKIT program
+\*====================================================================*/
+<a name="anchor-9"></a>int user_initialize(
+  int   argc,      /** Number of arguments                 **/
+  char *argv[],    /** Pro/E arguments                     **/
+  char *proe_vsn,  /** Pro/E version                       **/
+  char *build)     /** Pro/E build                         **/
+<a name="anchor-10"></a>{
+  int menu,i;
+  uiCmdCmdId  cmd_id;
+  ProFileName wmsgfil;
+  ProError err;
+<a name="anchor-11"></a>
+/*--------------------------------------------------------------------*\
+  Print out Pro/E version and build and set up logging if required
+\*--------------------------------------------------------------------*/
+  ProTKPrintf(&quot;\n&quot;);
+<a name="anchor-12"></a>  for(i=0;i&lt;argc;i++)
+  ProTKPrintf(&quot;\targv[%d]       = %s\n&quot;, i, argv[i]);
+  ProTKPrintf(&quot;\tPro/E version = %s\n&quot;, proe_vsn);
+  ProTKPrintf(&quot;\tPro/E build   = %s\n&quot;, build);
+
+<a name="anchor-13"></a>  if (argc > 4)
+    ProTestErrlogOpen(argv[4], proe_vsn, build);
+  else
+    ProTestErrlogOpen(&quot;pt_userguide&quot;, proe_vsn, build);
+
+<a name="anchor-14"></a>/*---------------------------------------------------------------------*\
+  Set up the entry point to the demos
+\*---------------------------------------------------------------------*/
+  ProStringToWstring (wmsgfil, &quot;utilities.txt&quot;);
+
+<a name="anchor-15"></a>  err = ProMenubarMenuAdd (&quot;UGMENU&quot;, &quot;-UG MENU&quot;, 
+		&quot;Utilities&quot;, PRO_B_TRUE, wmsgfil);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubarMenuAdd()&quot;,err);
+
+  err = ProCmdActionAdd(&quot;-UG README!&quot;,
+<a name="anchor-16"></a>        (uiCmdCmdActFn)UserREADMESetup,
+        uiProe2ndImmediate, NULL,
+        PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdActionAdd()&quot;,err);
+
+<a name="anchor-17"></a>  err = ProMenubarmenuPushbuttonAdd(
+        &quot;UGMENU&quot;, &quot;-UG README!&quot;, &quot;-UG README!&quot;,
+        &quot;Enter the README menu of the User Guide&quot;,
+        NULL, PRO_B_FALSE, cmd_id, wmsgfil);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubarmenuPushbuttonAdd()&quot;,err);
+<a name="anchor-18"></a>
+/*--------------------------------------------------------------------*\
+	Register a menu button icon for the command
+\*--------------------------------------------------------------------*/
+  err = ProCmdIconSet (cmd_id, &quot;tkreadme.gif&quot;);
+<a name="anchor-19"></a>  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdIconSet()&quot;,err);
+
+/*--------------------------------------------------------------------*\
+	Make the command available as a Toolbar button
+\*--------------------------------------------------------------------*/
+<a name="anchor-20"></a>  err = ProCmdDesignate (cmd_id,
+						&quot;-UG README!&quot;,
+						&quot;Enter the README menu of the User Guide&quot;, 
+						&quot;UG README description&quot;, 
+						wmsgfil);
+<a name="anchor-21"></a>  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdDesignate()&quot;,err);
+
+  err = ProCmdActionAdd(&quot;-UsrGuide Main&quot;,
+        (uiCmdCmdActFn)UserGuideMain,
+        uiProe2ndImmediate, NULL,
+<a name="anchor-22"></a>        PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdActionAdd()&quot;,err);
+
+  err = ProMenubarmenuPushbuttonAdd(
+        &quot;UGMENU&quot;, &quot;-UsrGuide Main&quot;, &quot;-UsrGuide Main&quot;,
+<a name="anchor-23"></a>        &quot;Enter the Main menu of the User Guide.&quot;,
+        NULL, PRO_B_FALSE, cmd_id, wmsgfil);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubarmenuPushbuttonAdd()&quot;,err);
+
+  err = ProCmdIconSet (cmd_id, &quot;tkmain.gif&quot;);
+<a name="anchor-24"></a>  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdIconSet()&quot;,err);
+
+  err = ProCmdDesignate (cmd_id,
+						&quot;-UsrGuide Main&quot;,
+						&quot;Enter the Main menu of the User Guide.&quot;, 
+<a name="anchor-25"></a>						&quot;UG Main description&quot;, 
+						wmsgfil);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdDesignate()&quot;,err);
+
+  err = ProCmdActionAdd(&quot;-TK Round&quot;,
+<a name="anchor-26"></a>        (uiCmdCmdActFn)UserEdgeRoundCreate,
+        uiProe2ndImmediate, NULL,
+        PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdActionAdd()&quot;,err);
+
+<a name="anchor-27"></a>   err = ProCmdIconSet (cmd_id, &quot;tkround&quot;);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdIconSet()&quot;,err);
+
+  err = ProCmdDesignate (cmd_id,
+			 &quot;-UsrGuide Round&quot;,
+<a name="anchor-28"></a>			 &quot;Userguide Round Example&quot;, 
+			 &quot;UG Round description&quot;, 
+			 wmsgfil);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdDesignate()&quot;,err);
+
+<a name="anchor-29"></a>  err = ProCmdActionAdd(&quot;-TK Note Create&quot;,
+        (uiCmdCmdActFn)UserSolidNoteCreate,
+        uiProe2ndImmediate, NULL,
+        PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdActionAdd()&quot;,err);
+<a name="anchor-30"></a>
+  err = ProCmdIconSet (cmd_id, &quot;tknote&quot;);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdIconSet()&quot;,err);
+
+  err = ProCmdDesignate (cmd_id,
+<a name="anchor-31"></a>			 &quot;-UsrGuide Solid Note&quot;,
+			 &quot;Userguide Solid Note Example&quot;, 
+			 &quot;UG Solid Note description&quot;, 
+			 wmsgfil);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdDesignate()&quot;,err);
+<a name="anchor-32"></a>
+
+
+
+  /*--------------------------------------------------------------------*\
+<a name="anchor-33"></a>		Part menu
+  \*--------------------------------------------------------------------*/
+  err = ProCmdActionAdd(&quot;-UsrGuide Part&quot;,
+        (uiCmdCmdActFn)UserPartSetup,
+        uiProe2ndImmediate, NULL,
+<a name="anchor-34"></a>        PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdActionAdd()&quot;,err);
+
+  err = ProMenubarmenuPushbuttonAdd(
+        &quot;UGMENU&quot;, &quot;-UsrGuide Part&quot;, &quot;-UsrGuide Part&quot;,
+<a name="anchor-35"></a>        &quot;Enter the Part menu of the User Guide.&quot;,
+        NULL, PRO_B_TRUE, cmd_id, wmsgfil);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubarmenuPushbuttonAdd()&quot;,err);
+
+  err = ProMenuFileRegister(&quot;part&quot;,&quot;part.mnu&quot;,&amp;menu);
+<a name="anchor-36"></a>  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenuFileRegister()&quot;,err);
+
+  err = ProMenuAuxfileRegister(&quot;part&quot;,&quot;part.aux&quot;,&amp;menu);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenuAuxfileRegister()&quot;,err);
+
+<a name="anchor-37"></a>  err = ProMenubuttonActionSet(&quot;part&quot;,&quot;-UG Part&quot;,
+     (ProMenubuttonAction)UserPartSetup,NULL,0);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubuttonActionSet()&quot;,err);
+
+  /*--------------------------------------------------------------------*\
+<a name="anchor-38"></a>		Assembly menu
+  \*--------------------------------------------------------------------*/
+  err = ProCmdActionAdd(&quot;-UsrGuide Asm&quot;,
+        (uiCmdCmdActFn)UserAssemblySetup,
+        uiProe2ndImmediate, NULL,
+<a name="anchor-39"></a>        PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdActionAdd()&quot;,err);
+
+  err = ProMenubarmenuPushbuttonAdd(
+        &quot;UGMENU&quot;, &quot;-UsrGuide Asm&quot;, &quot;-UsrGuide Asm&quot;,
+<a name="anchor-40"></a>        &quot;Enter the Assembly menu of the User Guide.&quot;,
+        NULL, PRO_B_TRUE, cmd_id, wmsgfil);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubarmenuPushbuttonAdd()&quot;,err);
+
+  err = ProMenuFileRegister(&quot;assembly&quot;,&quot;assembly.mnu&quot;,&amp;menu);
+<a name="anchor-41"></a>  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenuFileRegister()&quot;,err);
+
+  err = ProMenuAuxfileRegister(&quot;assembly&quot;,&quot;assembly.aux&quot;,&amp;menu);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenuAuxfileRegister()&quot;,err);
+
+<a name="anchor-42"></a>  err = ProMenubuttonActionSet(&quot;assembly&quot;,&quot;-UG Assembly&quot;,
+     (ProMenubuttonAction)UserAssemblySetup,NULL,0);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubuttonActionSet()&quot;,err);
+
+  err = ProCmdActionAdd(&quot;-UsrGuide MFG&quot;,
+<a name="anchor-43"></a>        (uiCmdCmdActFn)UserManufactureSetup,
+        uiProe2ndImmediate, NULL,
+        PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdActionAdd()&quot;,err);
+
+<a name="anchor-44"></a>  err = ProMenubarmenuPushbuttonAdd(
+        &quot;UGMENU&quot;, &quot;-UsrGuide MFG&quot;, &quot;-UsrGuide MFG&quot;,
+        &quot;Enter the MFG menu of the User Guide.&quot;,
+        NULL, PRO_B_TRUE, cmd_id, wmsgfil);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubarmenuPushbuttonAdd()&quot;,err);
+<a name="anchor-45"></a>
+  err = ProMenuFileRegister(&quot;manufacture&quot;,&quot;mfg.mnu&quot;,&amp;menu);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenuFileRegister()&quot;,err);
+
+  err = ProMenuAuxfileRegister(&quot;manufacture&quot;,&quot;mfg.aux&quot;,&amp;menu);
+<a name="anchor-46"></a>  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenuAuxfileRegister()&quot;,err);
+
+  err = ProMenubuttonActionSet(&quot;manufacture&quot;,&quot;-UG MFG&quot;,
+     (ProMenubuttonAction)UserManufactureSetup,NULL,0);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubuttonActionSet()&quot;,err);
+<a name="anchor-47"></a>
+  
+
+  /*--------------------------------------------------------------------*\
+		Drawing menu
+<a name="anchor-48"></a>  \*--------------------------------------------------------------------*/
+  err = ProCmdActionAdd(&quot;-UsrGuide New Drw&quot;,
+        (uiCmdCmdActFn)UserNewDrawingMenuSetup,
+        uiProe2ndImmediate, NULL,
+        PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+<a name="anchor-49"></a>  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdActionAdd()&quot;,err);
+
+  err = ProMenubarmenuPushbuttonAdd(
+        &quot;UGMENU&quot;, &quot;-UsrGuide New Drawing&quot;, &quot;-UsrGuide New Drawing&quot;,
+        &quot;Enter the New Drawing menu of the User Guide.&quot;,
+<a name="anchor-50"></a>        NULL, PRO_B_TRUE, cmd_id, wmsgfil);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubarmenuPushbuttonAdd()&quot;,err); 
+
+  err = ProMenuFileRegister(&quot;drawing&quot;,&quot;draw.mnu&quot;, &amp;menu);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenuFileRegister()&quot;,err);
+<a name="anchor-51"></a>
+  err = ProMenuAuxfileRegister(&quot;drawing&quot;,&quot;draw.aux&quot;, &amp;menu);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenuAuxfileRegister()&quot;,err);
+
+  err = ProMenubuttonActionSet(&quot;drawing&quot;,&quot;-UG Drawing&quot;,
+<a name="anchor-52"></a>        (ProMenubuttonAction)UserDrawingSetup,NULL,0);
+  
+  err = ProMenubuttonActionSet(&quot;drawing&quot;,&quot;-UG New Drawing&quot;,
+        (ProMenubuttonAction)UserNewDrawingMenuSetup,NULL,0);
+
+<a name="anchor-53"></a>  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubuttonActionSet()&quot;,err);
+
+  err = ProCmdActionAdd(&quot;-UsrGuide UI&quot;,
+        (uiCmdCmdActFn)UserUIMenuSetup,
+        uiProe2ndImmediate, NULL,
+<a name="anchor-54"></a>        PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProCmdActionAdd()&quot;,err);
+
+  err = ProMenubarmenuPushbuttonAdd(
+        &quot;UGMENU&quot;, &quot;-UsrGuide UI&quot;, &quot;-UsrGuide UI&quot;,
+<a name="anchor-55"></a>        &quot;Enter the UI menu of the User Guide.&quot;,
+        NULL, PRO_B_TRUE, cmd_id, wmsgfil);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubarmenuPushbuttonAdd()&quot;,err); 
+
+
+<a name="anchor-56"></a>  err = ProMenuFileRegister(&quot;drawing&quot;,&quot;draw.mnu&quot;, &amp;menu);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenuFileRegister()&quot;,err);
+
+  err = ProMenuAuxfileRegister(&quot;drawing&quot;,&quot;ui.aux&quot;,&amp;menu);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenuAuxfileRegister()&quot;,err);
+<a name="anchor-57"></a>
+  err = ProMenubuttonActionSet(&quot;drawing&quot;,&quot;-UG UI&quot;,
+     (ProMenubuttonAction)UserUIMenuSetup,NULL,0);
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProMenubuttonActionSet()&quot;,err);
+
+<a name="anchor-58"></a>
+
+/*---------------------------------------------------------------------*\
+  Initialize popup menus for selected examples
+\*---------------------------------------------------------------------*/
+<a name="anchor-59"></a>  UserPopupmenusSetup();
+
+/*---------------------------------------------------------------------*\
+  Initialize custom relation functions defined in this application
+\*---------------------------------------------------------------------*/
+<a name="anchor-60"></a>  UserCustomRelFunctionsDefine();
+
+/*---------------------------------------------------------------------*\
+  Initialize ModelCheck custom checks defined in this application
+\*---------------------------------------------------------------------*/
+<a name="anchor-61"></a>  UserCustomModelChecksDefine();
+
+/*---------------------------------------------------------------------*\
+Call init functions for menu examples
+\*---------------------------------------------------------------------*/
+<a name="anchor-62"></a>  err = ProUserMenubuttonMoveInit();
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProUserMenubuttonMoveInit&quot;,err);
+  err = ProUserAddMenuInit();
+  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProUserAddMenuInit&quot;,err);
+  err = ProUserConfirmationInit();
+<a name="anchor-63"></a>  ERROR_CHECK(&quot;user_initialize&quot;,&quot;ProUserConfirmationInit&quot;,err);
+
+  return(0);
+}
+
+<a name="anchor-64"></a>void user_terminate()
+{
+}
+
+</pre>
+</body>
+</html>

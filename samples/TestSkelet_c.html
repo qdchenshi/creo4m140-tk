@@ -1,0 +1,380 @@
+<html>
+<head>
+<title>TestSkelet.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProAssembly.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProElemId.h>
+#include &lt;ProElement.h>
+<a name="anchor-3"></a>#include &lt;ProFeatType.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMessage.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProMenu.h>
+<a name="anchor-4"></a>#include &lt;ProSelection.h>
+#include &lt;ProSolid.h>
+#include &lt;ProUtil.h>
+#include &lt;ProValue.h>
+#include &lt;ProSkeleton.h>
+<a name="anchor-5"></a>
+
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-6"></a>#include &quot;TestError.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &lt;UtilMessage.h>
+/*====================================================================*\
+  Function : ProTestMdlGet()
+<a name="anchor-7"></a>  Purpose  : 
+\*====================================================================*/
+ProError ProTestMdlGet(ProMdl * mdl)
+{
+    ProError err;
+<a name="anchor-8"></a>    wchar_t        wname[PRO_FAMILY_MDLNAME_SIZE];
+    char           cname [PRO_FAMILY_MDLNAME_SIZE];
+    char * c_pnt;
+    ProMdlfileType type = PRO_MDLFILE_PART;
+    
+<a name="anchor-9"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter model name (&lt;name>.prt or &lt;name>.asm) : &quot;);
+    if(!ProUtilStringGet(wname, NULL, PRO_LINE_SIZE))
+    {
+	*mdl = NULL;
+	return PRO_TK_NO_ERROR;
+<a name="anchor-10"></a>    }
+
+    ProWstringToString(cname, wname);
+
+    if ((c_pnt = strstr (cname , &quot;.asm&quot;)) != NULL)
+<a name="anchor-11"></a>	type = PRO_MDLFILE_ASSEMBLY;
+    else
+	if ((c_pnt = strstr (cname , &quot;.prt&quot;)) != NULL)
+	    type = PRO_MDLFILE_PART;
+    else
+<a name="anchor-12"></a>	return PRO_TK_BAD_INPUTS;
+    *c_pnt = '\0';
+    ProStringToWstring(wname, cname);
+
+    err = ProMdlnameRetrieve ( wname, type, mdl);
+<a name="anchor-13"></a>    TEST_CALL_REPORT(&quot;ProMdlnameRetrieve()&quot;, &quot;ProTestMdlGet()&quot;,
+				  err, err != PRO_TK_NO_ERROR); 
+    
+    return err;
+}
+<a name="anchor-14"></a>/*====================================================================*\
+  Function : ProTestSkeletonCreate()
+  Purpose  : 
+\*====================================================================*/
+
+<a name="anchor-15"></a>ProError ProTestSkeletonCreate (ProAssembly curent_ass, int action)
+{
+    ProMdl skel_template;
+    ProMdl skel;
+    ProError err;
+<a name="anchor-16"></a>    wchar_t      wname[PRO_MDLNAME_SIZE];
+
+	/*--------*/
+    ProModelitem mi;
+    ProMdlName nm;
+<a name="anchor-17"></a>
+    err = ProTestMdlGet (&amp; skel_template);
+    if (err != PRO_TK_NO_ERROR)
+	return PRO_TK_NO_ERROR;
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter a skeleton name : &quot;);
+<a name="anchor-18"></a>    if(!ProUtilStringGet(wname, NULL, PRO_LINE_SIZE))
+    {
+	return PRO_TK_NO_ERROR;
+    }
+
+<a name="anchor-19"></a>    err = ProMdlToModelitem (skel_template, &amp;mi);
+
+    err = ProMdlMdlnameGet (skel_template, nm);
+    
+    err = ProMdlMdlnameGet (curent_ass, nm);
+<a name="anchor-20"></a> 
+    err = ProAsmSkeletonMdlnameCreate (curent_ass, wname, skel_template, &amp;skel);
+    TEST_CALL_REPORT(&quot;ProAsmSkeletonMdlnameCreate()&quot;, &quot;ProTestSkeletonCreate()&quot;,
+				  err, err != PRO_TK_NO_ERROR);
+      
+<a name="anchor-21"></a>    return err;
+}
+
+/*====================================================================*\
+  Function : ProTestCopyCreate()
+<a name="anchor-22"></a>  Purpose  : 
+\*====================================================================*/
+
+ProError ProTestCopyCreate (ProAssembly curent_ass, int action)
+{
+<a name="anchor-23"></a>    ProMdl pt_template;
+    ProMdlType comp_type;
+    ProBoolean leave_unpl;
+    ProAsmcomp new_comp;
+    ProError err;
+<a name="anchor-24"></a>    wchar_t      wname[PRO_MDLNAME_SIZE];
+
+
+    wchar_t * wnames [3];
+    int i, dummy; 
+<a name="anchor-25"></a>
+    err = ProTestMdlGet (&amp; pt_template);
+    if (err != PRO_TK_NO_ERROR)
+	return PRO_TK_NO_ERROR;
+    
+<a name="anchor-26"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter a component name : &quot;);
+    if(!ProUtilStringGet(wname, NULL, PRO_LINE_SIZE))
+    {
+	return PRO_TK_NO_ERROR;
+    }
+<a name="anchor-27"></a>
+    for (i=0; i&lt;3; i++)
+    {
+	wnames[i] = (wchar_t*)calloc(PRO_NAME_SIZE, sizeof(wchar_t));
+    }
+<a name="anchor-28"></a>
+    ProStringToWstring(wnames[0], (char *)&quot;Part&quot;);
+    ProStringToWstring(wnames[1], (char *)&quot;Assembly&quot;);
+    ProStringToWstring(wnames[2], (char *)&quot;&quot;);
+    
+<a name="anchor-29"></a>    err = ProMenuFromStringsRegister((char *)&quot;Model Type&quot;, NULL, wnames, NULL, 
+	    NULL, &amp;dummy);
+
+    ProMenubuttonActionSet( (char *)&quot;Model Type&quot;, (char *)&quot;Part&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign, (ProAppData)&amp;comp_type ,
+<a name="anchor-30"></a>	PRO_PART);
+    ProMenubuttonActionSet( (char *)&quot;Model Type&quot;, (char *)&quot;Assembly&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign,(ProAppData)&amp;comp_type  ,
+	PRO_ASSEMBLY);
+    ProMenubuttonActionSet( (char *)&quot;Model Type&quot;, (char *)&quot;Model Type&quot;, 
+<a name="anchor-31"></a>       	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+
+    ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;Model Type&quot;, NULL);
+    ProMenuProcess((char *)&quot;Model Type&quot;, &amp;i);
+
+<a name="anchor-32"></a>    ProStringToWstring(wnames[0], (char *)&quot;Unplaced&quot;);
+    ProStringToWstring(wnames[1], (char *)&quot;Default&quot;);
+    
+    err = ProMenuFromStringsRegister((char *)&quot;Placment Type&quot;, NULL, wnames, NULL, 
+	    NULL, &amp;dummy);
+<a name="anchor-33"></a>
+    ProMenubuttonActionSet( (char *)&quot;Placment Type&quot;, (char *)&quot;Unplaced&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign, (ProAppData)&amp;leave_unpl , PRO_B_TRUE);
+    ProMenubuttonActionSet( (char *)&quot;Placment Type&quot;, (char *)&quot;Default&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign,(ProAppData)&amp;leave_unpl  , PRO_B_FALSE);
+<a name="anchor-34"></a>     ProMenubuttonActionSet( (char *)&quot;Placment Type&quot;, (char *)&quot;Placment Type&quot;, 
+       	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+
+    ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;Placment Type&quot;, NULL);
+    ProMenuProcess((char *)&quot;Placment Type&quot;, &amp;i);
+<a name="anchor-35"></a>
+	
+    err = ProAsmcompMdlnameCreateCopy (curent_ass, wname, comp_type, pt_template,
+	leave_unpl, &amp;new_comp);
+    TEST_CALL_REPORT(&quot;ProAsmcompMdlnameCreateCopy()&quot;,&quot;ProTestCopyCreate()&quot;,
+<a name="anchor-36"></a>				  err, err != PRO_TK_NO_ERROR);
+	
+
+    for (i=0; i&lt;3; i++)
+    {
+<a name="anchor-37"></a>	free (wnames [i]);
+    }
+
+    
+    return err;
+<a name="anchor-38"></a>}
+/*====================================================================*\
+  Function : ProTestSkelCopyCreate()
+  Purpose  : 
+\*====================================================================*/
+<a name="anchor-39"></a>int ProTestSkelCopyCreate(ProAssembly curent_ass)
+{
+    char * cnames [] =
+    {
+	&quot;Create skeleton&quot;,
+<a name="anchor-40"></a>	&quot;Create Copy&quot;,
+	&quot;&quot;
+    };
+    wchar_t * wnames [3];
+    int i, dummy;
+<a name="anchor-41"></a>    ProError err;
+
+    for (i=0; i&lt;3; i++)
+    {
+	wnames[i] = (wchar_t*)calloc(PRO_NAME_SIZE, sizeof(wchar_t));
+<a name="anchor-42"></a>	ProStringToWstring(wnames[i], cnames[i]);
+    }
+    err = ProMenuFromStringsRegister((char *)&quot;TkAsmcompCreate&quot;, NULL, wnames, NULL, 
+	    NULL, &amp;dummy);
+    TEST_CALL_REPORT(&quot;ProMenuFromStringsRegister()&quot;, &quot;ProTestSkelCopyCreate()&quot;,
+<a name="anchor-43"></a>	    err, err != PRO_TK_NO_ERROR);
+    for (i=0; i&lt;3; i++)
+    {
+	free (wnames [i]);
+    }
+<a name="anchor-44"></a>
+    ProMenubuttonActionSet( (char *)&quot;TkAsmcompCreate&quot;, (char *)&quot;Create skeleton&quot;, 
+	    (ProMenubuttonAction)ProTestSkeletonCreate, curent_ass, 0);
+    ProMenubuttonActionSet( (char *)&quot;TkAsmcompCreate&quot;, (char *)&quot;Create Copy&quot;, 
+	    (ProMenubuttonAction)ProTestCopyCreate, curent_ass, 0);
+<a name="anchor-45"></a>    ProMenubuttonActionSet( (char *)&quot;TkAsmcompCreate&quot;, (char *)&quot;TkAsmcompCreate&quot;, 
+       	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+
+    ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;TkAsmcompCreate&quot;, NULL);
+    ProMenuProcess((char *)&quot;TkAsmcompCreate&quot;, &amp;i); 
+<a name="anchor-46"></a>    
+    return (0);
+}
+/*====================================================================*\
+  Function : ProTestAsmSkeletonAdd()
+<a name="anchor-47"></a>  Purpose  : 
+\*====================================================================*/
+ProError ProTestAsmSkeletonAdd (ProAssembly curent_ass, int action)
+{
+    ProMdl asm_template;
+<a name="anchor-48"></a>    ProError err;
+
+    err = ProTestMdlGet (&amp; asm_template);
+    if (err != PRO_TK_NO_ERROR ||asm_template == NULL )
+	return PRO_TK_NO_ERROR;
+<a name="anchor-49"></a>
+	 
+    err = ProAsmSkeletonAdd (curent_ass, asm_template);
+    TEST_CALL_REPORT(&quot;ProAssmSkeletonAdd()&quot;, &quot;ProTestAsmSkeletonAdd()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-50"></a>  
+    return err;
+}
+
+/*====================================================================*\
+<a name="anchor-51"></a>  Function : ProTestAsmSkeletonDelete()
+  Purpose  : 
+\*====================================================================*/
+ProError ProTestAsmSkeletonDelete (ProAssembly curent_ass, int action)
+{
+<a name="anchor-52"></a>
+    ProError err;
+ 
+    err = ProAsmSkeletonDelete (curent_ass);
+    TEST_CALL_REPORT(&quot;ProAsmSkeletonDelete()&quot;, &quot;ProTestAsmSkeletonDelete()&quot;,
+<a name="anchor-53"></a>	    err, err != PRO_TK_NO_ERROR);
+	
+    return err;
+}
+/*====================================================================*\
+<a name="anchor-54"></a>  Function : ProTestAsmSkeletonSave()
+  Purpose  : 
+\*====================================================================*/
+ProError ProTestAsmSkeletonSave (ProAssembly curent_ass, int action)
+{
+<a name="anchor-55"></a>    ProMdl skeleton;
+    ProError err;
+ 
+    err = ProAsmSkeletonGet (curent_ass, &amp;skeleton);
+    TEST_CALL_REPORT(&quot;ProAsmSkeletonGet()&quot;, &quot;ProTestAsmSkeletonSave()&quot;,
+<a name="anchor-56"></a>	    err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+         return err;
+
+    err = ProMdlSave (skeleton);
+<a name="anchor-57"></a>    TEST_CALL_REPORT(&quot;ProMdlSave()&quot;, &quot;ProTestAsmSkeletonSave()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+	
+    return err;
+    
+<a name="anchor-58"></a>}
+
+
+/*====================================================================*\
+  Function : ProTestAsmcompFill()
+<a name="anchor-59"></a>  Purpose  : 
+\*====================================================================*/
+ProError ProTestAsmcompFill  (ProAssembly curent_ass, int action)
+{
+    ProError ProUtilAsmcompSelect(ProAsmcomp *p_asmcomp);
+<a name="anchor-60"></a>    
+    ProMdl asm_template;
+    ProError err;
+    ProAsmcomp asmcomp;
+
+<a name="anchor-61"></a>    err = ProTestMdlGet (&amp; asm_template);
+    if (err != PRO_TK_NO_ERROR )
+	return PRO_TK_NO_ERROR;
+    err = ProUtilAsmcompSelect (&amp;asmcomp);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-62"></a>	return PRO_TK_NO_ERROR;
+    
+ 
+    err = ProAsmcompFillFromMdl (&amp;asmcomp, asm_template);
+     TEST_CALL_REPORT(&quot;ProAsmcompFillFromMdl()&quot;, &quot;ProTestAsmSkeletonSave()&quot;,
+<a name="anchor-63"></a>	    err, err != PRO_TK_NO_ERROR);
+	 
+    
+    return err;
+    
+<a name="anchor-64"></a>}
+
+
+/*====================================================================*\
+  Function : ProTestCompSkelReplace()
+<a name="anchor-65"></a>  Purpose  : 
+\*====================================================================*/
+int ProTestCompSkelReplace (ProAssembly curent_ass)
+{
+      char * cnames [] =
+<a name="anchor-66"></a>    {
+	&quot;Skeleton Add&quot;,
+	&quot;Skeleton Delete&quot;,
+	&quot;Skeleton Save&quot;,
+	&quot;Fill from Model&quot;,
+<a name="anchor-67"></a>	&quot;&quot;
+    };
+    wchar_t * wnames [sizeof (cnames)/sizeof (char*)];
+    int i, dummy;
+    ProError err;
+<a name="anchor-68"></a>
+    for (i=0; i&lt;sizeof (cnames)/sizeof (char*); i++)
+    {
+	wnames[i] = (wchar_t*)calloc(PRO_NAME_SIZE, sizeof(wchar_t));
+	ProStringToWstring(wnames[i], cnames[i]);
+<a name="anchor-69"></a>    }
+    err = ProMenuFromStringsRegister((char *)&quot;TkAsmcompReplace&quot;, NULL, wnames, NULL, 
+	    NULL, &amp;dummy);
+    TEST_CALL_REPORT(&quot;ProMenuFromStringsRegister()&quot;, &quot;ProTestSkelCopyCreate()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-70"></a>    for (i=0; i&lt;sizeof (cnames)/sizeof (char*); i++)
+    {
+	free (wnames [i]);
+    }
+
+<a name="anchor-71"></a>    ProMenubuttonActionSet( (char *)&quot;TkAsmcompReplace&quot;, (char *)&quot;Skeleton Add&quot;, 
+	    (ProMenubuttonAction)ProTestAsmSkeletonAdd, curent_ass, 0);
+    ProMenubuttonActionSet( (char *)&quot;TkAsmcompReplace&quot;, (char *)&quot;Skeleton Delete&quot;, 
+	    (ProMenubuttonAction)ProTestAsmSkeletonDelete, curent_ass, 0);
+    ProMenubuttonActionSet( (char *)&quot;TkAsmcompReplace&quot;, (char *)&quot;Skeleton Save&quot;, 
+<a name="anchor-72"></a>	    (ProMenubuttonAction)ProTestAsmSkeletonSave, curent_ass, 0);
+    ProMenubuttonActionSet( (char *)&quot;TkAsmcompReplace&quot;, (char *)&quot;Fill from Model&quot;, 
+	    (ProMenubuttonAction)ProTestAsmcompFill, curent_ass, 0); 
+    ProMenubuttonActionSet( (char *)&quot;TkAsmcompReplace&quot;, (char *)&quot;TkAsmcompReplace&quot;, 
+       	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-73"></a>
+    ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;TkAsmcompReplace&quot;, NULL);
+    ProMenuProcess((char *)&quot;TkAsmcompReplace&quot;, &amp;i); 
+    
+
+<a name="anchor-74"></a>    return (0);
+}
+</pre>
+</body>
+</html>

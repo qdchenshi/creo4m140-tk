@@ -1,0 +1,295 @@
+<html>
+<head>
+<title>UgDrawingViews.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+#include &lt;ProToolkit.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProArray.h>
+<a name="anchor-2"></a>#include &lt;UtilMatrix.h>
+/*====================================================================*\ 
+FUNCTION : UsrListViews()
+PURPOSE  : Command to list view info in an information window 
+\*====================================================================*/ 
+<a name="anchor-3"></a>int UsrListViews() 
+{
+  ProDrawing drawing;
+  int n_views, view, sheet;
+  ProSolid solid;
+<a name="anchor-4"></a>  ProMdlName modelName;
+  ProMdlExtension modelExtension;
+  ProVector outline[2];
+  double scale;
+  ProDrawingViewDisplay display;
+<a name="anchor-5"></a>  char *sstyle;
+  ProView *views;
+  FILE *fp;
+  ProName wfname;
+  char name[PRO_MDLNAME_SIZE];
+<a name="anchor-6"></a>  char type[PRO_MDLEXTENSION_SIZE];
+  ProPath modelFullPath = { 0 }, objDirPath = { 0 };
+  int modelVersion;
+
+  char *fname = &quot;views.txt&quot;;
+<a name="anchor-7"></a>
+/*--------------------------------------------------------------------*\     
+Open a text file to contain the information to be displayed 
+\*--------------------------------------------------------------------*/ 
+  fp = PTApplsUnicodeFopen(fname, &quot;w&quot;);
+<a name="anchor-8"></a>
+/*--------------------------------------------------------------------*\     
+Get the current drawing 
+\*--------------------------------------------------------------------*/ 
+  ProMdlCurrentGet((ProMdl*)&amp;drawing);
+<a name="anchor-9"></a>
+/*--------------------------------------------------------------------*\     
+Collect the views into an array 
+\*--------------------------------------------------------------------*/ 
+  ProDrawingViewsCollect(drawing, &amp;views);
+<a name="anchor-10"></a>  ProArraySizeGet(views, &amp;n_views);
+
+  for(view=0;view&lt;n_views;view++)
+    { 
+/*--------------------------------------------------------------------*\
+<a name="anchor-11"></a>Get the sheet number for this view 
+\*--------------------------------------------------------------------*/ 
+      ProDrawingViewSheetGet(drawing, views[view], &amp;sheet);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-12"></a>Get the name of the solid that the view contains 
+\*--------------------------------------------------------------------*/ 
+      ProDrawingViewSolidGet(drawing, views[view], &amp;solid);
+	  ProMdlMdlnameGet((ProMdl)solid, modelName);
+	  ProMdlExtensionGet((ProMdl)solid, modelExtension);
+<a name="anchor-13"></a>      ProMdlOriginGet((ProMdl)solid, modelFullPath);
+	  ProFileMdlnameParse (modelFullPath, objDirPath, NULL, NULL, &amp;modelVersion);
+
+      ProWstringToString(name, modelName);
+      ProWstringToString(type, modelExtension);
+<a name="anchor-14"></a>
+/*--------------------------------------------------------------------*\ 
+Get the outline, scale, and display state 
+\*--------------------------------------------------------------------*/
+      ProDrawingViewOutlineGet(drawing, views[view], outline);         
+<a name="anchor-15"></a>      ProDrawingViewScaleGet(drawing, views[view], &amp;scale);         
+      ProDrawingViewDisplayGet(drawing, views[view], &amp;display);
+
+/*--------------------------------------------------------------------*\ 
+Write the information to the text file 
+<a name="anchor-16"></a>\*--------------------------------------------------------------------*/ 
+      ProTKFprintf(fp,&quot;View %d\n&quot;, view+1);
+      ProTKFprintf(fp,&quot;    Solid        : %s.%s.%d\n&quot;, name, type,
+	      modelVersion);
+
+<a name="anchor-17"></a>      ProTKFprintf(fp,&quot;    Sheet        : %d\n&quot;, sheet);
+      ProTKFprintf(fp,&quot;    Lower left   : %0.3f, %0.3f\n&quot;,
+	      outline[0][0],
+	      outline[0][1]);
+
+<a name="anchor-18"></a>      ProTKFprintf(fp,&quot;    Upper right  : %0.3f, %0.3f\n&quot;,
+	      outline[1][0],
+	      outline[1][1]);
+
+      ProTKFprintf(fp,&quot;    Scale        : %0.3f\n&quot;, scale);
+<a name="anchor-19"></a>      switch(display.style)
+	{         
+	case PRO_DISPSTYLE_DEFAULT     : sstyle = &quot;default&quot;; break;
+	  
+	case PRO_DISPSTYLE_WIREFRAME   : sstyle = &quot;wireframe&quot;; break;
+<a name="anchor-20"></a>
+	case PRO_DISPSTYLE_HIDDEN_LINE : sstyle = &quot;hidden line&quot;; break;
+
+	case PRO_DISPSTYLE_NO_HIDDEN   : sstyle = &quot;no hidden&quot;;break;
+
+<a name="anchor-21"></a>	case PRO_DISPSTYLE_SHADED      : sstyle = &quot;shaded&quot;; break;         
+	}
+
+      ProTKFprintf(fp,&quot;    Disp style   : %s\n&quot;, sstyle);
+    }
+<a name="anchor-22"></a>  
+/*--------------------------------------------------------------------*\     
+Close the file, and display it 
+\*------------------------------------------------------------------*/   
+  fclose(fp);     
+<a name="anchor-23"></a>
+  ProStringToWstring(wfname, fname);
+  ProInfoWindowDisplay(wfname, NULL, NULL);
+
+  return 0;
+<a name="anchor-24"></a>}
+
+
+/*====================================================================*\ 
+FUNCTION : UsrSolidSelect()
+<a name="anchor-25"></a>PURPOSE  : Utility to select a solid using the file browser and retrieve
+           it if it is not already in session.
+\*====================================================================*/ 
+
+int UsrSolidSelect(
+<a name="anchor-26"></a>     ProSolid *solid)
+{
+     ProName title;
+     ProLine filter;
+     ProPath wfile, wdir, wcurrent_dir;
+<a name="anchor-27"></a>     char file[PRO_PATH_SIZE], dir[PRO_PATH_SIZE],
+           current_dir[PRO_PATH_SIZE];
+     ProBoolean different_dir;
+     char *slash, *root, *ext;
+     ProFamilyMdlName wroot;
+<a name="anchor-28"></a>     ProMdlType mtype;
+     ProError status;
+
+/*--------------------------------------------------------------------*\     
+Ask the user to select a prt or asm file 
+<a name="anchor-29"></a>\*--------------------------------------------------------------------*/ 
+    ProStringToWstring(title,&quot;Solid&quot;);
+    ProStringToWstring(filter,&quot;*.prt,*.asm&quot;);
+
+    if(ProFileMdlnameOpen(title, filter, NULL, NULL, NULL, NULL, wfile) !=
+<a name="anchor-30"></a>         PRO_TK_NO_ERROR)
+
+      return(0);
+     ProWstringToString(file, wfile);
+
+<a name="anchor-31"></a>/*--------------------------------------------------------------------*\     
+Parse out the directory, and see if it is different from the current 
+\*--------------------------------------------------------------------*/     
+     different_dir = PRO_B_FALSE;
+
+<a name="anchor-32"></a>     if(slash = strrchr(file,'/'))
+     {
+        *slash = '\0';
+        strcpy(dir, file);
+        strcpy(file, ++slash);
+<a name="anchor-33"></a>        ProStringToWstring(wdir, dir);
+        ProDirectoryCurrentGet(wcurrent_dir);
+        ProWstringToString(current_dir, wcurrent_dir);
+        if(strcmp(current_dir, dir))
+             different_dir = PRO_B_TRUE;
+<a name="anchor-34"></a>     }
+
+/*--------------------------------------------------------------------*\     
+Parse out the file root name and model type 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-35"></a>
+     root = strtok(file,&quot;.&quot;);
+     ProStringToWstring(wroot, root);
+     ext = strtok(NULL,&quot;.&quot;);
+     if(!strcmp(ext,&quot;prt&quot;))
+<a name="anchor-36"></a>         mtype = PRO_MDL_PART;
+
+     else if(!strcmp(ext,&quot;asm&quot;))
+         mtype = PRO_MDL_ASSEMBLY;
+
+<a name="anchor-37"></a>     else
+         return(0);
+
+/*--------------------------------------------------------------------*\     
+If the solid is already in session, return with it 
+<a name="anchor-38"></a>\*--------------------------------------------------------------------*/ 
+    if(ProMdlnameInit(wroot, (ProMdlfileType)mtype, (ProMdl*)solid) == PRO_TK_NO_ERROR)
+         return(1);
+
+/*--------------------------------------------------------------------*\     
+<a name="anchor-39"></a>Move the to correct directory, and try to retieve the solid 
+\*--------------------------------------------------------------------*/ 
+
+    if(different_dir)
+         ProDirectoryChange(wdir);
+<a name="anchor-40"></a>
+    status = ProMdlnameRetrieve(wroot, (ProMdlfileType)mtype, (ProMdl*)solid);
+
+    if(different_dir)
+         ProDirectoryChange(wcurrent_dir);
+<a name="anchor-41"></a>
+    if(status != PRO_TK_NO_ERROR)
+         return(0);
+
+    return(1);
+<a name="anchor-42"></a> }
+
+/*====================================================================*\ 
+FUNCTION : UsrCreateSheet() 
+PURPOSE  : Create a new drawing sheet with a general, and two
+<a name="anchor-43"></a>           projected,views of a selected solid 
+\*====================================================================*/ 
+
+int UsrCreateSheet()
+ {
+<a name="anchor-44"></a>     ProDrawing drawing;
+     int sheet;
+     ProSolid solid;
+     ProVector pos;
+     ProView view, pview;
+<a name="anchor-45"></a>     ProVector outline[2];
+     ProMatrix matrix;
+
+/*--------------------------------------------------------------------*\     
+Create a new sheet and make it current 
+<a name="anchor-46"></a>\*--------------------------------------------------------------------*/ 
+
+     ProMdlCurrentGet((ProMdl)&amp;drawing);
+     ProDrawingSheetCreate(drawing, &amp;sheet);
+     ProDrawingCurrentSheetSet(drawing, sheet);
+<a name="anchor-47"></a>
+/*--------------------------------------------------------------------*\     
+Ask the user to select a solid and add it to the drawing 
+\*--------------------------------------------------------------------*/     
+
+<a name="anchor-48"></a>     if(!UsrSolidSelect(&amp;solid))
+         return(0);
+
+     ProDrawingSolidAdd(drawing, solid);
+
+<a name="anchor-49"></a>/*--------------------------------------------------------------------*\ 
+Create a general view from the Z axis direction 
+\*--------------------------------------------------------------------*/ 
+
+     ProUtilMatrixCopy(NULL, matrix);
+<a name="anchor-50"></a>     pos[0] = 200.0;
+     pos[1] = 600.0;
+     pos[2] = 0.0;
+
+     ProDrawingGeneralviewCreate(drawing, solid, sheet, PRO_B_FALSE,
+<a name="anchor-51"></a>                 pos, 0.5, matrix, &amp;view);
+
+/*--------------------------------------------------------------------*\     
+Get the position and size of the new view 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-52"></a>
+    ProDrawingViewOutlineGet(drawing, view, outline);
+
+/*--------------------------------------------------------------------*\     
+Create a projected view to the right of the general view 
+<a name="anchor-53"></a>\*--------------------------------------------------------------------*/ 
+
+     pos[0] = outline[1][0] + (outline[1][0] - outline[0][0]);
+     pos[1] = (outline[0][1] + outline[1][1]) / 2.0;
+     pos[2] = 0.0;
+<a name="anchor-54"></a>
+     ProDrawingProjectedviewCreate(drawing, view, PRO_B_FALSE, pos,
+            &amp;pview);
+
+/*--------------------------------------------------------------------*\     
+<a name="anchor-55"></a>Create a projected view below the general view 
+\*--------------------------------------------------------------------*/ 
+
+     pos[0] = (outline[0][0] + outline[1][0]) / 2.0;
+     pos[1] = outline[0][1] - (outline[1][1] - outline[0][1]);
+<a name="anchor-56"></a>
+     ProDrawingProjectedviewCreate(drawing, view, PRO_B_FALSE, pos,
+            &amp;pview);
+
+    return(1);
+<a name="anchor-57"></a>
+ }
+</pre>
+</body>
+</html>

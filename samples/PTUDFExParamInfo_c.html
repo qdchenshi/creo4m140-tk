@@ -1,0 +1,998 @@
+<html>
+<head>
+<title>PTUDFExParamInfo.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProParameter.h>
+#include &lt;ProMaterial.h>
+#include &lt;ProParamDriver.h>
+<a name="anchor-2"></a>#include &lt;ProUtil.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProRelSet.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-3"></a>
+
+#define PTTestResfileWrite(str)\
+  ProTKFprintf(file_ptr, &quot;%s\n&quot;, str);
+
+<a name="anchor-4"></a>#define PTTestResfileStringWrite(str)\
+  ProTKFprintf(file_ptr, &quot;%s&quot;, str);
+
+static char line [500];
+
+<a name="anchor-5"></a>static ProParamtableSet* tableset_array;
+
+static PTUDFExParamInfoFormat format;
+
+static FILE* file_ptr;
+<a name="anchor-6"></a>
+/*====================================================================*\
+FUNCTION: PTUDFExParamvalueWrite_very_low
+PURPOSE:  Write the value of a parameter value.
+\*====================================================================*/
+<a name="anchor-7"></a>ProError PTUDFExParamvalueWrite_very_low (ProParamvalue* value,
+					 ProBoolean short_version)
+{
+  ProParamvalueType  type;
+  double d_val;
+<a name="anchor-8"></a>  int i_val;
+  short b_val;
+  ProLine s_val;
+  char val [PRO_LINE_SIZE];
+  
+<a name="anchor-9"></a>  status = ProParamvalueTypeGet (value, &amp;type);
+  PT_TEST_LOG_SUCC (&quot;ProParamvalueTypeGet()&quot;);
+
+  switch (type)
+    {
+<a name="anchor-10"></a>    case PRO_PARAM_DOUBLE:
+      {
+	status = ProParamvalueValueGet (value, type, (void *) &amp;d_val);
+	PT_TEST_LOG_SUCC (&quot;ProParamvalueValueGet()&quot;);
+
+<a name="anchor-11"></a>	ProTKSprintf (line, (short_version ? &quot;%8.10lf&quot; : 
+			&quot;        - Param value (double): %8.10lf&quot;), d_val);
+	break;
+      }
+    case PRO_PARAM_STRING:
+<a name="anchor-12"></a>      {
+	status = ProParamvalueValueGet (value, type, (void *) s_val);
+	PT_TEST_LOG_SUCC (&quot;ProParamvalueValueGet()&quot;);
+	
+	ProTKSprintf (line, (short_version ? &quot;%s&quot; :
+<a name="anchor-13"></a>			&quot;        - Param value (string): %s&quot;), 
+		 ProWstringToString (val, s_val));
+	break;
+      }
+    case PRO_PARAM_INTEGER:
+<a name="anchor-14"></a>      {
+	status = ProParamvalueValueGet (value, type, (void *) &amp;i_val);
+	PT_TEST_LOG_SUCC (&quot;ProParamvalueValueGet()&quot;);
+
+	ProTKSprintf (line, (short_version ? &quot;%d&quot; :
+<a name="anchor-15"></a>			&quot;        - Param value (integer): %d&quot;), i_val);
+	break;
+      }
+    case PRO_PARAM_BOOLEAN:
+      {
+<a name="anchor-16"></a>	status = ProParamvalueValueGet (value, type, (void *) &amp;b_val);
+	PT_TEST_LOG_SUCC (&quot;ProParamvalueValueGet()&quot;);
+
+	ProTKSprintf (line, (short_version ? &quot;%s&quot;:
+			&quot;        - Param value (boolean): %s&quot;), 
+<a name="anchor-17"></a>		 b_val?&quot;TRUE&quot;:&quot;FALSE&quot;);
+	break;
+      }
+    case PRO_PARAM_NOTE_ID:
+      {
+<a name="anchor-18"></a>	status = ProParamvalueValueGet (value, type, (void *) &amp;i_val);
+	PT_TEST_LOG_SUCC (&quot;ProParamvalueValueGet()&quot;);
+
+	ProTKSprintf (line, (short_version ? &quot;%d&quot; :
+			&quot;        - Param value (note_id): %d&quot;), i_val);
+<a name="anchor-19"></a>	break;
+      }
+    case PRO_PARAM_VOID:
+      {
+	ProTKSprintf (line, (short_version ? &quot;&quot;:&quot;      + Param value (void)&quot;));
+<a name="anchor-20"></a>	break;
+      }
+    default:
+      return PRO_TK_GENERAL_ERROR;
+    }
+<a name="anchor-21"></a>  if (short_version)
+    {
+      PTTestResfileStringWrite (line);
+    }
+  else
+<a name="anchor-22"></a>    {
+      PTTestResfileWrite (line);
+    }
+  
+  return PRO_TK_NO_ERROR;
+<a name="anchor-23"></a>
+}
+
+/*====================================================================*\
+FUNCTION: PTUDFExParamvalueShortversionWrite_low
+<a name="anchor-24"></a>PURPOSE:  Write only the value of a parameter value.
+\*====================================================================*/
+ProError PTUDFExParamvalueShortversionWrite_low (ProParamvalue* value)
+{
+  PTUDFExParamvalueWrite_very_low (value, PRO_B_TRUE);
+<a name="anchor-25"></a>}
+
+/*====================================================================*\
+FUNCTION: PTUDFExParamvalueCSVWrite_low
+PURPOSE:  Write the value and type of a parameter value in a CSV format.
+<a name="anchor-26"></a>\*====================================================================*/
+ProError PTUDFExParamvalueCSVWrite_low (ProParamvalue* value)
+{
+  switch (value->type)
+    {
+<a name="anchor-27"></a>    case PRO_PARAM_INTEGER:
+      PTTestResfileStringWrite (&quot;INTEGER&quot;);
+      break;
+    case PRO_PARAM_DOUBLE:
+      PTTestResfileStringWrite (&quot;DOUBLE&quot;);
+<a name="anchor-28"></a>      break;
+    case PRO_PARAM_BOOLEAN:
+      PTTestResfileStringWrite (&quot;BOOLEAN&quot;);
+      break;
+    case PRO_PARAM_STRING:
+<a name="anchor-29"></a>      PTTestResfileStringWrite (&quot;STRING&quot;);
+      break;
+    case PRO_PARAM_VOID:
+      PTTestResfileStringWrite (&quot;VOID&quot;);
+      break;
+<a name="anchor-30"></a>    }
+
+  PTTestResfileStringWrite (&quot;,&quot;);
+  PTUDFExParamvalueWrite_very_low (value, PRO_B_TRUE);
+  PTTestResfileStringWrite (&quot;,&quot;);
+<a name="anchor-31"></a>}
+
+/*====================================================================*\
+FUNCTION: PTUDFExParamvalueWrite_low
+PURPOSE:  Write the value and type of a parameter value in a deascriptive
+<a name="anchor-32"></a>          text format.
+\*====================================================================*/
+ProError PTUDFExParamvalueWrite_low (ProParamvalue* value)
+{
+ PTUDFExParamvalueWrite_very_low (value, PRO_B_FALSE);
+<a name="anchor-33"></a>}
+
+/*====================================================================*\
+FUNCTION: PTUDFExParamlimitWrite_low
+PURPOSE:  Write text information about a parameter upper or lower bound.
+<a name="anchor-34"></a>\*====================================================================*/
+static ProError PTUDFExParamlimitWrite_low (char* label, ProParamLimit* limit)
+{
+  char*  limit_string;
+
+<a name="anchor-35"></a>  ProTKSprintf (line,  &quot;      + %s Value Info:&quot;, label);
+  PTTestResfileWrite (line);
+
+  switch (limit->type)
+    {
+<a name="anchor-36"></a>    case PRO_PARAM_UNLIMITED:
+      limit_string = &quot;Unlimited&quot;;
+      break;
+    case PRO_PARAM_GREATER_THAN:
+      limit_string = &quot;Greater than&quot;;
+<a name="anchor-37"></a>      break;
+    case PRO_PARAM_GREATER_THAN_OR_EQUAL:
+      limit_string = &quot;Greater than or equal to&quot;;
+      break;
+    case PRO_PARAM_LESS_THAN:
+<a name="anchor-38"></a>      limit_string = &quot;Less than&quot;;
+      break;
+    case PRO_PARAM_LESS_THAN_OR_EQUAL:
+      limit_string = &quot;Less than or equal to&quot;;
+      break;
+<a name="anchor-39"></a>    }
+
+  ProTKSprintf (line,&quot;      + Parameter Limit Type : %s&quot;, limit_string);
+  PTTestResfileWrite (line); 
+  
+<a name="anchor-40"></a>  PTUDFExParamvalueWrite_low (&amp;limit->value);
+
+  return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-41"></a>/*====================================================================*\
+FUNCTION: PTUDFExParamtableEntryWrite_low
+PURPOSE:  Write text information about a parameter table entry.
+\*====================================================================*/
+static ProError PTUDFExParamtableEntryWrite_low (ProParamtableEntry entry)
+<a name="anchor-42"></a>{
+  ProName name;
+  ProCharName c_name;
+  ProParamvalue value;
+  ProParamLimit min, max;
+<a name="anchor-43"></a>
+  PTTestResfileWrite (&quot;-----------------------------------------------------&quot;);
+
+  status = ProParamtableentryNameGet (entry, name);
+  PT_TEST_LOG_SUCC (&quot;ProParamtableentryNameGet()&quot;);
+<a name="anchor-44"></a>
+  ProWstringToString (c_name, name);
+
+  status = ProParamtableentryValueGet (entry, &amp;value);
+  PT_TEST_LOG_NOT_FOUND_OK (&quot;ProParamtableentryValueGet()&quot;);
+<a name="anchor-45"></a>
+  ProTKSprintf (line, &quot;          * Entry: %s, value: &quot;, c_name);
+  PTTestResfileStringWrite (line); 
+
+  if (status == PRO_TK_NO_ERROR)
+<a name="anchor-46"></a>    {
+      PTUDFExParamvalueShortversionWrite_low (&amp;value);
+      PTTestResfileWrite (&quot;&quot;);
+    }
+  else
+<a name="anchor-47"></a>    {
+      PTTestResfileWrite (&quot;NULL&quot;);
+    }
+
+  status = ProParamtableentryRangeGet (entry, &amp;min, &amp;max);
+<a name="anchor-48"></a>  PT_TEST_LOG_NOT_FOUND_OK (&quot;ProParamtableentryRangeGet()&quot;);
+  
+  if ( status == PRO_TK_NO_ERROR)
+    {
+      PTTestResfileStringWrite (&quot;          &quot;);  /* Indent */   
+<a name="anchor-49"></a>      PTUDFExParamlimitWrite_low (&quot;Minimum&quot;, &amp;min);
+      PTTestResfileStringWrite (&quot;          &quot;);  /* Indent */   
+      PTUDFExParamlimitWrite_low (&quot;Maximum&quot;, &amp;max);
+    }
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-50"></a>}
+
+/*====================================================================*\
+FUNCTION: PTUDFExParamtableSetWrite_low
+PURPOSE:  Write text information about a parameter table set.
+<a name="anchor-51"></a>\*====================================================================*/
+ProError PTUDFExParamtableSetWrite_low (ProParamtableSet table_set, ProBoolean include_entries)
+{
+  ProPath table_path;
+  ProName label;
+<a name="anchor-52"></a>  char buff [500];
+  int i, size;
+  ProParamtableEntry* entries;
+
+  PTTestResfileWrite (&quot;  - Member of a restricted table set:&quot;);
+<a name="anchor-53"></a>
+  status = ProParamtablesetTablepathGet (table_set, table_path);
+  PT_TEST_LOG_SUCC (&quot;ProParamtablesetTablepathGet()&quot;);
+
+  ProWstringToString (buff, table_path);
+<a name="anchor-54"></a>  
+  ProTKSprintf (line, &quot;        = Name/path: %s&quot;, buff);
+  PTTestResfileWrite (line);
+  
+  status = ProParamtablesetLabelGet (table_set, label);
+<a name="anchor-55"></a>  PT_TEST_LOG_SUCC (&quot;ProParamtablesetLabelGet()&quot;);
+
+  ProWstringToString (buff, label);
+  
+  ProTKSprintf (line, &quot;        = Label param: %s&quot;, buff);
+<a name="anchor-56"></a>  PTTestResfileWrite (line);
+
+  status = ProParamtablesetEntriesGet (table_set, &amp;entries);
+  PT_TEST_LOG_SUCC (&quot;ProParamtablesetEntriesGet()&quot;);
+
+<a name="anchor-57"></a>  status = ProArraySizeGet (entries, &amp;size);
+  PT_TEST_LOG_SUCC (&quot;ProArraySizeGet()&quot;);
+
+  if (include_entries)
+    {
+<a name="anchor-58"></a>      ProTKSprintf (line, &quot;        = %d entries: &quot;, size);
+      PTTestResfileWrite (line);
+
+      for (i = 0; i &lt; size; i ++)
+	{
+<a name="anchor-59"></a>	  PTUDFExParamtableEntryWrite_low (entries[i]);
+	}
+    }
+  else
+    {
+<a name="anchor-60"></a>      ProTKSprintf (line, &quot;        = %d entries. &quot;, size);
+      PTTestResfileWrite (line);
+    }
+
+  status = ProParamtableentryProarrayFree (entries);
+<a name="anchor-61"></a>  PT_TEST_LOG_SUCC (&quot;ProParamtableentryProarrayFree()&quot;);
+}
+
+/*====================================================================*\
+FUNCTION: PTUDFExWriteModelitem
+<a name="anchor-62"></a>PURPOSE:  Write information about a modelitem or parameter owner.
+\*====================================================================*/
+static ProError PTUDFExWriteModelitem (ProModelitem* item)
+{
+  ProMdlType mdl_type;
+<a name="anchor-63"></a>  char c_item_type [PRO_NAME_SIZE];
+  ProMdlName mdl_name;
+  char c_file_name [PRO_MDLNAME_SIZE];
+
+  status = ProMdlMdlnameGet (item->owner, mdl_name);
+<a name="anchor-64"></a>  ProWstringToString (c_file_name, mdl_name);
+
+  status = ProMdlTypeGet (item->owner, &amp;mdl_type);
+  switch (mdl_type)
+    {
+<a name="anchor-65"></a>    case PRO_MDL_PART:
+      strcat (c_file_name, &quot;.prt&quot;);
+      break;
+    case PRO_MDL_ASSEMBLY:
+      strcat (c_file_name, &quot;.asm&quot;);
+<a name="anchor-66"></a>      break;
+    }
+
+  switch (item->type)
+    {
+<a name="anchor-67"></a>    case PRO_TYPE_UNUSED:
+    case PRO_PART:
+    case PRO_ASSEMBLY:
+      strcpy (c_item_type, &quot;&quot;);
+      break;
+<a name="anchor-68"></a>    case PRO_FEATURE:
+      strcpy (c_item_type, &quot;Feature&quot;);
+      break;
+    case PRO_ANNOTATION_ELEM:
+      strcpy (c_item_type, &quot;Annotation Elem&quot;);
+<a name="anchor-69"></a>      break;
+    }
+  
+  switch (format)
+    {
+<a name="anchor-70"></a>    case PT_UDF_EX_PARAM_INFO_TEXT:
+      if (item->type == PRO_TYPE_UNUSED)
+	{
+	  ProTKSprintf (line, &quot;model %s&quot;, c_file_name);
+	}
+<a name="anchor-71"></a>      else
+	{
+	  ProTKSprintf (line, &quot;%s id %d (%s)&quot;, c_item_type, 
+		   item->id, c_file_name);
+	}
+<a name="anchor-72"></a>      PTTestResfileWrite (line);
+      break;
+      
+    case PT_UDF_EX_PARAM_INFO_CSV:
+      ProTKSprintf (line, &quot;%s,%s,%d,&quot;, c_file_name, c_item_type, 
+<a name="anchor-73"></a>	       item->id);
+      PTTestResfileStringWrite (line);
+      break;
+    }
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-74"></a>}
+
+/*====================================================================*\
+FUNCTION: PTUDFExWriteParameterBasics
+PURPOSE:  Write the parameter name &amp; owner details.
+<a name="anchor-75"></a>\*====================================================================*/
+static ProError PTUDFExWriteParameterBasics (ProParameter* param)
+{
+  char c_name [PRO_NAME_SIZE*4];
+  ProModelitem owner_item;
+<a name="anchor-76"></a>  ProMdl owner_mdl;
+
+  ProWstringToString (c_name, param->id);
+
+  switch (param->owner.type)
+<a name="anchor-77"></a>    {
+    case PRM_MODEL:
+      owner_item.owner = param->owner.who.model;
+      owner_item.id = -1;
+      owner_item.type = PRO_TYPE_UNUSED;
+<a name="anchor-78"></a>      break;
+    case PRM_ITEM:
+      memcpy (&amp;owner_item, &amp;param->owner.who.item, sizeof (ProModelitem));
+      break;
+    }
+<a name="anchor-79"></a>
+  switch (format)
+    {
+    case PT_UDF_EX_PARAM_INFO_TEXT:
+      PTTestResfileWrite (&quot;---------------------------------------------------------&quot;);
+<a name="anchor-80"></a>      ProTKSprintf (line, &quot;Parameter: %s owned by &quot;, c_name); 
+      PTTestResfileStringWrite (line);
+      
+      PTUDFExWriteModelitem (&amp;owner_item);
+  
+<a name="anchor-81"></a>      break;
+
+    case PT_UDF_EX_PARAM_INFO_CSV:
+      ProTKSprintf (line, &quot;%s,&quot;, c_name);
+      PTTestResfileStringWrite (line);
+<a name="anchor-82"></a>
+      PTUDFExWriteModelitem (&amp;owner_item);
+      break;
+    }
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-83"></a>}
+
+/*====================================================================*\
+FUNCTION: PTUDFExWriteParameterValue
+PURPOSE:  Write the parameter value and units details.
+<a name="anchor-84"></a>\*====================================================================*/
+static ProError PTUDFExWriteParameterValue (ProParamvalue* value, char* unit_name)
+{
+  switch (format)
+    {
+<a name="anchor-85"></a>    case PT_UDF_EX_PARAM_INFO_TEXT:
+      if (strlen (unit_name) > 0)
+	ProTKSprintf (line, &quot;      + Scaled Value, in %s:&quot;, unit_name);
+      else
+	ProTKSprintf (line, &quot;      + Value&quot;);
+<a name="anchor-86"></a>      PTTestResfileWrite (line);
+      PTUDFExParamvalueWrite_low (value);
+    
+      break;
+    case PT_UDF_EX_PARAM_INFO_CSV:
+<a name="anchor-87"></a>      PTUDFExParamvalueCSVWrite_low (value);
+
+      ProTKSprintf (line, &quot;%s,&quot;,unit_name);
+      PTTestResfileStringWrite (line);
+
+<a name="anchor-88"></a>      break;
+    }
+}
+
+/*====================================================================*\
+<a name="anchor-89"></a>FUNCTION: PTUDFExWriteDescription
+PURPOSE:  Write the parameter description.
+\*====================================================================*/
+static ProError PTUDFExWriteDescription (wchar_t* description)
+{
+<a name="anchor-90"></a>  char* c_descr;
+  int length;
+
+  status = ProWstringLengthGet (description, &amp;length);
+  
+<a name="anchor-91"></a>  c_descr = (char*) calloc (3* (length + 1), sizeof (char));
+      
+  ProWstringToString (c_descr, description);
+  
+  switch (format)
+<a name="anchor-92"></a>    {
+    case PT_UDF_EX_PARAM_INFO_TEXT:
+      ProTKSprintf (line, &quot;      + Description: %s&quot;, c_descr);
+      PTTestResfileWrite (line);
+      break;
+<a name="anchor-93"></a>    case PT_UDF_EX_PARAM_INFO_CSV:
+      ProTKSprintf (line, &quot;%s,&quot;, c_descr);
+      PTTestResfileStringWrite (line);
+      break;
+    }
+<a name="anchor-94"></a>      
+  free (c_descr);
+ 
+  return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-95"></a>
+/*====================================================================*\
+FUNCTION: PTUDFExWriteDesignation
+PURPOSE:  Write the parameter designation status.
+\*====================================================================*/
+<a name="anchor-96"></a>static ProError PTUDFExWriteDesignation (ProBoolean is_designated)
+{
+  switch (format)
+    {
+    case PT_UDF_EX_PARAM_INFO_TEXT:
+<a name="anchor-97"></a>      ProTKSprintf (line, &quot;      + %s&quot;, is_designated ? &quot;Designated.&quot;: &quot;Not designated.&quot;);
+      PTTestResfileWrite (line);
+      break;
+    case PT_UDF_EX_PARAM_INFO_CSV:
+      ProTKSprintf (line, &quot;%s,&quot;, is_designated ? &quot;TRUE&quot;: &quot;FALSE&quot;);
+<a name="anchor-98"></a>      PTTestResfileStringWrite (line);
+      break;
+    }
+ 
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-99"></a>}
+
+/*====================================================================*\
+FUNCTION: PTUDFExWriteEnumeration
+PURPOSE:  Write the details about an enumeration restriction.
+<a name="anchor-100"></a>\*====================================================================*/
+static ProError PTUDFExWriteEnumeration (ProBoolean is_enum, ProParamvalue* values_array)
+{
+  int num_values, i;
+  ProParamvalue value;
+<a name="anchor-101"></a>
+  switch (format)
+    {
+    case PT_UDF_EX_PARAM_INFO_TEXT:
+      ProTKSprintf (line, &quot;      + %s &quot;, (is_enum == PRO_B_TRUE) ? &quot;Enumerated:&quot;:&quot;Not enumerated.&quot; );
+<a name="anchor-102"></a>      PTTestResfileWrite (line);
+  
+      if (is_enum == PRO_B_TRUE)
+	{
+	  ProArraySizeGet ( values_array, &amp;num_values);
+<a name="anchor-103"></a>	  for (i = 0 ; i&lt; num_values; i++)
+	    {
+	      value = values_array[i];
+	      PTTestResfileStringWrite (&quot;\t&quot;);
+	      PTUDFExParamvalueWrite_low (&amp;value);
+<a name="anchor-104"></a>	    }
+	}
+      break;
+
+     case PT_UDF_EX_PARAM_INFO_CSV:
+<a name="anchor-105"></a>       if (is_enum == PRO_B_TRUE)
+	 {
+	   ProArraySizeGet ( values_array, &amp;num_values);
+	   for (i = 0 ; i&lt; num_values; i++)
+	     {
+<a name="anchor-106"></a>	       value = values_array[i];
+	       PTUDFExParamvalueShortversionWrite_low (&amp;value);
+	       
+	       if (i != num_values - 1)
+		 PTTestResfileStringWrite (&quot;|&quot;);
+<a name="anchor-107"></a>	     }
+	 }
+       PTTestResfileStringWrite (&quot;,&quot;);
+       break;
+    }
+<a name="anchor-108"></a>  return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+FUNCTION: PTUDFExWriteRange
+<a name="anchor-109"></a>PURPOSE:  Write the details about  range restriction.
+\*====================================================================*/
+static ProError PTUDFExWriteRange (ProBoolean has_range, ProParamLimit* min, ProParamLimit* max)
+{
+  switch (format)
+<a name="anchor-110"></a>    {
+    case PT_UDF_EX_PARAM_INFO_TEXT:
+      ProTKSprintf (line, &quot;      + %s &quot; , (has_range == PRO_B_TRUE) ? &quot;Has range.&quot; : &quot;Doesn't have range.&quot;);
+      PTTestResfileWrite (line);
+  
+<a name="anchor-111"></a>      if ( has_range == PRO_B_TRUE)
+	{
+	  PTUDFExParamlimitWrite_low (&quot;Minimum&quot;, min);
+	  PTUDFExParamlimitWrite_low (&quot;Maximum&quot;, max);
+	}
+<a name="anchor-112"></a>      break;
+    case PT_UDF_EX_PARAM_INFO_CSV:
+      if ( has_range == PRO_B_TRUE)
+	{
+	  switch (min->type)
+<a name="anchor-113"></a>	    {
+	    case PRO_PARAM_UNLIMITED:
+	      PTTestResfileStringWrite (&quot;(|&quot;);
+	      break;
+	    case PRO_PARAM_GREATER_THAN:
+<a name="anchor-114"></a>	      PTTestResfileStringWrite (&quot;(&quot;);
+	      PTUDFExParamvalueShortversionWrite_low (&amp;min->value);
+	      PTTestResfileStringWrite (&quot;|&quot;);
+	      break;
+	    case PRO_PARAM_GREATER_THAN_OR_EQUAL:
+<a name="anchor-115"></a>	      PTTestResfileStringWrite (&quot;[&quot;);
+	      PTUDFExParamvalueShortversionWrite_low (&amp;min->value);
+	      PTTestResfileStringWrite (&quot;|&quot;);
+	      break;
+	    }
+<a name="anchor-116"></a>	  
+	    switch (max->type)
+	    {
+	    case PRO_PARAM_UNLIMITED:
+	      PTTestResfileStringWrite (&quot;)&quot;);
+<a name="anchor-117"></a>	      break;
+	    case PRO_PARAM_LESS_THAN:
+	      PTUDFExParamvalueShortversionWrite_low (&amp;max->value);
+	      PTTestResfileStringWrite (&quot;)&quot;);
+	      break;
+<a name="anchor-118"></a>	    case PRO_PARAM_LESS_THAN_OR_EQUAL:
+	      PTUDFExParamvalueShortversionWrite_low (&amp;max->value);
+	      PTTestResfileStringWrite (&quot;]&quot;);
+	      break;
+	    }	      
+<a name="anchor-119"></a>	}
+      PTTestResfileStringWrite (&quot;,&quot;);
+      break;
+    }
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-120"></a>}
+
+/*====================================================================*\
+FUNCTION: PTUDFExWriteTable
+PURPOSE:  Write informaiton about the table set label for this parameter.
+<a name="anchor-121"></a>\*====================================================================*/
+static ProError PTUDFExWriteTable (ProName label)
+{
+  char c_label [PRO_NAME_SIZE * 4];
+
+<a name="anchor-122"></a>  ProWstringToString (c_label, label);
+
+  switch (format)
+    {
+    case PT_UDF_EX_PARAM_INFO_TEXT:
+<a name="anchor-123"></a>      if (strlen (c_label) > 0)
+	{
+	  ProTKSprintf (line, &quot;      + Member of table row %s&quot;, c_label);
+	  PTTestResfileWrite (line);
+	}
+<a name="anchor-124"></a>      else
+	{
+	  PTTestResfileWrite (&quot;      + Doesn't belong to a table.&quot;);
+	}
+      break;
+<a name="anchor-125"></a>    case PT_UDF_EX_PARAM_INFO_CSV:
+      if (strlen (c_label) > 0)
+	{
+	  ProTKSprintf (line, &quot;%s&quot;, c_label);
+	  PTTestResfileStringWrite (line);
+<a name="anchor-126"></a>	}
+      PTTestResfileStringWrite (&quot;,&quot;);
+      break;
+    }
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-127"></a>}
+
+/*====================================================================*\
+FUNCTION: PTUDFExWriteParameterEnd
+PURPOSE:  Close the section relating to the current parameter.
+<a name="anchor-128"></a>\*====================================================================*/
+static ProError PTUDFExWriteParameterEnd ()
+{
+  switch (format)
+    {
+<a name="anchor-129"></a>    case PT_UDF_EX_PARAM_INFO_TEXT:
+      PTTestResfileWrite (&quot;---------------------------------------------------------&quot;);
+      break;
+    case PT_UDF_EX_PARAM_INFO_CSV:
+      PTTestResfileWrite (&quot;&quot;);
+<a name="anchor-130"></a>      break;
+    }
+  return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-131"></a>
+/*====================================================================*\
+FUNCTION: PTUDFExParameterWrite_low
+PURPOSE:  Write all details about a single parameter.
+\*====================================================================*/
+<a name="anchor-132"></a>ProError PTUDFExParameterWrite_low (ProParameter* param)
+{
+   ProBoolean is_designated= PRO_B_FALSE;
+   ProParamvalue value, *array_values;
+   char unit_name [PRO_LINE_SIZE];
+<a name="anchor-133"></a>   ProUnititem units;
+   ProBoolean has_range, is_enum;
+   ProParamLimit max, min;
+   ProParamtableSet table_set;
+   wchar_t* description;
+<a name="anchor-134"></a>   ProName label;
+   ProError descr_status;
+   
+   /* Basics (name, owner) */
+   PTUDFExWriteParameterBasics (param);
+<a name="anchor-135"></a>
+   /* Value */
+  status = ProParameterScaledvalueGet (param, &amp;value);
+  PT_TEST_LOG_SUCC (&quot;ProParameterScaledvalueGet()&quot;);
+  
+<a name="anchor-136"></a>  status = ProParameterUnitsGet ( param, &amp;units);
+  PT_TEST_LOG_NOT_FOUND_OK (&quot;ProParametersUnitsGet&quot;);
+
+  if (status == PRO_TK_NO_ERROR)
+     ProWstringToString ( unit_name, units.name);
+<a name="anchor-137"></a>  else
+    strcpy (unit_name, &quot;&quot;);
+
+  PTUDFExWriteParameterValue (&amp;value, unit_name);
+
+<a name="anchor-138"></a>  /* Description */
+  descr_status = ProParameterDescriptionGet (param, &amp;description);
+  PT_TEST_LOG_NOT_FOUND_OK (&quot;ProParameterDescriptionGet()&quot;);
+
+  if (descr_status != PRO_TK_NO_ERROR)
+<a name="anchor-139"></a>    description = L&quot;&quot;;
+
+  PTUDFExWriteDescription (description);
+
+  if (descr_status == PRO_TK_NO_ERROR)
+<a name="anchor-140"></a>    {
+      ProWstringFree (description);
+    }
+
+  /* Designation */
+<a name="anchor-141"></a>  status = ProParameterDesignationVerify (param, &amp;is_designated);
+  PT_TEST_LOG_SUCC (&quot;ProParameterDesignationVerify()&quot;);
+
+  PTUDFExWriteDesignation (is_designated);
+
+<a name="anchor-142"></a>  /* Enumeration */
+  status = ProParameterIsEnumerated ( param, &amp;is_enum, &amp;array_values);
+  PT_TEST_LOG_SUCC (&quot;ProParameterIsEnumerated&quot;);
+
+  PTUDFExWriteEnumeration (is_enum, array_values);
+<a name="anchor-143"></a>
+  if (status == PRO_TK_NO_ERROR)
+    {
+      ProArrayFree ((ProArray *) &amp;array_values);
+    }
+<a name="anchor-144"></a>
+  /* Range */ 
+   status = ProParameterRangeGet (param, &amp;has_range, &amp;min, &amp;max);
+   PT_TEST_LOG_SUCC (&quot;ProParameterRangeGet&quot;);
+
+<a name="anchor-145"></a>   PTUDFExWriteRange (has_range, &amp;min, &amp;max);
+ 
+   /* Table set */
+   status = ProParameterTablesetGet (param, &amp;table_set);
+   PT_TEST_LOG_NOT_FOUND_OK (&quot;ProParameterTablesetGet&quot;);
+<a name="anchor-146"></a>
+  if (status == PRO_TK_NO_ERROR)
+     {
+       status = ProParamtablesetLabelGet (table_set, label);
+       PT_TEST_LOG_SUCC (&quot;ProParamtablesetLabelGet()&quot;);
+<a name="anchor-147"></a>     }
+   else
+     {
+       ProStringToWstring (label, &quot;&quot;);
+     }
+<a name="anchor-148"></a>
+   PTUDFExWriteTable (label);
+
+   PTUDFExWriteParameterEnd ();
+
+<a name="anchor-149"></a>   return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION: PTUDFExParamVisitAction
+<a name="anchor-150"></a>PURPOSE:  Visit action to write all details about  parameters.
+\*====================================================================*/
+ProError PTUDFExParamVisitAction (ProParameter* param, ProError status, ProAppData data)
+{
+  ProMdl owner_model;
+<a name="anchor-151"></a>
+  PTUDFExParameterWrite_low (param);
+
+  return PRO_TK_NO_ERROR;
+}
+<a name="anchor-152"></a>
+/*====================================================================*\
+FUNCTION: PTUDFExParamtableSetsWrite_low
+PURPOSE:  Write details about an array of parameter sets.
+\*====================================================================*/
+<a name="anchor-153"></a>static ProError PTUDFExParamtableSetsWrite_low (ProParamtableSet* table_sets)
+{
+  int i, size;
+
+  status = ProArraySizeGet (table_sets, &amp;size);
+<a name="anchor-154"></a>  PT_TEST_LOG_SUCC (&quot;ProArraySizeGet()&quot;);
+
+  for (i = 0; i &lt; size; i ++)
+    {
+      PTUDFExParamtableSetWrite_low (table_sets [i], PRO_B_TRUE);
+<a name="anchor-155"></a>    }
+
+  return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-156"></a>/*====================================================================*\
+FUNCTION: PTUDFExParametersWrite_low
+PURPOSE:  Write details about the parameters and parameter sets on 
+          this owner.
+\*====================================================================*/
+<a name="anchor-157"></a>ProError PTUDFExParametersWrite_low (ProModelitem* owner)
+{
+
+  status = ProArrayAlloc (0, sizeof (ProParamtableSet), 1, 
+			  (ProArray*) &amp;tableset_array);
+<a name="anchor-158"></a>  PT_TEST_LOG_SUCC (&quot;ProArrayAlloc()&quot;);
+
+  status = ProParameterVisit (owner, NULL, 
+			      (ProParameterAction)PTUDFExParamVisitAction,
+			      NULL);
+<a name="anchor-159"></a>  PT_TEST_LOG_NOT_FOUND_OK (&quot;ProParameterVisit()&quot;);
+
+  PTUDFExParamtableSetsWrite_low (tableset_array);
+  
+  status = ProParamtablesetProarrayFree (tableset_array);
+<a name="anchor-160"></a>  PT_TEST_LOG_SUCC (&quot;ProParamtablesetProarrayFree()&quot;);
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-161"></a>/*====================================================================*\
+FUNCTION: PTUDFExMdlParamtableSetsWrite_low
+PURPOSE:  Write details about all the parameter sets available to this model.
+\*====================================================================*/
+static ProError PTUDFExMdlParamtableSetsWrite_low (ProMdl mdl)
+<a name="anchor-162"></a>{
+  ProParamtableSet* table_sets;
+  int i, size;
+
+  status = ProMdlParamtablesetsCollect (mdl, &amp;table_sets);
+<a name="anchor-163"></a>  PT_TEST_LOG_SUCC (&quot;ProMdlParamtablesetsCollect()&quot;);
+
+  PTUDFExParamtableSetsWrite_low (table_sets);
+ 
+  status = ProParamtablesetProarrayFree (table_sets);
+<a name="anchor-164"></a>  PT_TEST_LOG_SUCC (&quot;ProParamtablesetProarrayFree()&quot;);
+
+  return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-165"></a>/*====================================================================*\
+FUNCTION: PTUDFExParamtablesetByLabelGet
+PURPOSE:  Find a parameter set, by name.
+\*====================================================================*/
+ProError PTUDFExParamtablesetByLabelGet (ProMdl mdl, wchar_t* name, 
+<a name="anchor-166"></a>					ProParamtableSet* set)
+{
+  ProParamtableSet* table_sets;
+  int i, size;
+  ProName label;
+<a name="anchor-167"></a>  int result;
+  ProBoolean found = PRO_B_FALSE;
+
+  status = ProMdlParamtablesetsCollect (mdl, &amp;table_sets);
+  PT_TEST_LOG_SUCC (&quot;ProMdlParamtablesetsCollect()&quot;);
+<a name="anchor-168"></a>
+  if (status != PRO_TK_NO_ERROR)
+    return (PRO_TK_E_NOT_FOUND);
+
+  status = ProArraySizeGet (table_sets, &amp;size);
+<a name="anchor-169"></a>  PT_TEST_LOG_SUCC (&quot;ProArraySizeGet()&quot;);
+
+  for (i = 0; i &lt; size; i ++)
+    {
+      status = ProParamtablesetLabelGet (table_sets[i], label);
+<a name="anchor-170"></a>      PT_TEST_LOG_SUCC (&quot;ProParamtablesetLabelGet()&quot;);
+
+      status = ProWstringCompare (label, name, PRO_VALUE_UNUSED, &amp;result);
+      PT_TEST_LOG_SUCC (&quot;ProWstringCompare()&quot;);
+
+<a name="anchor-171"></a>      if (result == 0)
+	{
+	  *set = table_sets[i];
+	  found = PRO_B_TRUE;
+	  continue;
+<a name="anchor-172"></a>	}
+
+      ProParamtablesetFree (table_sets[i]);
+    }
+
+<a name="anchor-173"></a>  ProArrayFree ((ProArray*)&amp;table_sets);
+ 
+  if (found)
+    return (PRO_TK_NO_ERROR);
+  else
+<a name="anchor-174"></a>    return (PRO_TK_E_NOT_FOUND);
+}
+
+/*====================================================================*\
+FUNCTION: PTUDFExParamInfoWrite
+<a name="anchor-175"></a>PURPOSE:  Write a text or CSV file with parameter info.
+\*====================================================================*/
+ProError PTUDFExParamInfoWrite (ProModelitem* param_owner,
+				PTUDFExParamInfoFormat f,
+				ProFileName output_file,
+<a name="anchor-176"></a>				ProBoolean append,
+				ProParameterFilter filter_action,
+				ProAppData app_data)
+{
+  ProError ret_status;
+<a name="anchor-177"></a>  char filename [100];
+  char* flags = &quot;w&quot;;
+
+  format = f;
+
+<a name="anchor-178"></a>  ProWstringToString (filename, output_file);
+
+  if (append)
+    flags = &quot;a&quot;;
+
+<a name="anchor-179"></a>  file_ptr = PTApplsUnicodeFopen (filename, flags);
+
+  status = ProArrayAlloc (0, sizeof (ProParamtableSet), 1, 
+			  (ProArray*) &amp;tableset_array);
+  PT_TEST_LOG_SUCC (&quot;ProArrayAlloc()&quot;);
+<a name="anchor-180"></a>
+  status = ProParameterVisit (param_owner, filter_action, 
+			      (ProParameterAction)PTUDFExParamVisitAction,
+			      app_data);
+  PT_TEST_LOG_NOT_FOUND_OK (&quot;ProParameterVisit()&quot;);
+<a name="anchor-181"></a>
+  ret_status = status;
+
+  PTUDFExParamtableSetsWrite_low (tableset_array);
+  
+<a name="anchor-182"></a>  status = ProParamtablesetProarrayFree (tableset_array);
+  PT_TEST_LOG_SUCC (&quot;ProParamtablesetProarrayFree()&quot;);
+
+  fclose (file_ptr);
+
+<a name="anchor-183"></a>  return (ret_status);
+}
+
+/*====================================================================*\
+FUNCTION: PTUDFExAEConstraintsWrite
+<a name="anchor-184"></a>PURPOSE:  Write a text format file with table-imposed constraints.
+\*====================================================================*/
+ProError PTUDFExAEConstraintsWrite (ProModelitem* param_owner,
+				    ProFileName output_file,
+				    ProBoolean append)
+<a name="anchor-185"></a>{
+  ProError ret_status;
+  char filename [100];
+  char* flags = &quot;w&quot;;
+  ProRelset rel_set;
+<a name="anchor-186"></a>  wchar_t** constraints;
+  int size, i;
+  char c_constraint [PRO_LINE_SIZE * 4];
+
+  format = PT_UDF_EX_PARAM_INFO_TEXT;
+<a name="anchor-187"></a>
+  ProWstringToString (filename, output_file);
+
+  if (append)
+    flags = &quot;a&quot;;
+<a name="anchor-188"></a>
+  file_ptr = PTApplsUnicodeFopen (filename, flags);
+
+  /* Write constraints on the AE parameters */
+  status = ProModelitemToRelset (param_owner, &amp;rel_set);
+<a name="anchor-189"></a>  PT_TEST_LOG_NOT_FOUND_OK (&quot;ProModelitemToRelset()&quot;);
+  
+  if (status == PRO_TK_NO_ERROR)
+    {
+      status = ProRelsetConstraintsGet (&amp;rel_set, &amp;constraints);
+<a name="anchor-190"></a>      PT_TEST_LOG_NOT_FOUND_OK (&quot;ProRelsetConstraintsGet()&quot;);
+      
+      if (status == PRO_TK_NO_ERROR)
+	{
+	  status = ProArraySizeGet (constraints, &amp;size);
+<a name="anchor-191"></a>	  PT_TEST_LOG_SUCC (&quot;ProArraySizeGet()&quot;);
+
+	  if (size > 0)
+	    {
+	      ProTKSprintf (line, &quot;There are %d table-imposed constraints on &quot;, 
+<a name="anchor-192"></a>		       size, c_constraint);
+	      PTTestResfileStringWrite (line);
+
+	      PTUDFExWriteModelitem (param_owner);
+	    }
+<a name="anchor-193"></a>	  
+	  for (i = 0; i &lt; size; i ++)
+	    {
+	      ProWstringToString (c_constraint, constraints[i]);
+	      
+<a name="anchor-194"></a>	      ProTKSprintf (line, &quot;    + Constraint %d: %s&quot;, i + 1, c_constraint);
+	      PTTestResfileWrite (line);
+	    }
+	  
+	  ProWstringproarrayFree (constraints);
+<a name="anchor-195"></a>
+	  fclose (file_ptr);
+
+	  return (PRO_TK_NO_ERROR);
+	}
+<a name="anchor-196"></a>    }
+  ProTKSprintf (line, &quot;There are no table-imposed constraints on &quot;);
+  PTTestResfileStringWrite (line);
+
+  PTUDFExWriteModelitem (param_owner);
+<a name="anchor-197"></a>  
+  fclose (file_ptr);
+
+  return (PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

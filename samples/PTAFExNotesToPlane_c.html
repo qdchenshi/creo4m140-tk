@@ -1,0 +1,235 @@
+<html>
+<head>
+<title>PTAFExNotesToPlane.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMenuBar.h>
+#include &lt;ProSurface.h>
+#include &lt;ProElement.h>
+#include &lt;ProAnnotationFeat.h>
+<a name="anchor-2"></a>#include &lt;ProAnnotationElem.h>
+#include &lt;ProNote.h>
+
+#include &lt;PTAFExamples.h>
+
+<a name="anchor-3"></a>/*====================================================================*\
+  FUNCTION :	 PTTestAccessNotesSelected()
+  PURPOSE  :   Enable access to the button for note/annotation plane conversion
+\*====================================================================*/
+uiCmdAccessState PTTestAccessNotesSelected(uiCmdAccessMode access_mode)
+<a name="anchor-4"></a>{
+  ProSelection* note_sels;
+  int size, i;
+  ProModelitem note;
+
+<a name="anchor-5"></a>/*---------------------------------------------------------------------*\
+Check for one or more selected notes
+\*---------------------------------------------------------------------*/
+  status = ProSelbufferSelectionsGet (&amp;note_sels);
+  PT_TEST_LOG_SUCC (&quot;ProSelbufferSelectionsGet()&quot;);
+<a name="anchor-6"></a>
+  if (status != PRO_TK_NO_ERROR)
+	return ACCESS_UNAVAILABLE;
+  
+  status = ProArraySizeGet (note_sels, &amp;size);
+<a name="anchor-7"></a>  PT_TEST_LOG_SUCC (&quot;ProArraySizeGet()&quot;);
+  
+  if (status != PRO_TK_NO_ERROR || size &lt;= 0)
+	return ACCESS_UNAVAILABLE;
+  
+<a name="anchor-8"></a>  for (i = 0; i &lt; size; i++)
+    {
+      status = ProSelectionModelitemGet (note_sels [i], &amp;note);
+      PT_TEST_LOG_SUCC (&quot;ProSelectionModelitemGet()&quot;);
+      
+<a name="anchor-9"></a>/*---------------------------------------------------------------------*\
+If any non-notes are selected, this command can't be used
+\*---------------------------------------------------------------------*/
+      if (note.type != PRO_NOTE)
+	{
+<a name="anchor-10"></a>	  ProSelectionarrayFree (note_sels);
+	  return ACCESS_UNAVAILABLE;
+	}
+    }
+  
+<a name="anchor-11"></a>  ProSelectionarrayFree (note_sels);
+  return ACCESS_AVAILABLE;	  
+}
+
+/*====================================================================*\
+<a name="anchor-12"></a>FUNCTION : PTConvertNoteToAnnotationplane
+PURPOSE  : Convert a note to use the selected annotation plane
+\*====================================================================*/
+ProError PTConvertNoteToAnnotationplane (ProNote* note, ProAnnotationPlane* ap)
+{
+<a name="anchor-13"></a>  ProNoteAttach attach;
+
+/*---------------------------------------------------------------------*\
+Extract the current note placement
+\*---------------------------------------------------------------------*/
+<a name="anchor-14"></a>  status = ProNotePlacementGet (note, &amp;attach);
+  PT_TEST_LOG_SUCC (&quot;ProNotePlacementGet()&quot;);
+
+/*---------------------------------------------------------------------*\
+Assign the annotation plane and reassign the placement to the note
+<a name="anchor-15"></a>\*---------------------------------------------------------------------*/
+  status = ProNoteAttachPlaneSet (attach, ap);
+  PT_TEST_LOG_SUCC (&quot;ProNoteAttachPlaneSet()&quot;);
+
+  status = ProNotePlacementSet (note, attach);
+<a name="anchor-16"></a>  PT_TEST_LOG_SUCC (&quot;ProNotePlacementSet()&quot;);
+
+  status = ProNoteAttachRelease (&amp;attach);
+  PT_TEST_LOG_SUCC (&quot;ProNoteAttachRelease()&quot;);
+  
+<a name="anchor-17"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION : PTSelectAnnotationplane
+<a name="anchor-18"></a>PURPOSE  : Interactively select an datum to be an annotation plane
+\*====================================================================*/
+ProError PTSelectAnnotationplane (int size, ProAnnotationPlane* ap)
+{
+  ProSelection* sels = NULL;
+<a name="anchor-19"></a>  ProGeomitem plane;
+  int n_sels;
+  ProSurface surf;
+  ProGeomitemdata* data;
+  ProVector normal;
+<a name="anchor-20"></a>
+/*---------------------------------------------------------------------*\
+Prompt for the selection
+\*---------------------------------------------------------------------*/
+  if (size == 1)
+<a name="anchor-21"></a>    {
+      status = ProMessageDisplay (message_file_init,
+				  &quot;PTNC Select the datum plane to use as the annotation plane for the note.&quot;);
+      PT_TEST_LOG_SUCC (&quot;ProMessageDisplay()&quot;);
+    }
+<a name="anchor-22"></a>  else
+    {
+      status = ProMessageDisplay (message_file_init,
+				  &quot;PTNC Select the datum plane to use as the annotation plane for the notes.&quot;);
+      PT_TEST_LOG_SUCC (&quot;ProMessageDisplay()&quot;);
+<a name="anchor-23"></a>    }
+
+  status = ProSelect (&quot;datum&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+  PT_TEST_LOG_SUCC (&quot;ProSelect()&quot;);
+  
+<a name="anchor-24"></a>  if (status != PRO_TK_NO_ERROR)
+    return status;
+
+  status = ProSelectionUnhighlight (sels [0]);
+  PT_TEST_LOG_SUCC (&quot;ProSelectionUnhighlight()&quot;);
+<a name="anchor-25"></a>
+/*---------------------------------------------------------------------*\
+Extract the selected datum plane as a surface
+\*---------------------------------------------------------------------*/
+  status = ProSelectionModelitemGet (sels [0], &amp;plane);
+<a name="anchor-26"></a>  PT_TEST_LOG_SUCC (&quot;ProSelectionModelitemGet()&quot;);
+
+  status = ProGeomitemToSurface (&amp;plane, &amp;surf);
+  PT_TEST_LOG_SUCC (&quot;ProGeomitemToSurface()&quot;);
+
+<a name="anchor-27"></a>/*---------------------------------------------------------------------*\
+Extract the surface data to get the surface normal vector
+\*---------------------------------------------------------------------*/
+  status = ProSurfaceDataGet (surf, &amp;data); 
+  PT_TEST_LOG_SUCC (&quot;ProSurfaceDataGet()&quot;);
+<a name="anchor-28"></a>
+  memcpy (normal, data->data.p_surface_data->srf_shape.plane.e3, sizeof (ProVector));
+
+  status = ProGeomitemdataFree (&amp;data);
+  PT_TEST_LOG_SUCC (&quot;ProGeomitemdataFree()&quot;);
+<a name="anchor-29"></a>
+/*---------------------------------------------------------------------*\
+Create the annotation plane
+\*---------------------------------------------------------------------*/
+  status = ProAnnotationplaneCreate (sels[0], normal, ap);
+<a name="anchor-30"></a>  PT_TEST_LOG_SUCC (&quot;ProAnnotationplaneCreate()&quot;);
+
+  if (status != PRO_TK_NO_ERROR)
+	return status;
+
+<a name="anchor-31"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION : PTNoteConvert
+<a name="anchor-32"></a>PURPOSE  : Convert one or more selected notes to use annotation planes
+\*====================================================================*/
+int PTNoteConvert ()
+{
+  ProSelection* note_sels  = NULL;
+<a name="anchor-33"></a>  int size, i;
+  ProNote note;
+  ProAnnotationPlane ap;
+  
+  ap.id = PRO_VALUE_UNUSED;
+<a name="anchor-34"></a>
+/*---------------------------------------------------------------------*\
+Extract the selected notes
+\*---------------------------------------------------------------------*/
+  status = ProSelbufferSelectionsGet (&amp;note_sels);
+<a name="anchor-35"></a>  PT_TEST_LOG_SUCC (&quot;ProSelbufferSelectionsGet()&quot;);
+
+  status = ProArraySizeGet (note_sels, &amp;size);
+  PT_TEST_LOG_SUCC (&quot;ProArraySizeGet()&quot;);
+
+<a name="anchor-36"></a>  for (i = 0; i &lt; size; i++)
+    {
+      status = ProSelectionModelitemGet (note_sels [i], &amp;note);
+      PT_TEST_LOG_SUCC (&quot;ProSelectionModelitemGet()&quot;);
+      
+<a name="anchor-37"></a>      if (note.type == PRO_NOTE)
+	{
+/*---------------------------------------------------------------------*\
+If the user has not yet selected the annotation plane, prompt for this
+\*---------------------------------------------------------------------*/
+<a name="anchor-38"></a>	  if (ap.id == PRO_VALUE_UNUSED)
+	    {
+	      status = PTSelectAnnotationplane (size, &amp;ap);
+	      if (status != PRO_TK_NO_ERROR)
+		return status;
+<a name="anchor-39"></a>	    }
+
+/*---------------------------------------------------------------------*\
+Hide the note, add the annotation plane, and redisplay the note
+\*---------------------------------------------------------------------*/      
+<a name="anchor-40"></a>	  status = ProAnnotationUndisplay (&amp;note, NULL, NULL);
+	  PT_TEST_LOG_SUCC (&quot;ProAnnotationErase()&quot;);
+	  
+	  PTConvertNoteToAnnotationplane (&amp;note, &amp;ap);
+	  
+<a name="anchor-41"></a>	  status = ProAnnotationDisplay (&amp;note, NULL, NULL, NULL);
+	  PT_TEST_LOG_SUCC (&quot;ProAnnotationDisplay()&quot;);
+	} 
+    }
+
+<a name="anchor-42"></a>  status = ProSelbufferClear ();
+  PT_TEST_LOG_SUCC (&quot;ProSelbufferClear()&quot;);
+ 
+/*---------------------------------------------------------------------*\
+Reselect the notes for the next operation
+<a name="anchor-43"></a>\*---------------------------------------------------------------------*/ 
+  for (i = 0; i &lt; size; i++)
+    {
+      status = ProSelbufferSelectionAdd  (note_sels[i]);
+      PT_TEST_LOG_SUCC (&quot;ProSelbufferSelectionAdd()&quot;);
+<a name="anchor-44"></a>    }
+  
+  ProSelectionarrayFree (note_sels);
+
+  return (1);
+<a name="anchor-45"></a>}
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,1049 @@
+<html>
+<head>
+<title>GearDesignUtils.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;GearDesign.h>
+
+#include &lt;ProToolkit.h>
+#include &lt;Pro2dEntdef.h>
+#include &lt;ProFeature.h>
+<a name="anchor-2"></a>#include &lt;ProModelitem.h>
+
+#include &lt;UtilCollect.h>
+#include &lt;UtilMath.h>
+#include &lt;ProSection.h>
+<a name="anchor-3"></a>
+#include &quot;UtilMenu.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;TestSect.h&quot;
+#include &quot;UtilMessage.h&quot;
+<a name="anchor-4"></a>#include &quot;TestError.h&quot;
+#include &quot;UtilMath.h&quot;
+#include &quot;UtilMatrix.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;UtilString.h&quot;
+<a name="anchor-5"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProObjects.h>
+#include &lt;ProSecdim.h>
+#include &lt;ProSection.h>
+<a name="anchor-6"></a>#include &lt;ProMdl.h>
+#include &lt;ProMenu.h>
+#include &lt;ProEdge.h>
+#include &lt;ProGeomitem.h>
+#include &lt;ProFeature.h>
+<a name="anchor-7"></a>#include &lt;ProSelection.h>
+#include &lt;ProSurface.h>
+#include &lt;ProArray.h>
+#include &lt;ProUtil.h>
+#include &lt;ProCurve.h>
+<a name="anchor-8"></a>#include &lt;ProTKRunTime.h>
+#include &lt;ProAxis.h>
+
+#define sqr(a) ((a)*(a))
+
+<a name="anchor-9"></a>
+
+typedef struct feat_by_name_find
+{
+   FeatByName *feats;
+<a name="anchor-10"></a>   int num_feats;	 
+}  FeatByNameFind;
+
+static ProError err;
+
+<a name="anchor-11"></a>/*=============================================================*\
+  Function: 	ProUtilCreateCircleSection
+  Purpose:	Full creating of section with one circle
+  Return :      
+\*=============================================================*/
+<a name="anchor-12"></a>ProError ProUtilCreateCircleSection(
+    ProSection section,		/*In : the section */
+    Parameter *params)		/*In : params [0] - diameter */
+				/*     params [1] - vertical surface */
+				/*     params [2] - vertical surface */
+<a name="anchor-13"></a>{
+    Pro2dCircledef circle;
+    Pro2dEntdef* ent;
+    Pro2dLinedef* line;
+    Pro2dPnt     point;
+<a name="anchor-14"></a>    int brk=0;
+    int circle_id, circle_diam, side_id, bot_id;
+    ProSectionPointType pnt_types[2];
+    ProError err;
+    ProWSecerror errors;
+<a name="anchor-15"></a>
+    do /* Used for exit from the middle of block */
+      {
+/*----------------------------------------------------------*\
+    Create entities
+<a name="anchor-16"></a>\*----------------------------------------------------------*/
+
+	circle.type = PRO_2D_CIRCLE;
+	
+	/* Align the X coordinate of the circle with the side datum plane */
+<a name="anchor-17"></a>	err = ProSectionEntityFromProjection(section, params[1].r, &amp;side_id);  
+	err = ProSectionEntityGet (section, side_id, &amp;ent);	
+	line = (Pro2dLinedef*) ent;	
+	circle.center[0] = line->end1 [0];
+	
+<a name="anchor-18"></a>	/* Align the Y coordinate of the circle with the bottom datum plane */
+	err = ProSectionEntityFromProjection(section, params[2].r, &amp;bot_id);   
+	err = ProSectionEntityGet (section, bot_id, &amp;ent);	
+	line = (Pro2dLinedef*) ent;	
+	circle.center[1] = line->end1 [1];
+<a name="anchor-19"></a>	
+	circle.radius = params[0].d/2;
+	
+	err = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;circle, &amp;circle_id);    
+/*----------------------------------------------------------*\
+<a name="anchor-20"></a>    Add dimensions
+\*----------------------------------------------------------*/
+	/*point[0] = 0.0;
+	point[1] = params[0].d/2+1; 
+	pnt_types[0] = PRO_ENT_WHOLE;
+<a name="anchor-21"></a>	err =ProSecdimCreate(section, &amp;circle_id, pnt_types, 1,
+			     PRO_TK_DIM_DIA, point, &amp;circle_diam);*/
+
+/*----------------------------------------------------------*\
+    Solve section
+<a name="anchor-22"></a>\*----------------------------------------------------------*/
+	err = ProSecerrorAlloc(&amp;errors);
+	err = ProSectionAutodim (section, &amp;errors);			   
+	err = ProSecerrorFree(&amp;errors);
+    } while (brk);
+<a name="anchor-23"></a>    return (err);
+}
+/*=============================================================*\
+  Function: 	ProUtilCreateToothSection
+  Purpose:	Full creating of tooth space section
+<a name="anchor-24"></a>  Return :      
+\*=============================================================*/
+ProError ProUtilCreateToothSection(
+    ProSection section,		/*In : the section */
+    Parameter *params)		/*In : params [0] - the module m */
+<a name="anchor-25"></a>				/*     params [1] - the number of teeth */
+				/*     params [2] - standart pressure angle */
+				/*     params [3] - gear side surface */
+				/*     params [4] - side datum plane*/
+{
+<a name="anchor-26"></a>    Pro2dLinedef line;
+    Pro2dPnt     point, p1, p2, p3;
+    Pro2dCircledef *p_circle, add_circle, ded_circle, t_circle;
+    Pro2dArcdef arc;
+    int dims[2], brk=0, ring_gear, z, arc1_id, arc2_id, d_id;
+<a name="anchor-27"></a>    int circle_id, ded_id;
+    ProSectionPointType pnt_types[2];
+    ProError err;
+    ProWSecerror errors;
+    double d, r, angle, r_base, r_t, m, an ;
+<a name="anchor-28"></a>
+    do /* Used for exit from the middle of block */
+    {
+
+	err = ProSectionEntityFromProjection(section, params[3].r, &amp;circle_id);
+<a name="anchor-29"></a>	if(err != PRO_TK_NO_ERROR)
+	break;  
+	
+	err = ProSectionEntityGet(section, circle_id, (Pro2dEntdef**)&amp;p_circle);
+	if(err != PRO_TK_NO_ERROR)
+<a name="anchor-30"></a>	break;  
+
+	m = params[0].d;		 /* module */
+	r = p_circle->radius;            /* addendum circle radius */
+	z = params[1].i;                 /* no. of teeth */
+<a name="anchor-31"></a>	d = params[0].d * z;;            /* The Pitch circle radius */
+
+	ring_gear = r &lt; d/2;
+	angle = params[2].d*PI/180;
+	r_t = d/2 * sin(angle);
+<a name="anchor-32"></a>	r_base = d/2 * cos(angle); /* The base-circle diam */
+
+	if (ring_gear)
+	{
+	    add_circle.radius = r;
+<a name="anchor-33"></a>	    ded_circle.radius = d/2 + 1.2*m;
+	    angle = PI/2 + angle - PI/(z*2);
+	}
+	else
+	{
+<a name="anchor-34"></a>	    add_circle.radius = r;
+	    ded_circle.radius = d/2 - 1.25*m;
+	    angle = PI/2 - angle - PI/(z*2);
+	}
+	add_circle.center[0] = ded_circle.center[0] = p_circle -> center [0];
+<a name="anchor-35"></a>	add_circle.center[1] = ded_circle.center[1] = p_circle -> center [1];
+
+	t_circle.center[0] = p_circle -> center [0] + r_base * cos(angle);
+	t_circle.center[1] = p_circle -> center [1] + r_base * sin(angle);
+	t_circle.radius = r_t;
+<a name="anchor-36"></a>
+	ProUtilTwoCircleIntersection(&amp;add_circle, &amp;t_circle, p1, p2);
+	if (ring_gear)
+	{
+	    if (p1[0]&lt;p2[0])
+<a name="anchor-37"></a>		memcpy(p1, p2, sizeof(p1));
+	} else 
+	{
+	    if (p1[0]>p2[0])
+		memcpy(p1, p2, sizeof(p1));
+<a name="anchor-38"></a>	}
+
+	ProUtilTwoCircleIntersection(&amp;ded_circle, &amp;t_circle, p2, p3);
+	if (ring_gear)
+	{
+<a name="anchor-39"></a>	    if (p2[0]&lt;p3[0])
+		memcpy(p2, p3, sizeof(p1));
+	} else 
+	{
+	    if (p2[0]>p3[0])
+<a name="anchor-40"></a>		memcpy(p2, p3, sizeof(p1));
+	}
+
+/*----------------------------------------------------------*\
+    Create entities
+<a name="anchor-41"></a>\*----------------------------------------------------------*/
+	line.type = PRO_2D_CENTER_LINE;
+	line.end1[0] = p_circle -> center [0];
+	line.end1[1] = p_circle -> center [1];
+	line.end2[0] = p_circle -> center [0];
+<a name="anchor-42"></a>	line.end2[1] = p_circle -> center [1] + r;
+	err = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;line, &amp;d_id); 
+	if(err != PRO_TK_NO_ERROR)
+	break;   
+
+<a name="anchor-43"></a>	arc.type =  PRO_2D_ARC;
+	memcpy(arc.center, t_circle.center, sizeof(arc.center));
+	arc.start_angle = atan2(p1[1]-arc.center[1], p1[0]-arc.center[0]);
+	arc.end_angle = atan2(p2[1]-arc.center[1], p2[0]-arc.center[0]);
+	arc.radius = r_t;
+<a name="anchor-44"></a>	err = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;arc, &amp;arc1_id);   
+	if(err != PRO_TK_NO_ERROR)
+	break;   
+
+	an = PI - arc.start_angle;
+<a name="anchor-45"></a>	arc.start_angle = PI - arc.end_angle;
+	arc.end_angle = an;
+	arc.center[0] = (2 * p_circle -> center [0] ) - arc.center[0];
+	err = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;arc, &amp;arc2_id);  
+	if(err != PRO_TK_NO_ERROR)
+<a name="anchor-46"></a>	break;    
+
+	memcpy(arc.center, ded_circle.center, sizeof(arc.center));
+	arc.start_angle = atan2( p2[1] - arc.center [1], p2[0] - arc.center [0]);
+	arc.end_angle = PI - arc.start_angle;
+<a name="anchor-47"></a>	arc.radius = ded_circle.radius;
+	err = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;arc, &amp;ded_id);  
+	if(err != PRO_TK_NO_ERROR)
+	break;    
+
+<a name="anchor-48"></a>/*----------------------------------------------------------*\
+    Add dimensions
+\*----------------------------------------------------------*/
+	point[0] = p_circle -> center [0];
+	point[1] = t_circle.center[1] + 1; 
+<a name="anchor-49"></a>	pnt_types[0] = PRO_ENT_CENTER;
+	pnt_types[1] = PRO_ENT_CENTER;
+	dims[0] = arc1_id;
+	dims[1] = arc2_id;
+	err = ProSecdimCreate(section, dims, pnt_types, 2,
+<a name="anchor-50"></a>			     PRO_TK_DIM_PNT_PNT_HORIZ, point, &amp;d_id);
+        if(err != PRO_TK_NO_ERROR)
+	break;  
+	
+	point[0] = 1.2 * t_circle.center[0];
+<a name="anchor-51"></a>	point[1] = t_circle.center[1]/2;
+	dims[1] = circle_id;
+	err = ProSecdimCreate(section, dims, pnt_types, 2,
+			     PRO_TK_DIM_PNT_PNT_VERT, point, &amp;d_id);
+        if(err != PRO_TK_NO_ERROR)
+<a name="anchor-52"></a>	break;  
+	
+	point[0] = 0;
+	if (ring_gear)
+	    point[1] = 1.2 * ded_circle.radius;
+<a name="anchor-53"></a>	else
+	    point[1] = 0.8 * ded_circle.radius;
+	pnt_types[0] = PRO_ENT_WHOLE;
+	err = ProSecdimCreate(section, &amp;ded_id, pnt_types, 1, 
+			      PRO_TK_DIM_RAD, point, &amp;d_id);  
+<a name="anchor-54"></a>	if(err != PRO_TK_NO_ERROR)
+	break;  
+	    
+	point[0] = p1[0] * 1.2;
+	point[1] = p1[1] * 1.2;
+<a name="anchor-55"></a>	err = ProSecdimCreate(section, &amp;arc1_id, pnt_types, 1, 
+			      PRO_TK_DIM_RAD, point, &amp;d_id);  
+        if(err != PRO_TK_NO_ERROR)
+	break;  
+/*----------------------------------------------------------*\
+<a name="anchor-56"></a>    Solve section
+\*----------------------------------------------------------*/
+    	err = ProSecerrorAlloc(&amp;errors);
+	err = ProSectionSolve(section, &amp;errors);
+	if (err != PRO_TK_NO_ERROR)
+<a name="anchor-57"></a>	    break;
+
+	err = ProSecerrorFree(&amp;errors);
+    } while (brk);
+
+<a name="anchor-58"></a>    return (err);
+}
+/*=============================================================*\
+  Function: 	ProUtilCreateKeySection
+  Purpose:	Full creating of open section with tree lines
+<a name="anchor-59"></a>  Return :      
+\*=============================================================*/
+ProError ProUtilCreateKeySection(
+    ProSection section,		/*In : the section */
+    Parameter *params)		/*In : params [0] - section width */
+<a name="anchor-60"></a>				/*     params [1] - section height */
+				/*     params [2] - cyl surface */
+{
+    Pro2dLinedef line;
+    Pro2dPnt     point;
+<a name="anchor-61"></a>    Pro2dCircledef *p_circle;
+    int dims[2], brk=0;
+    int left_id, right_id, top_id, width_id, height_id, circle_id;
+    ProSectionPointType pnt_types[2];
+    ProError err;
+<a name="anchor-62"></a>    ProWSecerror errors;
+    double y, r;
+
+
+    do /* Used for exit from the middle of block */
+<a name="anchor-63"></a>    {
+        err = ProSectionEntityFromProjection(section, params[2].r, &amp;circle_id);
+        err = ProSectionEntityGet(section, circle_id, (Pro2dEntdef**)&amp;p_circle);
+
+        r = p_circle->radius;
+<a name="anchor-64"></a>        y = sqrt(r*r - params[0].d*params[0].d/4);
+
+/*----------------------------------------------------------*\
+    Create entities
+\*----------------------------------------------------------*/
+<a name="anchor-65"></a>        line.type = PRO_2D_LINE;
+        line.end1[0] = line.end2[0] = -params[0].d/2;
+        line.end1[1] = y;
+        line.end2[1] = r + params[1].d;
+        err = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;line, &amp;left_id);
+<a name="anchor-66"></a>
+        line.end1[0] = line.end2[0] = -line.end1[0];
+        err = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;line, &amp;right_id);
+
+
+<a name="anchor-67"></a>
+        line.end1[0] = -line.end1[0];
+        line.end1[1] =  line.end2[1];
+        err = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;line, &amp;top_id);
+
+<a name="anchor-68"></a>/*----------------------------------------------------------*\
+    Add dimensions
+\*----------------------------------------------------------*/
+        point[0] = 0.0;
+        point[1] = r + params[1].d+1;
+<a name="anchor-69"></a>        pnt_types[0] = PRO_ENT_WHOLE;
+        err =ProSecdimCreate(section, &amp;top_id, pnt_types, 1,
+                             PRO_TK_DIM_LINE, point, &amp;width_id);
+
+        point[0] = params[0].d/2+1;
+<a name="anchor-70"></a>        point[1] = (y + point[1])/2;
+        pnt_types[0] = pnt_types[1] = PRO_ENT_WHOLE;
+        dims[0] = top_id;
+        dims[1] = circle_id;
+        err = ProSecdimCreate(section, dims, pnt_types, 2,
+<a name="anchor-71"></a>                              PRO_TK_DIM_LINE_AOC, point, &amp;height_id);
+
+/*----------------------------------------------------------*\
+    Solve section
+\*----------------------------------------------------------*/
+<a name="anchor-72"></a>        err = ProSecerrorAlloc(&amp;errors);
+        err = ProSectionSolve(section, &amp;errors);
+
+	err = ProSecerrorFree(&amp;errors);
+    } while (brk);
+<a name="anchor-73"></a>
+    return (err);
+}
+
+/*=============================================================*\
+<a name="anchor-74"></a>  Function: 	ProUtilCreateNotchSection
+  Purpose:	Full creating of open section with tree lines
+  Return :      
+\*=============================================================*/
+ProError ProUtilCreateNotchSection(
+<a name="anchor-75"></a>    ProSection section,		/*In : the section */
+    Parameter *params)		/*In : params [0] - circle diameter */
+				/*     params [1] - notch radius */
+				/*     params [2] - backplate surface */
+{
+<a name="anchor-76"></a>    Pro2dArcdef arc;
+    Pro2dCircledef* p_circle;
+    Pro2dPnt     point;
+    int dims[2], brk=0;
+    int circle_id, arc_id, hor_id, vert_id, rad_id;
+<a name="anchor-77"></a>    ProSectionPointType pnt_types[2];
+    ProError err;
+    ProWSecerror errors;
+    double y, x;
+
+<a name="anchor-78"></a>
+    do /* Used for exit from the middle of block */
+    {
+
+	y = ((params[0].d*params[0].d)/2-params[1].d*params[1].d)/params[0].d;
+<a name="anchor-79"></a>	x = sqrt((params[0].d*params[0].d)/4-y*y);
+/*----------------------------------------------------------*\
+    Create entities
+\*----------------------------------------------------------*/
+	err = ProSectionEntityFromProjection(section, params[2].r, &amp;circle_id);
+<a name="anchor-80"></a>	err = ProSectionEntityGet (section, circle_id, (Pro2dEntdef**)&amp;p_circle);
+
+	arc.type = PRO_2D_ARC;
+	arc.center[0] = p_circle -> center [0];
+	arc.center[1] = p_circle -> center [1] + params[0].d/2;
+<a name="anchor-81"></a>	arc.radius = params[1].d;
+	arc.start_angle = atan2(y-params[0].d/2, -x)+PI*2;
+	arc.end_angle = 3*PI - arc.start_angle;
+	err = ProSectionEntityAdd(section, (Pro2dEntdef*)&amp;arc, &amp;arc_id);    
+
+<a name="anchor-82"></a>/*----------------------------------------------------------*\
+    Add dimensions
+\*----------------------------------------------------------*/
+	point[0] = p_circle -> center [0];
+	point[1] = p_circle -> center [1] + params[0].d/2 ; 
+<a name="anchor-83"></a>	pnt_types[0] = PRO_ENT_WHOLE;
+	err =ProSecdimCreate(section, &amp;arc_id, pnt_types, 1,
+			     PRO_TK_DIM_RAD, point, &amp;rad_id);
+    
+	point[0] = p_circle -> center [0];
+<a name="anchor-84"></a>	point[1] = p_circle -> center [1] + params[0].d/4;
+	pnt_types[0] = PRO_ENT_CENTER;
+	pnt_types[1] = PRO_ENT_CENTER;
+	dims[0] = circle_id;
+	dims[1] = arc_id;
+<a name="anchor-85"></a>	err = ProSecdimCreate(section, dims, pnt_types, 2, 
+			      PRO_TK_DIM_PNT_PNT_HORIZ, point, &amp;hor_id);  
+
+	point[0] = p_circle -> center [0] + 1.0;
+	point[1] = p_circle -> center [1] + params[0].d/4;
+<a name="anchor-86"></a>	pnt_types[0] = PRO_ENT_CENTER;
+	pnt_types[1] = PRO_ENT_CENTER;
+	dims[0] = circle_id;
+	dims[1] = arc_id;
+vert_id = -1;
+<a name="anchor-87"></a> ProTKPrintf( &quot;point=(%f %f)\n&quot;, point[0], point[1] );
+	err = ProSecdimCreate(section, dims, pnt_types, 2, 
+			      PRO_TK_DIM_AOC_AOC_TAN_VERT, point, &amp;vert_id);  
+	    
+/*----------------------------------------------------------*\
+<a name="anchor-88"></a>    Solve section
+\*----------------------------------------------------------*/
+	err = ProSecerrorAlloc(&amp;errors);
+	err = ProSectionSolve(section, &amp;errors);
+	if (err != PRO_TK_NO_ERROR)
+<a name="anchor-89"></a>	    break;
+
+	err = ProSecerrorFree(&amp;errors);
+   } while (brk);
+
+<a name="anchor-90"></a>    return (err);
+}
+
+/*=============================================================*\
+  Function: 	ProUtilCreateSketchedFeature
+<a name="anchor-91"></a>  Purpose:	create a new feature
+  Return :      PRO_TK_NO_ERROR if succsessfull, an error otherwise
+\*=============================================================*/
+ProError ProUtilCreateSketchedFeature(
+    GearParam *g_ptr,	    /* In : */    
+<a name="anchor-92"></a>    FeatureDef *feat_def,   /* In : Feature definition */
+    ProFeature *feature)    /* Out: created feature */
+{
+    static ElemTreeData sketch[]={
+	{1, PRO_E_SKETCHER, {PRO_VALUE_TYPE_POINTER}}
+<a name="anchor-93"></a>    };
+
+    static ProElempathItem path_items[] = {
+	{PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SECTION},
+	{PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_SKETCHER}
+<a name="anchor-94"></a>    };
+    
+    ProElement elem_tree, elem_sec;
+    ProElement created_elemtree, sketch_element;
+
+<a name="anchor-95"></a>    ProError err;
+    ProModelitem model_item;
+    ProSelection model_sel;
+    
+    ProFeatureCreateOptions opts[1];
+<a name="anchor-96"></a>    ProErrorlist errs;
+    ProElempath path;
+    ProValue value;
+    ProValueData value_data;
+    ProSection section;
+<a name="anchor-97"></a>    int brk = 0;
+
+    do /* Used for exit from middle of block */
+    {
+/*----------------------------------------------------------*\
+<a name="anchor-98"></a>    Create Element Tree
+\*----------------------------------------------------------*/
+	err = ProUtilElemtreeCreate(feat_def->tree, feat_def->sizeof_tree, NULL, 
+				    &amp;elem_tree);
+	if (err != PRO_TK_NO_ERROR)
+<a name="anchor-99"></a>	    break;
+
+/*----------------------------------------------------------*\
+    Create the incomplete protrusion in the current model
+\*----------------------------------------------------------*/
+<a name="anchor-100"></a>	err = ProMdlToModelitem(g_ptr->model, &amp;model_item);
+	err = ProSelectionAlloc(NULL, &amp;model_item, &amp;model_sel);
+	opts[0] = PRO_FEAT_CR_INCOMPLETE_FEAT;
+	err = ProFeatureCreate(model_sel, elem_tree, opts, 1, feature, &amp;errs);
+	if (err != PRO_TK_NO_ERROR)
+<a name="anchor-101"></a>	{
+	    ProUtilFeatErrsWrite(&quot;ProFeatureCreate&quot;, err, elem_tree, &amp;errs);
+	    break;
+	}
+	err = ProSelectionFree(&amp;model_sel);
+<a name="anchor-102"></a>
+/*----------------------------------------------------------*\
+    Get the initialized section element from the database
+\*----------------------------------------------------------*/
+	err = ProElempathAlloc(&amp;path);
+<a name="anchor-103"></a>	err = ProElempathDataSet(path, path_items, 2);
+
+	err = ProFeatureElemtreeCreate (feature, &amp;created_elemtree);
+	err = ProElemtreeElementGet (created_elemtree, path, &amp;sketch_element);
+	err = ProElementValueGet (sketch_element, &amp;value);
+<a name="anchor-104"></a>
+	err = ProValueDataGet(value, &amp;value_data);
+	section =  (ProSection)value_data.v.p;
+	err = ProElempathFree(&amp;path);
+/*----------------------------------------------------------*\
+<a name="anchor-105"></a>    Create a section
+\*----------------------------------------------------------*/
+	err = feat_def->section_create_func(section, feat_def->params);
+	if (err != PRO_TK_NO_ERROR)
+	    break;
+<a name="anchor-106"></a>
+/*------------------------------------------------------------*\
+    Set section-dependent element values
+\*------------------------------------------------------------*/
+
+<a name="anchor-107"></a>	ProUtilFeatureSetSectionDependentValues (created_elemtree,
+						 feat_def->tree,
+						 feat_def->sizeof_tree);
+
+	opts[0] = PRO_FEAT_CR_INCOMPLETE_FEAT;
+<a name="anchor-108"></a>	err = ProFeatureRedefine(NULL, feature, created_elemtree, opts, 1, &amp;errs);
+	if (err != PRO_TK_NO_ERROR)
+	{
+	    ProUtilFeatErrsWrite(&quot;ProFeatureRedefine&quot;, err, elem_tree, &amp;errs);
+	    break;
+<a name="anchor-109"></a>	}
+	err = ProElementFree(&amp;elem_tree);
+/*----------------------------------------------------------*\
+    Set feature name
+\*----------------------------------------------------------*/
+<a name="anchor-110"></a>	ProUtilModelitemNameSet(feature, feat_def->feat_name);
+    } while (brk);
+
+    return (err);
+}
+<a name="anchor-111"></a>
+/*=============================================================*\
+  Function: 	ProUtilFeatureSetSectionDependentValues
+  Purpose:	Assign necessary elements (direction, material side) from 
+                original value table (special for Extrude, Revolve element 
+<a name="anchor-112"></a>	        tree, these elements must be set along with or after 
+		PRO_E_SEKTCHER)
+\*=============================================================*/
+ProError ProUtilFeatureSetSectionDependentValues (ProElement elemtree,
+						  ElemTreeData* elemarr,
+<a name="anchor-113"></a>						  int n_elem)
+{
+  ElemTreeData* needed_elems = NULL;
+  int i_elem, i_value;
+  int size;
+<a name="anchor-114"></a>  
+  ProElempath elem_path;
+  ProElempathItem path_item;
+  ProElement element;
+  ProValue value;
+<a name="anchor-115"></a>
+
+  for (i_elem = 0; i_elem &lt; n_elem; i_elem ++)
+    {
+      switch (elemarr [i_elem].elem_id)
+<a name="anchor-116"></a>	{
+	case PRO_E_EXT_SURF_CUT_SOLID_TYPE:
+	  {
+	    ProArrayAlloc (0, sizeof (ElemTreeData), 1, (ProArray*)&amp;needed_elems);
+	    break;
+<a name="anchor-117"></a>	  }
+	case PRO_E_STD_DIRECTION:
+	case PRO_E_STD_MATRLSIDE:
+	  {
+	    if (needed_elems != NULL)
+<a name="anchor-118"></a>	      {
+		ProArrayObjectAdd ((ProArray*)&amp;needed_elems, -1, 1, &amp;elemarr[i_elem]);
+	      }
+	    break;
+	  }
+<a name="anchor-119"></a>	default:
+	  break;
+	}
+    }
+  if (needed_elems == NULL)
+<a name="anchor-120"></a>    return PRO_TK_NO_ERROR;
+
+  err = ProArraySizeGet (needed_elems, &amp;size);
+  if (err != PRO_TK_NO_ERROR)
+    return PRO_TK_NO_ERROR;
+<a name="anchor-121"></a>  if (size == 0)
+    {
+      ProArrayFree ((ProArray*)&amp;needed_elems);
+      return PRO_TK_NO_ERROR;
+    }
+<a name="anchor-122"></a>
+
+  for (i_value = 0; i_value &lt; size; i_value ++)
+    {
+      switch (needed_elems [i_value].elem_id)
+<a name="anchor-123"></a>	{
+	  case PRO_E_STD_DIRECTION:
+	  case PRO_E_STD_MATRLSIDE:
+	    {
+              ProElempathAlloc (&amp;elem_path);
+<a name="anchor-124"></a>	      path_item.type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+	      path_item.path_item.elem_id = needed_elems [i_value].elem_id;
+	    
+	      ProElempathDataSet (elem_path, &amp;path_item, 1);
+
+<a name="anchor-125"></a>	      ProElemtreeElementGet (elemtree, elem_path, &amp;element);
+	      
+	      /*----------------------------------------------------------*\
+		Add Element value
+	      \*----------------------------------------------------------*/
+<a name="anchor-126"></a>              ProValueAlloc(&amp;value);
+            
+              ProValueDataSet(value, &amp;needed_elems[i_value].data);
+            
+              ProElementValueSet(element, value);
+<a name="anchor-127"></a>              ProElempathFree (&amp;elem_path);
+	       
+	      break;
+	    }
+	}
+<a name="anchor-128"></a>    }
+
+  ProArrayFree ((ProArray*) &amp;needed_elems);
+
+  return PRO_TK_NO_ERROR;
+<a name="anchor-129"></a>}
+
+/*=============================================================*\
+  Function: 	ProUtilModelitemNameSet
+  Purpose:	Set new name for the model item
+<a name="anchor-130"></a>  Return :      as ProModelitemNameSet
+\*=============================================================*/
+ProError ProUtilModelitemNameSet(ProModelitem *modelitem, char *name)
+{
+    ProName w_name;
+<a name="anchor-131"></a>    ProError err;
+
+    ProStringToWstring(w_name, name);
+    err = ProModelitemNameSet(modelitem, w_name);
+    return (err);
+<a name="anchor-132"></a>}
+
+/*=============================================================*\
+  Function: 	ProUtilFeatByNameVisit
+  Purpose:	visiting fucntion for ProSolidFeatVisit
+<a name="anchor-133"></a>  Return :      1 if feature with required name found, 0 otherwise
+\*=============================================================*/
+static ProError ProUtilModelitemByNameVisit(
+    ProModelitem *modelitem, 
+    ProError err, 
+<a name="anchor-134"></a>    ProAppData app_data)
+{
+    FeatByNameFind *feat_by_name = (FeatByNameFind *)app_data;
+    ProName   name;	
+    int i;
+<a name="anchor-135"></a>    ProBoolean vis;
+
+    if (modelitem->type == PRO_FEATURE)
+    {
+	err = ProFeatureVisibilityGet((ProFeature*)modelitem, &amp;vis);
+<a name="anchor-136"></a>	if (err!=PRO_TK_NO_ERROR || vis == PRO_B_FALSE)
+	    return (PRO_TK_NO_ERROR);
+    }
+    
+    err = ProModelitemNameGet(modelitem, name);
+<a name="anchor-137"></a>    if (err != PRO_TK_NO_ERROR)
+	return (PRO_TK_NO_ERROR);
+
+    for (i=0; i&lt;feat_by_name->num_feats; i++)
+    {
+<a name="anchor-138"></a>	if (ProUtilStrwscmp(feat_by_name->feats[i].name, name)==0)
+	    feat_by_name->feats[i].id = modelitem->id;
+    }
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-139"></a>
+
+/*=============================================================*\
+  Function: 	ProUtilFeatsByName
+  Purpose:	to find solid features by name
+<a name="anchor-140"></a>  Return :      PRO_TK_NO_ERROR if successfull,
+\*=============================================================*/
+ProError ProUtilFeatsByName(
+    ProSolid model,
+    FeatByName *feats,
+<a name="anchor-141"></a>    int num_feats)
+{
+    FeatByNameFind feat_by_name;
+    ProError   err;
+    int i;
+<a name="anchor-142"></a>
+    feat_by_name.feats = feats;
+    feat_by_name.num_feats = num_feats;
+    for (i=0; i&lt;num_feats; i++)
+	feats[i].id = -1;
+<a name="anchor-143"></a>    
+    err = ProSolidFeatVisit((ProSolid)model, 
+	(ProFeatureVisitAction)ProUtilModelitemByNameVisit, NULL, 
+	(ProAppData)&amp;feat_by_name);
+    return (err);
+<a name="anchor-144"></a>}
+
+/*=============================================================*\
+  Function: 	ProUtilSelectionFromSurfaceId
+  Purpose:	transformation from surface id to ProSelection
+<a name="anchor-145"></a>  Return :      PRO_TK_NO_ERROR if successfull,
+\*=============================================================*/
+ProError ProUtilSelectionFromSurfaceId(
+    ProMdl model,	/* In : model */
+    int surf_id,	/* In : surface id */
+<a name="anchor-146"></a>    ProSelection *sel)	/* Out: selection, to free use ProSelectionFree() */
+{
+    ProError err;
+    ProSurface surf;
+    ProModelitem modelitem;
+<a name="anchor-147"></a>    
+    err=ProSurfaceInit(model, surf_id, &amp;surf);
+    if (err!=PRO_TK_NO_ERROR)
+	return (err);
+    err = ProSurfaceToGeomitem((ProSolid)model, surf, (ProGeomitem*)&amp;modelitem);
+<a name="anchor-148"></a>    if (err != PRO_TK_NO_ERROR)
+    	return (err);
+    err = ProSelectionAlloc(NULL, &amp;modelitem, sel);
+    if (err !=  PRO_TK_NO_ERROR)
+    	return (err);
+<a name="anchor-149"></a>    
+    
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-150"></a>/*=============================================================*\
+  Function: 	ProUtilAxisGeomitemVisit
+  Purpose:	Visit function for the ProFeatureGeomitemVisit
+  Return :      only one axis as feature it self is axis 
+\*=============================================================*/
+<a name="anchor-151"></a>ProError ProUtilAxisGeomitemVisit(
+    ProGeomitem *geomitem,
+    ProError err,
+    ProAppData appdata)
+{
+<a name="anchor-152"></a>    ProGeomitem *axis =  (ProGeomitem*)appdata;
+    axis[0] = geomitem[0];
+    err = PRO_TK_E_FOUND;
+    return (PRO_TK_E_FOUND);
+}
+<a name="anchor-153"></a>
+/*=============================================================*\
+  Function: 	ProUtilAxisGeomitem
+  Purpose:	Found Axis GeomItem for the axis feature (PRO_FEAT_DATUM_AXIS)
+  Return :      PRO_TK_NO_ERROR if successful
+<a name="anchor-154"></a>\*=============================================================*/
+ProError ProUtilAxisGeomitem(
+    ProFeature *feature_axis,	    /* In: the feature */ 
+    ProType type,		    /* In: Geomitem type */
+    int  *featid)		    /*Out: Geomitem id  */
+<a name="anchor-155"></a>{
+    ProModelitem modelitem;
+    ProError err;
+
+    err = ProFeatureGeomitemVisit(feature_axis, type, 
+<a name="anchor-156"></a>	                          ProUtilAxisGeomitemVisit, NULL, 
+				  (ProAppData)&amp;modelitem);
+
+    if (err==PRO_TK_E_FOUND)
+    {
+<a name="anchor-157"></a>	featid[0] = modelitem.id;
+	return (PRO_TK_NO_ERROR);
+    }
+    return (PRO_TK_E_NOT_FOUND);
+}
+<a name="anchor-158"></a>
+/*===================================================================*\
+  Function: 	ProUtilSelectionFromAxisId
+  Purpose:	transformation from axis id to ProSelection
+  Return :      PRO_TK_NO_ERROR if successfull,
+<a name="anchor-159"></a>\*=============================================================*/
+
+ProError ProUtilSelectionFromAxisId(
+    ProMdl model,	/* In : model */
+    int axis_id,	/* In : axis id */
+<a name="anchor-160"></a>    ProSelection *sel)	/* Out: selection, to free use ProSelectionFree() */
+{
+    ProError err;
+    ProAxis axis;
+    ProModelitem modelitem;
+<a name="anchor-161"></a>    
+    err = ProAxisInit(model, axis_id, &amp;axis);
+    if (err!=PRO_TK_NO_ERROR) 
+	return (err);
+    err = ProAxisToGeomitem((ProSolid)model, axis, (ProGeomitem*)&amp;modelitem);
+<a name="anchor-162"></a>    if (err != PRO_TK_NO_ERROR)
+    	return (err);
+    err = ProSelectionAlloc(NULL, &amp;modelitem, sel);
+    if (err!=PRO_TK_NO_ERROR) 
+	return (err);
+<a name="anchor-163"></a>	
+    return (PRO_TK_NO_ERROR);
+}
+
+
+<a name="anchor-164"></a>/*=============================================================*\
+  Function: 	ProUtilGeometryAtPointFind
+  Purpose:	to find surface at point
+  Return :      PRO_TK_NO_ERROR if successfull,
+		PRO_TK_E_NOT_FOUND otherwise
+<a name="anchor-165"></a>\*=============================================================*/
+ProError ProUtilGeometryAtPointFind(
+    ProPart part, 
+    Pro3dPnt point, 
+    ProModelitem *modelitem)
+<a name="anchor-166"></a>{
+    int n_sel, i;
+    ProSelection *p_sel;
+    ProType type;
+    ProError err;
+<a name="anchor-167"></a>
+    err = ProGeometryAtPointFind(part, point, &amp;p_sel, &amp;n_sel);
+    
+    if (err != PRO_TK_NO_ERROR)
+	return (PRO_TK_E_NOT_FOUND);
+<a name="anchor-168"></a>
+    err = ProSelectionModelitemGet(p_sel[0], modelitem);
+    
+    /* Free memory allocated by ProGeometryAtPointFind */
+    for (i = 0; i &lt; n_sel; i++)
+<a name="anchor-169"></a>        ProSelectionFree( &amp;p_sel[i]);
+
+    ProArrayFree((ProArray *) &amp;p_sel);
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-170"></a>
+
+
+/*=============================================================*\
+  Function: 	ProUtilFeatFirstGeomitemVisit
+<a name="anchor-171"></a>  Purpose:	Visit function for the ProFeatureGeomitemVisit
+  Return :      1 (only first geom item visited)
+\*=============================================================*/
+ProError ProUtilFeatFirstGeomitemVisit(
+    ProGeomitem *geom_item,
+<a name="anchor-172"></a>    ProError err,
+    ProAppData app_data)
+{
+    ProGeomitem *surf =  (ProGeomitem*)app_data;
+    surf[0] = geom_item[0];
+<a name="anchor-173"></a>    return ((ProError)1);
+}
+
+/*=============================================================*\
+  Function: 	ProUtilFeatFirstGeomitem
+<a name="anchor-174"></a>  Purpose:	Found first GeomItem for the feature
+  Return :      PRO_TK_NO_ERROR if successful
+\*=============================================================*/
+ProError ProUtilFeatFirstGeomitem(
+    ProFeature *feature,	    /* In: the feature */ 
+<a name="anchor-175"></a>    ProType type,		    /* In: Geomitem type */
+    int  *item_id)		    /*Out: Geomitem id, user's memory */
+{
+    ProModelitem model_item;
+    ProError err;
+<a name="anchor-176"></a>
+    err = ProFeatureGeomitemVisit(feature, type, 
+	ProUtilFeatFirstGeomitemVisit, NULL, (ProAppData)&amp;model_item);
+
+    if (err==1)
+<a name="anchor-177"></a>    {
+	item_id[0] = model_item.id;
+	return (PRO_TK_NO_ERROR);
+    }
+    return (PRO_TK_E_NOT_FOUND);
+<a name="anchor-178"></a>}
+
+/*=============================================================*\
+  Function: 	ProUtilFeatFirstDimensionVisit
+  Purpose:	Visit function for the ProFeatureDimensionVisit
+<a name="anchor-179"></a>  Return :      1 (only first dim visited)
+\*=============================================================*/
+ProError ProUtilFeatFirstDimensionVisit(
+    ProDimension *dim,
+    ProError err,
+<a name="anchor-180"></a>    ProAppData app_data)
+{
+    ProDimension *found =  (ProDimension*)app_data;
+    found[0] = dim[0];
+    return ((ProError)1);
+<a name="anchor-181"></a>}
+
+/*=============================================================*\
+  Function: 	ProUtilFeatFirstDimension
+  Purpose:	Found first GeomItem for the feature
+<a name="anchor-182"></a>  Return :      PRO_TK_NO_ERROR if successful
+\*=============================================================*/
+ProError ProUtilFeatFirstDimension(
+    ProFeature *feature,	    /* In: the feature */ 
+    int  *item_id)		    /*Out: Dimension id, user's memory */
+<a name="anchor-183"></a>{
+    ProModelitem model_item;
+    ProError err;
+
+    err = ProFeatureDimensionVisit(feature, 
+<a name="anchor-184"></a>	ProUtilFeatFirstDimensionVisit, NULL, (ProAppData)&amp;model_item);
+
+    if (err==1)
+    {
+	item_id[0] = model_item.id;
+<a name="anchor-185"></a>	return (PRO_TK_NO_ERROR);
+    }
+    return (PRO_TK_E_NOT_FOUND);
+}
+
+<a name="anchor-186"></a>/*=============================================================*\
+  Function: 	ProUtilFindTwoCircleIntersection
+  Purpose:	Calculate intersection of two circles
+  Return :      PRO_TK_NO_ERROR if successfull
+		PRO_TK_GENERAL_ERROR - no intersection
+<a name="anchor-187"></a>\*=============================================================*/
+ProError ProUtilTwoCircleIntersection(
+    Pro2dCircledef *c1, 
+    Pro2dCircledef *c2, 
+    Pro2dPnt	    p1,
+<a name="anchor-188"></a>    Pro2dPnt	    p2)
+{
+    double d, x1, y1, sa, ca;
+
+    d = sqrt(sqr(c1->center[0]-c2->center[0]) + 
+<a name="anchor-189"></a>             sqr(c1->center[1]-c2->center[1]));
+    if ((d&lt;EPSM6) || (d>c1->radius + c2->radius) || 
+	(d + c1->radius &lt; c2->radius) || (d + c2->radius &lt; c1->radius))
+	return (PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-190"></a>    y1 = (sqr(c1->radius) + sqr(d) - sqr(c2->radius)) / 2 /d;
+    x1 = sqrt(sqr(c1->radius) - sqr(y1));
+
+    sa = (c2->center[0]-c1->center[0]) / d;
+    ca = (c2->center[1]-c1->center[1]) / d;
+<a name="anchor-191"></a>
+    p1[0] = y1 * sa + x1 * ca + c1->center[0];
+    p1[1] = y1 * ca - x1 * sa + c1->center[1];
+    p2[0] = y1 * sa - x1 * ca + c1->center[0];
+    p2[1] = y1 * ca + x1 * sa + c1->center[1];
+<a name="anchor-192"></a>    
+    return (PRO_TK_NO_ERROR);
+}
+
+
+<a name="anchor-193"></a>/*=============================================================*\
+  Function: 	ProUtilFeatErrsWrite
+  Purpose:	Debug function. Print elem tree and errors af feature 
+                creation or redefenition failed
+*=============================================================*/
+<a name="anchor-194"></a>void ProUtilFeatErrsWrite(
+    char *function,
+    ProError err,
+    ProElement tree,
+    ProErrorlist *err_list)
+<a name="anchor-195"></a>{
+    ProTKFprintf(stderr, &quot;Function %s returned %d\n&quot;, function, err);
+    ProUtilElementtreePrint(tree, (UtilTreeprintWindow)2, 0);
+    ProUtilFeatErrsPrint(err_list);
+}
+<a name="anchor-196"></a>
+ProError ProUtilSecEntityUseCurveLoop (ProSection section, Parameter *params)
+{
+
+
+<a name="anchor-197"></a>    ProSelection *ref_geom_sketch;
+    ProModelitem ref_item;
+    ProSelection curve_ref;
+    ProIntlist ids;
+    ProWSecerror sec_errors;
+<a name="anchor-198"></a>    int num_ids;
+    ProErrorlist errors;
+    ProMdl model;
+    ProError status;
+    int curve_id;
+<a name="anchor-199"></a>    ProFeature feature;
+    ProModelitem app_data;
+    FeatByName feat_sketch[] = {
+                                    {&quot;SKETCH_1&quot;}};
+    ProCurve curve;
+<a name="anchor-200"></a>    CurveComponent *curvecomps;
+
+    status = ProMdlCurrentGet (&amp;model);
+
+    status = ProUtilFeatsByName(model, feat_sketch, 1);
+<a name="anchor-201"></a>    
+    status = ProFeatureInit(model, feat_sketch[0].id, &amp;feature);
+    
+    status = ProFeatureGeomitemVisit(&amp;feature, PRO_CURVE, ProUtilGeomItemVisitCurve, NULL, (ProAppData)&amp;app_data);
+    
+<a name="anchor-202"></a>    curve_id = app_data.id;
+    
+    // Extract curve from composite curve
+    status = ProCurveInit ((ProSolid)model, curve_id, &amp;curve);
+    ProUtilCollectCurveComponents(curve, &amp;curvecomps);
+<a name="anchor-203"></a>    status = ProCurveIdGet(curvecomps[0].p_curve, &amp;curve_id);
+    status = ProModelitemInit (model, (curve_id), PRO_CURVE, &amp;ref_item);
+    
+    status = ProSelectionAlloc (NULL, &amp;ref_item, &amp;curve_ref);
+
+<a name="anchor-204"></a>    status = ProSectionEntityUseCurveLoop (section, curve_ref, &amp;ids,  &amp;num_ids);
+
+    status = ProSelectionFree (&amp;curve_ref);
+
+    status = ProSecerrorAlloc (&amp;sec_errors);
+<a name="anchor-205"></a>
+    status = ProSectionAutodim (section, &amp;sec_errors);
+
+    status = ProSecerrorFree (&amp;sec_errors);
+
+<a name="anchor-206"></a>    return (status);
+}
+
+ProError ProUtilGeomItemVisitCurve (ProGeomitem *geom_item, ProError err_status, ProAppData data)
+{
+<a name="anchor-207"></a>    ProGeomitem *curve =  (ProGeomitem*)data;
+    curve[0] = geom_item[0];
+    err_status = PRO_TK_E_FOUND;
+    return (PRO_TK_E_FOUND);
+}
+<a name="anchor-208"></a>
+</pre>
+</body>
+</html>

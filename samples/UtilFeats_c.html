@@ -1,0 +1,653 @@
+<html>
+<head>
+<title>UtilFeats.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProFeature.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProArray.h>
+#include &lt;ProNcseq.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>#include &lt;ProFeatType.h>
+#include &lt;ProElement.h>
+#include &lt;ProTKRunTime.h>
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-4"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;UtilFeats.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;UtilNames.h&quot;
+<a name="anchor-5"></a>#include &quot;UtilTypes.h&quot;
+
+/*====================================================================*\
+    FUNCTION :	ProUtilFeatureDump()
+    PURPOSE  :	To write a decription of a feature to a text file
+<a name="anchor-6"></a>\*====================================================================*/
+void ProUtilFeatureDump(
+    ProModelitem *feature,
+    FILE *fp)
+{
+<a name="anchor-7"></a>    ProError status;
+    ProSolid owner;
+    ProAsmcomppath path;
+    ProModelitem modelitem;    
+    int n_children, c, n_parents, p;
+<a name="anchor-8"></a>    ProPatternStatus pstatus;
+    ProGrppatternStatus gpstatus;
+    ProFeatStatus fstatus;
+    ProGroupStatus gstatus;
+    ProSelection selection;
+<a name="anchor-9"></a>    char model_name[PRO_NAME_SIZE], model_type[PRO_NAME_SIZE];
+    int m;
+    ProFeattype ftype;
+    char ftype_str[PRO_NAME_SIZE];
+    int *children_ids, *parents_ids;
+<a name="anchor-10"></a>    ProBoolean is_nc_seq;
+    ProWVerstamp stamp;
+    char* p_stamp_string;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-11"></a>    Check the feature owner
+\*--------------------------------------------------------------------*/
+    status = ProModelitemMdlGet(feature, (ProMdl *) &amp;owner);
+    TEST_CALL_REPORT(&quot;ProModelitemMdlGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-12"></a>    ProUtilModelnameGet((ProMdl*)&amp;owner, model_name,  model_type);
+    ProTKFprintf(fp,&quot;Owner     : %s.%s\n&quot;, model_name, model_type);
+
+/*--------------------------------------------------------------------*\
+    Check the feature owner
+<a name="anchor-13"></a>\*--------------------------------------------------------------------*/
+    status = ProFeatureSolidGet(feature, &amp;owner);
+    TEST_CALL_REPORT(&quot;ProFeatureSolidGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+    ProUtilModelnameGet((ProMdl*)&amp;owner, model_name,  model_type);
+<a name="anchor-14"></a>    ProTKFprintf(fp,&quot;Sld Owner : %s.%s\n&quot;, model_name, model_type);
+
+/*--------------------------------------------------------------------*\
+    Get the list of children of the selected feature
+\*--------------------------------------------------------------------*/
+<a name="anchor-15"></a>    status = ProFeatureChildrenGet(feature, &amp;children_ids, &amp;n_children);
+    TEST_CALL_REPORT(&quot;ProFeatureChildrenGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp, &quot;Children : &quot;);
+    for(c=0; c&lt;n_children; c++)
+<a name="anchor-16"></a>	ProTKFprintf(fp,&quot;%d &quot;, children_ids[c]);
+    ProTKFprintf(fp,&quot;\n&quot;);
+
+/*--------------------------------------------------------------------*\
+    Get the list of parents of the selected feature
+<a name="anchor-17"></a>\*--------------------------------------------------------------------*/
+    status = ProFeatureParentsGet(feature, &amp;parents_ids, &amp;n_parents);
+    TEST_CALL_REPORT(&quot;ProFeatureParentsGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp, &quot;Parents  : &quot;);
+<a name="anchor-18"></a>    for(p=0; p&lt;n_parents; p++)
+	ProTKFprintf(fp,&quot;%d &quot;, parents_ids[p]);
+    ProTKFprintf(fp,&quot;\n&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-19"></a>    Get the version stamp of the specified feature
+\*--------------------------------------------------------------------*/
+    status = ProVerstampAlloc( &amp;stamp );
+    TEST_CALL_REPORT(&quot;ProVerstampAlloc()&quot;, &quot;ProUtilFeatureDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-20"></a>    status = ProFeatureVerstampGet( feature, &amp;stamp );
+    TEST_CALL_REPORT(&quot;ProFeatureVerstampGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+    status = ProVerstampStringGet( stamp, &amp;p_stamp_string );
+    TEST_CALL_REPORT(&quot;ProVerstampStringGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+<a name="anchor-21"></a>					status, status != PRO_TK_NO_ERROR);
+    
+    ProTKFprintf( fp,&quot;Version stamp: %s\n&quot;, p_stamp_string );
+
+    status = ProVerstampStringFree( &amp;p_stamp_string );
+<a name="anchor-22"></a>    TEST_CALL_REPORT(&quot;ProVerstampStringFree()&quot;, &quot;ProUtilFeatureDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+    status = ProVerstampFree( &amp;stamp );
+    TEST_CALL_REPORT(&quot;ProVerstampFree()&quot;, &quot;ProUtilFeatureDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-23"></a>
+/*--------------------------------------------------------------------*\
+    Get the feature status
+\*--------------------------------------------------------------------*/
+    status = ProFeatureStatusGet(feature, &amp;fstatus);
+<a name="anchor-24"></a>    TEST_CALL_REPORT(&quot;ProFeatureStatusGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp, &quot;FEATURE STATUS       &quot;);
+    switch(fstatus)
+    {
+<a name="anchor-25"></a>    case PRO_FEAT_INVALID:
+	ProTKFprintf(fp, &quot;Invalid\n&quot;);
+	break;
+    case PRO_FEAT_ACTIVE:
+	ProTKFprintf(fp, &quot;Active\n&quot;);
+<a name="anchor-26"></a>	break;
+    case PRO_FEAT_INACTIVE:
+	ProTKFprintf(fp, &quot;Inactive\n&quot;);
+	break;
+    case PRO_FEAT_FAMTAB_SUPPRESSED:
+<a name="anchor-27"></a>	ProTKFprintf(fp, &quot;Famtab suppressed\n&quot;);
+	break;
+    case PRO_FEAT_SIMP_REP_SUPPRESSED:
+	ProTKFprintf(fp,&quot;Simprep suppressed\n&quot;);
+	break;
+<a name="anchor-28"></a>    case PRO_FEAT_PROG_SUPPRESSED:
+	ProTKFprintf(fp,&quot;Pro/PROGRAM suppressed\n&quot;);
+	break;
+    case PRO_FEAT_SUPPRESSED:
+	ProTKFprintf(fp, &quot;Suppressed\n&quot;);
+<a name="anchor-29"></a>	break;
+    case PRO_FEAT_UNREGENERATED:
+	ProTKFprintf(fp, &quot;Unregenerated\n&quot;);
+	break;
+    default:
+<a name="anchor-30"></a>	ProTKFprintf(fp, &quot;**UNKNOWN**\n&quot;);
+	break;
+    }
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-31"></a>    Get the group status of the feature
+\*--------------------------------------------------------------------*/
+    status = ProFeatureGroupStatusGet( feature, &amp;gstatus );
+    TEST_CALL_REPORT(&quot;ProFeatureGroupStatusGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-32"></a>    ProTKFprintf(fp, &quot;GROUP STATUS       &quot;);
+    switch(gstatus)
+    {
+    case PRO_GROUP_INVALID:
+	ProTKFprintf(fp, &quot;Invalid\n&quot;);
+<a name="anchor-33"></a>	break;
+    case PRO_GROUP_NONE:
+	ProTKFprintf(fp, &quot;None\n&quot;);
+	break;
+    case PRO_GROUP_MEMBER:
+<a name="anchor-34"></a>	ProTKFprintf(fp, &quot;Group member\n&quot;);
+	break;
+    default:
+	ProTKFprintf(fp, &quot;**UNKNOWN**\n&quot;);
+	break;
+<a name="anchor-35"></a>    }
+
+/*--------------------------------------------------------------------*\
+    Get the pattern status of the feature
+\*--------------------------------------------------------------------*/
+<a name="anchor-36"></a>    status = ProFeaturePatternStatusGet(feature, &amp;pstatus);
+    TEST_CALL_REPORT(&quot;ProFeaturePatternStatusGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+    status = ProFeatureGrppatternStatusGet(feature, &amp;gpstatus);
+    TEST_CALL_REPORT(&quot;ProFeatureGrppatternStatusGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+<a name="anchor-37"></a>					status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp, &quot;PATTERN STATUS       &quot;);
+    switch(pstatus)
+    {
+    case PRO_PATTERN_LEADER:
+<a name="anchor-38"></a>	ProTKFprintf(fp, &quot;Leader of a feature pattern\n&quot;);
+	break;
+    case PRO_PATTERN_MEMBER:
+	ProTKFprintf(fp, &quot;Member of a feature pattern\n&quot;);
+	break;
+<a name="anchor-39"></a>    default:
+	break;
+    }
+    switch(gpstatus)
+    {
+<a name="anchor-40"></a>    case PRO_GRP_PATTERN_LEADER:
+        ProTKFprintf(fp, &quot;Leader of a group pattern\n&quot;);
+        break;
+    case PRO_GRP_PATTERN_MEMBER:
+        ProTKFprintf(fp, &quot;Member of a group pattern\n&quot;);
+<a name="anchor-41"></a>        break;
+    case PRO_GRP_PATTERN_NONE:
+        if (pstatus == PRO_PATTERN_NONE)
+            ProTKFprintf(fp, &quot;Not a pattern member\n&quot;);
+        break;
+<a name="anchor-42"></a>    default:
+        break;
+    }
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-43"></a>    Get elements info. 
+\*--------------------------------------------------------------------*/
+    ProUtilFeatureElementsDump( feature, fp);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-44"></a>    Find whether the feature is an NC sequence
+\*--------------------------------------------------------------------*/
+    status = ProFeatureIsNcseq(feature, &amp;is_nc_seq);
+
+   if ( is_nc_seq == PRO_B_TRUE )
+<a name="anchor-45"></a>	ProTKFprintf(fp, &quot;Feature is an NC Sequence\n&quot;);
+    TEST_CALL_REPORT(&quot;ProFeatureIsNcseq()&quot;, &quot;ProUtilFeatureDump()&quot;,
+				PRO_TK_NO_ERROR, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-46"></a>    Find out whether the feature is created in an assembly
+\*--------------------------------------------------------------------*/
+    status = ProFeatureSelectionGet(feature, &amp;selection);
+    TEST_CALL_REPORT(&quot;ProFeatureSelectionGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+				    status, ((status != PRO_TK_NO_ERROR) &amp;&amp;
+<a name="anchor-47"></a>					     (status != PRO_TK_BAD_CONTEXT) &amp;&amp;
+					     (status != PRO_TK_E_NOT_FOUND)));
+    if(!(status == PRO_TK_BAD_CONTEXT))
+    if(status == PRO_TK_E_NOT_FOUND)
+    {
+<a name="anchor-48"></a>	ProTKFprintf(fp,&quot;ASSEMBLY REFERENCES :\n&quot;);
+	ProTKFprintf(fp,&quot; (Assembly is not in session)\n&quot;);
+    }
+    else if(status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-49"></a>	ProTKFprintf(fp,&quot;ASSEMBLY REFERENCES :\n&quot;);
+	
+	status = ProSelectionAsmcomppathGet(selection, &amp;path);
+	TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+			 status, status != PRO_TK_NO_ERROR);
+<a name="anchor-50"></a>
+	status = ProSelectionModelitemGet(selection, &amp;modelitem);
+	TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+			 status, status != PRO_TK_NO_ERROR);
+	
+<a name="anchor-51"></a>/*--------------------------------------------------------------------*\
+	Assembly name
+\*--------------------------------------------------------------------*/
+
+	ProUtilModelnameGet((ProMdl*)&amp;path.owner, model_name,  model_type);
+<a name="anchor-52"></a>	ProTKFprintf(fp,&quot;    Owning model : %s.%s\n&quot;, model_name, model_type);
+
+/*--------------------------------------------------------------------*\
+	Feature id and type
+\*--------------------------------------------------------------------*/
+<a name="anchor-53"></a>	status = ProFeatureTypeGet(&amp;modelitem, &amp;ftype);
+	TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;, &quot;ProUtilFeatureDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	ProUtilFeattypeStr(ftype, ftype_str);
+	ProTKFprintf(fp,&quot;    Feature      : %d, type %s\n&quot;, modelitem.id, ftype_str);
+<a name="anchor-54"></a>
+/*--------------------------------------------------------------------*\
+	Component id table
+\*--------------------------------------------------------------------*/
+	if (path.table_num > 0)
+<a name="anchor-55"></a>	{
+	    ProTKFprintf(fp,&quot;    comp_id_table   &quot;);	    
+	    for(m=0; m&lt;path.table_num; m++)
+	        ProTKFprintf(fp,&quot;%d&quot;, path.comp_id_table[m]);
+	    ProTKFprintf(fp, &quot;\n&quot;);
+<a name="anchor-56"></a>	}
+	
+    }
+}
+
+<a name="anchor-57"></a>
+
+/*====================================================================*\
+    FUNCTION :	ProUtilFeatureElementsDump()
+    PURPOSE  :	To write a decription of a feature elements to a text file
+<a name="anchor-58"></a>\*====================================================================*/
+void ProUtilFeatureElementsDump(
+    ProModelitem *feature,
+    FILE *fp)
+{
+<a name="anchor-59"></a>    ProError		status;
+    ProElement		elem_tree;
+    FeatureElemPrintData print_data;
+    ElemtreeElement *elements;
+    int elements_num, i;
+<a name="anchor-60"></a>
+/*----------------------------------------------*\
+    Create a copy of the feature element tree 
+\*----------------------------------------------*/
+    status = ProFeatureElemtreeExtract( feature, NULL, PRO_FEAT_EXTRACT_NO_OPTS, &amp;elem_tree );
+<a name="anchor-61"></a>    TEST_CALL_REPORT(&quot;ProFeatureElemtreeExtract()&quot;, 
+	&quot;ProUtilFeatureElementsDump()&quot;, status, 
+              (status != PRO_TK_NO_ERROR) &amp;&amp; (status != PRO_TK_INVALID_TYPE));
+
+/*-----------------------------------------------------------*\
+<a name="anchor-62"></a>    For non-supported features, don't dump the element info
+\*-----------------------------------------------------------*/
+    if (status == PRO_TK_INVALID_TYPE)
+      {
+        ProTKFprintf(fp, &quot;Element tree is not supported for this feature\n&quot;);
+<a name="anchor-63"></a>      }
+    else
+       if (status == PRO_TK_NO_ERROR)
+          {
+            print_data.fp = fp;
+<a name="anchor-64"></a>            print_data.p_feature = feature;
+			          
+            status = ProUtilCollectElemtreeElements (elem_tree, NULL, &amp;elements);
+            if (status == PRO_TK_NO_ERROR)
+            { 
+<a name="anchor-65"></a>                status = ProArraySizeGet ((ProArray)elements, &amp;elements_num);
+                TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;,
+		    &quot;ProUtilFeatureElementsDump()&quot;,
+		    status, status != PRO_TK_NO_ERROR );
+                for (i = 0; i &lt; elements_num; i++)
+<a name="anchor-66"></a>                {
+                    status = ProUtilElemPrint (elem_tree, elements[i].p_element,
+                        elements[i].p_elempath, &amp;print_data);
+                }
+                status = ProUtilElemtreeElementArrayFree (&amp;elements);
+<a name="anchor-67"></a>            }
+          }
+
+}
+
+<a name="anchor-68"></a>
+
+/*====================================================================*\
+    FUNCTION :	ProUtilElemPrint()
+    PURPOSE  :	Visit function.
+<a name="anchor-69"></a>\*====================================================================*/
+ProError ProUtilElemPrint( 
+    ProElement elem_tree, 
+    ProElement  elem,
+    ProElempath elem_path, 
+<a name="anchor-70"></a>    FeatureElemPrintData* p_data )
+{
+    ProError		status;
+    ProElemId		elem_id;
+    int			dimension_id = -1;
+<a name="anchor-71"></a>    ProBoolean		is_visible;
+    ProBoolean		is_incomplete;
+    ProBoolean		is_compound;
+    ProBoolean          is_array;
+    ProBoolean          is_multival;
+<a name="anchor-72"></a>    ProValue*		p_values;
+    ProValue            value;
+    int			array_size;
+    ProValueData	value_data;
+    char		value_data_str[ 48 ];
+<a name="anchor-73"></a>    int			i;
+    ProBoolean          flag = PRO_B_TRUE;             
+	ProValueDataType value_type;
+
+    status = ProElementIdGet( elem, &amp;elem_id );
+<a name="anchor-74"></a>    TEST_CALL_REPORT(&quot;ProElementIdGet()&quot;, 
+	&quot;ProUtilElemPrint()&quot;,
+	PRO_TK_NO_ERROR, status != PRO_TK_NO_ERROR);
+    ProTKFprintf( p_data->fp, &quot;Element ID: %d\n&quot;, elem_id );
+
+<a name="anchor-75"></a>    status = ProFeatureElemIsVisible( p_data->p_feature, elem_path, 
+	&amp;is_visible );
+#if 0
+    TEST_CALL_REPORT(&quot;ProFeatureElemIsVisible()&quot;,
+	&quot;ProUtilElemPrint()&quot;, status,
+<a name="anchor-76"></a>	status != PRO_TK_NO_ERROR );
+#else
+/* This function return PRO_TK_E_NOT_FOUND for Element FEATURE_TYPE,
+from feature PRO_FEAT_DATUM_QUILT (it's a bug)*/
+    TEST_CALL_REPORT(&quot;ProFeatureElemIsVisible()&quot;,
+<a name="anchor-77"></a>	&quot;ProUtilElemPrint()&quot;, status,
+        0);
+#endif
+
+    status = ProFeatureElemIsIncomplete( p_data->p_feature, elem_path, 
+<a name="anchor-78"></a>	&amp;is_incomplete );
+#if 0
+    /* spr 751801 */
+    TEST_CALL_REPORT( &quot;ProFeatureElemIsIncomplete()&quot;, &quot;ProUtilElemPrint()&quot;, 		status, status != PRO_TK_NO_ERROR);
+#else
+<a name="anchor-79"></a>    TEST_CALL_REPORT( &quot;ProFeatureElemIsIncomplete()&quot;, &quot;ProUtilElemPrint()&quot;,     	status, 0 );
+#endif
+
+    status = ProElementIsCompound( elem, NULL, &amp;is_compound );
+    TEST_CALL_REPORT(&quot;ProElementIsCompound()&quot;, &quot;ProUtilElemPrint()&quot;,
+<a name="anchor-80"></a>	status, status != PRO_TK_NO_ERROR);
+
+    status = ProElementIsArray(elem, NULL, &amp;is_array );
+    TEST_CALL_REPORT(&quot;ProElementIsArray()&quot;, &quot;ProUtilElemPrint()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-81"></a>
+    ProTKFprintf( p_data->fp, is_visible == PRO_B_TRUE ? &quot;\tVisible\n&quot; : &quot;\tInvisible\n&quot; );
+    ProTKFprintf( p_data->fp, is_incomplete == PRO_B_TRUE ? &quot;\tIncomplete\n&quot; : 
+	&quot;\tComplete\n&quot; );
+
+<a name="anchor-82"></a>    ProTKFprintf( p_data->fp, is_compound == PRO_B_TRUE ? &quot;\tCompound\n&quot; : 
+	                            (is_array == PRO_B_TRUE ? &quot;\tArray\n&quot; :
+                                           &quot;\tNeither compound nor array\n&quot;));
+
+    if( is_compound == PRO_B_TRUE || is_array == PRO_B_TRUE)
+<a name="anchor-83"></a>	return PRO_TK_NO_ERROR;
+
+    status = ProFeatureElemDimensionIdGet( p_data->p_feature, elem_path, 
+	&amp;dimension_id );
+    TEST_CALL_REPORT(&quot;ProFeatureElemDimensionIdGet()&quot;, 
+<a name="anchor-84"></a>	&quot;ProUtilElemPrint()&quot;,
+	status, (status != PRO_TK_NO_ERROR)&amp;&amp;
+                (status != PRO_TK_E_NOT_FOUND));
+
+     if (status != PRO_TK_E_NOT_FOUND)
+<a name="anchor-85"></a>         ProTKFprintf( p_data->fp, &quot;\tDimension ID: %d\n&quot;, dimension_id );
+     else
+         ProTKFprintf( p_data->fp, &quot;\tThis element does not contain dimension\n&quot;);
+
+    status = ProArrayAlloc( 0, sizeof(ProValue), 1, (ProArray*)&amp;p_values );
+<a name="anchor-86"></a>    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProUtilElemPrint()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+
+    status = ProElementIsMultival(elem, NULL, &amp;is_multival);
+    TEST_CALL_REPORT( &quot;ProElementIsMultival&quot;, 
+<a name="anchor-87"></a>                       &quot;ProUtilElemPrint&quot;, status, status != PRO_TK_NO_ERROR);
+
+    if (is_multival == PRO_B_TRUE)
+    {
+       status = ProFeatureElemValuesGet( p_data->p_feature,
+<a name="anchor-88"></a>                                          elem_path, &amp;p_values );
+#if 0
+	TEST_CALL_REPORT( &quot;ProFeatureElemValuesGet()&quot;, &quot;ProUtilElemPrint()&quot;,
+	    status,
+	    status != PRO_TK_NO_ERROR );
+<a name="anchor-89"></a>#else
+/* ProFeatureElemValuesGet() - returns PRO_TK_E_NOT_FOUND in the PIPE mode
+for Element PRO_E_STD_EDGE_CHAMF_EDGES.(bugminsk1347)*/
+	TEST_CALL_REPORT( &quot;ProFeatureElemValuesGet()&quot;, &quot;ProUtilElemPrint()&quot;,
+	    status,
+<a name="anchor-90"></a>	    0 );
+#endif
+    }
+    else
+    {
+<a name="anchor-91"></a>	   status = ProElementValuetypeGet(elem, &amp;value_type);
+	   TEST_CALL_REPORT( &quot;ProElementValuetypeGet&quot;, &quot;ProUtilElemPrint&quot;,
+                                status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_EMPTY);
+	   
+	   if(status == PRO_TK_NO_ERROR)
+<a name="anchor-92"></a>	   {
+	   switch(value_type)
+	   {
+			case PRO_VALUE_TYPE_INT:
+			{
+<a name="anchor-93"></a>				int int_val;
+
+				status = ProElementIntegerGet(elem, NULL, &amp;int_val);
+				TEST_CALL_REPORT( &quot;ProElementIntegerGet&quot;, &quot;ProUtilElemPrint&quot;,
+									status, status != PRO_TK_NO_ERROR);
+<a name="anchor-94"></a>				ProTKSprintf( value_data_str, &quot;%d&quot;, int_val );
+			break;
+			}
+			case PRO_VALUE_TYPE_DOUBLE:
+			{
+<a name="anchor-95"></a>				double double_val;
+
+				status = ProElementDoubleGet(elem, NULL, &amp;double_val);
+				TEST_CALL_REPORT( &quot;ProElementDoubleGet&quot;, &quot;ProUtilElemPrint&quot;,
+									status, status != PRO_TK_NO_ERROR);
+<a name="anchor-96"></a>				ProTKSprintf( value_data_str, &quot;%f&quot;, double_val );
+			break;
+			}
+			case PRO_VALUE_TYPE_POINTER:
+			{
+<a name="anchor-97"></a>				ProAppData special_val;
+
+				status = ProElementSpecialvalueGet(elem, NULL, (ProAppData *) &amp;special_val);
+				TEST_CALL_REPORT( &quot;ProElementSpecialvalueGet&quot;, &quot;ProUtilElemPrint&quot;,
+									status, status != PRO_TK_NO_ERROR);
+<a name="anchor-98"></a>				ProTKSprintf( value_data_str, &quot;Pointer=*&quot;, special_val );
+			break;
+			}
+			case PRO_VALUE_TYPE_STRING:
+			{
+<a name="anchor-99"></a>				char *  string_val;
+
+				status = ProElementStringGet(elem, NULL, &amp;string_val);
+				TEST_CALL_REPORT( &quot;ProElementStringGet&quot;, &quot;ProUtilElemPrint&quot;,
+									status, status != PRO_TK_NO_ERROR);
+<a name="anchor-100"></a>				ProTKSprintf( value_data_str, &quot;%s&quot;, string_val );
+			break;
+			}
+			case PRO_VALUE_TYPE_WSTRING:
+			{
+<a name="anchor-101"></a>				wchar_t *  wstring_val;
+
+				status = ProElementWstringGet(elem, NULL, &amp;wstring_val);
+				TEST_CALL_REPORT( &quot;ProElementWstringGet&quot;, &quot;ProUtilElemPrint&quot;,
+									status, status != PRO_TK_NO_ERROR);
+<a name="anchor-102"></a>				if ( wstring_val !=NULL)
+					ProWstringToString( value_data_str, wstring_val );
+                else 
+					ProTKSprintf( value_data_str,&quot;&lt;NULL>&quot; );
+			break;
+<a name="anchor-103"></a>			}
+			case PRO_VALUE_TYPE_SELECTION:
+			{
+				ProTKSprintf( value_data_str, &quot;Selection&quot; );
+			break;
+<a name="anchor-104"></a>			}
+			case PRO_VALUE_TYPE_TRANSFORM:
+			{
+				ProTKSprintf( value_data_str, &quot;Transformation&quot; );
+			break;
+<a name="anchor-105"></a>			}
+			default:
+				ProTKSprintf( value_data_str, &quot;**UNKNOWN**\n&quot; );
+	   }
+	   ProTKFprintf( p_data->fp, &quot;\t%s\n&quot;, value_data_str );
+<a name="anchor-106"></a>	}
+    }
+    if (p_values!=NULL &amp;&amp; (is_multival == PRO_B_TRUE)){
+        array_size = 0;
+        status = ProArraySizeGet( (ProArray)p_values, &amp;array_size );
+<a name="anchor-107"></a>        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProUtilElemPrint()&quot;,
+			status, status != PRO_TK_NO_ERROR );
+
+        ProTKFprintf( p_data->fp, &quot;\t%s\n&quot;,(i=1)?&quot;Value:&quot;:&quot;Values:&quot; );
+        for( i=0; i&lt;array_size; i++ )
+<a name="anchor-108"></a>	  {
+	   /*To avoid PRO_E_SKETCHER and PRO_E_PATTERN, following condition is set*/
+	    if(( elem_id == 458) || (elem_id == 27))
+	      flag = PRO_B_FALSE; 
+	    
+<a name="anchor-109"></a>	    if(flag == PRO_B_TRUE)
+	      {
+		status = ProValueDataGet( p_values[i], &amp;value_data );
+        	TEST_CALL_REPORT( &quot;ProValueDataGet()&quot;, &quot;ProUtilElemPrint()&quot;,
+				  status, status != PRO_TK_NO_ERROR );
+<a name="anchor-110"></a>		switch( value_data.type )
+		  {
+		  case PRO_VALUE_TYPE_INT:
+	            ProTKSprintf( value_data_str, &quot;%d&quot;, value_data.v.i );
+	            break;
+<a name="anchor-111"></a>		    
+		  case PRO_VALUE_TYPE_DOUBLE:
+	            ProTKSprintf( value_data_str, &quot;%f&quot;, value_data.v.d );
+                    break;
+		    
+<a name="anchor-112"></a>		  case PRO_VALUE_TYPE_POINTER:
+	            ProTKSprintf( value_data_str, &quot;Pointer=*&quot;, value_data.v.p );
+	            break;
+		    
+		  case PRO_VALUE_TYPE_STRING:
+<a name="anchor-113"></a>		    
+                    if ( value_data.v.s !=NULL)
+		      ProTKSprintf( value_data_str, &quot;%s&quot;, value_data.v.s );
+		    else 
+		      ProTKSprintf( value_data_str,&quot;&lt;NULL>&quot; );
+<a name="anchor-114"></a>		    break;
+		    
+		  case PRO_VALUE_TYPE_WSTRING:
+		    
+		    /* NOTE - NULL is possible in some element trees 
+<a name="anchor-115"></a>		       (for example, for the element PRO_E_STD_FEATURE_NAME
+		       where NULL means that feature has the default name) */
+		    
+                    if ( value_data.v.w !=NULL)
+		      ProWstringToString( value_data_str, value_data.v.w );
+<a name="anchor-116"></a>                    else 
+		      ProTKSprintf( value_data_str,&quot;&lt;NULL>&quot; );
+	            break;
+		    
+		  case PRO_VALUE_TYPE_SELECTION:
+<a name="anchor-117"></a>	            ProTKSprintf( value_data_str, &quot;Selection&quot; );
+	            break;
+		    
+		  case PRO_VALUE_TYPE_TRANSFORM:
+                    ProTKSprintf( value_data_str, &quot;Transformation&quot; );
+<a name="anchor-118"></a>                    break;
+		    
+		  default:
+	            ProTKSprintf( value_data_str, &quot;**UNKNOWN**\n&quot; );
+		  }
+<a name="anchor-119"></a>		
+		ProTKFprintf( p_data->fp, &quot;\t%s\n&quot;, value_data_str );
+	      }
+	  }
+	
+<a name="anchor-120"></a>        status = ProArrayFree( (ProArray*)&amp;p_values );
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProUtilFeatureElementsDump()&quot;,
+			  status, status != PRO_TK_NO_ERROR );
+    }
+    
+<a name="anchor-121"></a>    
+    return PRO_TK_NO_ERROR;
+}
+
+
+<a name="anchor-122"></a>/*===============================================================*\
+FUNCTION : ProUtilFeatCreate
+PURPOSE  : Creates feature in no mode option
+returns : 
+PRO_TK_NO_ERROR - Successfully executed
+<a name="anchor-123"></a>\*===============================================================*/
+ProError ProUtilFeatCreate(ProAsmcomppath *p_comp_path ,ProMdl model, 
+                           ProElement pro_e_feature_tree, 
+                           ProFeature *feature)
+{
+<a name="anchor-124"></a>    ProError status = PRO_TK_GENERAL_ERROR;
+    ProSelection model_sel;
+    ProModelitem model_item;
+    ProErrorlist p_errors;
+    ProFeatureCreateOptions *no_mode_option = 0;
+<a name="anchor-125"></a>    int no_opts = 1;
+
+    status = ProMdlToModelitem( model, &amp;model_item ); 
+    TEST_CALL_REPORT(&quot;ProMdlToModelitem&quot;, &quot;ProUtilFeatCreate&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-126"></a>    status = ProSelectionAlloc (p_comp_path, &amp;model_item, &amp;model_sel);
+    status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+        1, (ProArray*)&amp;no_mode_option);
+
+    no_mode_option[0]= PRO_FEAT_CR_NO_OPTS;
+<a name="anchor-127"></a>
+    status = ProFeatureWithoptionsCreate (model_sel, pro_e_feature_tree,
+        no_mode_option, PRO_REGEN_NO_FLAGS, feature, &amp;p_errors); 
+    TEST_CALL_REPORT(&quot;ProFeatureWithoptionsCreate&quot;, &quot;ProUtilFeatCreate&quot;, 
+			status, status != PRO_TK_NO_ERROR ); 
+<a name="anchor-128"></a>
+    status = ProArrayFree((ProArray*)&amp;no_mode_option);
+    ProSelectionFree(&amp;model_sel);
+    return status;
+}
+</pre>
+</body>
+</html>

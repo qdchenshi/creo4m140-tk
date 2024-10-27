@@ -1,0 +1,235 @@
+<html>
+<head>
+<title>UgPlotUse.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProPlotdriver.h>
+#include &lt;ProArray.h>
+<a name="anchor-2"></a>#include &lt;ProColor.h>
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProMessage.h>
+#include &lt;ProUtil.h>
+
+<a name="anchor-3"></a>/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+#include &lt;string.h>
+
+/*---------------------- Function Prototypes -------------------------*/
+<a name="anchor-4"></a>ProError user_demo_line ();
+ProError user_demo_text ();
+ProError user_demo_circle ();
+ProError user_demo_arc ();
+ProError user_demo_polyline ();
+<a name="anchor-5"></a>ProError user_demo_filled_poly ();
+
+static FILE *demo_output;
+
+/*===========================================================*\
+<a name="anchor-6"></a>    ProDriverExecute call
+\*===========================================================*/
+ProError user_plot(FILE *fp, char *driver_name)
+{
+    ProError status;
+<a name="anchor-7"></a>    ProName *type_list;
+    ProAppData data;
+    ProLine app_name;
+
+    demo_output = fp;
+<a name="anchor-8"></a>
+    ProStringToWstring(app_name, driver_name);
+    data = (ProAppData) &amp;app_name;   
+
+/*-----------------------------------------------------------*\
+<a name="anchor-9"></a>    Declare the plot format &quot;demo&quot;.
+\*-----------------------------------------------------------*/
+    status = ProPlotdriverInterfaceCreate (L&quot;demo&quot;);
+
+/*-----------------------------------------------------------*\
+<a name="anchor-10"></a>    Make &quot;demo&quot; valid for Drawing mode.
+\*-----------------------------------------------------------*/
+    status = ProArrayAlloc(2, sizeof(ProName), 1, (ProArray*) &amp;type_list);
+    ProStringToWstring(type_list[0], &quot;DRW&quot;);
+    ProStringToWstring(type_list[1], &quot;&quot;);
+<a name="anchor-11"></a>    status = ProPlotdriverInterfaceobjectsSet (L&quot;demo&quot;, type_list);
+
+/*-----------------------------------------------------------*\
+    Bind the functions user_demo*() to the primitives for
+    the format &quot;demo&quot;.
+<a name="anchor-12"></a>\*-----------------------------------------------------------*/
+    status = ProPlotdriverLinefunctionSet(L&quot;demo&quot;, user_demo_line);
+    status = ProPlotdriverTextfunctionSet(L&quot;demo&quot;, user_demo_text);
+    status = ProPlotdriverCirclefunctionSet(L&quot;demo&quot;, user_demo_circle);
+    status = ProPlotdriverArcfunctionSet(L&quot;demo&quot;, user_demo_arc);
+<a name="anchor-13"></a>    status = ProPlotdriverPolylinefunctionSet(L&quot;demo&quot;, user_demo_polyline);
+    status = ProPlotdriverPolygonfunctionSet(L&quot;demo&quot;, user_demo_filled_poly);
+
+/*-----------------------------------------------------------*\
+    Invoke the plot.
+<a name="anchor-14"></a>\*-----------------------------------------------------------*/
+    status = ProPlotdriverExecute  (L&quot;demo&quot;, data);
+    ERROR_CHECK(&quot;user_plot&quot;,&quot;ProPlotdriverExecute&quot;,(status != PRO_TK_NO_ERROR));
+
+    demo_output = NULL;
+<a name="anchor-15"></a>
+    return status;
+}
+
+
+<a name="anchor-16"></a>/*===========================================================*\
+    Bound function for plotting a LINE in the format &quot;demo&quot;.
+\*===========================================================*/
+ProError user_demo_line (data, point1, point2, color)
+ProAppData data;
+<a name="anchor-17"></a>double point1[3],
+       point2[3];
+int    color;
+{
+    ProLine *app_name = (ProLine *)data;
+<a name="anchor-18"></a>
+    ProTKFprintf (demo_output, &quot;%ws: LINE..\n&quot;, app_name);
+    ProTKFprintf (demo_output,&quot;  point1 = %f, %f\n&quot;,
+         point1[0], point1[1]);
+    ProTKFprintf (demo_output,&quot;  point2 = %f, %f\n&quot;,
+<a name="anchor-19"></a>         point2[0], point2[1]);
+    ProTKFprintf (demo_output,&quot;  color  = %d\n&quot;, color);
+
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-20"></a>
+/*===========================================================*\
+    Bound function for plotting a TEXT item in the format
+    &quot;demo&quot;.
+\*===========================================================*/
+<a name="anchor-21"></a>ProError user_demo_text (data, point, text, size, angle, slant_angle,
+                         width_factor, dummy, color)
+ProAppData data;
+double    point[3];
+wchar_t  *text;
+<a name="anchor-22"></a>double    size, 
+          angle,
+          slant_angle, 
+          width_factor;
+int       dummy, color;
+<a name="anchor-23"></a>{
+    char str[PRO_LINE_SIZE];
+    ProLine *app_name = (ProLine *)data;
+
+    ProTKFprintf (demo_output, &quot;%ws: TEXT..\n&quot;, app_name);
+<a name="anchor-24"></a>    ProTKFprintf (demo_output,&quot;  point = %f, %f\n&quot;, point[0],
+             point[1]);
+    ProTKFprintf (demo_output,&quot;  text  = %s\n&quot;, ProWstringToString
+            (str, text));
+    ProTKFprintf (demo_output,&quot;  size  = %f\n&quot;, size);
+<a name="anchor-25"></a>    ProTKFprintf (demo_output,&quot;  angle = %f\n&quot;, angle);
+    ProTKFprintf (demo_output,&quot;  slant = %f\n&quot;, slant_angle);
+    ProTKFprintf (demo_output,&quot;  width = %f\n&quot;, width_factor);
+    ProTKFprintf (demo_output,&quot;  color = %d\n&quot;, color);
+
+<a name="anchor-26"></a>    return PRO_TK_NO_ERROR;
+}
+
+/*===========================================================*\
+    Bound function for plotting a CIRCLE in the format &quot;demo&quot;
+<a name="anchor-27"></a>\*===========================================================*/
+ProError user_demo_circle (data, center, radius, color)
+ProAppData data;
+double  center[3], 
+        radius;
+<a name="anchor-28"></a>int     color;
+{
+    ProLine *app_name = (ProLine *)data;
+
+    ProTKFprintf (demo_output, &quot;%ws: CIRCLE..\n, app_name&quot;);
+<a name="anchor-29"></a>    ProTKFprintf (demo_output,&quot;  center = %f, %f\n&quot;, center[0],
+             center[1]);
+    ProTKFprintf (demo_output,&quot;  radius = %f\n&quot;, radius);
+    ProTKFprintf (demo_output,&quot;  color  = %d\n&quot;, color);
+
+<a name="anchor-30"></a>    return PRO_TK_NO_ERROR;
+}
+
+/*===========================================================*\
+    Bound function for plotting an ARC in the format &quot;demo&quot;
+<a name="anchor-31"></a>\*===========================================================*/
+ProError user_demo_arc (data, center, radius, point1, point2, t0, t1,
+                        color)
+ProAppData data;
+double  center[3], 
+<a name="anchor-32"></a>        radius, 
+        point1[3], 
+        point2[3], 
+        t0, 
+        t1;
+<a name="anchor-33"></a>int     color;
+{
+    ProLine *app_name = (ProLine *)data;
+
+    ProTKFprintf (demo_output, &quot;%ws: ARC..\n&quot;, app_name);
+<a name="anchor-34"></a>    ProTKFprintf (demo_output,&quot;  center = %f, %f\n&quot;, center[0],
+             center[1]);
+    ProTKFprintf (demo_output,&quot;  radius = %f\n&quot;, radius);
+    ProTKFprintf (demo_output,&quot;  point1 = %f, %ff\n&quot;, point1[0],
+             point1[1]);
+<a name="anchor-35"></a>    ProTKFprintf (demo_output,&quot;  point2 = %f, %ff\n&quot;, point2[0],
+             point2[1]);
+    ProTKFprintf (demo_output,&quot;  t1     = %f\n&quot;, t1);
+    ProTKFprintf (demo_output,&quot;  color  = %d\n&quot;, color);
+
+<a name="anchor-36"></a>    return PRO_TK_NO_ERROR;
+}
+
+/*===========================================================*\
+    Bound function for plotting a POLYLINE in the format &quot;demo&quot;
+<a name="anchor-37"></a>\*===========================================================*/
+ProError user_demo_polyline (data, n_pts, array, color)
+ProAppData data;
+int      n_pts;
+double   array[][3];
+<a name="anchor-38"></a>int      color;
+{
+    int  p;
+    ProLine *app_name = (ProLine *)data;
+
+<a name="anchor-39"></a>    ProTKFprintf (demo_output, &quot;%ws: POLYLINE..\n&quot;, app_name);
+    for (p = 0; p &lt; n_pts; p++)
+         ProTKFprintf (demo_output,&quot;  Point %d = %f, %f\n&quot;, p,
+                  array[p][0], 
+                  array[p][1]);
+<a name="anchor-40"></a>    ProTKFprintf (demo_output,&quot;  color    = %d\n&quot;, color);
+
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-41"></a>/*===========================================================*\
+    Bound function for plotting a FILLED POLYGON in the
+    format &quot;demo&quot;
+\*===========================================================*/
+ProError user_demo_filled_poly (data, n_pts, array, color)
+<a name="anchor-42"></a>ProAppData data;
+int      n_pts;
+double   array[][3];
+int  color;
+{
+<a name="anchor-43"></a>    int  p;
+    ProLine *app_name = (ProLine *)data;
+
+    ProTKFprintf (demo_output, &quot;%ws: FILLED POLY..\n&quot;, app_name);
+    for (p = 0; p &lt; n_pts; p++)
+<a name="anchor-44"></a>         ProTKFprintf (demo_output,&quot;  Point %d = %f, %f\n&quot;, p,
+                  array[p][0], 
+                  array[p][1]);
+    ProTKFprintf (demo_output,&quot;  color    = %d\n&quot;, color);
+
+<a name="anchor-45"></a>    return PRO_TK_NO_ERROR;
+}
+</pre>
+</body>
+</html>

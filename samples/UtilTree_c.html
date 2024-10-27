@@ -1,0 +1,1950 @@
+<html>
+<head>
+<title>UtilTree.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#ifndef lint
+static char UtilTree_c [] = &quot;@(#)UtilTree.c     1.2 11/26/96&quot;;
+#endif
+
+<a name="anchor-2"></a>/*--------------------------------------------------------------------*\
+Pro/Toolkit includes
+\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProMdl.h&quot;
+<a name="anchor-3"></a>#include &quot;ProDisplist.h&quot;
+#include &quot;ProFeatType.h&quot;
+#include &quot;ProElement.h&quot;
+#include &quot;ProElemId.h&quot;
+#include &quot;ProElempath.h&quot;
+<a name="anchor-4"></a>#include &quot;ProDtmPln.h&quot;
+#include &quot;ProUtil.h&quot;
+
+#include &lt;string.h>
+#include &lt;stdio.h>
+<a name="anchor-5"></a>#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+
+/*--------------------------------------------------------------------*\
+Pro/Develop includes
+<a name="anchor-6"></a>\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+<a name="anchor-7"></a>#include &quot;UtilTree.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilCollect.h&quot;
+/*--------------------------------------------------------------------*\
+<a name="anchor-8"></a>Application data types
+\*--------------------------------------------------------------------*/
+extern ProError ProUtilIdToStr();
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-9"></a>Application global/external data
+\*--------------------------------------------------------------------*/
+typedef enum
+{
+   PRO_ELEMTREE_PRINT_ALL = 1,
+<a name="anchor-10"></a>   PRO_ELEMTREE_PRINT_BRANCHES = 2
+} ProUtilElemtreePrintOpts;
+
+
+typedef struct
+<a name="anchor-11"></a>{
+   ProUtilElemtreePrintOpts *options;
+   FILE                     *f;
+   int                       branches[2*PRO_ELEMTREE_MAX_LEVEL];
+   UtilTreeprintWindow window;
+<a name="anchor-12"></a>} UtilElemtreePrintdata;
+
+static UtilGrWindowData win_data;
+
+static ProError ProUtilElemValuePrint ( ProElement, ProBoolean, ProBoolean, UtilElemtreePrintdata, char*);
+<a name="anchor-13"></a>static ProError ProUtilValuePrint ( ProElement, UtilElemtreePrintdata, char*);
+static ProError ProUtilValuePrintDeprecated ( ProValue, UtilElemtreePrintdata, char*);
+static ProError ProUtilElemtreePPrint
+    (ProElement, ProElempath,ProUtilElemtreePrintOpts*,UtilTreeprintWindow*);
+static ProError ProUtilElemtreeElemPrint ( ProElement, ProElement, ProElempath, UtilElemtreePrintdata*);
+<a name="anchor-14"></a>static ProError ProUtilElemPrint ( ProElement, ProBoolean, ProBoolean, ProBoolean, ProBoolean, UtilElemtreePrintdata, char*);
+static ProError ProUtilElemIdPrint ( ProElement, ProBoolean, ProBoolean, UtilElemtreePrintdata, char*);
+static ProError ProUtilDisp(char*, ProBool);
+static ProError ProUtilElemtreeInGrWindow( ProElement, ProElempath, ProUtilElemtreePrintOpts*s, int*);
+
+<a name="anchor-15"></a>/*====================================================================*\
+FUNCTION : ProUtilElementtreePrint
+PURPOSE  : Print an entire element tree
+\*====================================================================*/
+ProError ProUtilElementtreePrint (
+<a name="anchor-16"></a>   ProElement elem_tree,
+   UtilTreeprintWindow window,
+   int *grwin_id )
+{
+   ProError    status = PRO_TK_NO_ERROR;
+<a name="anchor-17"></a>   ProElempath path = (ProElempath)NULL;
+   char *p_env_win;
+
+    /* get empty path */
+    status = ProElempathAlloc ( &amp;path );
+<a name="anchor-18"></a>    TEST_CALL_REPORT(&quot;ProElempathAlloc()&quot;, &quot;ProUtilElementtreePrint()&quot;,
+                                status, (status != PRO_TK_NO_ERROR));
+
+    if ( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-19"></a>        switch (window)
+        {
+            case PRO_TEST_INFO_WINDOW:
+                status = ProUtilElemtreePPrint (elem_tree,path,NULL,&amp;window);
+                break;
+<a name="anchor-20"></a>
+            case PRO_TEST_GRAPHICS_WINDOW:
+                p_env_win = getenv(&quot;GRAPH_WINDOW&quot;);
+
+                if ((p_env_win == NULL) || (ProUtilStrcmp(p_env_win, 
+<a name="anchor-21"></a>                					(char *)&quot;yes&quot;)))
+                  {
+                    *grwin_id = -1;
+                    break;
+                  }
+<a name="anchor-22"></a>                status = ProUtilElemtreeInGrWindow( elem_tree, path, NULL,
+                                                                grwin_id);
+                break;
+        }
+    }
+<a name="anchor-23"></a>
+    if ( path != (ProElempath)NULL )
+      {
+        status = ProElempathFree ( &amp;path );
+        TEST_CALL_REPORT(&quot;ProElempathFree()&quot;, &quot;ProUtilElementtreePrint&quot;,
+<a name="anchor-24"></a>                                      status, status != PRO_TK_NO_ERROR);
+      }
+
+    return ( status );
+}
+<a name="anchor-25"></a>
+/*====================================================================*\
+FUNCTION : ProUtilElemtreePPrint
+PURPOSE  : Print an element tree
+\*====================================================================*/
+<a name="anchor-26"></a>static ProError ProUtilElemtreePPrint (
+   ProElement                  elem_tree,
+   ProElempath                 elem_path,
+   ProUtilElemtreePrintOpts   *options,
+   UtilTreeprintWindow *p_window)
+<a name="anchor-27"></a>{
+    UtilElemtreePrintdata  data;
+    ProError               status = PRO_TK_NO_ERROR;
+    char                   fname[PRO_NAME_SIZE];
+    wchar_t               wfname[PRO_NAME_SIZE];
+<a name="anchor-28"></a>
+    data.options = options;
+    ProTKSprintf (fname, &quot;%s&quot;, &quot;elemtree.inf&quot;);
+    data.f = PTApplsUnicodeFopen (fname, &quot;w&quot;);
+    if ( data.f == (FILE *)NULL )
+<a name="anchor-29"></a>    {
+        status = PRO_TK_GENERAL_ERROR;
+    }
+    else
+    {
+<a name="anchor-30"></a>        ProTKFprintf(data.f, &quot;Element tree\n============\n\n&quot;);
+        if (*p_window == PRO_TEST_GRAPHICS_WINDOW)
+        {
+            ProUtilDisp((char *)&quot;Element tree&quot;, PRO_B_FALSE);
+            win_data.point[1] = win_data.point[1] - win_data.decrease;
+<a name="anchor-31"></a>            ProUtilDisp((char *)&quot;============&quot;, PRO_B_FALSE);
+            win_data.point[1] = win_data.point[1] - 2 * win_data.decrease;
+        }
+    }
+
+<a name="anchor-32"></a>    memset(data.branches, 0, sizeof(data.branches));
+
+    data.window = *p_window;
+
+    if ( status == PRO_TK_NO_ERROR )
+<a name="anchor-33"></a>    {
+        status = ProElemtreeElementVisit ( elem_tree, elem_path,
+                (ProElemtreeVisitFilter)NULL,
+                (ProElemtreeVisitAction)ProUtilElemtreeElemPrint,
+                (ProAppData)&amp;data );
+<a name="anchor-34"></a>        TEST_CALL_REPORT(&quot;ProElemtreeElementVisit()&quot;,&quot;ProUtilElemtreePPrint()&quot;,
+                                        status, (status != PRO_TK_NO_ERROR));
+    }
+
+    if ( (data.f != (FILE *)NULL)&amp;&amp;(*p_window == PRO_TEST_INFO_WINDOW))
+<a name="anchor-35"></a>    {
+        fclose ( data.f );
+        ProInfoWindowDisplay(ProStringToWstring(wfname, fname), NULL, NULL);
+    }
+
+<a name="anchor-36"></a>    return ( status );
+}
+
+/*====================================================================*\
+FUNCTION : ProUtilElemtreeElemPrint
+<a name="anchor-37"></a>PURPOSE  : Print the element tree
+\*====================================================================*/
+static ProError ProUtilElemtreeElemPrint (
+   ProElement     elem_tree,
+   ProElement     elem,
+<a name="anchor-38"></a>   ProElempath    elem_path,
+   UtilElemtreePrintdata   *p_data)
+{
+    int          i, level = -1, n_elems = -1;
+    ProElemId    id;
+<a name="anchor-39"></a>    ProError     status = PRO_TK_NO_ERROR;
+    char         indent[2*PRO_ELEMTREE_MAX_LEVEL];
+    ProBoolean   is_compound = PRO_B_FALSE, is_array = PRO_B_FALSE,
+                 is_multi_val = PRO_B_FALSE, are_more_items = PRO_B_FALSE;
+    ProElement  *children;
+<a name="anchor-40"></a>
+    status = ProElementIdGet (elem, &amp;id );
+    TEST_CALL_REPORT(&quot;ProElementIdGet()&quot;,&quot;ProUtilElemtreeElemPrint()&quot;,
+                                        status, (status != PRO_TK_NO_ERROR));
+    status = ProElementIsCompound (elem_tree, elem_path, &amp;is_compound);
+<a name="anchor-41"></a>    TEST_CALL_REPORT(&quot;ProElementIsCompound()&quot;,&quot;ProUtilElemtreeElemPrint()&quot;,
+                                        status, (status != PRO_TK_NO_ERROR));
+
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-42"></a>        status = ProElementIsArray (elem_tree, elem_path, &amp;is_array);
+        TEST_CALL_REPORT(&quot;ProElementIsArray()&quot;,
+                         &quot;ProUtilElemtreeElemPrint()&quot;,
+                            status, (status != PRO_TK_NO_ERROR));
+    }
+<a name="anchor-43"></a>
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProElempathSizeGet ( elem_path, &amp;level );
+        TEST_CALL_REPORT(&quot;ProElempathSizeGet()&quot;,
+<a name="anchor-44"></a>                         &quot;ProUtilElemtreeElemPrint()&quot;,
+                            status, (status != PRO_TK_NO_ERROR));
+    }
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-45"></a>   Check to see if element is multivalued
+\*--------------------------------------------------------------------*/
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProElementIsMultival(elem_tree,elem_path, &amp;is_multi_val);
+<a name="anchor-46"></a>        TEST_CALL_REPORT(&quot;ProElementIsMultival()&quot;,&quot;ProUtilElemtreeElemPrint()&quot;,
+                                        status, (status != PRO_TK_NO_ERROR));
+    }
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-47"></a>    Set the indents properly
+\*--------------------------------------------------------------------*/
+    if (status != PRO_TK_NO_ERROR)
+        return PRO_TK_BAD_INPUTS;
+
+<a name="anchor-48"></a>    if (is_compound || is_array)
+    {
+        status = ProArrayAlloc(0,sizeof(ProElement),1,(ProArray*) &amp;children);
+        TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,&quot;ProUtilElemtreeElemPrint()&quot;,
+                                        status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-49"></a>
+        if (status == PRO_TK_NO_ERROR)
+        {
+            if (is_compound)
+            {
+<a name="anchor-50"></a>                status = ProElementChildrenGet(elem_tree, elem_path, &amp;children);
+                TEST_CALL_REPORT(&quot;ProElementChildrenGet()&quot;,
+                             &quot;ProUtilElemtreeElemPrint()&quot;,
+                              status, (status != PRO_TK_NO_ERROR));
+                if (status == PRO_TK_NO_ERROR)
+<a name="anchor-51"></a>                {
+                    status = ProArraySizeGet((ProArray) children, &amp;n_elems);
+                    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+                                 &quot;ProUtilElemtreeElemPrint()&quot;,
+                                  status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-52"></a>                }
+            }
+            else
+            {
+                status = ProElementArrayGet(elem_tree, elem_path, &amp;children);
+<a name="anchor-53"></a>                TEST_CALL_REPORT(&quot;ProElementArrayGet()&quot;,
+                             &quot;ProUtilElemtreeElemPrint()&quot;,
+                              status, (status != PRO_TK_NO_ERROR));
+		status = ProElementArrayCount(elem_tree, elem_path, &amp;n_elems);
+		TEST_CALL_REPORT(&quot;ProElementArrayCount()&quot;,
+<a name="anchor-54"></a>                                 &quot;ProUtilElemtreeElemPrint()&quot;,
+                                  status, (status != PRO_TK_NO_ERROR));
+
+            }
+
+<a name="anchor-55"></a>            if (level > 0)
+                (p_data->branches[level-1])--;
+
+            if (n_elems > 0)
+            {
+<a name="anchor-56"></a>                p_data->branches[level] = n_elems;
+            }
+        }
+
+        status = ProArrayFree((ProArray*) &amp;children);
+<a name="anchor-57"></a>        TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,&quot;ProUtilElemtreeElemPrint()&quot;,
+                                    status, (status != PRO_TK_NO_ERROR));
+    }
+    else
+    {
+<a name="anchor-58"></a>        if (level == -1 )
+            return PRO_TK_BAD_INPUTS;
+
+        if (level > 0)
+            (p_data->branches[level-1])--;
+<a name="anchor-59"></a>    }
+
+    indent[0] = '\0';
+
+    if ( level > 0 )
+<a name="anchor-60"></a>    {
+        for ( i = 0; i &lt; (level-1); i++ )
+        {
+            if ( p_data->branches[i] > 0 )
+            {
+<a name="anchor-61"></a>                ProUtilstrcat (indent, &quot; |   &quot; );
+            }
+            else
+                ProUtilstrcat (indent, &quot;     &quot; );
+        }
+<a name="anchor-62"></a>            ProUtilstrcat(indent,&quot; |---&quot;);
+    }
+
+    for (i = 0; i &lt; 20; i++)
+    {
+<a name="anchor-63"></a>        if ( p_data->branches[i] > 0 )
+        {
+            are_more_items = PRO_B_TRUE;
+            break;
+        }
+<a name="anchor-64"></a>    }
+
+    if ( status == PRO_TK_NO_ERROR )
+    {
+        status = ProUtilElemPrint ( elem, is_compound, is_array, is_multi_val,
+<a name="anchor-65"></a>                        are_more_items, *p_data, indent );
+        if (status != PRO_TK_NO_ERROR)
+        {
+            ProTKFprintf(p_data->f, &quot;\n&quot;);
+            ProTKFprintf(stderr, &quot;Element id %d is bad valued \n&quot;, id);
+<a name="anchor-66"></a>        }
+
+    }
+
+   return ( PRO_TK_NO_ERROR );
+<a name="anchor-67"></a>}
+
+/*====================================================================*\
+FUNCTION : ProUtilElemPrint
+PURPOSE  : Print a single element
+<a name="anchor-68"></a>\*====================================================================*/
+static ProError ProUtilElemPrint (
+   ProElement                elem,
+   ProBoolean                is_compound,
+   ProBoolean                is_array,
+<a name="anchor-69"></a>   ProBoolean                is_multi_val,
+   ProBoolean                are_more_items,
+   UtilElemtreePrintdata     data,
+   char                     *indent)
+{
+<a name="anchor-70"></a>    ProError     status = PRO_TK_NO_ERROR;
+
+    status = ProUtilElemIdPrint ( elem,is_compound,is_array,data, indent);
+
+    if ( status == PRO_TK_NO_ERROR &amp;&amp; !is_compound &amp;&amp; !is_array)
+<a name="anchor-71"></a>    {
+        status = ProUtilElemValuePrint ( elem, is_multi_val,
+                                are_more_items, data, indent);
+    }
+    else
+<a name="anchor-72"></a>    {
+        ProTKFprintf ( data.f, &quot;\n&quot;);
+        if (data.window == PRO_TEST_GRAPHICS_WINDOW)
+        {
+            win_data.point[1] = win_data.point[1] - win_data.decrease;
+<a name="anchor-73"></a>            win_data.point[0] = 0;
+        }
+    }
+
+    return ( status );
+<a name="anchor-74"></a>}
+
+/*====================================================================*\
+FUNCTION : ProUtilElemIdPrint
+PURPOSE  : Print the element name ( or id if it is not in the str table)
+<a name="anchor-75"></a>\*====================================================================*/
+static ProError ProUtilElemIdPrint (
+    ProElement                elem,
+    ProBoolean                is_compound,
+    ProBoolean                is_array,
+<a name="anchor-76"></a>    UtilElemtreePrintdata     data,
+    char                     *indent)
+{
+    ProElemId    elem_id;
+    ProError     status = PRO_TK_NO_ERROR;
+<a name="anchor-77"></a>    char elem_name[40], s[100];
+
+   status = ProElementIdGet ( elem, &amp;elem_id );
+   TEST_CALL_REPORT(&quot;ProElementIdGet()&quot;,&quot;ProUtilElemtreePPrint()&quot;,
+                                        status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-78"></a>
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProUtilIdToStr(elem_id, elem_name);
+    }
+<a name="anchor-79"></a>
+    if (status == PRO_TK_NO_ERROR)
+    {
+        ProTKSprintf ( s, &quot;%s%s  &quot;, indent, elem_name);
+        ProTKFprintf ( data.f, s);
+<a name="anchor-80"></a>        if (data.window == PRO_TEST_GRAPHICS_WINDOW)
+        {
+            ProUtilDisp(s, PRO_B_TRUE);
+        }
+    }
+<a name="anchor-81"></a>    else if ( status == PRO_TK_E_NOT_FOUND )
+    {
+        ProTKSprintf(s, &quot;%sElem Id: %3d  &quot;, indent, elem_id );
+        ProTKFprintf ( data.f, s);
+        if (data.window == PRO_TEST_GRAPHICS_WINDOW)
+<a name="anchor-82"></a>        {
+            ProUtilDisp(s, PRO_B_TRUE);
+        }
+
+        status = PRO_TK_NO_ERROR;
+<a name="anchor-83"></a>    }
+
+    if ( status == PRO_TK_NO_ERROR &amp;&amp; is_compound )
+    {
+        ProTKSprintf ( s, &quot; (COMPOUND) &quot;);
+<a name="anchor-84"></a>        ProTKFprintf ( data.f, s);
+        if (data.window == PRO_TEST_GRAPHICS_WINDOW)
+        {
+            ProUtilDisp(s, PRO_B_TRUE);
+        }
+<a name="anchor-85"></a>    }
+
+    if ( status == PRO_TK_NO_ERROR &amp;&amp; is_array )
+    {
+        ProTKSprintf ( s, &quot; (ARRAY) &quot;);
+<a name="anchor-86"></a>        ProTKFprintf ( data.f, s);
+        if (data.window == PRO_TEST_GRAPHICS_WINDOW)
+        {
+            ProUtilDisp(s, PRO_B_TRUE);
+        }
+<a name="anchor-87"></a>    }
+
+    return ( status );
+}
+
+<a name="anchor-88"></a>/*====================================================================*\
+FUNCTION : ProUtilElemValuePrint
+PURPOSE  : Print the value of an element
+\*====================================================================*/
+static ProError ProUtilElemValuePrint (
+<a name="anchor-89"></a>    ProElement                elem,
+    ProBoolean                is_multi_val,
+    ProBoolean                are_more_items,
+    UtilElemtreePrintdata     data,
+    char                     *indent)
+<a name="anchor-90"></a>{
+    ProValue     value = (ProValue)NULL;
+    ProError     status = PRO_TK_NO_ERROR;
+    char s[100], *chp = indent;
+
+<a name="anchor-91"></a>    if ( is_multi_val == PRO_B_FALSE)
+    {
+
+        status = ProUtilValuePrint ( elem, data, NULL);
+
+<a name="anchor-92"></a>    }
+    else /* the case of multipule values is deprecated; check the documentation of specific feature trees */ 
+    {
+        ProValue    *p_value = (ProValue*)NULL;
+        int          i, n_vals, ind_len;
+<a name="anchor-93"></a>
+        status = ProArrayAlloc(0, sizeof(ProValue), 1, (ProArray*)&amp;p_value);
+        TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,&quot;ProUtilElemValuePrint()&quot;,
+                                status, (status != PRO_TK_NO_ERROR));
+
+<a name="anchor-94"></a>        if (status == PRO_TK_NO_ERROR)
+        {   
+            status = ProElementValuesGet(elem, &amp;p_value);
+            TEST_CALL_REPORT(&quot;ProElementValuesGet()&quot;,&quot;ProUtilElemValuePrint()&quot;,
+                                        status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-95"></a>        }
+
+        if (status == PRO_TK_NO_ERROR)
+        {
+            status = ProArraySizeGet((ProArray)p_value, &amp;n_vals);
+<a name="anchor-96"></a>            TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProUtilElemValuePrint()&quot;,
+                                    status, (status != PRO_TK_NO_ERROR));
+
+
+            ind_len = strlen(indent);
+<a name="anchor-97"></a>
+            if (are_more_items == PRO_B_TRUE)
+            {
+                *(chp+=ind_len) = '\0';
+                for (i = 0; i &lt; 3; i++)
+<a name="anchor-98"></a>                    *(--chp) = ' ';
+            }
+            else
+            {
+                for (i = 0; i &lt; ind_len; i++)
+<a name="anchor-99"></a>                    *(chp++) = ' ';
+                *(chp) = '\0';
+            }
+
+            for (i = 0 ; i &lt; n_vals; i++)
+<a name="anchor-100"></a>            {
+                status = ProUtilValuePrintDeprecated (p_value[i], data,
+                                    i == 0 ? (char*)NULL : indent );
+            }
+
+<a name="anchor-101"></a>	    if( n_vals == 0 )
+		ProTKFprintf ( data.f, &quot;\n&quot; );
+        }
+
+        if (p_value != NULL)
+<a name="anchor-102"></a>        {
+            status = ProArrayFree((ProArray*)&amp;p_value);
+            TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,&quot;ProUtilElemValuePrint()&quot;,
+                                    status, (status != PRO_TK_NO_ERROR));
+        }
+<a name="anchor-103"></a>    }
+
+    return ( status );
+}
+
+<a name="anchor-104"></a>/*====================================================================*\
+FUNCTION : ProUtilValuePrintDeprecated
+PURPOSE  : Print out an elements value
+\*====================================================================*/
+static ProError ProUtilValuePrintDeprecated (
+<a name="anchor-105"></a>    ProValue              value,
+    UtilElemtreePrintdata data,
+    char                 *indent)
+{
+    ProValueData value_data;
+<a name="anchor-106"></a>    ProError     status = PRO_TK_NO_ERROR;
+    char temp[100], temp2[100], li[2*PRO_ELEMTREE_MAX_LEVEL];
+    ProModelitem mdl_item;
+    ProAsmcomppath path;
+    double *d;
+<a name="anchor-107"></a>
+    int k;
+
+    li[0] = '\0';
+
+<a name="anchor-108"></a>    if (indent != (char*) NULL)
+    {
+        ProUtilstrcat(li, (const char *)indent);
+        ProUtilstrcat(li,&quot;                 &quot;);
+    }
+<a name="anchor-109"></a>
+    status = ProValueDataGet (value, &amp;value_data);
+    TEST_CALL_REPORT(&quot;ProValueDataGet()&quot;,&quot;ProUtilValuePrintDeprecated()&quot;,
+                                        status, (status != PRO_TK_NO_ERROR));
+
+<a name="anchor-110"></a>    if ( status == PRO_TK_NO_ERROR )
+    {
+        switch ( value_data.type )
+        {
+            case PRO_VALUE_TYPE_TRANSFORM:
+<a name="anchor-111"></a>                if ( value_data.v.t == NULL )
+                {
+                   ProTKSprintf (temp, &quot;%sVALUE (TRANSFORM)&quot;, li );
+                   break;
+                }
+<a name="anchor-112"></a>                ProTKSprintf (temp, &quot;%sVALUE (TRANSFORM)&quot;, li );
+                d = (double*)value_data.v.t;
+                for (k=0; k&lt;4; k++)
+                    ProTKPrintf(&quot;%8.5f %8.5f %8.5f %8.5f\n&quot;, d[k*4],
+                          d[k*4+1], d[k*4+2], d[k*4+3]);
+<a name="anchor-113"></a>                break;
+
+            case PRO_VALUE_TYPE_INT:
+                ProTKSprintf (temp, &quot;%sVALUE (INT)       = %d&quot;,li,value_data.v.i );
+                break;
+<a name="anchor-114"></a>
+            case PRO_VALUE_TYPE_DOUBLE:
+                ProTKSprintf (temp, &quot;%sVALUE (DOUBLE)    = %f&quot;,li,value_data.v.d );
+                break;
+
+<a name="anchor-115"></a>            case PRO_VALUE_TYPE_STRING:
+                if ( value_data.v.s == NULL )
+                {
+                   ProTKSprintf (temp, &quot;%sVALUE (STRING)    = &quot;,li);
+                   break;
+<a name="anchor-116"></a>                }
+                ProTKSprintf (temp, &quot;%sVALUE (STRING)    = %s&quot;,li,value_data.v.s );
+                break;
+
+            case PRO_VALUE_TYPE_WSTRING:
+<a name="anchor-117"></a>                if ( value_data.v.w == NULL )
+                {
+                   ProTKSprintf (temp, &quot;%sVALUE (WSTRING)   = &quot;,li);
+                   break;
+                }
+<a name="anchor-118"></a>                ProTKSprintf (temp, &quot;%sVALUE (WSTRING)   = %s&quot;,li,
+                                ProWstringToString(temp2, value_data.v.w) );
+                break;
+
+            case PRO_VALUE_TYPE_SELECTION:
+<a name="anchor-119"></a>                if ( value_data.v.r == NULL )
+                {
+                   ProTKSprintf (temp, &quot;%sVALUE (SELECTION) = &quot;, li);
+                   break;
+                }
+<a name="anchor-120"></a>                status = ProSelectionModelitemGet(value_data.v.r, &amp;mdl_item);
+                TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+                    &quot;ProUtilValuePrintDeprecated()&quot;, status, status != PRO_TK_NO_ERROR);
+                status = ProSelectionAsmcomppathGet(value_data.v.r, &amp;path);
+                TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;,
+<a name="anchor-121"></a>                    &quot;ProUtilValuePrintDeprecated()&quot;, status, status != PRO_TK_NO_ERROR);
+                ProTKSprintf (temp, &quot;%sVALUE (SELECTION) Id = %d Type = %d Owner = %x&quot;,
+                    li, mdl_item.id, mdl_item.type, mdl_item.owner);
+
+                if (path.table_num>0)
+<a name="anchor-122"></a>                {
+                    ProUtilstrcat(temp, &quot; Path = &quot;);
+                    for(k=0; k&lt;path.table_num; k++)
+                        ProTKSprintf(temp+strlen(temp), &quot; %d&quot;, path.comp_id_table[k]);
+                    ProTKSprintf(temp+strlen(temp), &quot; Owner %x&quot;, path.owner);
+<a name="anchor-123"></a>
+                }
+                ProTKPrintf(&quot;%s\n&quot;, temp);
+                ProTKSprintf (temp, &quot;%sVALUE (SELECTION)   id = %d&quot;, li,
+                    mdl_item.id);
+<a name="anchor-124"></a>
+                break;
+
+            case PRO_VALUE_TYPE_POINTER:
+                /* For QCR files */
+<a name="anchor-125"></a>                if (value_data.v.p != NULL)
+                    ProTKSprintf(temp,  &quot;%sPOINTER           = **&quot;, li);
+                else
+                    ProTKSprintf (temp, &quot;%sPOINTER           = %x&quot;,li,
+                             value_data.v.p );
+<a name="anchor-126"></a>                ProTKPrintf(&quot;%x\n&quot;,value_data.v.p);
+
+                break;
+        }
+
+<a name="anchor-127"></a>        ProTKFprintf (data.f, temp );
+        ProTKFprintf (data.f, &quot;\n&quot;);
+        if(data.window == PRO_TEST_GRAPHICS_WINDOW)
+        {
+            ProUtilDisp(temp, PRO_B_FALSE);
+<a name="anchor-128"></a>            win_data.point[1] = win_data.point[1] - win_data.decrease;
+            win_data.point[0] = 0;
+        }
+    }
+
+<a name="anchor-129"></a>    return ( status );
+}
+
+/*====================================================================*\
+FUNCTION : ProUtilValuePrint
+<a name="anchor-130"></a>PURPOSE  : Print out an elements value
+\*====================================================================*/
+static ProError ProUtilValuePrint (
+    ProElement            element,
+    UtilElemtreePrintdata data,
+<a name="anchor-131"></a>    char                 *indent)
+{
+    ProValueDataType value_type;
+    ProError     status = PRO_TK_NO_ERROR;
+    char temp[100], temp2[100], li[2*PRO_ELEMTREE_MAX_LEVEL];
+<a name="anchor-132"></a>    ProModelitem mdl_item;
+    ProAsmcomppath path;
+    double *d;
+
+    int k;
+<a name="anchor-133"></a>
+    li[0] = '\0';
+
+    if (indent != (char*) NULL)
+    {
+<a name="anchor-134"></a>        ProUtilstrcat(li, (const char *)indent);
+        ProUtilstrcat(li,&quot;                 &quot;);
+    }
+
+		status = ProElementValuetypeGet (element, &amp;value_type);
+<a name="anchor-135"></a>		TEST_CALL_REPORT(&quot;ProElementValuetypeGet()&quot;,&quot;ProUtilValuePrint()&quot;,
+                                        status, (status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_EMPTY));
+
+    if ( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-136"></a>        switch ( value_type )
+        {
+            case PRO_VALUE_TYPE_TRANSFORM:
+	    {
+                ProMatrix value;
+<a name="anchor-137"></a>                status = ProElementTransformGet(element, NULL, value);
+                if ( status != PRO_TK_NO_ERROR )
+                {
+                   ProTKSprintf (temp, &quot;%sVALUE (TRANSFORM)&quot;, li );
+                   break;
+<a name="anchor-138"></a>                }
+                ProTKSprintf (temp, &quot;%sVALUE (TRANSFORM)&quot;, li );
+		d = (double*)value;		
+		for (k=0; k&lt;4; k++)
+		    ProTKPrintf(&quot;%8.5f %8.5f %8.5f %8.5f\n&quot;, d[k*4],
+<a name="anchor-139"></a>			  d[k*4+1], d[k*4+2], d[k*4+3]);
+                break;
+	    }
+            case PRO_VALUE_TYPE_INT:
+	    {
+<a name="anchor-140"></a>                int value;
+                status = ProElementIntegerGet(element, NULL, &amp;value);
+                ProTKSprintf (temp, &quot;%sVALUE (INT)       = %d&quot;,li,value );
+                break;
+	    }
+<a name="anchor-141"></a>            case PRO_VALUE_TYPE_DOUBLE:
+	    {
+                double value;
+                status = ProElementDoubleGet(element, NULL, &amp;value);
+                ProTKSprintf (temp, &quot;%sVALUE (DOUBLE)    = %f&quot;,li,value );
+<a name="anchor-142"></a>                break;
+	    }
+            case PRO_VALUE_TYPE_STRING:
+	    {
+                char *value;
+<a name="anchor-143"></a>                status = ProElementStringGet(element, NULL, &amp;value);
+                if ( value == NULL )
+                {
+                   ProTKSprintf (temp, &quot;%sVALUE (STRING)    = &quot;,li);
+                   break;
+<a name="anchor-144"></a>                }
+                ProTKSprintf (temp, &quot;%sVALUE (STRING)    = %s&quot;,li,value );
+                status = ProStringFree( value );
+                break;
+	    }
+<a name="anchor-145"></a>            case PRO_VALUE_TYPE_WSTRING:
+	    {
+                wchar_t *value;
+                status = ProElementWstringGet(element, NULL, &amp;value);
+                if ( value == NULL )
+<a name="anchor-146"></a>                {
+                   ProTKSprintf (temp, &quot;%sVALUE (WSTRING)   = &quot;,li);
+                   break;
+                }
+                ProTKSprintf (temp, &quot;%sVALUE (WSTRING)   = %s&quot;,li,
+<a name="anchor-147"></a>                                ProWstringToString(temp2, value) );
+                status = ProWstringFree( value );
+                break;
+	    }
+            case PRO_VALUE_TYPE_SELECTION:
+<a name="anchor-148"></a>	    {
+                ProReference value;
+		ProSelection sel;
+                status = ProElementReferenceGet(element, NULL, &amp;value);
+                if ( value == NULL )
+<a name="anchor-149"></a>                {
+                   ProTKSprintf (temp, &quot;%sVALUE (SELECTION) = &quot;, li);
+                   break;
+                }
+		status = ProReferenceToSelection(value, &amp;sel);
+<a name="anchor-150"></a>                status = ProSelectionModelitemGet(sel, &amp;mdl_item);
+    		TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+		    &quot;ProUtilValuePrint()&quot;, status, status != PRO_TK_NO_ERROR);
+		status = ProSelectionAsmcomppathGet(sel, &amp;path);
+    		TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;,
+<a name="anchor-151"></a>		    &quot;ProUtilValuePrint()&quot;, status, status != PRO_TK_NO_ERROR);
+                ProTKSprintf (temp, &quot;%sVALUE (SELECTION) Id = %d Type = %d Owner = %x&quot;,
+		    li, mdl_item.id, mdl_item.type, mdl_item.owner);
+
+		if (path.table_num>0)
+<a name="anchor-152"></a>		{
+		    ProUtilstrcat(temp, &quot; Path = &quot;);		    
+		    for(k=0; k&lt;path.table_num; k++)
+			ProTKSprintf(temp+strlen(temp), &quot; %d&quot;, path.comp_id_table[k]);
+		    ProTKSprintf(temp+strlen(temp), &quot; Owner %x&quot;, path.owner);
+<a name="anchor-153"></a>		    
+		}
+		ProTKPrintf(&quot;%s\n&quot;, temp);		
+                ProTKSprintf (temp, &quot;%sVALUE (SELECTION)   id = %d&quot;, li, 
+		    mdl_item.id);
+<a name="anchor-154"></a>		status = ProReferenceFree( value );
+                break;
+	    }
+            case PRO_VALUE_TYPE_POINTER:
+	    {
+<a name="anchor-155"></a>                ProAppData value;
+                status = ProElementSpecialvalueGet(element, NULL, &amp;value);
+		/* For QCR files */
+		if (value != NULL)
+		    ProTKSprintf(temp,  &quot;%sPOINTER           = **&quot;, li);
+<a name="anchor-156"></a>		else    
+		    ProTKSprintf (temp, &quot;%sPOINTER           = %x&quot;,li, 
+			     value );
+		ProTKPrintf(&quot;%x\n&quot;,value);
+		
+<a name="anchor-157"></a>                break;
+	    }
+        }
+
+        ProTKFprintf (data.f, temp );
+<a name="anchor-158"></a>        ProTKFprintf (data.f, &quot;\n&quot;);
+        if(data.window == PRO_TEST_GRAPHICS_WINDOW)
+        {
+            ProUtilDisp(temp, PRO_B_FALSE);
+            win_data.point[1] = win_data.point[1] - win_data.decrease;
+<a name="anchor-159"></a>            win_data.point[0] = 0;
+        }
+    }
+
+    return ( status );
+<a name="anchor-160"></a>}
+
+
+/*====================================================================*\
+FUNCTION : ProUtilDisp
+<a name="anchor-161"></a>PURPOSE  : Display a feature tree in an information window
+\*====================================================================*/
+static ProError ProUtilDisp(char *text, ProBool move_carret)
+{
+   ProError err;
+<a name="anchor-162"></a>   wchar_t w_str[150];
+   ProTextAttribute attribute, new_attribute;
+   double char_length;
+
+   err = ProTextAttributesCurrentGet(&amp;attribute);
+<a name="anchor-163"></a>   TEST_CALL_REPORT(&quot;ProTextAttributesCurrentGet&quot;,&quot;ProUtilDisp&quot;,
+                                        err, err!=PRO_TK_NO_ERROR);
+
+   new_attribute = attribute;
+   new_attribute.height = 15;
+<a name="anchor-164"></a>   new_attribute.width_factor = 0.75;
+
+#if 0
+
+   err = ProTextHeightCurrentSet(new_attribute.height);
+<a name="anchor-165"></a>          TEST_CALL_REPORT(&quot;ProTextHeightCurrentSet&quot;,&quot;ProUtilDisp&quot;,
+                                        err, err!=PRO_TK_NO_ERROR);
+   err =  ProTextWidthFactorCurrentSet(new_attribute.width_factor);
+          TEST_CALL_REPORT(&quot;ProTextWidthFactorCurrentSet&quot;,&quot;ProUtilDisp&quot;,
+                                        err, err!=PRO_TK_NO_ERROR);
+<a name="anchor-166"></a>#endif
+   ProStringToWstring(w_str, text);
+   err = ProGraphicsTextDisplay(win_data.point, w_str);
+   TEST_CALL_REPORT(&quot;ProGraphicsTextDisplay&quot;,&quot;ProUtilDisp&quot;,
+                                       err, err!=PRO_TK_NO_ERROR);
+<a name="anchor-167"></a>#if 0
+   err = ProTextHeightCurrentSet(attribute.height);
+          TEST_CALL_REPORT(&quot;ProTextHeightCurrentSet&quot;,&quot;ProUtilDisp&quot;,
+                                        err, err!=PRO_TK_NO_ERROR);
+   err = ProTextWidthFactorCurrentSet(attribute.width_factor);
+<a name="anchor-168"></a>          TEST_CALL_REPORT(&quot;ProTextWidthFactorCurrentSet&quot;,&quot;ProUtilDisp&quot;,
+                                        err, err!=PRO_TK_NO_ERROR);
+#endif
+
+   if (move_carret == PRO_B_TRUE)
+<a name="anchor-169"></a>     {
+       char_length = new_attribute.height * new_attribute.width_factor;
+       win_data.point[0] += 2 * char_length * (double)strlen(text);
+     }
+
+<a name="anchor-170"></a>   return err;
+}
+
+
+/*====================================================================*\
+<a name="anchor-171"></a>FUNCTION : ProUtilElemtreeInGrWindow
+PURPOSE  :
+\*====================================================================*/
+static ProError ProUtilElemtreeInGrWindow(
+   ProElement  elem_tree,
+<a name="anchor-172"></a>   ProElempath elem_path,
+   ProUtilElemtreePrintOpts *options,
+   int *p_win_id)
+{
+   ProError err = PRO_TK_NO_ERROR;
+<a name="anchor-173"></a>#ifndef PT_PRODUCTS_BUILD
+   ProMdlName obj_name;
+   ProType obj_type = PRO_PART;
+   ProSolid tree_obj;
+   int cur_id, newwin_id;
+<a name="anchor-174"></a>   ProMatrix transform;
+   UtilTreeprintWindow window = PRO_TEST_GRAPHICS_WINDOW;
+
+   ProStringToWstring(obj_name, (char *)&quot;feature_tree&quot;);
+
+<a name="anchor-175"></a>   err = ProSolidMdlnameCreate(obj_name, (ProMdlfileType)obj_type, &amp;tree_obj);
+   TEST_CALL_REPORT(&quot;ProSolidMdlnameCreate()&quot;, &quot;ProUtilElemtreeInGrWindow&quot;,
+                                             err, err != PRO_TK_NO_ERROR);
+
+   if (err != PRO_TK_NO_ERROR)
+<a name="anchor-176"></a>     {
+       err = ProMdlnameInit(obj_name, (ProMdlfileType)obj_type, (ProMdl *)&amp;tree_obj);
+       TEST_CALL_REPORT(&quot;ProMdlnameInit()&quot;, &quot;ProUtilElemtreeInGrWindow&quot;,
+                                             err, err != PRO_TK_NO_ERROR);
+     }
+<a name="anchor-177"></a>
+    if (err != PRO_TK_NO_ERROR)
+     {
+       err = ProMdlnameRetrieve(obj_name, (ProMdlfileType)obj_type, (ProMdl *)&amp;tree_obj);
+       TEST_CALL_REPORT(&quot;ProMdlnameRetrieve()&quot;, &quot;ProUtilElemtreeInGrWindow&quot;,
+<a name="anchor-178"></a>                                             err, err != PRO_TK_NO_ERROR);
+     }
+
+   err = ProWindowCurrentGet(&amp;cur_id);
+   TEST_CALL_REPORT(&quot;ProWindowCurrentGet()&quot;, &quot;ProUtilElemtreeInGrWindow&quot;,
+<a name="anchor-179"></a>                                             err, err != PRO_TK_NO_ERROR);
+
+   err = ProObjectwindowMdlnameCreate(obj_name, obj_type, &amp;newwin_id);
+   TEST_CALL_REPORT(&quot;ProObjectwindowMdlnameCreate()&quot;, &quot;ProUtilElemtreeInGrWindow&quot;,
+                                             err, err != PRO_TK_NO_ERROR);
+<a name="anchor-180"></a>
+   err = ProWindowCurrentSet(newwin_id);
+   TEST_CALL_REPORT(&quot;ProWindowCurrentSet()&quot;, &quot;ProUtilElemtreeInGrWindow&quot;,
+                                             err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-181"></a>   err = ProSolidDisplay(tree_obj);
+   TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, &quot;ProUtilElemtreeInGrWindow&quot;,
+                                             err, err != PRO_TK_NO_ERROR);
+
+
+<a name="anchor-182"></a>   err = ProViewMatrixGet((ProMdl) tree_obj, NULL, transform);
+   TEST_CALL_REPORT(&quot;ProViewMatrixGet&quot;, &quot;ProUtilElemtreeInGrWindow&quot;, err,
+                                                err != PRO_TK_NO_ERROR);
+
+   err = ProDisplist2dDelete(5);
+<a name="anchor-183"></a>   TEST_CALL_REPORT(&quot;ProDisplist2dDelete()&quot;, &quot;ProUtilElemtreeInGrWindow&quot;,
+                                             err, err != PRO_TK_NO_ERROR);
+
+   win_data.point[0] = 0.0;
+   win_data.point[1] = 800;
+<a name="anchor-184"></a>   win_data.decrease = 35;
+
+   err = ProDisplist2dCreate(5, transform, 
+        (ProDisplistCallback)ProUtilElemtreePPrint,
+        (void *)elem_tree, (void *)elem_path, (void *)options, (void *)&amp;window);
+<a name="anchor-185"></a>   TEST_CALL_REPORT(&quot;ProDisplist3dCreate&quot;, &quot;ProUtilElemtreeInGrWindow&quot;, err,
+                                                err != PRO_TK_NO_ERROR);
+
+   err = ProWindowRefresh( newwin_id );
+   TEST_CALL_REPORT(&quot;ProWindowRefresh()&quot;, &quot;ProUtilElemtreeInGrWindow&quot;,
+<a name="anchor-186"></a>                                             err, err != PRO_TK_NO_ERROR);
+
+
+   err = ProDisplist2dDisplay(5, transform);
+   TEST_CALL_REPORT(&quot;ProDisplist2dDisplay()&quot;, &quot;ProUtilElemtreeInGrWindow&quot;,
+<a name="anchor-187"></a>                                             err, err != PRO_TK_NO_ERROR);
+
+   err = ProWindowCurrentSet(cur_id);
+   TEST_CALL_REPORT(&quot;ProWindowCurrentSet()&quot;, &quot;ProUtilElemtreeInGrWindow&quot;,
+                                             err, err != PRO_TK_NO_ERROR);
+<a name="anchor-188"></a>
+   if(p_win_id != NULL)
+     *p_win_id = newwin_id;
+#endif
+   return err;
+<a name="anchor-189"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProUtilShowTreeInInfo()
+    PURPOSE  :	show tree
+<a name="anchor-190"></a>\*====================================================================*/
+ProError ProUtilShowTreeInInfo(
+    ProElement elem_tree )
+{
+    return (ProUtilElementtreePrint(elem_tree,PRO_TEST_INFO_WINDOW,NULL));
+<a name="anchor-191"></a>}
+
+
+/*====================================================================*\
+    FUNCTION :	ProUtilElemWithSelectionFilter()
+<a name="anchor-192"></a>    PURPOSE  :	Finf Elements with selection data
+\*====================================================================*/
+ProError ProUtilElemWithSelectionFilter(
+    ProElement elem_tree,
+    ProElement elem,
+<a name="anchor-193"></a>    ProElempath elempath)
+{
+    ProError err;
+    ProBoolean is_comp, is_multi, has_sel = PRO_B_FALSE;
+    ProValue value, *p_values;
+<a name="anchor-194"></a>    ProValueData val_data;
+    int i, n_val = -1;
+	ProReference *p_references, p_reference;
+
+    err = ProElementIsArray(elem, NULL, &amp;is_comp);
+<a name="anchor-195"></a>    TEST_CALL_REPORT(&quot;ProElementIsArray()&quot;, 
+	    &quot;ProUtilElemWithSelectionFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    
+    if (is_comp == PRO_B_FALSE)
+<a name="anchor-196"></a>    {
+	err = ProElementIsCompound(elem, NULL, &amp;is_comp);
+	TEST_CALL_REPORT(&quot;ProElementIsCompound()&quot;,
+	    &quot;ProUtilElemWithSelectionFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-197"></a>
+    if (is_comp == PRO_B_TRUE)
+	return (PRO_TK_CONTINUE);
+
+    err = ProElementIsMultival(elem, NULL, &amp;is_multi);
+<a name="anchor-198"></a>    TEST_CALL_REPORT(&quot;ProElementIsMultival()&quot;,
+	    &quot;ProUtilElemWithSelectionFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    if (is_multi)
+    {
+<a name="anchor-199"></a>	  err = ProElementReferencesGet(elem, NULL, &amp;p_references);
+	  TEST_CALL_REPORT(&quot;ProElementReferencesGet()&quot;,
+	    &quot;ProUtilElemWithSelectionFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	  if(err == PRO_TK_NO_ERROR)
+<a name="anchor-200"></a>	  {
+		err = ProArraySizeGet((ProArray)p_references, &amp;n_val);
+		
+		TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+		     &quot;ProUtilElemWithSelectionFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-201"></a>	
+		if(n_val > 0)
+		{
+			has_sel = PRO_B_TRUE;
+		
+<a name="anchor-202"></a>			ProReferencearrayFree((ProArray*)&amp;p_references);
+			    TEST_CALL_REPORT(&quot;ProReferencearrayFree()&quot;,
+				&quot;ProUtilElemWithSelectionFilter()&quot;, 
+				err, err != PRO_TK_NO_ERROR);			
+		}
+<a name="anchor-203"></a>	  }
+	}
+
+    else
+    {
+<a name="anchor-204"></a>
+
+		
+		err = ProElementReferenceGet(elem, NULL, &amp;p_reference);
+		TEST_CALL_REPORT(&quot;ProElementReferenceGet()&quot;,
+<a name="anchor-205"></a>			&quot;ProUtilElemWithSelectionFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+
+		if ( err == PRO_TK_NO_ERROR )
+			has_sel = PRO_B_TRUE;
+    }
+<a name="anchor-206"></a>
+    return (has_sel == PRO_B_TRUE ? PRO_TK_NO_ERROR : PRO_TK_CONTINUE);
+}
+
+/*====================================================================*\
+<a name="anchor-207"></a>FUNCTION : ProUtilSelectionChangeAsmcomppath
+PURPOSE  : Move selection from part and subassembly refs to the root 
+	   assembly level 
+\*====================================================================*/
+ProError ProUtilSelectionChangeAsmcomppath(
+<a name="anchor-208"></a>    ProSelection old_sel,
+    ProSelection *p_new_sel,
+    ProAppData p_asmcomppath)
+{
+    ProAsmcomppath *p_fpath = ((ProAsmcomppath *)p_asmcomppath);
+<a name="anchor-209"></a>    ProAsmcomppath  ref_path, path;
+    ProModelitem    modelitem;
+    ProMdl	    mdl;
+    ProError	    err;
+    int i;
+<a name="anchor-210"></a>
+    /* Model and feature must be on the one branch from the root assy
+       Model path must be less that feature path */	
+    err = ProSelectionAsmcomppathGet(old_sel, &amp;ref_path);
+    TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;,
+<a name="anchor-211"></a>	    &quot;ProUtilSelectionChangeAsmcomppath()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (ref_path.table_num >= p_fpath->table_num)
+	return (PRO_TK_E_NOT_FOUND);
+
+    err = ProSelectionModelitemGet(old_sel, &amp;modelitem);
+<a name="anchor-212"></a>    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+	    &quot;ProUtilSelectionChangeAsmcomppath()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    if (ref_path.table_num == 0)
+	ref_path.owner = (ProSolid)modelitem.owner;
+<a name="anchor-213"></a>
+    for (i=0; i&lt; p_fpath->table_num - ref_path.table_num; i++)   
+    {
+	err = ProAsmcomppathInit(p_fpath->owner, p_fpath->comp_id_table, i+1,
+	    &amp;path);
+<a name="anchor-214"></a>	TEST_CALL_REPORT(&quot;ProAsmcomppathInit()&quot;,
+	    &quot;ProUtilSelectionChangeAsmcomppath()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProAsmcomppathMdlGet(&amp;path, &amp;mdl);
+	TEST_CALL_REPORT(&quot;ProAsmcomppathMdlGet()&quot;,
+<a name="anchor-215"></a>	    &quot;ProUtilSelectionChangeAsmcomppath()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	/* Owner found on same branch as feature */
+	if (mdl == (ProMdl)ref_path.owner)
+	    break;
+<a name="anchor-216"></a>    }
+    if (i >= p_fpath->table_num - ref_path.table_num)
+	return (PRO_TK_E_NOT_FOUND);
+
+    /* build new ref path */
+<a name="anchor-217"></a>    memcpy(path.comp_id_table + i + 1, ref_path.comp_id_table, 
+	(ref_path.table_num+1) * sizeof(path.comp_id_table[0]));
+    path.table_num = i + 1 + ref_path.table_num;
+
+    err = ProSelectionAlloc(&amp;path, &amp;modelitem, p_new_sel);
+<a name="anchor-218"></a>    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;,
+	    &quot;ProUtilSelectionChangeAsmcomppath()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-219"></a>
+/*====================================================================*\
+FUNCTION : ProUtilOriginalGeomSelection
+PURPOSE  : Changes selection to 'internal' surfaces to original geometry
+\*====================================================================*/
+<a name="anchor-220"></a>ProError ProUtilOriginalGeomSelection(
+    ProSelection old_sel,
+    ProSelection *p_new_sel,
+    ProAppData dummy)
+{
+<a name="anchor-221"></a>    ProError err, er1;
+    ProElempath path;
+    ProModelitem modelitem;
+    ProFeature feature;
+    ProFeattype feat_type;
+<a name="anchor-222"></a>    ProBoolean replace = PRO_B_FALSE, is_vis;
+    int i;
+    ProElempathItem constr_type[3]; 
+    ProElempathItem constr_ref[3]; 
+    ProElement elem_tree, elem;
+<a name="anchor-223"></a>    ProReference ref;
+    ProSelection sel;
+    int type;
+
+    constr_type[0].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+<a name="anchor-224"></a>    constr_type[0].path_item.elem_id = PRO_E_DTMPLN_CONSTRAINTS;
+    constr_type[1].type = PRO_ELEM_PATH_ITEM_TYPE_INDEX;
+    constr_type[1].path_item.elem_id = 0;
+    constr_type[2].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+    constr_type[2].path_item.elem_id = PRO_E_DTMPLN_CONSTR_TYPE;
+<a name="anchor-225"></a>
+    constr_ref[0].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+    constr_ref[0].path_item.elem_id = PRO_E_DTMPLN_CONSTRAINTS;
+    constr_ref[1].type = PRO_ELEM_PATH_ITEM_TYPE_INDEX;
+    constr_ref[1].path_item.elem_id = 0;
+<a name="anchor-226"></a>    constr_ref[2].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+    constr_ref[2].path_item.elem_id = PRO_E_DTMPLN_CONSTR_REF;
+
+    if (old_sel != NULL)
+    {
+<a name="anchor-227"></a>    err = ProSelectionModelitemGet(old_sel, &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    /* Do any wotk only if selection is surface on internal datum plane */
+<a name="anchor-228"></a>    if (modelitem.type != PRO_SURFACE)
+	return (PRO_TK_E_NOT_FOUND);
+
+    err = ProGeomitemFeatureGet((ProGeomitem*)&amp;modelitem, &amp;feature);
+    TEST_CALL_REPORT(&quot;ProGeomitemFeatureGet()&quot;,
+<a name="anchor-229"></a>		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProFeatureVisibilityGet(&amp;feature, &amp;is_vis);
+    TEST_CALL_REPORT(&quot;ProFeatureVisibilityGet()&quot;,
+		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-230"></a>    if (err != PRO_TK_NO_ERROR || is_vis != PRO_B_FALSE)
+	return (PRO_TK_E_NOT_FOUND);
+
+    err = ProFeatureTypeGet(&amp;feature, &amp;feat_type);
+    TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;,
+<a name="anchor-231"></a>		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    if (err != PRO_TK_NO_ERROR || feat_type != PRO_FEAT_DATUM)
+	return (PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-232"></a>    /* internal datum plane found - create elemtree and check constraints*/
+    for (i=0; i&lt;2; i++)
+    {
+	err = ProElempathAlloc(&amp;path);
+	TEST_CALL_REPORT(&quot;ProElempathAlloc()&quot;,
+<a name="anchor-233"></a>		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	constr_type[1].path_item.elem_index = i;
+	err = ProElempathDataSet(path, constr_type, 3);
+	TEST_CALL_REPORT(&quot;ProElempathDataSet()&quot;,
+<a name="anchor-234"></a>		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProFeatureElemtreeExtract (&amp;feature, NULL,
+                             PRO_FEAT_EXTRACT_NO_OPTS, &amp;elem_tree );
+	if (err != PRO_TK_NO_ERROR)
+<a name="anchor-235"></a>	    continue;
+        err = ProElemtreeElementGet(elem_tree, path, &amp;elem);
+	if (err != PRO_TK_NO_ERROR)
+	    continue;
+        err = ProElementIntegerGet(elem, NULL, &amp;type);
+<a name="anchor-236"></a>	if (err != PRO_TK_NO_ERROR)
+	    continue;
+
+	/* this printout is left for compatibility with existing tests */
+	TEST_CALL_REPORT(&quot;ProFeatureElemValueGet()&quot;,
+<a name="anchor-237"></a>		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	er1 = ProElempathFree(&amp;path);
+	TEST_CALL_REPORT(&quot;ProElempathFree()&quot;,
+		&quot;ProUtilOriginalGeomSelection()&quot;, er1, er1 != PRO_TK_NO_ERROR);
+<a name="anchor-238"></a>
+	if (err != PRO_TK_NO_ERROR)
+	    continue;
+
+	/* this printout is left for compatibility with existing tests */
+<a name="anchor-239"></a>	TEST_CALL_REPORT(&quot;ProValueDataGet()&quot;,
+		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+	if (type != PRO_DTMPLN_THRU)
+	    continue;
+
+<a name="anchor-240"></a>	err = ProElempathAlloc(&amp;path);
+	TEST_CALL_REPORT(&quot;ProElempathAlloc()&quot;,
+		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	constr_ref[1].path_item.elem_index = i;
+<a name="anchor-241"></a>	err = ProElempathDataSet(path, constr_ref, 3);
+	TEST_CALL_REPORT(&quot;ProElempathDataSet()&quot;,
+		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProFeatureElemtreeExtract (&amp;feature, NULL,
+<a name="anchor-242"></a>                             PRO_FEAT_EXTRACT_NO_OPTS, &amp;elem_tree );
+	if (err != PRO_TK_NO_ERROR)
+	    continue;
+        err = ProElemtreeElementGet(elem_tree, path, &amp;elem);
+	if (err != PRO_TK_NO_ERROR)
+<a name="anchor-243"></a>	    continue;
+        err = ProElementReferenceGet(elem, NULL, &amp;ref);
+	if (err != PRO_TK_NO_ERROR)
+	    continue;
+    err = ProReferenceToSelection(ref, &amp;sel);
+<a name="anchor-244"></a>	if (err != PRO_TK_NO_ERROR)
+	    continue;
+
+	/* this printout is left for compatibility with existing tests */
+	TEST_CALL_REPORT(&quot;ProFeatureElemValueGet()&quot;,
+<a name="anchor-245"></a>		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	er1 = ProElempathFree(&amp;path);
+	TEST_CALL_REPORT(&quot;ProElempathFree()&quot;,
+		&quot;ProUtilOriginalGeomSelection()&quot;, er1, er1 != PRO_TK_NO_ERROR);
+<a name="anchor-246"></a>
+	if (err != PRO_TK_NO_ERROR)
+	    continue;
+
+	/* this printout is left for compatibility with existing tests */
+<a name="anchor-247"></a>	TEST_CALL_REPORT(&quot;ProValueDataGet()&quot;,
+		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	/* Original Selection found. Replace old one */
+	err = ProSelectionCopy(sel, p_new_sel);
+<a name="anchor-248"></a>	TEST_CALL_REPORT(&quot;ProSelectionCopy()&quot;,
+		&quot;ProUtilOriginalGeomSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	replace = PRO_B_TRUE;
+	break;
+<a name="anchor-249"></a>      }
+    }
+
+    return (replace == PRO_B_TRUE ? PRO_TK_NO_ERROR : PRO_TK_E_NOT_FOUND);
+}
+<a name="anchor-250"></a>
+
+/*====================================================================*\
+FUNCTION : ProUtilValueReplaceSelection
+PURPOSE  : Replace selection in value
+<a name="anchor-251"></a>\*====================================================================*/
+/*
+ProError ProUtilValueReplaceSelection(
+    ProValue *p_value,
+    ProUtilChahgeSelection user_func,
+<a name="anchor-252"></a>    ProAppData	appdata)
+{
+    ProSelection new_sel;
+    ProValueData val_data,new_data;
+    ProError err;
+<a name="anchor-253"></a>
+    err = ProValueDataGet(*p_value, &amp;val_data);
+    TEST_CALL_REPORT(&quot;ProValueDataGet()&quot;,
+		&quot;ProUtilValueReplaceSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-254"></a>    if (err != PRO_TK_NO_ERROR || val_data.type != PRO_VALUE_TYPE_SELECTION)
+	return (PRO_TK_E_NOT_FOUND);
+
+        
+    err = user_func(val_data.v.r, &amp;new_sel, appdata);
+<a name="anchor-255"></a>    if (err != PRO_TK_NO_ERROR)
+	return err;
+
+    // Original Selection found. Replace old one 
+    err = ProValueFree(*p_value);
+<a name="anchor-256"></a>    TEST_CALL_REPORT(&quot;ProValueFree()&quot;, 
+	      &quot;ProUtilValueReplaceSelection()&quot;, err, 0);
+    err = ProValueAlloc(p_value);
+    TEST_CALL_REPORT(&quot;ProValueAlloc()&quot;,
+	      &quot;ProUtilValueReplaceSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-257"></a>    new_data.type = PRO_VALUE_TYPE_SELECTION;
+
+    new_data.type = PRO_VALUE_TYPE_SELECTION;
+    new_data.v.r = new_sel;
+
+<a name="anchor-258"></a>    err = ProValueDataSet(*p_value, &amp;new_data);
+    TEST_CALL_REPORT(&quot;ProValueDataSet()&quot;,
+	    &quot;ProUtilValueReplaceSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return (err);
+<a name="anchor-259"></a>}
+*/
+
+/*====================================================================*\
+FUNCTION : ProUtilElemtreeReplaceSelection
+<a name="anchor-260"></a>PURPOSE  : Replace selection for elemtree
+\*====================================================================*/
+ProError ProUtilElemtreeReplaceSelection(
+    ProElement elem_tree,
+    ProUtilChahgeSelection user_func,
+<a name="anchor-261"></a>    ProAppData	appdata)
+{
+    ProError err;
+    ElemtreeElement *p_elems;
+    int i, j, n_elems, n_val;
+<a name="anchor-262"></a>    ProValue value, *p_values;
+    ProBoolean  replace, is_multi;
+
+    err = ProUtilCollectElemtreeElements(elem_tree, NULL, &amp;p_elems);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-263"></a>	return (err);
+    
+    err = ProArraySizeGet((ProArray)p_elems, &amp;n_elems);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+	    &quot;ProUtilElemtreeReplaceSelection()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-264"></a>    for(i=0; i&lt;n_elems; i++)
+    {
+	if (ProUtilElemWithSelectionFilter(elem_tree, p_elems[i].p_element,
+	    p_elems[i].p_elempath) != PRO_TK_NO_ERROR)
+	    continue;
+<a name="anchor-265"></a>	
+	err = ProElementIsMultival(p_elems[i].p_element, NULL, &amp;is_multi);
+	TEST_CALL_REPORT(&quot;ProElementIsMultival()&quot;,
+		&quot;ProUtilElemtreeReplaceSelection()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+<a name="anchor-266"></a>
+	replace =PRO_B_FALSE;
+
+	if (is_multi)
+	{
+<a name="anchor-267"></a>		ProReference* p_references;
+
+		ProElementReferencesGet(p_elems[i].p_element, NULL, &amp;p_references);
+		TEST_CALL_REPORT(&quot;ProElementReferencesGet()&quot;,
+		&quot;ProUtilElemtreeReplaceSelection()&quot;, 
+<a name="anchor-268"></a>						err, err != PRO_TK_NO_ERROR);
+
+		err = ProArraySizeGet((ProArray)p_references, &amp;n_val);
+	    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+		&quot;ProUtilElemtreeReplaceSelection()&quot;, 
+<a name="anchor-269"></a>						err, err != PRO_TK_NO_ERROR);
+						
+	    for (j=0; j&lt;n_val; j++)
+	    {
+			ProSelection old_sel, new_sel;
+<a name="anchor-270"></a>			
+			err = ProReferenceToSelection(p_references[j], &amp;old_sel);
+			TEST_CALL_REPORT(&quot;ProReferenceToSelection()&quot;,
+					&quot;ProUtilElemtreeReplaceSelection()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+<a name="anchor-271"></a>
+			err = user_func(old_sel, &amp;new_sel, appdata);
+
+			if (err == PRO_TK_NO_ERROR)
+			{
+<a name="anchor-272"></a>				replace = PRO_B_TRUE;
+				err = ProSelectionToReference(new_sel, &amp;p_references[j]);
+				 TEST_CALL_REPORT(&quot;ProSelectionToReference()&quot;,
+					&quot;ProUtilElemtreeReplaceSelection()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+<a name="anchor-273"></a>						
+			}
+	    }
+	    
+	    if (replace == PRO_B_TRUE)
+<a name="anchor-274"></a>	    {
+			ProElementReferencesSet(p_elems[i].p_element, p_references);
+		TEST_CALL_REPORT(&quot;ProElementReferencesSet()&quot;,
+		    &quot;ProUtilElemtreeReplaceSelection()&quot;, 
+	    		    			err, err != PRO_TK_NO_ERROR);
+<a name="anchor-275"></a>	    }
+		ProReferencearrayFree((ProArray*)&amp;p_references);
+	    TEST_CALL_REPORT(&quot;ProReferencearrayFree()&quot;,
+		&quot;ProUtilElemtreeReplaceSelection()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+<a name="anchor-276"></a>	}
+	else
+	{
+		ProReference p_reference;
+		ProSelection old_sel2, new_sel2;
+<a name="anchor-277"></a>
+		ProElementReferenceGet(p_elems[i].p_element, NULL, &amp;p_reference);
+		TEST_CALL_REPORT(&quot;ProElementReferenceGet()&quot;,
+		&quot;ProUtilElemtreeReplaceSelection()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+<a name="anchor-278"></a>
+		err = ProReferenceToSelection(p_reference, &amp;old_sel2);
+			TEST_CALL_REPORT(&quot;ProReferenceToSelection()&quot;,
+					&quot;ProUtilElemtreeReplaceSelection()&quot;, 
+						err, err != PRO_TK_NO_ERROR);
+<a name="anchor-279"></a>
+		err = user_func(old_sel2, &amp;new_sel2, appdata);
+
+		if (err == PRO_TK_NO_ERROR)
+		{
+<a name="anchor-280"></a>			replace = PRO_B_TRUE;
+			err = ProSelectionToReference(new_sel2, &amp;p_reference);
+				TEST_CALL_REPORT(&quot;ProSelectionToReference()&quot;,
+				&quot;ProUtilElemtreeReplaceSelection()&quot;, 
+					err, err != PRO_TK_NO_ERROR);
+<a name="anchor-281"></a>
+			ProElementReferenceSet(p_elems[i].p_element, p_reference);
+			TEST_CALL_REPORT(&quot;ProElementReferenceSet()&quot;,
+						&quot;ProUtilElemtreeReplaceSelection()&quot;, 
+	    		    			err, err != PRO_TK_NO_ERROR);
+<a name="anchor-282"></a>
+		}
+	}
+    }	
+    err = ProUtilElemtreeElementArrayFree(&amp;p_elems);
+<a name="anchor-283"></a>    return (err);
+}
+
+/*=============================================================*\
+  Function: 	ProUtilElemtreeCreate
+<a name="anchor-284"></a>  Purpose:	Create element tree by the ElemTreeData structure
+  Return :      PRO_TK_NO_ERROR if successfull,
+\*=============================================================*/
+ProError ProUtilElemtreeCreate(
+    ElemTreeData *elemarr,	    /* In : The array of ElemTreeData */
+<a name="anchor-285"></a>    int n_elem,			    /* In : number of ElemTreeData in elemarr */
+    ProElement base_tree,	    /* In : the base tree */
+    ProElement *elem_tree)	    /* Out : element tree */
+{
+    ProElement elem_level[10], elem;
+<a name="anchor-286"></a>    ProValue value;
+    int i, type;
+    ProError err;
+    ProValueDataType data_type;
+    ProSelection sel_1;
+<a name="anchor-287"></a>    ProReference ref_1;
+
+    if (base_tree!=NULL)
+	elem_level[0] = base_tree;
+
+<a name="anchor-288"></a>    for (i=0; i&lt;n_elem; i++)
+    {
+	err = ProElementAlloc((ProElemId)elemarr[i].elem_id, &amp;elem);
+	TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;, 
+		 &quot;ProUtilElemtreeCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-289"></a>	if (err != PRO_TK_NO_ERROR)
+	    return (err);
+	if (elemarr[i].data.type != -1)
+	{
+/*----------------------------------------------------------*\
+<a name="anchor-290"></a>    Add Element value
+\*----------------------------------------------------------*/
+
+	    type = elemarr[i].data.type;
+	    
+<a name="anchor-291"></a>	   switch(type)
+	    {
+	    	case PRO_VALUE_TYPE_INT :
+		{
+			ProElementIntegerSet(elem, elemarr[i].data.v.i);
+<a name="anchor-292"></a>			break;
+		}
+		case PRO_VALUE_TYPE_DOUBLE :
+		{
+			ProElementDoubleSet(elem, elemarr[i].data.v.d);
+<a name="anchor-293"></a>			break;
+		}
+		case PRO_VALUE_TYPE_POINTER :
+		{
+			ProElementSpecialvalueSet(elem, (ProAppData*)elemarr[i].data.v.p);
+<a name="anchor-294"></a>			break;
+		}
+		case PRO_VALUE_TYPE_STRING :
+		{
+			ProElementStringSet(elem, (char*)elemarr[i].data.v.s);
+<a name="anchor-295"></a>			break;
+		}
+		case PRO_VALUE_TYPE_WSTRING :
+		{
+			ProElementWstringSet(elem, (wchar_t*)elemarr[i].data.v.w);
+<a name="anchor-296"></a>			break;
+		}
+		case PRO_VALUE_TYPE_SELECTION :
+		{
+		        ProSelectionToReference(elemarr[i].data.v.r, &amp;ref_1);
+<a name="anchor-297"></a>			ProElementReferenceSet(elem, ref_1);
+			break;
+		}
+		case PRO_VALUE_TYPE_TRANSFORM :
+		{
+<a name="anchor-298"></a>			ProElementTransformSet(elem, (double (*)[4])elemarr[i].data.v.t);
+			break;
+		}
+		case PRO_VALUE_TYPE_BOOLEAN :
+		{
+<a name="anchor-299"></a>			ProElementBooleanSet(elem, elemarr[i].data.v.b);
+			break;
+		}
+	    }
+	}
+<a name="anchor-300"></a>/*----------------------------------------------------------*\
+    Add Element to the tree
+\*----------------------------------------------------------*/
+	if (elemarr[i].level!=0)
+	{
+<a name="anchor-301"></a>	    err = ProElemtreeElementAdd(elem_level[elemarr[i].level-1], NULL, 
+		elem);
+	    TEST_CALL_REPORT(&quot;ProElemtreeElementAdd()&quot;, 
+		 &quot;ProUtilElemtreeCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+	}
+<a name="anchor-302"></a>	elem_level[elemarr[i].level] = elem;
+    }
+    elem_tree[0] = elem_level[0];
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-303"></a>
+/*=============================================================*\
+  Function: 	ProUtilElemtreeElementGet
+  Purpose:	Find Element by array of elempathitems
+\*=============================================================*/
+<a name="anchor-304"></a>ProError ProUtilElemtreeElementGet(
+    ProElement elem_tree,
+    ProElempathItem *elempath_data,
+    int	path_size,
+    ProElement *p_element)
+<a name="anchor-305"></a>{
+    ProElempath path;
+    ProError err, status;
+
+    err = ProElempathAlloc(&amp;path);
+<a name="anchor-306"></a>    TEST_CALL_REPORT(&quot;ProElempathAlloc()&quot;,
+		&quot;ProUtilElemtreeElementGet()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProElempathDataSet(path, elempath_data, path_size);
+    TEST_CALL_REPORT(&quot;ProElempathDataSet()&quot;, 
+<a name="anchor-307"></a>		&quot;ProUtilElemtreeElementGet()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProElemtreeElementGet(elem_tree, path, p_element);
+    TEST_CALL_REPORT(&quot;ProElemtreeElementGet()&quot;, 
+		&quot;ProUtilElemtreeElementGet()&quot;, err, err != PRO_TK_NO_ERROR &amp;&amp;
+<a name="anchor-308"></a>		err != PRO_TK_E_NOT_FOUND);
+   
+    status = ProElempathFree(&amp;path);
+    TEST_CALL_REPORT(&quot;ProElempathFree()&quot;, 
+	    &quot;ProUtilElemtreeElementGet()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-309"></a>
+    return(err);
+}
+
+
+<a name="anchor-310"></a>/*====================================================================*\
+FUNCTION : ProUtilFeatErrsPrint
+PURPOSE  : Prints feature errors
+\*====================================================================*/
+ProError ProUtilFeatErrsPrint(ProErrorlist *errs)
+<a name="anchor-311"></a>{
+    int i;
+
+    for (i=0; i&lt;errs->error_number; i++)
+    {
+<a name="anchor-312"></a>        ProTKPrintf(&quot;Error %d: Error ID %d, Type %d, Error %d\n&quot;,
+                i+1,errs->error_list[i].err_item_id,
+                errs->error_list[i].err_item_type,
+                errs->error_list[i].error);
+    }
+<a name="anchor-313"></a>
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-314"></a>FUNCTION : ProUtilElementValueSet()
+PURPOSE  : Replace an element value by new one
+\*====================================================================*/
+ProError ProUtilElementValueSet(
+    ProElement element,
+<a name="anchor-315"></a>    ProValueData  *value_data)
+{
+	ProError err;
+    ProValue value;
+    
+<a name="anchor-316"></a>    ProError status;
+	ProValueDataType value_type;
+	ProReference ref;
+
+    switch(value_data->type)
+<a name="anchor-317"></a>    {
+        case  PRO_VALUE_TYPE_INT :
+            status = ProElementIntegerSet( element, value_data->v.i);
+            TEST_CALL_REPORT(&quot;ProElementIntegerSet&quot;, &quot;ProUtilElementValueSet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                       
+<a name="anchor-318"></a>            break;
+		case  PRO_VALUE_TYPE_DOUBLE:
+            status = ProElementDoubleSet( element, value_data->v.d);
+            TEST_CALL_REPORT(&quot;ProElementDoubleSet&quot;, &quot;ProUtilElementValueSet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                        
+<a name="anchor-319"></a>            break;
+		case  PRO_VALUE_TYPE_POINTER:
+            status = ProElementSpecialvalueSet( element, value_data->v.p);        
+            TEST_CALL_REPORT(&quot;ProElementSpecialvalueSet&quot;, &quot;ProUtilElementValueSet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+<a name="anchor-320"></a>            break;
+		case  PRO_VALUE_TYPE_STRING:
+            status = ProElementStringSet( element, value_data->v.s);   
+            TEST_CALL_REPORT(&quot;ProElementStringSet&quot;, &quot;ProUtilElementValueSet&quot;, 
+			    status, status != PRO_TK_NO_ERROR );                                         
+<a name="anchor-321"></a>            break;
+		case  PRO_VALUE_TYPE_WSTRING:
+            status = ProElementWstringSet( element, value_data->v.w);   
+            TEST_CALL_REPORT(&quot;ProElementWstringSet&quot;, &quot;ProUtilElementValueSet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                                        
+<a name="anchor-322"></a>            break;
+		case  PRO_VALUE_TYPE_SELECTION: 
+		ProSelectionToReference(value_data->v.r, &amp;ref);
+            status = ProElementReferenceSet( element, ref);
+            TEST_CALL_REPORT(&quot;ProElementReferenceSet&quot;, &quot;ProUtilElementValueSet&quot;,  
+<a name="anchor-323"></a>			    status, status != PRO_TK_NO_ERROR );                                        
+            break;
+		case  PRO_VALUE_TYPE_TRANSFORM:
+            status = ProElementTransformSet( element, (double (*)[4])(value_data->v.t));   
+            TEST_CALL_REPORT(&quot;ProElementTransformSet&quot;, &quot;ProUtilElementValueSet&quot;, 
+<a name="anchor-324"></a>			    status, status != PRO_TK_NO_ERROR );                       
+            break;
+		case  PRO_VALUE_TYPE_BOOLEAN:
+            status = ProElementBooleanSet( element, value_data->v.b);   
+            TEST_CALL_REPORT(&quot;ProElementBooleanSet&quot;, &quot;ProUtilElementValueSet&quot;, 
+<a name="anchor-325"></a>			    status, status != PRO_TK_NO_ERROR );                       
+            break;
+	}
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-326"></a>
+
+ProError ProUtilElementFeatTypeGet(ProFeature *feat, ProElemId *name_id)
+{
+   ProError status;
+<a name="anchor-327"></a>   UtilElemData   elem_data;
+   ProElempathItem feat_elem_path [] =
+       {
+           { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_FEATURE_TYPE}
+       };
+<a name="anchor-328"></a>   status = ProUtilElementFeatDataGet(*feat, feat_elem_path, 1, &amp;elem_data);   
+   if(PRO_TK_NO_ERROR == status)
+       *name_id = elem_data.val.i;
+   return status;
+}
+<a name="anchor-329"></a>
+/*===============================================================*\
+FUNCTION : ProUtilElementFeatDataGet
+PURPOSE  : Fill the element data from the element path of a feature
+\*===============================================================*/
+<a name="anchor-330"></a>ProError ProUtilElementFeatDataGet(ProFeature feature, 
+   ProElempathItem ref_path_items[], int num_path_ele,
+   UtilElemData *elem_data)
+{
+    ProError status,err;
+<a name="anchor-331"></a>    ProElement created_elemtree;
+    ProAsmcomppath          *p_comp_path = NULL;
+
+    status = ProFeatureElemtreeExtract (&amp;feature, p_comp_path, 
+        PRO_FEAT_EXTRACT_NO_OPTS, &amp;created_elemtree);
+<a name="anchor-332"></a>    if(status != PRO_TK_NO_ERROR)
+     return status;
+    status = ProUtilElementTreeDataGet(created_elemtree, ref_path_items, num_path_ele,
+                elem_data);
+    ProElementFree(&amp;created_elemtree);
+<a name="anchor-333"></a>    return status;
+}
+
+/*===============================================================*\
+FUNCTION : ProUtilElementTreeDataGet
+<a name="anchor-334"></a>PURPOSE  : Fill the element data from the element tree
+\*===============================================================*/
+ProError ProUtilElementTreeDataGet(ProElement created_elemtree, 
+   ProElempathItem ref_path_items[], int num_path_ele,
+   UtilElemData *elem_data)
+<a name="anchor-335"></a>{
+    ProError status;
+    ProElement element = NULL;
+    ProElempath path;
+    ProValue p_value;
+<a name="anchor-336"></a>    ProValueDataType value_type = PRO_VALUE_TYPE_INT; 
+    ProElemId  elem_id; 
+
+    status = ProElempathAlloc(&amp;path);
+    status = ProElempathDataSet(path, ref_path_items, num_path_ele);
+<a name="anchor-337"></a>    status = ProElemtreeElementGet (created_elemtree, path, &amp;element);
+    status = ProElementIdGet( element, &amp;elem_id);
+    status = ProElementValuetypeGet ( element, &amp;value_type ); 
+    if(status != PRO_TK_NO_ERROR)   
+     return PRO_TK_NO_ERROR;
+<a name="anchor-338"></a>    status = ProUtilElementValueGet(element, elem_data);
+    status = ProElempathFree (&amp;path);
+    return status;
+}
+
+<a name="anchor-339"></a>
+/*===============================================================*\
+FUNCTION : ProUtilElementValueGet 
+PURPOSE  : Get the element value from the element
+\*===============================================================*/
+<a name="anchor-340"></a>ProError ProUtilElementValueGet(ProElement element, UtilElemData *elem_data)
+{
+    ProError status;
+    ProValueDataType value_type = PRO_VALUE_TYPE_INT; 
+    ProElemId  elem_id; 
+<a name="anchor-341"></a>    ProReference ref;
+
+    status = ProElementIdGet( element, &amp;elem_id);
+    if ( elem_id == PRO_E_FEATURE_TREE || elem_id &lt; 1) 
+        return PRO_TK_NO_ERROR;
+<a name="anchor-342"></a>
+    status = ProElementValuetypeGet ( element, &amp;value_type ); 
+    if(status != PRO_TK_NO_ERROR)   
+        return PRO_TK_NO_ERROR;
+     
+<a name="anchor-343"></a>    if ( ( elem_id == PRO_E_STD_CURVE_COLLECTION_APPL ) || 
+       ( elem_id == PRO_E_STD_SURF_COLLECTION_APPL ) )
+    {
+        elem_data->type = ELEM_VALUE_TYPE_COLLECTION;    
+    }
+<a name="anchor-344"></a>    else
+      elem_data->type = (UtilElemType)value_type;  
+
+    switch(elem_data->type)
+    {
+<a name="anchor-345"></a>        case  ELEM_VALUE_TYPE_INT :
+            status = ProElementIntegerGet( element,
+                ( ProElementIntegerOptions) NULL, &amp;(elem_data->val.i));
+            TEST_CALL_REPORT(&quot;ProElementIntegerGet&quot;, &quot;ProUtilElementValueGet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                       
+<a name="anchor-346"></a>            break;        
+        case  ELEM_VALUE_TYPE_DOUBLE:
+            status = ProElementDoubleGet( element,
+                ( ProElementDoubleOptions) NULL, &amp;(elem_data->val.d));
+            TEST_CALL_REPORT(&quot;ProElementDoubleGet&quot;, &quot;ProUtilElementValueGet&quot;,  
+<a name="anchor-347"></a>			    status, status != PRO_TK_NO_ERROR );                        
+            break;        
+        case  ELEM_VALUE_TYPE_POINTER:
+            status = ProElementSpecialvalueGet( element,
+                ( ProElementSpecialOptions) NULL, &amp;(elem_data->val.p));        
+<a name="anchor-348"></a>            TEST_CALL_REPORT(&quot;ProElementDoubleGet&quot;, &quot;ProUtilElementValueGet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+            break;        
+        case  ELEM_VALUE_TYPE_STRING:
+            status = ProElementStringGet( element,
+<a name="anchor-349"></a>                    ( ProElementStringOptions) NULL, &amp;(elem_data->val.s));   
+            TEST_CALL_REPORT(&quot;ProElementDoubleGet&quot;, &quot;ProUtilElementValueGet&quot;, 
+			    status, status != PRO_TK_NO_ERROR );                                         
+            break;        
+        case  ELEM_VALUE_TYPE_WSTRING:
+<a name="anchor-350"></a>            status = ProElementWstringGet( element,
+               ( ProElementWstringOptions) NULL, &amp;(elem_data->val.w));   
+            TEST_CALL_REPORT(&quot;ProElementWstringGet&quot;, &quot;ProUtilElementValueGet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                                        
+            break;        
+<a name="anchor-351"></a>        case  ELEM_VALUE_TYPE_SELECTION: 
+            status = ProElementReferenceGet( element,
+                (ProElementReferenceOptions) NULL, &amp;ref);
+            TEST_CALL_REPORT(&quot;ProElementReferenceGet&quot;, &quot;ProUtilElementValueGet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+<a name="anchor-352"></a>            status = ProReferenceToSelection(ref, &amp;(elem_data->val.r));                    
+            break;    
+        case  ELEM_VALUE_TYPE_TRANSFORM:
+            status = ProElementTransformGet( element,
+                (ProElementTransformOptions) NULL, (double (*)[4])(elem_data->val.t));   
+<a name="anchor-353"></a>            TEST_CALL_REPORT(&quot;ProElementTransformGet&quot;, &quot;ProUtilElementValueGet&quot;, 
+			    status, status != PRO_TK_NO_ERROR );                       
+            break;        
+        case  ELEM_VALUE_TYPE_BOOLEAN:
+            status = ProElementBooleanGet( element,
+<a name="anchor-354"></a>                (ProElementBooleanOptions) NULL, &amp;(elem_data->val.b));   
+            TEST_CALL_REPORT(&quot;ProElementBooleanGet&quot;, &quot;ProUtilElementValueGet&quot;, 
+			    status, status != PRO_TK_NO_ERROR );                       
+            break;        
+        case  ELEM_VALUE_TYPE_COLLECTION:         
+<a name="anchor-355"></a>             status = ProElementCollectionGet( element,
+                (ProCollectionGetOptions) NULL, &amp;(elem_data->val.collection));  
+            TEST_CALL_REPORT(&quot;ProElementCollectionGet&quot;, &quot;ProUtilElementValueGet&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+            break;        
+<a name="anchor-356"></a>        default:
+             printf(&quot;NOT SUPPORTED FOR OTHER TYPE ..&quot;);
+    }
+    return status;
+}
+<a name="anchor-357"></a>
+/*===============================================================*\
+FUNCTION : ProUtilElemtreeElementAdd 
+PURPOSE  : Add the element in the element tree
+           Incase of integer, double and boolean pass the value,
+<a name="anchor-358"></a>           In other cases, pass the pointer.
+\*===============================================================*/
+ProError ProUtilElemtreeElementAdd( ProElement parent_element, ProElemId child_id_name,
+                                 UtilElemType elem_type, ProAppData app_data)
+{
+<a name="anchor-359"></a>    ProError status = PRO_TK_NO_ERROR;
+    ProReference ref;
+    double *dbl_val;
+    int    *int_val;   /* integer */
+    ProBoolean     *bool_val;	/* boolean */
+<a name="anchor-360"></a>
+    ProElement child_element;    
+    status = ProElementAlloc ( child_id_name, &amp;child_element);
+    switch(elem_type)
+    {
+<a name="anchor-361"></a>        case  ELEM_VALUE_TYPE_INT :
+            int_val = (int *)app_data;
+            status = ProElementIntegerSet( child_element, *int_val);
+            TEST_CALL_REPORT(&quot;ProElementIntegerSet&quot;, &quot;ProUtilElemtreeElementAdd&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                                 
+<a name="anchor-362"></a>            break;        
+        case  ELEM_VALUE_TYPE_DOUBLE:
+            dbl_val = (double *)(app_data);
+            status = ProElementDoubleSet( child_element, *dbl_val);
+            TEST_CALL_REPORT(&quot;ProElementDoubleSet&quot;, &quot;ProUtilElemtreeElementAdd&quot;,  
+<a name="anchor-363"></a>			    status, status != PRO_TK_NO_ERROR );                                  
+            break;        
+        case  ELEM_VALUE_TYPE_POINTER:
+            status = ProElementSpecialvalueSet( child_element, (void *)(app_data));        
+            TEST_CALL_REPORT(&quot;ProElementSpecialvalueSet&quot;, &quot;ProUtilElemtreeElementAdd&quot;, 
+<a name="anchor-364"></a>			    status, status != PRO_TK_NO_ERROR );                                            
+            break;        
+        case  ELEM_VALUE_TYPE_STRING:
+            status = ProElementStringSet( child_element, (char *)(app_data));   
+            TEST_CALL_REPORT(&quot;ProElementStringSet&quot;, &quot;ProUtilElemtreeElementAdd&quot;, 
+<a name="anchor-365"></a>			    status, status != PRO_TK_NO_ERROR );                                             
+            break;        
+        case  ELEM_VALUE_TYPE_WSTRING:
+            status = ProElementWstringSet( child_element, (wchar_t *)(app_data));   
+            TEST_CALL_REPORT(&quot;ProElementWstringSet&quot;, &quot;ProUtilElemtreeElementAdd&quot;, 
+<a name="anchor-366"></a>			    status, status != PRO_TK_NO_ERROR );                                            
+            break;        
+        case  ELEM_VALUE_TYPE_SELECTION: 
+            status = ProSelectionToReference((ProSelection)(app_data), &amp;ref);                
+            status = ProElementReferenceSet( child_element, ref);
+<a name="anchor-367"></a>            TEST_CALL_REPORT(&quot;ProSelectionToReference&quot;, &quot;ProUtilElemtreeElementAdd&quot;, 
+			    status, status != PRO_TK_NO_ERROR );                                                 
+            break;    
+        case  ELEM_VALUE_TYPE_TRANSFORM:
+            status = ProElementTransformSet( child_element, (double (*)[4])((app_data)));   
+<a name="anchor-368"></a>            TEST_CALL_REPORT(&quot;ProElementTransformSet&quot;, &quot;ProUtilElemtreeElementAdd&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                                             
+            break;        
+        case  ELEM_VALUE_TYPE_BOOLEAN:
+            bool_val = (ProBoolean *)(app_data); 
+<a name="anchor-369"></a>            status = ProElementBooleanSet( child_element, *bool_val);   
+            TEST_CALL_REPORT(&quot;ProElementBooleanSet&quot;, &quot;ProUtilElemtreeElementAdd&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                                             
+            break;        
+        case  ELEM_VALUE_TYPE_COLLECTION:         
+<a name="anchor-370"></a>            status = ProElementCollectionSet( child_element, (ProCollection)(app_data));  
+            TEST_CALL_REPORT(&quot;ProElementCollectionSet&quot;, &quot;ProUtilElemtreeElementAdd&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+            break;        
+        default:
+<a name="anchor-371"></a>            status = PRO_TK_GENERAL_ERROR;
+            printf(&quot;NOT SUPPORTED FOR OTHER TYPE ..&quot;);
+            break;
+    }
+    if(PRO_TK_NO_ERROR != status)
+<a name="anchor-372"></a>        return status;     
+    status = ProElemtreeElementAdd ( parent_element, NULL, child_element );
+    return status;
+}
+
+<a name="anchor-373"></a>ProError ProUtilSketchFeatureReset(ProFeature* feat, ProSection *section)
+{
+  
+  ProError status;
+  ProElement elem_tree, elem;
+<a name="anchor-374"></a>  ProElempath elem_path;
+  ProFeatureCreateOptions *opts = 0;
+  ProErrorlist err_list;
+
+  
+<a name="anchor-375"></a>  ProElempathItem sketch_path_item[] = {
+     {PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SECTION},
+     {PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_SKETCHER}
+  };
+  
+<a name="anchor-376"></a>  status = ProFeatureElemtreeExtract (feat, NULL,
+               PRO_FEAT_EXTRACT_NO_OPTS, &amp;elem_tree );
+  
+  status = ProElempathAlloc(&amp;elem_path);
+  
+<a name="anchor-377"></a>  status = ProElempathDataSet(elem_path, sketch_path_item, 2);
+  
+  status = ProElemtreeElementGet(elem_tree, elem_path, &amp;elem);
+  
+  status = ProElementSpecialvalueSet(elem, (ProAppData)*section);
+<a name="anchor-378"></a>  
+  status = ProElemtreeElementAdd(elem_tree, elem_path, elem);
+  status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+    1, (ProArray*)&amp;opts);
+
+<a name="anchor-379"></a>  opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+  status = ProFeatureWithoptionsRedefine(NULL, feat, elem_tree,
+    opts, PRO_REGEN_NO_FLAGS, &amp;err_list);  
+  TEST_CALL_REPORT(&quot;ProFeatureWithoptionsRedefine&quot;, &quot;ProUtilSketchFeatureReset&quot;, 
+<a name="anchor-380"></a>			    status, status != PRO_TK_NO_ERROR );                       
+
+  status = ProArrayFree((ProArray*)&amp;opts);
+  return status;
+
+<a name="anchor-381"></a>}
+
+/*===============================================================*\
+FUNCTION : ProUtilElementValueDataFree 
+PURPOSE  : Get the element value from the element
+<a name="anchor-382"></a>\*===============================================================*/
+ProError ProUtilElementValueDataFree(UtilElemData *elem_data)
+  {
+     ProError status = PRO_TK_NO_ERROR;
+     switch(elem_data->type)
+<a name="anchor-383"></a>     {
+         case  ELEM_VALUE_TYPE_STRING:
+            status = ProStringFree( elem_data->val.s);   
+            TEST_CALL_REPORT(&quot;ProStringFree&quot;, &quot;ProUtilElementValueDataFree&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+<a name="anchor-384"></a>            break;
+         case  ELEM_VALUE_TYPE_WSTRING:
+             ProWstringFree (elem_data->val.w);   
+             TEST_CALL_REPORT(&quot;ProWstringFree&quot;, &quot;ProUtilElementValueDataFree&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                      
+<a name="anchor-385"></a>            break;
+         case  ELEM_VALUE_TYPE_SELECTION:
+             status = ProSelectionFree (&amp;(elem_data->val.r));   
+             TEST_CALL_REPORT(&quot;ProSelectionFree&quot;, &quot;ProUtilElementValueDataFree&quot;, 
+			    status, status != PRO_TK_NO_ERROR );                                   
+<a name="anchor-386"></a>            break;
+         case  ELEM_VALUE_TYPE_COLLECTION:         
+             status = ProCollectionFree ( &amp;(elem_data->val.collection));   
+             TEST_CALL_REPORT(&quot;ProCollectionFree&quot;, &quot;ProUtilElementValueDataFree&quot;,  
+			    status, status != PRO_TK_NO_ERROR );                                  
+<a name="anchor-387"></a>             break;
+         default:
+             ProTKPrintf(&quot;Not Applicable&quot;);
+             /* Not applicable for  other types */
+     }
+<a name="anchor-388"></a>     return status;
+  }
+</pre>
+</body>
+</html>

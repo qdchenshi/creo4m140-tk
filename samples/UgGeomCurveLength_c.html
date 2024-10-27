@@ -1,0 +1,162 @@
+<html>
+<head>
+<title>UgGeomCurveLength.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProCollect.h>
+#include &lt;ProParameter.h>
+<a name="anchor-2"></a>#include &lt;ProParamval.h>
+#include &lt;ProGeomitem.h>
+
+/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+<a name="anchor-3"></a>#include &lt;ProCrvcollection.h>
+/*---------------------- Function Prototypes -------------------------*/
+ProError UserCurveLength();
+ProError UserCrvcollectionFilter (ProSelection   cur_sel,
+				  ProAppData   app_data);
+<a name="anchor-4"></a>
+/*---------------------- Static variables -------------------------*/
+
+static int crv_entry_count; 
+
+<a name="anchor-5"></a>/*============================================================================*\
+	Function: UserCurveLength()
+	Purpose: Compute Area of the Surface Collection
+\*============================================================================*/
+ProError UserCurveLength()
+<a name="anchor-6"></a>{
+  int sel_count;
+  ProError status;
+  ProCharName name;
+  ProModelitem model_item;
+<a name="anchor-7"></a>  ProFileName msgfile;
+  ProName w_name;
+  ProCollection collection; 
+  ProSelection * regen_sels; 
+  int n_regen_sels; 
+<a name="anchor-8"></a>  double total_length = 0; 
+
+  ProSelection * coll_sels; 
+  int coll_sels_size; 
+  ProCollectioninstrType coll_flags[6] = { 
+<a name="anchor-9"></a>    PRO_CURVCOLL_ONE_BY_ONE, 
+    PRO_CURVCOLL_TAN_CHAIN,
+    PRO_CURVCOLL_CURVE_CHAIN,
+    PRO_CURVCOLL_BNDRY_CHAIN,
+    PRO_CURVCOLL_SURF_CHAIN,
+<a name="anchor-10"></a>    PRO_CURVCOLL_LOG_EDGE }; 
+    
+  crv_entry_count++; 
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-11"></a>	Prompt user for Curve Collection
+\*----------------------------------------------------------------------------*/
+  ProStringToWstring(msgfile,&quot;msg_uggeom.txt&quot;);
+
+  status = ProMessageDisplay(msgfile,&quot;USER Collect Curves to find total length:&quot;);
+<a name="anchor-12"></a>  ERROR_CHECK(&quot;UserCurveLength&quot;,&quot;ProMessageDisplay&quot;,status);
+
+  status = ProCrvcollectionAlloc ( &amp;collection );
+  ERROR_CHECK( &quot;UserCurveLength&quot;, &quot;ProCrvcollectionAlloc&quot;, status );
+
+<a name="anchor-13"></a>/*----------------------------------------------------------------------------*\
+	Interactive Curve Collection
+\*----------------------------------------------------------------------------*/ 
+  status = ProCurvesCollect ( (ProChaincollUIControl *)coll_flags, 
+			      6, 
+<a name="anchor-14"></a>			      ( ProCrvcollFilter ) UserCrvcollectionFilter, 
+			      ( ProAppData ) NULL, 
+			      &amp;collection, 
+			      &amp;coll_sels, 
+			      &amp;coll_sels_size ); 
+<a name="anchor-15"></a> 
+  ERROR_CHECK( &quot;UserCurveLength&quot;, &quot;ProCurvesCollect&quot;, status );
+
+/*----------------------------------------------------------------------------*\
+       Regenerating the returned collection to get the list of 
+<a name="anchor-16"></a>       constituent curves
+\*----------------------------------------------------------------------------*/  
+  status = ProCrvcollectionRegenerate ( collection, 
+					&amp;regen_sels, &amp;n_regen_sels ); 
+  ERROR_CHECK( &quot;UserCurveLength&quot;, &quot;ProCrvcollectionRegenerate&quot;, status );
+<a name="anchor-17"></a>
+  if ( ( status != PRO_TK_NO_ERROR ) || ( n_regen_sels &lt;= 0 ) )
+    return PRO_TK_GENERAL_ERROR; 
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-18"></a>       Evaluating the overall length from edge collection
+\*----------------------------------------------------------------------------*/ 
+  for ( sel_count = 0; sel_count &lt; n_regen_sels; sel_count++ )
+    {
+      ProEdge edge; 
+<a name="anchor-19"></a>      double length; 
+
+      status = ProSelectionModelitemGet ( regen_sels[sel_count], 
+					  &amp;model_item ); 
+      ERROR_CHECK( &quot;UserCurveLength&quot;, &quot;ProSelectionModelitemGet&quot;, status );
+<a name="anchor-20"></a>
+      status = ProGeomitemToEdge ( &amp;model_item, &amp;edge ); 
+      ERROR_CHECK( &quot;UserCurveLength&quot;, &quot;ProGeomitemToEdge&quot;, status );
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-21"></a>       Evaluating the length of individual curve
+\*----------------------------------------------------------------------------*/ 
+      status = ProEdgeLengthEval ( edge, &amp;length ); 
+      ERROR_CHECK( &quot;UserCurveLength&quot;, &quot;ProSurfaceAreaEval&quot;, status );
+
+<a name="anchor-22"></a>      total_length = total_length + length; 
+
+    }
+
+  status = ProMessageDisplay(msgfile,&quot;USER Total Curve Length is %0f&quot;,
+<a name="anchor-23"></a>			     &amp;total_length);
+  ERROR_CHECK( &quot;UserCurveLength&quot;, &quot;ProMessageDisplay&quot;, status );
+
+/*----------------------------------------------------------------------------*\
+       Freeing Memory
+<a name="anchor-24"></a>\*----------------------------------------------------------------------------*/ 
+
+  status = ProCollectionFree ( &amp;collection ); 
+  ERROR_CHECK( &quot;UserCurveLength&quot;, &quot;ProCollectionFree&quot;, status );
+
+<a name="anchor-25"></a>  status = ProSelectionarrayFree ( regen_sels ); 
+  ERROR_CHECK( &quot;UserCurveLength&quot;, &quot;ProSelectionarrayFree&quot;, status );
+
+  status = ProSelectionarrayFree ( coll_sels ); 
+  ERROR_CHECK( &quot;UserCurveLength&quot;, &quot;ProSelectionarrayFree&quot;, status ); 
+<a name="anchor-26"></a>
+  ProMessageClear();
+  return(status);
+}
+
+<a name="anchor-27"></a>/*============================================================================*\
+	Function: UserCrvcollectionFilter()
+	Purpose: Filter function for curve collection. 
+	         Filters only PRO_EDGE type of selections
+\*============================================================================*/
+<a name="anchor-28"></a>ProError UserCrvcollectionFilter (ProSelection   cur_sel,
+				  ProAppData   app_data)
+{
+  ProError status; 
+  ProModelitem model_item; 
+<a name="anchor-29"></a>  
+  status = ProSelectionModelitemGet ( cur_sel, &amp;model_item ); 
+  ERROR_CHECK( &quot;UserCrvcollectionFilter&quot;, &quot;ProSelectionModelitemGet&quot;, status );
+
+  if ( model_item.type == PRO_EDGE ) 
+<a name="anchor-30"></a>    return PRO_TK_NO_ERROR;
+  else
+    return PRO_TK_GENERAL_ERROR; 
+}
+</pre>
+</body>
+</html>

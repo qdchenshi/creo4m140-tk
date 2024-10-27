@@ -1,0 +1,94 @@
+<html>
+<head>
+<title>UgDtlgroupExamples.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProDtlgroup.h>
+
+/*====================================================================*\ 
+FUNCTION : UsrGroupCreate() 
+<a name="anchor-2"></a>PURPOSE  : Command to create a new group with selected items 
+\*====================================================================*/ 
+int UsrGroupCreate()
+ {
+     ProError status;
+<a name="anchor-3"></a>     ProSelection *sel;
+     int n_sel, s;
+     ProModelitem *items;
+     ProDrawing drawing;
+     ProName name;
+<a name="anchor-4"></a>     ProDtlgroupdata gdata;
+     ProDtlgroup group;
+     ProFileName msgfil;
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-5"></a>    Select notes, draft entities, symbol instances 
+\*--------------------------------------------------------------------*/     
+     ProStringToWstring (msgfil, &quot;msg_ugdrawing.txt&quot;);
+
+     ProMessageDisplay(msgfil,&quot;USER Select the items to belong to the group&quot;);
+<a name="anchor-6"></a>     status = ProSelect(&quot;any_note,draft_ent,dtl_symbol&quot;,-1,
+                 NULL,NULL,NULL,NULL,&amp;sel,&amp;n_sel);
+
+     if(status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+         return(0);
+<a name="anchor-7"></a>
+/*--------------------------------------------------------------------*\ 
+    Allocate and fill a ProArray with the detail item handles 
+\*--------------------------------------------------------------------*/     
+     ProArrayAlloc(n_sel, sizeof(ProModelitem), 1, (ProArray*)&amp;items);
+<a name="anchor-8"></a>     for(s=0;s&lt;n_sel;s++)
+       {
+         status = ProSelectionModelitemGet(sel[s], &amp;items[s]);
+	 ProTKPrintf (&quot;  **** SEL MDLITEM GET: %d *****\n&quot;, status);
+	 ProTKPrintf (&quot;  %%%% MDLITEM %d TYPE: %d %%%%%\n&quot;, items[s].id, items[s].type);
+<a name="anchor-9"></a>       }
+/*--------------------------------------------------------------------*\ 
+    Get the current drawing 
+\*--------------------------------------------------------------------*/     
+     ProMdlCurrentGet((ProMdl*)&amp;drawing);
+<a name="anchor-10"></a>
+/*--------------------------------------------------------------------*\ 
+    Prompt for the group name 
+\*--------------------------------------------------------------------*/     
+     ProMessageDisplay(msgfil,&quot;USER Enter group name&quot;);
+<a name="anchor-11"></a>
+     if(ProMessageStringRead(PRO_NAME_SIZE, name) != PRO_TK_NO_ERROR)
+         return(0);
+
+     ProTKPrintf (&quot;About to create\n&quot;);
+<a name="anchor-12"></a>
+/*--------------------------------------------------------------------*\ 
+    Allocate group data 
+\*--------------------------------------------------------------------*/     
+     status = ProDtlgroupdataAlloc(drawing, name, &amp;gdata);
+<a name="anchor-13"></a>     ProTKPrintf (&quot;  **** DTLGROUP DATA ALLOC: %d *****\n&quot;, status);
+
+/*--------------------------------------------------------------------*\ 
+    Set the group items 
+\*--------------------------------------------------------------------*/     
+<a name="anchor-14"></a>     status = ProDtlgroupdataItemsSet(gdata, items);
+     ProTKPrintf (&quot;  **** DTLGROUP DATA SET: %d *****\n&quot;, status);
+
+/*--------------------------------------------------------------------*\ 
+    Create the group 
+<a name="anchor-15"></a>\*--------------------------------------------------------------------*/     
+     status = ProDtlgroupCreate(drawing, gdata, &amp;group);
+     ProTKPrintf (&quot;  **** DTLGROUP CREATE: %d *****\n&quot;, status);
+     
+
+<a name="anchor-16"></a>/*--------------------------------------------------------------------*\ 
+    Free the data 
+\*--------------------------------------------------------------------*/     
+     ProDtlgroupdataFree(gdata);
+     ProArrayFree((ProArray*)&amp;items); 
+<a name="anchor-17"></a>}
+</pre>
+</body>
+</html>

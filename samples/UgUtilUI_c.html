@@ -1,0 +1,157 @@
+<html>
+<head>
+<title>UgUtilUI.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProUI.h>
+#include &lt;ProUIPushbutton.h>
+#include &lt;ProUIDialog.h>
+#include &lt;ProUIInputpanel.h>
+<a name="anchor-2"></a>#include &lt;UtilString.h>
+#include &lt;ProUILabel.h>
+#define UGUIPROMPT &quot;ugutiluiprompt&quot;
+
+/*====================================================================*\
+<a name="anchor-3"></a>STRUCTURE: UserUtilUIPromptData
+PURPOSE:   Pass relevant data to UI callback functions
+\*====================================================================*/
+typedef struct 
+{
+<a name="anchor-4"></a>	wchar_t** input;
+	int limit;
+} UserUtilUIPromptData;
+
+/*====================================================================*\
+<a name="anchor-5"></a>FUNCTION: UserPromptUIOKAction
+PURPOSE:  Action function for OK button press
+\*====================================================================*/
+static int UserPromptUIOKAction (char* dialog, char* component, 
+									ProAppData data)
+<a name="anchor-6"></a>{
+	UserUtilUIPromptData* prompt_data = (UserUtilUIPromptData*)data;
+	wchar_t** input = prompt_data->input;
+
+	ProUIInputpanelValueGet (UGUIPROMPT, &quot;PromptNamePanel&quot;, input);
+<a name="anchor-7"></a>
+	ProUIDialogExit (UGUIPROMPT, PRO_TK_NO_ERROR);
+
+	return PRO_TK_NO_ERROR;
+}
+<a name="anchor-8"></a>
+/*====================================================================*\
+FUNCTION: UserPromptUICancelAction
+PURPOSE:  Action function for Cancel button press
+\*====================================================================*/
+<a name="anchor-9"></a>static int UserPromptUICancelAction (char* dialog, char* component, 
+										ProAppData data)
+{	
+	ProUIDialogExit (UGUIPROMPT, PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-10"></a>	return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION: UserPromptUIInputAction
+<a name="anchor-11"></a>PURPOSE:  Action function for input of text in the prompt inputpanel -
+			activates the OK button if there is some content
+\*====================================================================*/
+static int UserPromptUIInputAction (char* dialog, char* component, 
+										ProAppData data)
+<a name="anchor-12"></a>{	
+	wchar_t* value = NULL;
+	UserUtilUIPromptData* prompt_data = (UserUtilUIPromptData*)data;
+	int limit_chars = prompt_data->limit;
+
+<a name="anchor-13"></a>	ProUIInputpanelValueGet (UGUIPROMPT, &quot;PromptNamePanel&quot;, &amp;value);
+	
+	if (value != NULL &amp;&amp; ProUtilWstrLen (value) > 0)
+	{
+		ProUIPushbuttonEnable (UGUIPROMPT, &quot;OK&quot;);
+<a name="anchor-14"></a>
+/*--------------------------------------------------------------------*\
+		Prevent users from entering too many characters
+\*--------------------------------------------------------------------*/
+		if (limit_chars != PRO_VALUE_UNUSED &amp;&amp; 
+<a name="anchor-15"></a>				ProUtilWstrLen (value) > limit_chars)
+		{
+			wchar_t* truncated_value = 
+				(wchar_t*)calloc (limit_chars + 1, sizeof (wchar_t));
+			memcpy (truncated_value, value, limit_chars * sizeof (wchar_t));
+<a name="anchor-16"></a>			ProUIInputpanelValueSet (UGUIPROMPT, &quot;PromptNamePanel&quot;, 
+										truncated_value);
+			free (truncated_value);	
+		}
+	}
+<a name="anchor-17"></a>	else
+		ProUIPushbuttonDisable (UGUIPROMPT, &quot;OK&quot;);
+
+	ProWstringFree (value);
+
+<a name="anchor-18"></a>	return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION: UserPromptUI
+<a name="anchor-19"></a>PURPOSE:  Prompts user to enter a string
+\*====================================================================*/
+int UserPromptUI (char* new_title, char* new_label, int max_length, 
+					wchar_t** input)
+{
+<a name="anchor-20"></a>	int exit_status;
+	UserUtilUIPromptData data;
+	data.input = input;
+	data.limit = max_length;
+
+<a name="anchor-21"></a>	ProUIDialogCreate (UGUIPROMPT, UGUIPROMPT);
+
+/*--------------------------------------------------------------------*\
+	Set up dialog title and prompt
+\*--------------------------------------------------------------------*/
+<a name="anchor-22"></a>	if (new_title != NULL)
+	{
+		ProPath new_title_line;
+		ProStringToWstring (new_title_line, new_title);
+
+<a name="anchor-23"></a>		ProUIDialogTitleSet (UGUIPROMPT, new_title_line);
+	}
+
+	if (new_label != NULL)
+	{
+<a name="anchor-24"></a>		ProPath new_label_line;
+		ProStringToWstring (new_label_line, new_label);
+
+		ProUILabelTextSet (UGUIPROMPT, &quot;PromptNameLabel&quot;, 
+							new_label_line);
+<a name="anchor-25"></a>	}
+
+	ProUIPushbuttonDisable (UGUIPROMPT, &quot;OK&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-26"></a>	Set up the component action functions
+\*--------------------------------------------------------------------*/
+	ProUIPushbuttonActivateActionSet (UGUIPROMPT, &quot;OK&quot;, 
+										(ProUIAction)UserPromptUIOKAction,
+										(ProAppData)&amp;data);
+<a name="anchor-27"></a>	ProUIPushbuttonActivateActionSet (UGUIPROMPT, &quot;Cancel&quot;, 
+										(ProUIAction)UserPromptUICancelAction,
+										NULL);
+
+	ProUIInputpanelInputActionSet (UGUIPROMPT, &quot;PromptNamePanel&quot;, 
+<a name="anchor-28"></a>										(ProUIAction)UserPromptUIInputAction,
+										(ProAppData)&amp;data);
+
+	ProUIDialogActivate (UGUIPROMPT, &amp;exit_status);
+
+<a name="anchor-29"></a>	ProUIDialogDestroy (UGUIPROMPT);
+
+	return exit_status;
+}
+</pre>
+</body>
+</html>

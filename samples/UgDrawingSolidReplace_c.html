@@ -1,0 +1,85 @@
+<html>
+<head>
+<title>UgDrawingSolidReplace.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProFaminstance.h>
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-2"></a>
+/*==================================================================*\
+FUNCTION: UserDrawingSolidReplace()
+PURPOSE:  Replaces all instance solid models in a drawing with their
+           generic.  Similar to the Pro/ENGINEER behavior,  the function 
+<a name="anchor-3"></a>	   will not replace models if the target generic model is already 
+	   present in the drawing.
+\*==================================================================*/
+int UsrDrawingSolidReplace()
+{
+<a name="anchor-4"></a>  ProError      err;
+  ProDrawing    drawing;
+  ProMdlType    mdl_type;
+  ProSolid*     solid_array;
+  int           array_size, i;
+<a name="anchor-5"></a>  ProSolid      generic;
+  
+/*------------------------------------------------------------------*\
+  Use the current model to create the drawing.
+\*------------------------------------------------------------------*/
+<a name="anchor-6"></a>  err = ProMdlCurrentGet ((ProMdl*)&amp;drawing); 
+  if (err != PRO_TK_NO_ERROR)
+      return (err);
+  err = ProMdlTypeGet ((ProMdl)drawing, &amp;mdl_type);
+  if (err != PRO_TK_NO_ERROR || 
+<a name="anchor-7"></a>      (mdl_type != PRO_MDL_DRAWING))
+       return PRO_TK_INVALID_TYPE;
+
+/*------------------------------------------------------------------*\
+  Visit the drawing models.
+<a name="anchor-8"></a>\*------------------------------------------------------------------*/
+  err = ProDrawingSolidsCollect (drawing, &amp;solid_array);
+  if (err != PRO_TK_NO_ERROR)
+    return (err);
+
+<a name="anchor-9"></a>  ProArraySizeGet (solid_array, &amp;array_size);
+
+/*------------------------------------------------------------------*\
+  Loop on all of the drawing models.
+\*------------------------------------------------------------------*/  
+<a name="anchor-10"></a>  for (i = 0; i &lt; array_size; i++)
+    {
+/*------------------------------------------------------------------*\
+      If the generic is not an instance, continue.
+\*------------------------------------------------------------------*/ 
+<a name="anchor-11"></a>      err = ProFaminstanceGenericGet ((ProMdl)solid_array[i], 
+				      PRO_B_TRUE, 
+				      (ProMdl*)&amp;generic);
+  
+      if (err != PRO_TK_NO_ERROR)
+<a name="anchor-12"></a>	continue;
+
+/*------------------------------------------------------------------*\
+      Replace all instances with their (top-level) generic.
+\*------------------------------------------------------------------*/
+<a name="anchor-13"></a>      err = ProDrawingSolidReplace (drawing, solid_array[i], generic, 
+			      PRO_B_TRUE); 
+      if (err == PRO_TK_E_FOUND)
+	{
+	  ProTKPrintf (&quot;Model was not replaced because&quot;);
+<a name="anchor-14"></a>	  ProTKPrintf (&quot; the target model is already in the drawing.\n&quot;);
+	}
+    }
+  
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-15"></a>}
+
+</pre>
+</body>
+</html>

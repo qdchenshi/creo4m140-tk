@@ -1,0 +1,2321 @@
+<html>
+<head>
+<title>PTUDFExUDFPlacementDashboard.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProObjects.h>
+#include &lt;ProUIDashboard.h>
+#include &lt;ProUIPushbutton.h>
+<a name="anchor-2"></a>#include &lt;ProUILayout.h>
+#include &lt;ProUITab.h>
+#include &lt;ProUIList.h>
+#include &lt;ProUIOptionmenu.h>
+#include &lt;ProUITable.h>
+<a name="anchor-3"></a>#include &lt;ProUITree.h>
+#include &lt;ProUtil.h>
+#include &lt;ProMdl.h>
+#include &lt;ProParamval.h>
+
+<a name="anchor-4"></a>#include &lt;PTUDFExamples.h>
+#include &lt;PTUDFExDashboardStructs.h>
+#include &lt;ProTKRunTime.h>
+
+#define PTUDFEX_DB_MAIN_PAGE_NAME &quot;PTUDFExDBMainPage&quot;
+<a name="anchor-5"></a>#define PTUDFEX_DB_INSTANCE_PAGE_NAME &quot;PTUDFExDBInstancePage&quot;
+#define PTUDFEX_DB_SELECTOR_PAGE_NAME &quot;PTUDFExDBSelectorPage&quot;
+#define PTUDFEX_DB_PARAM_PAGE_NAME &quot;PTUDFExDBParamPage&quot;
+#define PTUDFEX_DB_DIM_PAGE_NAME &quot;PTUDFExDBDimPage&quot;
+#define PTUDFEX_DB_PROPERTY_PAGE_NAME &quot;PTUDFExDBPropertyPage&quot;
+<a name="anchor-6"></a>
+#define PT_UDF_EX_TREE_ROOT_NODE &quot;RootNode&quot;
+#define PT_UDF_EX_SELECTED_NODE_TYPE &quot;Selected&quot;
+#define PT_UDF_EX_UNSELECTED_NODE_TYPE &quot;Unselected&quot;
+
+<a name="anchor-7"></a>
+#define PTUDFEX_OK_PUSHBTN &quot;udf_ok_btn&quot;
+#define PTUDFEX_REPEAT_PUSHBTN &quot;udf_repeat_btn&quot;
+
+typedef struct
+<a name="anchor-8"></a>{
+	ProUIDashboardPage page;
+	char* device_name;
+	ProUIDashboardPage main_page; /* The main page handle */
+	char* main_device_name;  /* The device name for the main page / Pro/E window */
+<a name="anchor-9"></a>	PTUDFExUdfdata* db_udf_data;
+} PTUDFExtUdfDBPageData;
+
+typedef enum
+{
+<a name="anchor-10"></a>	PTUDFEX_UI_LAYOUT,
+	PTUDFEX_UI_TAB,
+	PTUDFEX_UI_PUSHBUTTON,
+	PTUDFEX_UI_LIST,
+	PTUDFEX_UI_LABEL
+<a name="anchor-11"></a>} PTUDFExUIType;
+
+static wchar_t** s_mru_udf_files = NULL;
+static wchar_t** s_mru_udf_filepaths = NULL;
+static int s_num_mru_udfs = 0;
+<a name="anchor-12"></a>
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExMRUMenuUpdate
+PURPOSE:  Update contents of the UDF dashboard MRU list.
+<a name="anchor-13"></a>RETURNS:  Index of the menu item to select.
+\*======================================================================================================*/
+static int PTUDFExMRUMenuUpdate (char* device_name, 
+									  char* menu_name,
+									  wchar_t* file_name, /* If NULL, we are updating the list without selecting any new items */
+<a name="anchor-14"></a>									  wchar_t* file_path)
+{
+	char** names;	
+	int i, result = -1;
+	wchar_t** tmp_files;
+<a name="anchor-15"></a>	wchar_t** tmp_filepaths;
+	int file_name_len;
+	int file_path_len;
+
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-16"></a>	Add the input item to the list. 
+\*------------------------------------------------------------------------------------------------------*/
+	if (file_name != NULL || file_path != NULL)
+	{
+		for (i = 0; i &lt; s_num_mru_udfs; i ++)
+<a name="anchor-17"></a>		{
+			ProWstringCompare (s_mru_udf_files [i], file_name, PRO_VALUE_UNUSED, &amp;result);
+			if (result == 0)
+				break;
+		}
+<a name="anchor-18"></a>/*------------------------------------------------------------------------------------------------------*\
+	Item is already in the list.
+\*------------------------------------------------------------------------------------------------------*/
+		if (result == 0)
+			return (i);
+<a name="anchor-19"></a>
+		tmp_files = (wchar_t**) calloc (s_num_mru_udfs + 1, sizeof (wchar_t*));
+		tmp_filepaths = (wchar_t**) calloc (s_num_mru_udfs + 1, sizeof (wchar_t*));
+
+		for (i = 0; i &lt; s_num_mru_udfs; i ++)
+<a name="anchor-20"></a>		{
+			tmp_files[i] = s_mru_udf_files [i];
+			tmp_filepaths [i] = s_mru_udf_filepaths [i];
+		}
+		ProWstringLengthGet (file_name, &amp;file_name_len);
+<a name="anchor-21"></a>		ProWstringLengthGet (file_path, &amp;file_path_len);
+		tmp_files [s_num_mru_udfs] = (wchar_t*) calloc (file_name_len + 1, sizeof (wchar_t));
+		tmp_filepaths [s_num_mru_udfs] = (wchar_t*) calloc (file_path_len + 1, sizeof (wchar_t));
+		ProWstringCopy (file_name, tmp_files [s_num_mru_udfs], PRO_VALUE_UNUSED);
+		ProWstringCopy (file_path, tmp_filepaths [s_num_mru_udfs], PRO_VALUE_UNUSED);
+<a name="anchor-22"></a>
+		if (s_num_mru_udfs != 0)
+		{
+			free (s_mru_udf_files);
+			free (s_mru_udf_filepaths);
+<a name="anchor-23"></a>		}
+		s_mru_udf_files = tmp_files;
+		s_mru_udf_filepaths = tmp_filepaths;
+		s_num_mru_udfs ++;
+	}
+<a name="anchor-24"></a>
+	if (s_num_mru_udfs == 0)
+		return (-1);
+
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-25"></a>	Update the optionmenu properties with the items.
+\*------------------------------------------------------------------------------------------------------*/
+	names = (char**) calloc (s_num_mru_udfs, sizeof (char*));
+
+	for (i = 0; i &lt; s_num_mru_udfs; i ++)
+<a name="anchor-26"></a>	{
+		names[i] = (char*) calloc (2, sizeof (char));
+		ProTKSprintf (names [i], &quot;%d&quot;, i);
+	}
+
+<a name="anchor-27"></a>	status = ProUIOptionmenuNamesSet (device_name, menu_name, s_num_mru_udfs, names);
+	PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuNamesSet()&quot;);
+
+	status = ProUIOptionmenuLabelsSet (device_name, menu_name, s_num_mru_udfs, s_mru_udf_files);
+	PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuLabelsSet()&quot;);
+<a name="anchor-28"></a>
+	status = ProUIOptionmenuItemhelptextSet (device_name, menu_name, s_num_mru_udfs, s_mru_udf_filepaths);
+	PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuItemhelptextSet()&quot;);
+
+	status = ProUIOptionmenuEnable (device_name, menu_name);
+<a name="anchor-29"></a>	PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuEnable()&quot;);
+
+	for (i = 0; i &lt; s_num_mru_udfs; i ++)
+	{
+		free (names[i]); 
+<a name="anchor-30"></a>	}
+	free (names);
+	
+	return (s_num_mru_udfs - 1);
+}
+<a name="anchor-31"></a>
+/*======================================================================================================*\
+FUNCTION: PTUDFExGetOwnerString
+PURPOSE:  Get the string label for a variable parameter.
+\*======================================================================================================*/
+<a name="anchor-32"></a>static ProError PTUDFExGetOwnerString (int id, ProType type, ProLine label)
+{
+	wchar_t* type_label = L&quot;&quot;;
+	char c_id_buf [20];
+	wchar_t id_buf [20];
+<a name="anchor-33"></a>	switch (type)
+	{
+	case PRO_ANNOTATION_ELEM:
+		type_label = L&quot;Annotation Element&quot;;
+		break;
+<a name="anchor-34"></a>	case PRO_FEATURE:
+		type_label = L&quot;Feature&quot;;
+		break;
+	}
+	
+<a name="anchor-35"></a>	ProTKSprintf (c_id_buf, &quot; id %d&quot;, id);
+	ProStringToWstring (id_buf, c_id_buf);
+
+	ProWstringCopy (type_label, label, PRO_VALUE_UNUSED);
+	ProWstringConcatenate (id_buf, label, PRO_VALUE_UNUSED);
+<a name="anchor-36"></a>
+	return (PRO_TK_NO_ERROR);
+}
+
+
+<a name="anchor-37"></a>/*======================================================================================================*\
+FUNCTION: PTUDFExPromptLabelUpdate
+PURPOSE:  Update sensitivity of item from dashboard page.
+\*======================================================================================================*/
+static ProError PTUDFExPromptLabelUpdate (ProUIDashboardPage page, char* device_name,
+<a name="anchor-38"></a>												char* page_c_name, wchar_t* prompt)
+{
+	char* component_name;
+	
+	status = ProUIDashboardpageComponentnameGet (page, page_c_name, &amp;component_name);
+<a name="anchor-39"></a>	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+	if (status != PRO_TK_NO_ERROR)
+		return (PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-40"></a>	ProUILabelTextSet (device_name, component_name, prompt);
+
+	return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-41"></a>
+/*======================================================================================================*\
+FUNCTION: PTUDFExSetPageComponentSensitivity
+PURPOSE:  Update sensitivity of item from dashboard page.
+\*======================================================================================================*/
+<a name="anchor-42"></a>static ProError PTUDFExSetPageComponentSensitivity (ProUIDashboardPage page, char* device_name,
+												char* page_c_name, ProBoolean sensitivity,
+												PTUDFExUIType type)
+{
+	char* component_name;
+<a name="anchor-43"></a>	
+	status = ProUIDashboardpageComponentnameGet (page, page_c_name, &amp;component_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+	if (status != PRO_TK_NO_ERROR)
+<a name="anchor-44"></a>		return (PRO_TK_E_NOT_FOUND);
+
+	switch (type)
+	{
+	case PTUDFEX_UI_LAYOUT:
+<a name="anchor-45"></a>		if (sensitivity)
+			ProUILayoutEnable (device_name, component_name);
+		else
+			ProUILayoutDisable (device_name, component_name);
+		break;
+<a name="anchor-46"></a>	case PTUDFEX_UI_TAB:
+		if (sensitivity)
+			ProUITabEnable (device_name, component_name);
+		else
+			ProUITabDisable (device_name, component_name);
+<a name="anchor-47"></a>		break;
+	case PTUDFEX_UI_PUSHBUTTON:
+		if (sensitivity)
+			ProUIPushbuttonEnable (device_name, component_name);
+		else
+<a name="anchor-48"></a>			ProUIPushbuttonDisable (device_name, component_name);
+		break;
+	case PTUDFEX_UI_LIST:
+		if (sensitivity)
+			ProUIListEnable (device_name, component_name);
+<a name="anchor-49"></a>		else
+			ProUIListDisable (device_name, component_name);
+		break;
+	case PTUDFEX_UI_LABEL:
+		if (sensitivity)
+<a name="anchor-50"></a>			ProUILabelEnable (device_name, component_name);
+		else
+			ProUILabelDisable (device_name, component_name);
+		break;
+	}
+<a name="anchor-51"></a>
+	ProStringFree (component_name);
+
+	return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-52"></a>
+/*======================================================================================================*\
+FUNCTION: PTUDFExOKBtnUpdate
+PURPOSE:  Update display of the OK button based on current UDF data.
+\*======================================================================================================*/
+<a name="anchor-53"></a>static ProError PTUDFExOKBtnUpdate (PTUDFExtUdfDBPageData* data)
+{
+	int i;
+	ProBoolean all_refs_ok = PRO_B_TRUE;
+
+<a name="anchor-54"></a>	for (i = 0; i &lt; data->db_udf_data->num_references; i++)
+	{
+		if (data->db_udf_data->reference_array [i].sel_ref == NULL)
+		{
+			all_refs_ok = PRO_B_FALSE;
+<a name="anchor-55"></a>			break;
+		}
+	}
+
+	PTUDFExSetPageComponentSensitivity (data->main_page, data->main_device_name, PTUDFEX_OK_PUSHBTN, all_refs_ok, PTUDFEX_UI_PUSHBUTTON);
+<a name="anchor-56"></a>	PTUDFExSetPageComponentSensitivity (data->main_page, data->main_device_name, PTUDFEX_REPEAT_PUSHBTN, all_refs_ok, PTUDFEX_UI_PUSHBUTTON);
+
+	return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-57"></a>/*======================================================================================================*\
+FUNCTION: PTUDFExUpdateReferencesUI
+PURPOSE:  Update display related to references needed by the current selected UDF.
+\*======================================================================================================*/
+static void PTUDFExUpdateReferencesUI (PTUDFExtUdfDBPageData* data)
+<a name="anchor-58"></a>{
+	int size = data->db_udf_data->num_references;
+	int i;
+	char* tab_name;
+	char* db_tab_name;
+<a name="anchor-59"></a>	char* tab_layout_name;
+	char* coll_label_name_1;
+	char* coll_label_name_2;
+	char* coll_label_name_3;
+	ProUIDashboard dashboard;
+<a name="anchor-60"></a>	ProUIDashboardPage selector_page;
+
+	status = ProUIDashboardpageComponentnameGet (data->page, &quot;udf_ex_ref_tab&quot;, &amp;db_tab_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+<a name="anchor-61"></a>/*-----------------------------------------------------------------------------------------------------*\
+Set the dashboard to show the reference inputs that matches the number of references for the item
+\*-----------------------------------------------------------------------------------------------------*/
+	
+	switch (size)
+<a name="anchor-62"></a>	{
+	case 1:
+		tab_name = &quot;udf_ex_ref_tab_1&quot;;
+		coll_label_name_1 = &quot;udf_ex_ref_1_label_1&quot;;
+		coll_label_name_2 = NULL;
+<a name="anchor-63"></a>		coll_label_name_3 = NULL;
+		break;
+	case 2:
+		tab_name = &quot;udf_ex_ref_tab_2&quot;;
+		coll_label_name_1 = &quot;udf_ex_ref_2_label_1&quot;;
+<a name="anchor-64"></a>		coll_label_name_2 = &quot;udf_ex_ref_2_label_2&quot;;
+		coll_label_name_3 = NULL;
+		break;
+	case 3:
+	default:
+<a name="anchor-65"></a>		tab_name = &quot;udf_ex_ref_tab_3&quot;;
+		coll_label_name_1 = &quot;udf_ex_ref_3_label_1&quot;;
+		coll_label_name_2 = &quot;udf_ex_ref_3_label_2&quot;;
+		coll_label_name_3 = &quot;udf_ex_ref_3_label_3&quot;;
+		break;
+<a name="anchor-66"></a>	}
+	
+/*-----------------------------------------------------------------------------------------------------*\
+Set the main page to show the correct layout (containing 1, 2, or 3 collectors)
+\*-----------------------------------------------------------------------------------------------------*/
+<a name="anchor-67"></a>	status = ProUIDashboardpageComponentnameGet (data->page, tab_name, &amp;tab_layout_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+	status = ProUITabSelectednamesSet (data->device_name, db_tab_name, 1, &amp;tab_layout_name);
+	PT_TEST_LOG_SUCC (&quot;ProUITabSelectednamesSet()&quot;);
+<a name="anchor-68"></a>
+	ProStringFree (db_tab_name);
+	ProStringFree (tab_layout_name);
+
+	PTUDFExPromptLabelUpdate (data->page, data->device_name, coll_label_name_1, data->db_udf_data->reference_array[0].prompt);
+<a name="anchor-69"></a>	if (coll_label_name_2 != NULL)
+		PTUDFExPromptLabelUpdate (data->page, data->device_name, coll_label_name_2, data->db_udf_data->reference_array[1].prompt);
+	if (coll_label_name_3 != NULL)
+		PTUDFExPromptLabelUpdate (data->page, data->device_name, coll_label_name_3, data->db_udf_data->reference_array[2].prompt);
+
+<a name="anchor-70"></a>/*-----------------------------------------------------------------------------------------------------*\
+If the number of references > 3, make the References tab RED to ensure user knows to enter it to set
+the references not shown on the main page.
+\*-----------------------------------------------------------------------------------------------------*/
+	status = ProUIDashboardpageDashboardGet (data->page, &amp;dashboard);
+<a name="anchor-71"></a>	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageDashboardGet()&quot;);
+
+	status = ProUIDashboardPageGet (dashboard, PTUDFEX_DB_SELECTOR_PAGE_NAME, &amp;selector_page);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardPageGet()&quot;);
+
+<a name="anchor-72"></a>	status = ProUIDashboardpageForegroundcolorSet (selector_page, (size > 3 ? PRO_UI_COLOR_RED : PRO_UI_COLOR_WINDOW_TEXT ));
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageForegroundcolorSet()&quot;);
+}
+
+/*======================================================================================================*\
+<a name="anchor-73"></a>FUNCTION: PTUDFExUpdate
+PURPOSE:  Update display and data based on the current selected UDF.
+\*======================================================================================================*/
+static void PTUDFExUpdate (PTUDFExtUdfDBPageData* data)
+{
+<a name="anchor-74"></a>	int length;
+
+/*------------------------------------------------------------------------------------------------------*\
+	If no UDF is loaded, deactive most of the dashboard
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-75"></a>	ProWstringLengthGet (data->db_udf_data->gph_name, &amp;length);
+	if (length &lt;= 0)
+	{
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, PTUDFEX_OK_PUSHBTN, PRO_B_FALSE, PTUDFEX_UI_PUSHBUTTON);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, PTUDFEX_REPEAT_PUSHBTN, PRO_B_FALSE, PTUDFEX_UI_PUSHBUTTON);
+<a name="anchor-76"></a>		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_tab&quot;, PRO_B_FALSE, PTUDFEX_UI_TAB);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_1_label_1&quot;, PRO_B_FALSE, PTUDFEX_UI_LABEL);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_1_coll_1&quot;, PRO_B_FALSE, PTUDFEX_UI_LIST);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_2_label_1&quot;, PRO_B_FALSE, PTUDFEX_UI_LABEL);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_2_coll_1&quot;, PRO_B_FALSE, PTUDFEX_UI_LIST);
+<a name="anchor-77"></a>		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_2_label_2&quot;, PRO_B_FALSE, PTUDFEX_UI_LABEL);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_2_coll_2&quot;, PRO_B_FALSE, PTUDFEX_UI_LIST);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_label_1&quot;, PRO_B_FALSE, PTUDFEX_UI_LABEL);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_coll_1&quot;, PRO_B_FALSE, PTUDFEX_UI_LIST);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_label_2&quot;, PRO_B_FALSE, PTUDFEX_UI_LABEL);
+<a name="anchor-78"></a>		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_coll_2&quot;, PRO_B_FALSE, PTUDFEX_UI_LIST);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_label_3&quot;, PRO_B_FALSE, PTUDFEX_UI_LABEL);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_coll_3&quot;, PRO_B_FALSE, PTUDFEX_UI_LIST);
+	}
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-79"></a>	Activate the dashboard components
+\*------------------------------------------------------------------------------------------------------*/
+	else
+	{	
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_1_label_1&quot;, PRO_B_TRUE, PTUDFEX_UI_LABEL);
+<a name="anchor-80"></a>		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_1_coll_1&quot;, PRO_B_TRUE, PTUDFEX_UI_LIST);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_2_label_1&quot;, PRO_B_TRUE, PTUDFEX_UI_LABEL);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_2_coll_1&quot;, PRO_B_TRUE, PTUDFEX_UI_LIST);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_2_label_2&quot;, PRO_B_TRUE, PTUDFEX_UI_LABEL);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_2_coll_2&quot;, PRO_B_TRUE, PTUDFEX_UI_LIST);
+<a name="anchor-81"></a>		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_label_1&quot;, PRO_B_TRUE, PTUDFEX_UI_LABEL);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_coll_1&quot;, PRO_B_TRUE, PTUDFEX_UI_LIST);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_label_2&quot;, PRO_B_TRUE, PTUDFEX_UI_LABEL);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_coll_2&quot;, PRO_B_TRUE, PTUDFEX_UI_LIST);
+		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_label_3&quot;, PRO_B_TRUE, PTUDFEX_UI_LABEL);
+<a name="anchor-82"></a>		PTUDFExSetPageComponentSensitivity (data->page, data->device_name, &quot;udf_ex_ref_3_coll_3&quot;, PRO_B_TRUE, PTUDFEX_UI_LIST);
+
+/*------------------------------------------------------------------------------------------------------*\
+	Update the required references UIs
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-83"></a>		if (data->db_udf_data->reference_array == NULL)
+		{
+			PTUDFExUpdateReferences (data->db_udf_data);
+			PTUDFExUpdateReferencesUI (data);
+			PTUDFExOKBtnUpdate (data);
+<a name="anchor-84"></a>		}
+
+/*------------------------------------------------------------------------------------------------------*\
+	Update the available variable parameters
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-85"></a>		if (data->db_udf_data->varparam_array == NULL)
+		{
+			PTUDFExUpdateVarparams (data->db_udf_data);
+		}
+
+<a name="anchor-86"></a>/*------------------------------------------------------------------------------------------------------*\
+	Update the available variable dimensions
+\*------------------------------------------------------------------------------------------------------*/
+		if (data->db_udf_data->vardim_array == NULL)
+		{
+<a name="anchor-87"></a>			PTUDFExUpdateVardims (data->db_udf_data);
+		}
+
+/*------------------------------------------------------------------------------------------------------*\
+	Update the available instances
+<a name="anchor-88"></a>\*------------------------------------------------------------------------------------------------------*/
+		if (data->db_udf_data->instance_names == NULL)
+		{
+			PTUDFExUpdateInstances (data->db_udf_data);
+		}
+<a name="anchor-89"></a>	}
+}
+
+typedef struct
+{
+<a name="anchor-90"></a>	ProType type;
+	const char* filter_string;
+	const char* string;
+} TypeEntry;
+
+<a name="anchor-91"></a>static TypeEntry s_type_entries[] = {
+	{PRO_CSYS, &quot;csys&quot;, &quot;Coordinate system&quot;},
+	{PRO_SURFACE, &quot;surface,datum&quot;, &quot;Surface&quot;},
+	{PRO_AXIS, &quot;axis&quot;, &quot;Axis&quot;},
+	{PRO_POINT, &quot;point&quot;, &quot;Point&quot;},
+<a name="anchor-92"></a>	{PRO_FEATURE, &quot;feature,membfeat&quot;, &quot;Feature&quot;},
+	{PRO_EDGE, &quot;edge&quot;, &quot;Edge&quot;},
+	{PRO_EDGE_START, &quot;edge_end&quot;, &quot;End of edge&quot;},
+	{PRO_EDGE_END, &quot;edge_end&quot;, &quot;End of edge&quot;},
+	{PRO_CURVE, &quot;curve,comp_crv&quot;, &quot;Curve&quot;},
+<a name="anchor-93"></a>	{PRO_CRV_START, &quot;curve_end&quot;, &quot;End of curve&quot;},
+	{PRO_CRV_END, &quot;curve_end&quot;, &quot;End of curve&quot;},
+	{PRO_QUILT, &quot;quilt&quot;, &quot;Quilt&quot;},
+	{PRO_DIMENSION, &quot;dimension&quot;, &quot;Dimension&quot;},
+	{PRO_REF_DIMENSION, &quot;ref_dim&quot;, &quot;Ref dimension&quot;},
+<a name="anchor-94"></a>	{PRO_GTOL, &quot;gtol&quot;, &quot;Gtol&quot;},
+	{PRO_SYMBOL_INSTANCE, &quot;symbol_3d&quot;, &quot;Symbol&quot;},
+	{PRO_SURF_FIN, &quot;surffin_3d&quot;, &quot;Surface finish&quot;},
+	{PRO_NOTE, &quot;note_3d&quot;, &quot;Note&quot;},
+	{PRO_PART, &quot;prt_or_asm&quot;, &quot;Part&quot;},
+<a name="anchor-95"></a>	{PRO_ASSEMBLY, &quot;prt_or_asm&quot;, &quot;Part&quot;},
+	{PRO_ANNOTATION_ELEM, &quot;annot_elem&quot;, &quot;Annotation element&quot;}
+};
+
+static int s_num_type_entries = sizeof (s_type_entries) / sizeof (TypeEntry);
+<a name="anchor-96"></a>
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExStringLookup
+PURPOSE: Look up the label text string for a particular item type.
+<a name="anchor-97"></a>\*======================================================================================================*/
+static const char* PTUDFExStringLookup (ProType type)
+{
+	int i;
+	for (i = 0; i &lt; s_num_type_entries; i++)
+<a name="anchor-98"></a>	{
+		if (s_type_entries [i].type == type)
+			return (s_type_entries [i].string);
+	}
+	return &quot;&quot;;
+<a name="anchor-99"></a>}
+
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExFilterStringLookup
+<a name="anchor-100"></a>PURPOSE: Look up the ProSelect filter string for a particular item type.
+\*======================================================================================================*/
+static const char* PTUDFExFilterStringLookup (ProType type)
+{
+	int i;
+<a name="anchor-101"></a>	for (i = 0; i &lt; s_num_type_entries; i++)
+	{
+		if (s_type_entries [i].type == type)
+			return (s_type_entries [i].filter_string);
+	}
+<a name="anchor-102"></a>	return &quot;&quot;;
+}
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExGetComponentIndexNo
+<a name="anchor-103"></a>PURPOSE: Action function to prompt for selection when user clicks on the collector.
+\*======================================================================================================*/
+static int PTUDFExGetComponentIndexNo (char* component)
+{
+	int comp_len = strlen (component);
+<a name="anchor-104"></a>
+	if (isdigit (component [comp_len - 2]))
+		return (atoi (&amp;component [comp_len -2]));
+	return (atoi (&amp;component [comp_len -1]));
+}
+<a name="anchor-105"></a>
+/*======================================================================================================*\
+FUNCTION: PTUDFExCollectorSelect
+PURPOSE:  Utility to gather a selection needed by a collector.
+\*======================================================================================================*/
+<a name="anchor-106"></a>static ProError PTUDFExCollectorSelect (ProType item_type, ProSelection* selected_item)
+{
+	const char* filter_string = PTUDFExFilterStringLookup (item_type);
+	ProSelection tmp_sel;
+	ProSelection* sel_array;
+<a name="anchor-107"></a>	int num_sels;
+
+	status = ProSelect (filter_string, 1, NULL, NULL, NULL, NULL, &amp;sel_array, &amp;num_sels);
+	PT_TEST_LOG (&quot;ProSelect()&quot;, status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_USER_ABORT);
+
+<a name="anchor-108"></a>	if (status != PRO_TK_NO_ERROR || num_sels &lt;= 0)
+		return (status);
+
+	status = ProSelectionCopy (sel_array [0], &amp;tmp_sel);
+	PT_TEST_LOG_SUCC (&quot;ProSelectionCopy()&quot;);
+<a name="anchor-109"></a>
+	*selected_item = tmp_sel;
+
+	return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-110"></a>
+/*======================================================================================================*\
+FUNCTION: PTUDFExCollectorStringGet
+PURPOSE:  Get the descriptive string for a given reference.
+\*======================================================================================================*/
+<a name="anchor-111"></a>static ProError PTUDFExCollectorStringGet (ProSelection selection, ProLine string)
+{
+	char line [PRO_LINE_SIZE];
+	ProModelitem sel_item;
+
+<a name="anchor-112"></a>	status = ProSelectionModelitemGet (selection, &amp;sel_item);
+	PT_TEST_LOG_SUCC (&quot;ProSelectionModelitemGet()&quot;);
+
+	ProTKSprintf (line, &quot;%s id %d&quot;, PTUDFExStringLookup (sel_item.type), sel_item.id);
+	ProStringToWstring (string, line);
+<a name="anchor-113"></a>
+	return (PRO_TK_NO_ERROR);
+}
+
+
+<a name="anchor-114"></a>/*======================================================================================================*\
+FUNCTION: PTUDFExCollectorStringUpdate
+PURPOSE:  Set the descriptive string for the current collector contents.
+\*======================================================================================================*/
+static void PTUDFExCollectorStringUpdate (ProUIDashboardPage page, char* device, char* component, PTUDFExReference* reference_info)
+<a name="anchor-115"></a>{
+	ProLine string;
+	wchar_t* list_label_ptr;
+	char* real_component = component;
+	char* empty_image_ptr = &quot;&quot;;
+<a name="anchor-116"></a>	char* red_dot_image_ptr = &quot;red_dot_14x14&quot;;
+
+	
+	if (page != NULL)
+	{
+<a name="anchor-117"></a>		status = ProUIDashboardpageComponentnameGet (page, component, &amp;real_component);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+	}
+
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-118"></a>	If no item has been selected, show the collector prompt including the missing red dot
+\*------------------------------------------------------------------------------------------------------*/
+	if (reference_info->sel_ref == NULL)
+	{
+		ProStringToWstring (string, &quot;Select...&quot;);
+<a name="anchor-119"></a>
+		status = ProUIListItemimageSet (device, real_component, 1, &amp;red_dot_image_ptr);
+		PT_TEST_LOG_SUCC (&quot;ProUIListItemimageSet()&quot;);
+	}
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-120"></a>	Else, show the current item's details
+\*------------------------------------------------------------------------------------------------------*/
+	else
+	{
+		PTUDFExCollectorStringGet (reference_info->sel_ref, string);
+<a name="anchor-121"></a>
+		status = ProUIListItemimageSet (device, real_component, 1, &amp;empty_image_ptr);
+		PT_TEST_LOG_SUCC (&quot;ProUIListItemimageSet()&quot;);
+	}
+
+<a name="anchor-122"></a>	list_label_ptr = &amp;string [0];
+
+	status = ProUIListLabelsSet (device, real_component, 1, &amp;list_label_ptr);
+	PT_TEST_LOG_SUCC (&quot;ProUIListLabelsSet()&quot;);
+
+<a name="anchor-123"></a>	if (page != NULL)
+		ProStringFree (real_component);
+}
+
+/*======================================================================================================*\
+<a name="anchor-124"></a>FUNCTION: PTUDFExCollectorStringsUpdate
+PURPOSE:  Set the descriptive string for the current collector contents.
+\*======================================================================================================*/
+static void PTUDFExCollectorStringsUpdate (PTUDFExtUdfDBPageData* db_data)
+{
+<a name="anchor-125"></a>	int num_references = db_data->db_udf_data->num_references;
+
+	switch (num_references)
+	{
+	case 1:
+<a name="anchor-126"></a>		PTUDFExCollectorStringUpdate (db_data->main_page, db_data->main_device_name, &quot;udf_ex_ref_1_coll_1&quot;, &amp;db_data->db_udf_data->reference_array[0]);
+		break;
+	case 2:
+		PTUDFExCollectorStringUpdate (db_data->main_page, db_data->main_device_name, &quot;udf_ex_ref_2_coll_1&quot;, &amp;db_data->db_udf_data->reference_array[0]);
+		PTUDFExCollectorStringUpdate (db_data->main_page, db_data->main_device_name, &quot;udf_ex_ref_2_coll_2&quot;, &amp;db_data->db_udf_data->reference_array[1]);
+<a name="anchor-127"></a>		break;
+	case 3:
+	default:
+		PTUDFExCollectorStringUpdate (db_data->main_page, db_data->main_device_name, &quot;udf_ex_ref_3_coll_1&quot;, &amp;db_data->db_udf_data->reference_array[0]);
+		PTUDFExCollectorStringUpdate (db_data->main_page, db_data->main_device_name, &quot;udf_ex_ref_3_coll_2&quot;, &amp;db_data->db_udf_data->reference_array[1]);
+<a name="anchor-128"></a>		PTUDFExCollectorStringUpdate (db_data->main_page, db_data->main_device_name, &quot;udf_ex_ref_3_coll_3&quot;, &amp;db_data->db_udf_data->reference_array[2]);
+		break;
+	}
+}
+
+<a name="anchor-129"></a>
+/*======================================================================================================*\
+FUNCTION: PTUDFExClearReferenceHighlights
+PURPOSE:  Clear any and all highlighted references.
+\*======================================================================================================*/
+<a name="anchor-130"></a>static void PTUDFExClearReferenceHighlights (PTUDFExtUdfDBPageData* db_data, int current_collector)
+{
+	int i;
+
+	for (i = 0; i &lt; db_data->db_udf_data->num_references; i++)
+<a name="anchor-131"></a>	{
+/*------------------------------------------------------------------------------------------------------*\
+	Don't unhighlight the current collector's reference since it will be rehighlighted later
+\*------------------------------------------------------------------------------------------------------*/
+		if (i == current_collector)
+<a name="anchor-132"></a>			continue;
+
+		if (db_data->db_udf_data->reference_array[i].sel_ref != NULL)
+			ProSelectionUnhighlight (db_data->db_udf_data->reference_array[i].sel_ref);
+	}
+<a name="anchor-133"></a>}
+
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExCollectorAction
+<a name="anchor-134"></a>PURPOSE: Action function to prompt for selection when user clicks on the collector.
+\*======================================================================================================*/
+static void PTUDFExCollectorAction (char* device, char* component, ProAppData data)
+{
+	int reference_no = PTUDFExGetComponentIndexNo (component);
+<a name="anchor-135"></a>	int reference_index = reference_no - 1;
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) data;
+	ProType type = db_data->db_udf_data->reference_array [reference_index].type;
+	ProSelection tmp_sel;
+	
+<a name="anchor-136"></a>/*------------------------------------------------------------------------------------------------------*\
+	Clear any other highlighted references
+\*------------------------------------------------------------------------------------------------------*/
+	PTUDFExClearReferenceHighlights (db_data, reference_index);
+
+<a name="anchor-137"></a>/*------------------------------------------------------------------------------------------------------*\
+	Highlight this collector's reference, if it already has one selected
+\*------------------------------------------------------------------------------------------------------*/
+	if (db_data->db_udf_data->reference_array [reference_index].sel_ref != NULL)
+			ProSelectionHighlight (db_data->db_udf_data->reference_array [reference_index].sel_ref, PRO_COLOR_HIGHLITE);
+<a name="anchor-138"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	Prompt for selection
+\*------------------------------------------------------------------------------------------------------*/
+	status = PTUDFExCollectorSelect (type, &amp;tmp_sel);
+<a name="anchor-139"></a>
+	if (status == PRO_TK_NO_ERROR)
+	{
+/*------------------------------------------------------------------------------------------------------*\
+	Store the newly selected item
+<a name="anchor-140"></a>\*------------------------------------------------------------------------------------------------------*/
+		if (db_data->db_udf_data->reference_array [reference_index].sel_ref != NULL)
+		{
+				ProSelectionUnhighlight (db_data->db_udf_data->reference_array [reference_index].sel_ref);
+				ProSelectionFree (&amp;db_data->db_udf_data->reference_array [reference_index].sel_ref);
+<a name="anchor-141"></a>		}
+
+		db_data->db_udf_data->reference_array [reference_index].sel_ref = tmp_sel;
+
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-142"></a>	Update the collector and the dashboard UI
+\*------------------------------------------------------------------------------------------------------*/
+		PTUDFExCollectorStringUpdate (NULL, device, component, &amp;db_data->db_udf_data->reference_array [reference_index]);
+
+		PTUDFExOKBtnUpdate (db_data);
+<a name="anchor-143"></a>	}
+}
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExCollectorFocusoutAction
+<a name="anchor-144"></a>PURPOSE: Action function to prompt for selection when user clicks on the collector.
+\*======================================================================================================*/
+static void PTUDFExClearActiveSelectionUI ()
+{
+}
+<a name="anchor-145"></a>
+/*======================================================================================================*\
+FUNCTION: PTUDFExCollectorFocusoutAction
+PURPOSE: Action function to prompt for selection when user clicks on the collector.
+\*======================================================================================================*/
+<a name="anchor-146"></a>static void PTUDFExCollectorFocusoutAction (char* device, char* component, ProAppData data)
+{
+	int comp_len = strlen (component);
+	int reference_no = atoi (&amp;component [comp_len -1]);
+	int reference_index = reference_no - 1;
+<a name="anchor-147"></a>	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) data;
+	char* empty_list_ptr;
+
+	if (db_data->db_udf_data->reference_array [reference_index].sel_ref != NULL)
+		ProSelectionUnhighlight (db_data->db_udf_data->reference_array [reference_index].sel_ref);
+<a name="anchor-148"></a>
+	status = ProUIListSelectednamesSet (device, component, 0, &amp;empty_list_ptr);
+	PT_TEST_LOG_SUCC (&quot;ProUIListSelectednamesSet()&quot;);
+
+	PTUDFExClearActiveSelectionUI ();
+<a name="anchor-149"></a>}
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExClearMemory
+PURPOSE:  Clear any currently stored memory in the dashboard data
+<a name="anchor-150"></a>\*======================================================================================================*/
+static void PTUDFExClearMemory (PTUDFExtUdfDBPageData* db_data)
+{
+	if (db_data->db_udf_data->reference_array != NULL)
+	{
+<a name="anchor-151"></a>		int size;
+		int i;
+
+		status = ProArraySizeGet (db_data->db_udf_data->reference_array, &amp;size);
+
+<a name="anchor-152"></a>		for (i = 0; i &lt; size; i++)
+		{
+			if (db_data->db_udf_data->reference_array [i].sel_ref != NULL)
+				ProSelectionFree (&amp;db_data->db_udf_data->reference_array [i].sel_ref);
+		}
+<a name="anchor-153"></a>		ProArrayFree ((ProArray*) &amp;db_data->db_udf_data->reference_array);
+		db_data->db_udf_data->reference_array = NULL;
+		db_data->db_udf_data->num_references = 0;
+	}
+
+<a name="anchor-154"></a>	if (db_data->db_udf_data->vardim_array != NULL)
+	{
+		ProArrayFree ((ProArray*) &amp;db_data->db_udf_data->vardim_array);
+		db_data->db_udf_data->vardim_array = NULL;
+		db_data->db_udf_data->num_vardims = 0;
+<a name="anchor-155"></a>	}
+
+	if (db_data->db_udf_data->varparam_array != NULL)
+	{
+		ProArrayFree ((ProArray*)&amp;db_data->db_udf_data->varparam_array);
+<a name="anchor-156"></a>		db_data->db_udf_data->varparam_array = NULL;
+		db_data->db_udf_data->num_varparams = 0;
+	}
+
+	if (db_data->db_udf_data->instance_names != NULL)
+<a name="anchor-157"></a>	{
+		ProArrayFree ((ProArray*)&amp;db_data->db_udf_data->instance_names);
+	}
+
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-158"></a>	Update the dashboard internal data and UI
+\*------------------------------------------------------------------------------------------------------*/
+	PTUDFExUpdate (db_data);
+}
+
+<a name="anchor-159"></a>/*======================================================================================================*\
+FUNCTION: PTUDFExMRUMenuAction
+PURPOSE:  Action when a UDF is selected from the MRU menu
+\*======================================================================================================*/
+static void PTUDFExMRUMenuAction (char* device, char* component, ProAppData data)
+<a name="anchor-160"></a>{
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) data;
+	int num_sels;
+	char** sels;
+	int mru_index;
+<a name="anchor-161"></a>	ProUdfdata udf_data;
+	ProPath udf_file_path;
+	wchar_t* udf_file_name_ptr;
+	int length;
+
+<a name="anchor-162"></a>/*------------------------------------------------------------------------------------------------------*\
+	Determine the currently selected UDF
+\*------------------------------------------------------------------------------------------------------*/
+	status = ProUIOptionmenuSelectednamesGet (device, component, &amp;num_sels, &amp;sels);
+	PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuSelectednamesGet()&quot;);
+<a name="anchor-163"></a>
+	mru_index = atoi (sels [0]);
+
+	ProStringarrayFree (sels, num_sels);
+
+<a name="anchor-164"></a>	status = ProUdfdataAlloc (&amp;udf_data);
+	PT_TEST_LOG_SUCC (&quot;ProUdfdataAlloc()&quot;);
+
+	ProWstringCopy (s_mru_udf_filepaths [mru_index], db_data->db_udf_data->udf_file_path, PRO_VALUE_UNUSED);
+
+<a name="anchor-165"></a>	udf_file_name_ptr = s_mru_udf_files [mru_index];
+	ProWstringLengthGet (udf_file_name_ptr, &amp;length);
+	ProWstringCopy (udf_file_name_ptr, db_data->db_udf_data->gph_name, length - 4); 
+	db_data->db_udf_data->gph_name [length - 4] = (wchar_t) 0;
+
+<a name="anchor-166"></a>	status = ProUdfdataPathSet (udf_data, db_data->db_udf_data->udf_file_path);
+	PT_TEST_LOG_SUCC (&quot;ProUdfdataPathSet()&quot;);
+
+	if (db_data->db_udf_data->udf_data != NULL)
+	{
+<a name="anchor-167"></a>		ProUdfdataFree (db_data->db_udf_data->udf_data);
+	}
+	db_data->db_udf_data->udf_data = udf_data;
+
+	PTUDFExClearMemory (db_data);
+<a name="anchor-168"></a>}
+
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExFileOpenAction
+<a name="anchor-169"></a>PURPOSE: Push button action function to select and open a .gph file.
+\*======================================================================================================*/
+static void PTUDFExFileOpenAction (char* device, char* component, ProAppData data)
+{
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) data;
+<a name="anchor-170"></a>	ProName label;
+	ProLine filter_string;
+	ProPath udf_file_path;
+	ProMdlName name;
+	ProMdlExtension ext;
+<a name="anchor-171"></a>	char* file_name_menu;
+	int index;
+	char buf [2];
+	char* buf_ptr;
+
+<a name="anchor-172"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	Prompt for UDF selection
+\*------------------------------------------------------------------------------------------------------*/
+	ProStringToWstring (label, &quot;Select UDF&quot;);
+<a name="anchor-173"></a>	ProStringToWstring (filter_string, &quot;*.gph&quot;);
+
+	status = ProFileMdlnameOpen (label, filter_string, NULL, NULL, NULL, NULL, udf_file_path);
+	PT_TEST_LOG (&quot;ProFileMdlnameOpen()&quot;, status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_USER_ABORT);
+
+<a name="anchor-174"></a>	if (status == PRO_TK_NO_ERROR)
+	{
+/*------------------------------------------------------------------------------------------------------*\
+	Update the MRU pulldown
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-175"></a>		status = ProFileMdlnameParse (udf_file_path, NULL, name, ext, NULL);
+		PT_TEST_LOG_SUCC (&quot;ProFileMdlnameParse()&quot;);
+
+		ProWstringConcatenate (L&quot;.&quot;, name, PRO_VALUE_UNUSED);
+		ProWstringConcatenate (ext, name, PRO_VALUE_UNUSED);
+<a name="anchor-176"></a>
+		status = ProUIDashboardpageComponentnameGet (db_data->page, &quot;udf_name_menu&quot;, &amp;file_name_menu);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+		index = PTUDFExMRUMenuUpdate (db_data->device_name, file_name_menu, name, udf_file_path);
+<a name="anchor-177"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	Update the dashboard data and UI for the new selected item
+\*------------------------------------------------------------------------------------------------------*/
+		ProTKSprintf (buf, &quot;%d&quot;, index);
+<a name="anchor-178"></a>		buf_ptr = &amp;buf[0];
+
+		status = ProUIOptionmenuSelectednamesSet (db_data->device_name, file_name_menu, 1, &amp;buf_ptr);
+		PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuSelectednamesSet()&quot;);
+
+<a name="anchor-179"></a>		PTUDFExMRUMenuAction (device, file_name_menu, data);
+
+		ProStringFree (file_name_menu);
+
+	}
+<a name="anchor-180"></a>}
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExPlaceUDFAction
+PURPOSE:  UDF placement routine
+<a name="anchor-181"></a>\*======================================================================================================*/
+static void PTUDFExPlaceUDFAction (PTUDFExtUdfDBPageData* db_data)
+{ 
+	ProUdfdata udf_data;
+	ProUdfreference reference_array[40];
+<a name="anchor-182"></a>	ProUdfvardim vardim_array [40];
+	ProUdfvarparam varparam_array [40];
+	ProSolid solid;
+	ProUdfCreateOption options[] = {PROUDFOPT_EDIT_MENU};
+	ProGroup udf;
+<a name="anchor-183"></a>	int i, length;
+	int vardim_array_size = 0;
+	
+
+	status = ProMdlCurrentGet ((ProMdl*)&amp;solid);
+<a name="anchor-184"></a>	PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet()&quot;);
+
+	ProUdfdataAlloc (&amp;udf_data);
+
+	ProWstringLengthGet (db_data->db_udf_data->instance_name, &amp;length);
+<a name="anchor-185"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	Set UDF name (and instance name)
+\*------------------------------------------------------------------------------------------------------*/
+	if (length > 0)
+<a name="anchor-186"></a>	{
+		ProUdfdataNameSet (udf_data, db_data->db_udf_data->gph_name, db_data->db_udf_data->instance_name);
+		//status = ProUdfdataInstancenameSet (udf_data, db_data->db_udf_data->instance_name);
+	}
+	else
+<a name="anchor-187"></a>		ProUdfdataNameSet (udf_data, db_data->db_udf_data->gph_name, NULL);
+
+/*------------------------------------------------------------------------------------------------------*\
+	Set some default placement parameters.
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-188"></a>	status = ProUdfdataDimdisplaySet (udf_data, PROUDFDIMDISP_NORMAL);
+	PT_TEST_LOG_SUCC (&quot;ProUdfdataDimdisplaySet()&quot;);
+
+	status = ProUdfdataScaleSet (udf_data, PROUDFSCALETYPE_SAME_DIMS, 0.0);
+	PT_TEST_LOG_SUCC (&quot;ProUdfdataScaleSet()&quot;);
+<a name="anchor-189"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	Set the UDF references
+\*------------------------------------------------------------------------------------------------------*/
+	for (i = 0; i &lt; db_data->db_udf_data->num_references; i++)
+<a name="anchor-190"></a>	{
+		status = ProUdfreferenceAlloc (db_data->db_udf_data->reference_array [i].prompt,
+										db_data->db_udf_data->reference_array [i].sel_ref, PRO_B_FALSE, &amp;reference_array[i]);
+		PT_TEST_LOG_SUCC (&quot;ProUdfreferenceAlloc()&quot;);
+
+<a name="anchor-191"></a>		status = ProUdfdataReferenceAdd (udf_data, reference_array[i]);
+		PT_TEST_LOG_SUCC (&quot;ProUdfdataReferenceAdd()&quot;);
+	}
+
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-192"></a>	Set the UDF variable dimensions
+\*------------------------------------------------------------------------------------------------------*/
+	if (db_data->db_udf_data->vardim_array  != NULL)
+	{		
+		for (i = 0; i &lt; db_data->db_udf_data->num_vardims; i++)
+<a name="anchor-193"></a>		{
+			status = ProUdfvardimAlloc (db_data->db_udf_data->vardim_array[i].dim_symbol,
+										db_data->db_udf_data->vardim_array[i].value,
+										db_data->db_udf_data->vardim_array[i].type,
+										&amp;vardim_array [i]);
+<a name="anchor-194"></a>			PT_TEST_LOG_SUCC (&quot;ProUdfvardimAlloc()&quot;);
+
+			status = ProUdfdataUdfvardimAdd (udf_data, vardim_array[i]);
+			PT_TEST_LOG_SUCC (&quot;ProUdfdataUdfvardimAdd()&quot;);
+		}
+<a name="anchor-195"></a>	}
+
+/*------------------------------------------------------------------------------------------------------*\
+	Set the UDF variable parameters
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-196"></a>	if (db_data->db_udf_data->varparam_array  != NULL)
+	{
+		ProModelitem item;
+
+		for (i = 0; i &lt; db_data->db_udf_data->num_varparams; i++)
+<a name="anchor-197"></a>		{
+			item.owner = NULL;
+			item.id = db_data->db_udf_data->varparam_array[i].owner_id;
+			item.type = db_data->db_udf_data->varparam_array[i].owner_type;
+
+<a name="anchor-198"></a>			status = ProUdfvarparamAlloc (db_data->db_udf_data->varparam_array[i].param_name,
+										&amp;item,
+										&amp;varparam_array [i]);
+			PT_TEST_LOG_SUCC (&quot;ProUdfvarparamAlloc()&quot;);
+
+<a name="anchor-199"></a>			status = ProUdfvarparamValueSet (varparam_array [i], &amp;db_data->db_udf_data->varparam_array[i].value);
+			PT_TEST_LOG_SUCC (&quot;ProUdfvaparamValueSet()&quot;);
+
+			status = ProUdfdataVarparamAdd (udf_data, varparam_array[i]);
+			PT_TEST_LOG_SUCC (&quot;ProUdfdataUdfvarparamAdd()&quot;);
+<a name="anchor-200"></a>		}
+	}
+
+/*------------------------------------------------------------------------------------------------------*\
+	Create the UDF
+<a name="anchor-201"></a>\*------------------------------------------------------------------------------------------------------*/
+	status = ProUdfCreate (solid, udf_data, NULL,
+							options, 0, &amp;udf);
+	PT_TEST_LOG_SUCC (&quot;ProUdfCreate()&quot;);
+
+<a name="anchor-202"></a>/*------------------------------------------------------------------------------------------------------*\
+	Rename the new UDF group
+\*------------------------------------------------------------------------------------------------------*/
+	if (db_data->db_udf_data->udf_name_set)
+	{
+<a name="anchor-203"></a>		ProFeature* feats;
+
+		status = ProGroupFeaturesCollect (&amp;udf, &amp;feats);
+		PT_TEST_LOG_SUCC (&quot;ProGroupFeaturesCollect()&quot;);
+
+<a name="anchor-204"></a>		status = ProModelitemNameSet (&amp;feats [0], db_data->db_udf_data->udf_name);
+		PT_TEST_LOG_SUCC (&quot;ProModelitemNameSet()&quot;);
+
+		ProTreetoolRefresh (solid);
+
+<a name="anchor-205"></a>		ProArrayFree ((ProArray*)&amp;feats);
+	}
+
+/*------------------------------------------------------------------------------------------------------*\
+	Clean up allocated memory
+<a name="anchor-206"></a>\*------------------------------------------------------------------------------------------------------*/
+	for (i = 0; i &lt; db_data->db_udf_data->num_references; i++)
+	{
+		ProUdfreferenceFree (reference_array [i]);
+	}
+<a name="anchor-207"></a>
+	if (db_data->db_udf_data->vardim_array  != NULL)
+	{		
+		for (i = 0; i &lt; db_data->db_udf_data->num_vardims; i++)
+		{
+<a name="anchor-208"></a>			ProUdfvardimFree (vardim_array [i]);
+		}
+	}
+
+	if (db_data->db_udf_data->varparam_array  != NULL)
+<a name="anchor-209"></a>	{		
+		for (i = 0; i &lt; db_data->db_udf_data->num_varparams; i++)
+		{
+			ProUdfvarparamFree (varparam_array [i]);
+		}
+<a name="anchor-210"></a>	}
+
+	ProUdfdataFree (udf_data);
+}
+
+<a name="anchor-211"></a>/*======================================================================================================*\
+FUNCTION: PTUDFExOKAction
+PURPOSE: Push button action function to finish the UDF placement and close the dashboard.
+\*======================================================================================================*/
+static void PTUDFExOKAction (char* device, char* component, ProAppData data)
+<a name="anchor-212"></a>{
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) data;
+	ProUIDashboard db;
+
+	PTUDFExPlaceUDFAction (db_data);
+<a name="anchor-213"></a>
+	ProUdfdataFree (db_data->db_udf_data->udf_data);
+	db_data->db_udf_data->udf_data = NULL;
+
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-214"></a>	Close the dashboard
+\*------------------------------------------------------------------------------------------------------*/
+	status = ProUIDashboardpageDashboardGet (db_data->page, &amp;db);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageDashboardGet()&quot;);
+
+<a name="anchor-215"></a>	status = ProUIDashboardDestroy (db);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardDestroy()&quot;);
+
+	status = ProWindowRepaint (PRO_VALUE_UNUSED);
+	PT_TEST_LOG_SUCC (&quot;ProWindowRepaint()&quot;);
+<a name="anchor-216"></a>}
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExRepeatAction
+PURPOSE: Push button action function to finish the UDF placement and reset the dashboard.
+<a name="anchor-217"></a>\*======================================================================================================*/
+static void PTUDFExRepeatAction (char* device, char* component, ProAppData data)
+{
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) data;
+
+<a name="anchor-218"></a>	PTUDFExPlaceUDFAction (db_data);
+
+/*------------------------------------------------------------------------------------------------------*\
+	Reset the dashboard
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-219"></a>	PTUDFExClearMemory (db_data);
+
+	PTUDFExCollectorStringsUpdate (db_data);
+
+	status = ProWindowRepaint (PRO_VALUE_UNUSED);
+<a name="anchor-220"></a>	PT_TEST_LOG_SUCC (&quot;ProWindowRepaint()&quot;);
+}
+
+
+
+<a name="anchor-221"></a>/*======================================================================================================*\
+FUNCTION: PTUDFExCancelAction
+PURPOSE: Push button action function to cancel the operartion and close the dashboard.
+\*======================================================================================================*/
+static void PTUDFExCancelAction (char* device, char* component, ProAppData data)
+<a name="anchor-222"></a>{
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) data;
+	ProUIDashboard db;
+
+	status = ProUIDashboardpageDashboardGet (db_data->page, &amp;db);
+<a name="anchor-223"></a>	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageDashboardGet()&quot;);
+
+	status = ProUIDashboardDestroy (db);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardDestroy()&quot;);
+}
+<a name="anchor-224"></a>
+/*======================================================================================================*\
+FUNCTION: PTUDFExTreeSelectAction
+PURPOSE: Action when a node of the selector tree is selected
+\*======================================================================================================*/
+<a name="anchor-225"></a>static void PTUDFExTreeSelectAction (char* device, char* component, ProAppData data)
+{
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) data;
+	int i;
+	char* label;
+<a name="anchor-226"></a>	int num_sels;
+	char** selnames;
+	int reference_no = PTUDFExGetComponentIndexNo (component);
+	ProSelection tmp_sel;
+
+<a name="anchor-227"></a>	PTUDFExClearActiveSelectionUI ();
+
+	status = ProUIDashboardpageComponentnameGet (db_data->page, &quot;pt_udf_ex_selector_label&quot;, &amp;label);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageDashboardGet()&quot;);
+
+<a name="anchor-228"></a>	status = ProUITreeSelectednamesGet (device, component, &amp;num_sels, &amp;selnames);
+	PT_TEST_LOG_SUCC (&quot;ProUITreeSelectednamesGet()&quot;);
+
+/*------------------------------------------------------------------------------------------------------*\
+	Update the selector UI, reference prompt, main page collectors, and OK button based on the latest selection
+<a name="anchor-229"></a>\*------------------------------------------------------------------------------------------------------*/
+	if (num_sels == 1)
+	{
+		int idx = PTUDFExGetComponentIndexNo (selnames [0]);
+		
+<a name="anchor-230"></a>		PTUDFExClearReferenceHighlights (db_data, idx);
+
+		if (db_data->db_udf_data->reference_array [idx].sel_ref != NULL)
+			ProSelectionHighlight (db_data->db_udf_data->reference_array [idx].sel_ref, PRO_COLOR_HIGHLITE);
+
+<a name="anchor-231"></a>		status = ProUILabelTextSet (device, label, db_data->db_udf_data->reference_array[idx].prompt);
+		PT_TEST_LOG_SUCC (&quot;ProUILabelTextSet()&quot;);
+
+		status = PTUDFExCollectorSelect (db_data->db_udf_data->reference_array[idx].type, &amp;tmp_sel);
+
+<a name="anchor-232"></a>		if (status == PRO_TK_NO_ERROR)
+		{
+			ProLine string;
+
+			if (db_data->db_udf_data->reference_array [idx].sel_ref != NULL)
+<a name="anchor-233"></a>			{
+				ProSelectionUnhighlight (db_data->db_udf_data->reference_array [idx].sel_ref);
+				ProSelectionFree (&amp;db_data->db_udf_data->reference_array [idx].sel_ref);
+			}
+
+<a name="anchor-234"></a>			db_data->db_udf_data->reference_array [idx].sel_ref = tmp_sel;
+
+			PTUDFExCollectorStringGet (tmp_sel, string);
+
+			status = ProUITreeNodeTypeSet (device, component, selnames [0], PT_UDF_EX_SELECTED_NODE_TYPE);
+<a name="anchor-235"></a>			PT_TEST_LOG_SUCC (&quot;ProUITreeNodeTypeSet()&quot;);
+
+			status = ProUITreeNodeLabelSet (device, component, selnames [0], string);
+			PT_TEST_LOG_SUCC (&quot;ProUITreeNodeLabelSet()&quot;);
+
+<a name="anchor-236"></a>			PTUDFExCollectorStringsUpdate (db_data);
+	
+			PTUDFExOKBtnUpdate (db_data);
+		}
+
+<a name="anchor-237"></a>		ProStringarrayFree (selnames, num_sels);
+	}
+	else
+	{
+		status = ProUILabelTextSet (device, label, L&quot;&quot;);
+<a name="anchor-238"></a>		PT_TEST_LOG_SUCC (&quot;ProUILabelTextSet()&quot;);
+	}
+	
+	ProStringFree (label);
+
+<a name="anchor-239"></a>}
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExPageDataInit
+PURPOSE:  Set the data needed elsewhere in the UI action functions
+<a name="anchor-240"></a>\*======================================================================================================*/
+static void PTUDFExPageDataInit (ProUIDashboardPage page, PTUDFExtUdfDBPageData* db_data)
+{
+	ProUIDashboard db;
+	
+<a name="anchor-241"></a>	db_data->page = page;
+
+	status = ProUIDashboardpageDevicenameGet (page, &amp;db_data->device_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageDevicenameGet()&quot;);
+
+<a name="anchor-242"></a>	status = ProUIDashboardpageDashboardGet (page, &amp;db);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageDashboardGet()&quot;);
+
+	status = ProUIDashboardPageGet (db, PTUDFEX_DB_MAIN_PAGE_NAME, &amp;db_data->main_page);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardPageGet()&quot;);
+<a name="anchor-243"></a>
+	status = ProUIDashboardpageDevicenameGet (db_data->main_page, &amp;db_data->main_device_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageDevicenameGet()&quot;);
+}
+
+<a name="anchor-244"></a>/*======================================================================================================*\
+FUNCTION: PTUDFExUDFMainPageNotification
+PURPOSE: Notification function controlling the page for entering user-controllable parameters.
+\*======================================================================================================*/
+static ProError PTUDFExUDFMainPageNotification (ProUIDashboardPage page,
+<a name="anchor-245"></a>										ProUIDashboardPageEventType event_type,
+			 							ProAppData appdata)
+{
+	char* component_name;
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) appdata;
+<a name="anchor-246"></a>	char buf [2];
+	char* buf_ptr;
+	int index;
+
+	if (event_type == PRO_UI_DASHBOARD_PAGE_CREATE || event_type == PRO_UI_DASHBOARD_PAGE_SHOW)
+<a name="anchor-247"></a>	{
+		if (db_data->page == NULL)
+		{
+			PTUDFExPageDataInit (page, db_data);
+		}
+<a name="anchor-248"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	Set action functions on components in the main page
+\*------------------------------------------------------------------------------------------------------*/
+		status = ProUIDashboardpageComponentnameGet (page, &quot;udf_file_open_btn&quot;, &amp;component_name);
+<a name="anchor-249"></a>		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+		status = ProUIPushbuttonActivateActionSet (db_data->device_name, component_name, 
+													PTUDFExFileOpenAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+<a name="anchor-250"></a>
+		ProStringFree (component_name);		
+
+		status = ProUIDashboardpageComponentnameGet (page, PTUDFEX_OK_PUSHBTN, &amp;component_name);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+<a name="anchor-251"></a>
+		status = ProUIPushbuttonActivateActionSet (db_data->device_name, component_name, 
+													PTUDFExOKAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+<a name="anchor-252"></a>		ProStringFree (component_name);	
+
+		
+		status = ProUIDashboardpageComponentnameGet (page, &quot;udf_cancel_btn&quot;, &amp;component_name);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+<a name="anchor-253"></a>
+		status = ProUIPushbuttonActivateActionSet (db_data->device_name, component_name, 
+													PTUDFExCancelAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+<a name="anchor-254"></a>		ProStringFree (component_name);	
+
+		status = ProUIDashboardpageComponentnameGet (page, PTUDFEX_REPEAT_PUSHBTN, &amp;component_name);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+<a name="anchor-255"></a>		status = ProUIPushbuttonActivateActionSet (db_data->device_name, component_name, 
+													PTUDFExRepeatAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+		ProStringFree (component_name);	
+<a name="anchor-256"></a>
+		status = ProUIDashboardpageComponentnameGet (page, &quot;udf_ex_ref_1_coll_1&quot;, &amp;component_name);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+		status = ProUIListFocusinActionSet (db_data->device_name, component_name, 
+<a name="anchor-257"></a>													PTUDFExCollectorAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+		status = ProUIListFocusoutActionSet (db_data->device_name, component_name, 
+													PTUDFExCollectorFocusoutAction, appdata);
+<a name="anchor-258"></a>		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+		ProStringFree (component_name);	
+
+		status = ProUIDashboardpageComponentnameGet (page, &quot;udf_ex_ref_2_coll_1&quot;, &amp;component_name);
+<a name="anchor-259"></a>		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+		status = ProUIListFocusinActionSet (db_data->device_name, component_name, 
+													PTUDFExCollectorAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+<a name="anchor-260"></a>
+		status = ProUIListFocusoutActionSet (db_data->device_name, component_name, 
+													PTUDFExCollectorFocusoutAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+<a name="anchor-261"></a>		ProStringFree (component_name);	
+
+		status = ProUIDashboardpageComponentnameGet (page, &quot;udf_ex_ref_2_coll_2&quot;, &amp;component_name);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+<a name="anchor-262"></a>		status = ProUIListFocusinActionSet (db_data->device_name, component_name, 
+													PTUDFExCollectorAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+		status = ProUIListFocusoutActionSet (db_data->device_name, component_name, 
+<a name="anchor-263"></a>													PTUDFExCollectorFocusoutAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+		ProStringFree (component_name);	
+
+<a name="anchor-264"></a>		status = ProUIDashboardpageComponentnameGet (page, &quot;udf_ex_ref_3_coll_1&quot;, &amp;component_name);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+
+		status = ProUIListFocusinActionSet (db_data->device_name, component_name, 
+<a name="anchor-265"></a>													PTUDFExCollectorAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+		status = ProUIListFocusoutActionSet (db_data->device_name, component_name, 
+													PTUDFExCollectorFocusoutAction, appdata);
+<a name="anchor-266"></a>		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+		ProStringFree (component_name);	
+
+		status = ProUIDashboardpageComponentnameGet (page, &quot;udf_ex_ref_3_coll_2&quot;, &amp;component_name);
+<a name="anchor-267"></a>		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+		status = ProUIListFocusinActionSet (db_data->device_name, component_name, 
+													PTUDFExCollectorAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+<a name="anchor-268"></a>
+		status = ProUIListFocusoutActionSet (db_data->device_name, component_name, 
+													PTUDFExCollectorFocusoutAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+<a name="anchor-269"></a>		ProStringFree (component_name);	
+
+		status = ProUIDashboardpageComponentnameGet (page, &quot;udf_ex_ref_3_coll_3&quot;, &amp;component_name);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+<a name="anchor-270"></a>
+		status = ProUIListFocusinActionSet (db_data->device_name, component_name, 
+													PTUDFExCollectorAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+<a name="anchor-271"></a>		status = ProUIListFocusoutActionSet (db_data->device_name, component_name, 
+													PTUDFExCollectorFocusoutAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIPushbuttonActivateActionSet()&quot;);
+
+		ProStringFree (component_name);	
+<a name="anchor-272"></a>
+		status = ProUIDashboardpageComponentnameGet (db_data->page, &quot;udf_name_menu&quot;, &amp;component_name);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+		index = PTUDFExMRUMenuUpdate (db_data->device_name, component_name, NULL, NULL);
+<a name="anchor-273"></a>
+		status = ProUIOptionmenuSelectActionSet (db_data->device_name, component_name, PTUDFExMRUMenuAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuSelectActionSet()&quot;);
+
+		if (index >= 0)
+<a name="anchor-274"></a>		{
+			ProTKSprintf (buf, &quot;%d&quot;, index);
+			buf_ptr = &amp;buf[0];
+
+			status = ProUIOptionmenuSelectednamesSet (db_data->device_name, component_name, 1, &amp;buf_ptr);
+<a name="anchor-275"></a>			PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuSelectednamesSet()&quot;);
+
+			PTUDFExMRUMenuAction (db_data->device_name, component_name, appdata);
+		}
+		ProStringFree (component_name);
+<a name="anchor-276"></a>
+		PTUDFExUpdate (db_data);
+	}
+	return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-277"></a>
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExUDFOpenPageNotification
+PURPOSE: Notification function controlling the page for entering user-controllable parameters.
+<a name="anchor-278"></a>\*======================================================================================================*/
+static ProError PTUDFExUDFInstancePageNotification (ProUIDashboardPage page,
+										ProUIDashboardPageEventType event_type,
+			 							ProAppData appdata)
+{
+<a name="anchor-279"></a>	char* component_name;
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) appdata;
+	int num_names, num_labels, index;
+	char** names;
+	wchar_t** labels;
+<a name="anchor-280"></a>	int i;
+
+	if (event_type == PRO_UI_DASHBOARD_PAGE_CREATE)
+	{
+		status = ProUIDashboardpageTitleSet (page, L&quot;Instances&quot;);
+<a name="anchor-281"></a>		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageTitleSet()&quot;);
+	}
+
+	status = ProUIDashboardpageComponentnameGet (page, &quot;udf_instance_name_menu&quot;, &amp;component_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+<a name="anchor-282"></a>
+
+/*------------------------------------------------------------------------------------------------------*\
+	Setup the instance name pulldown
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-283"></a>	if (event_type == PRO_UI_DASHBOARD_PAGE_SHOW)
+	{
+		if (db_data->page == NULL)
+		{
+			PTUDFExPageDataInit (page, db_data);
+<a name="anchor-284"></a>		}
+
+		status = ProArraySizeGet (db_data->db_udf_data->instance_names, &amp;num_names);
+
+		if (status != PRO_TK_NO_ERROR || num_names &lt;= 0)
+<a name="anchor-285"></a>		{
+			status = ProUIOptionmenuDisable (db_data->device_name, component_name);
+			PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuDisable()&quot;);
+		}
+		else
+<a name="anchor-286"></a>		{
+			status = ProUIOptionmenuEnable (db_data->device_name, component_name);
+			PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuEnable()&quot;);
+		}	
+		
+<a name="anchor-287"></a>		num_names ++;
+		names = (char**) calloc (num_names, sizeof (char*));
+		labels = (wchar_t**) calloc (num_names, sizeof (wchar_t*));
+
+		for (i = 0; i &lt; num_names; i++)
+<a name="anchor-288"></a>		{
+			names [i] = (char*) calloc (4, sizeof (char));
+			ProTKSprintf (names[i], &quot;%d&quot;, i);
+
+			labels [i] = (wchar_t*) calloc (PRO_NAME_SIZE, sizeof (wchar_t*));
+<a name="anchor-289"></a>			if (i == 0)
+				ProStringToWstring (labels [i], &quot;&lt;Generic>&quot;);
+			else
+				ProWstringCopy (db_data->db_udf_data->instance_names [i - 1], labels [i], PRO_VALUE_UNUSED);
+		}
+<a name="anchor-290"></a>		status = ProUIOptionmenuNamesSet (db_data->device_name, component_name, num_names, names);
+		PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuNamesSet()&quot;);
+
+		status = ProUIOptionmenuLabelsSet (db_data->device_name, component_name, num_names, labels);
+		PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuLabelsSet()&quot;);
+<a name="anchor-291"></a>
+		status = ProUIOptionmenuSelectednamesSet (db_data->device_name, component_name, 1, &amp;names [0]);
+		PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuSelectednamesSet()&quot;);
+
+		for (i = 0; i &lt; num_names; i++)
+<a name="anchor-292"></a>		{
+			free (names [i]);
+			free (labels [i]);
+		}
+		free (names);
+<a name="anchor-293"></a>		free (labels);
+	}
+	
+/*------------------------------------------------------------------------------------------------------*\
+	Transfer the selected instane to the dashboard data and clean up
+<a name="anchor-294"></a>\*------------------------------------------------------------------------------------------------------*/
+	if (event_type == PRO_UI_DASHBOARD_PAGE_HIDE)
+	{
+		status = ProUIOptionmenuSelectednamesGet (db_data->device_name, component_name, &amp;num_names, &amp;names);
+		PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuSelectednamesGet()&quot;);
+<a name="anchor-295"></a>
+		status = ProUIOptionmenuLabelsGet (db_data->device_name, component_name, &amp;num_labels, &amp;labels);
+		PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuLabelsGet()&quot;);
+
+		index = atoi (names[0]);
+<a name="anchor-296"></a>
+		if (index != 0)
+			ProWstringCopy (labels [index], db_data->db_udf_data->instance_name, PRO_VALUE_UNUSED);
+		else
+			ProStringToWstring (db_data->db_udf_data->instance_name, &quot;&quot;);
+<a name="anchor-297"></a>
+		ProWindowRefresh (PRO_VALUE_UNUSED);
+	}
+
+	ProStringFree (component_name);
+<a name="anchor-298"></a>
+	return (PRO_TK_NO_ERROR);
+}
+
+/*======================================================================================================*\
+<a name="anchor-299"></a>FUNCTION: PTUDFExUDFDimPageNotification
+PURPOSE: Notification function controlling the page for entering user-controllable parameters.
+\*======================================================================================================*/
+static ProError PTUDFExUDFDimPageNotification (ProUIDashboardPage page,
+										ProUIDashboardPageEventType event_type,
+<a name="anchor-300"></a>			 							ProAppData appdata)
+{
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) appdata;
+	char* component_name;
+	char* input_base_name;
+<a name="anchor-301"></a>
+	if (event_type == PRO_UI_DASHBOARD_PAGE_CREATE)
+	{
+		status = ProUIDashboardpageTitleSet (page, L&quot;Variable Dimensions&quot;);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageTitleSet()&quot;);
+<a name="anchor-302"></a>	}
+
+	status = ProUIDashboardpageComponentnameGet (page, &quot;pt_udf_ex_vdim_table&quot;, &amp;component_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+<a name="anchor-303"></a>	status = ProUIDashboardpageComponentnameGet (page, &quot;pt_udf_ex_vdim_value_base&quot;, &amp;input_base_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+/*------------------------------------------------------------------------------------------------------*\
+	Setup the variable dimension table
+<a name="anchor-304"></a>\*------------------------------------------------------------------------------------------------------*/
+	if (event_type == PRO_UI_DASHBOARD_PAGE_SHOW)
+	{
+		int num_dims;
+		char** row_names;
+<a name="anchor-305"></a>		wchar_t* dim_label = L&quot;Dimension&quot;;
+		wchar_t* param_label = L&quot;Pattern param&quot;;
+		int i;
+
+		if (db_data->page == NULL)
+<a name="anchor-306"></a>		{
+			PTUDFExPageDataInit (page, db_data);
+		}
+		
+		if (db_data->db_udf_data->vardim_array != NULL)
+<a name="anchor-307"></a>		{
+			num_dims = db_data->db_udf_data->num_vardims;
+
+			row_names = (char**) calloc (num_dims, sizeof (char*));
+
+<a name="anchor-308"></a>			for (i = 0; i &lt; num_dims; i++)
+			{
+				row_names [i] = (char*) calloc (4, sizeof (char));
+				ProTKSprintf (row_names [i], &quot;%d&quot;, i);
+			}
+<a name="anchor-309"></a>
+			status = ProUITableRownamesSet (db_data->device_name, component_name, num_dims, row_names);
+			PT_TEST_LOG_SUCC (&quot;ProUITableRownamesSet&quot;);
+
+			for (i = 0; i &lt; num_dims; i++)
+<a name="anchor-310"></a>			{
+				char input_name [30];
+
+				status = ProUITableCellLabelSet (db_data->device_name, component_name, row_names [i],
+												&quot;Prompt&quot;, db_data->db_udf_data->vardim_array[i].prompt);
+<a name="anchor-311"></a>				PT_TEST_LOG_SUCC (&quot;ProUITableCellLabelSet()&quot;);
+
+				status = ProUITableCellLabelSet (db_data->device_name, component_name, row_names [i],
+												&quot;Type&quot;, (db_data->db_udf_data->vardim_array[i].type == PROUDFVARTYPE_DIM ? 
+												dim_label : param_label));
+<a name="anchor-312"></a>				PT_TEST_LOG_SUCC (&quot;ProUITableCellLabelSet()&quot;);
+
+				ProTKSprintf (input_name, &quot;input_%s&quot;, row_names [i]);
+
+				status = ProUITableCellComponentCopy (db_data->device_name, component_name, row_names [i],
+<a name="anchor-313"></a>												&quot;Value&quot;,
+												db_data->device_name, input_base_name, input_name);
+				PT_TEST_LOG_SUCC (&quot;ProUITableCellComponentCopy()&quot;);
+
+				status = ProUIInputpanelDoubleSet (db_data->device_name, input_name, 
+<a name="anchor-314"></a>													db_data->db_udf_data->vardim_array[i].value);
+				PT_TEST_LOG_SUCC (&quot;ProUIInputpanelDoubleSet()&quot;);
+
+				free (row_names [i]);
+			}
+<a name="anchor-315"></a>
+			free (row_names);
+		}
+	}
+
+<a name="anchor-316"></a>/*------------------------------------------------------------------------------------------------------*\
+	Transfer data from the table to the dashboard data, and cleanup
+\*------------------------------------------------------------------------------------------------------*/
+	if (event_type == PRO_UI_DASHBOARD_PAGE_HIDE)
+	{
+<a name="anchor-317"></a>		char** row_names;
+		int n_rows;
+		int i;
+		char* input_name;
+
+<a name="anchor-318"></a>		status = ProUITableRownamesGet (db_data->device_name, component_name,  &amp;n_rows, &amp;row_names);
+		PT_TEST_LOG_SUCC (&quot;ProUITableRownamesGet()&quot;);
+
+		for (i = 0; i &lt; n_rows; i++)
+		{	
+<a name="anchor-319"></a>			status = ProUITableCellComponentNameGet (db_data->device_name, component_name, row_names [i],
+														&quot;Value&quot;, &amp;input_name);
+			PT_TEST_LOG_SUCC (&quot;ProUITableCellComponentnameGet()&quot;);
+
+			status = ProUIInputpanelDoubleGet (db_data->device_name, input_name, 
+<a name="anchor-320"></a>										&amp;db_data->db_udf_data->vardim_array[i].value);
+			PT_TEST_LOG_SUCC (&quot;ProUIInputpanelDoubleGet()&quot;);
+
+			status = ProUITableCellComponentDelete (db_data->device_name, component_name, row_names [i],
+														&quot;Value&quot;);
+<a name="anchor-321"></a>			PT_TEST_LOG_SUCC (&quot;ProUITableCellComponentDelete()&quot;);
+			
+			ProStringFree (input_name);
+		}
+		
+<a name="anchor-322"></a>		status = ProUITableRowsDelete (db_data->device_name, component_name, n_rows, row_names);
+		PT_TEST_LOG_SUCC (&quot;ProUITableRowsDelete()&quot;);
+
+
+		ProStringarrayFree (row_names, n_rows);
+<a name="anchor-323"></a>	}
+	
+	ProStringFree (component_name);
+	ProStringFree (input_base_name);
+
+<a name="anchor-324"></a>	return (PRO_TK_NO_ERROR);
+}
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExUDFParamPageNotification
+<a name="anchor-325"></a>PURPOSE: Notification function controlling the page for entering user reference selections.
+\*======================================================================================================*/
+static ProError PTUDFExUDFParamPageNotification (ProUIDashboardPage page,
+										ProUIDashboardPageEventType event_type,
+			 							ProAppData appdata)
+<a name="anchor-326"></a>{
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) appdata;
+	char* component_name;
+	char* input_base_name;
+	char* bool_base_name;
+<a name="anchor-327"></a>
+	if (event_type == PRO_UI_DASHBOARD_PAGE_CREATE)
+	{
+		status = ProUIDashboardpageTitleSet (page, L&quot;Variable Parameters&quot;);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageTitleSet()&quot;);
+<a name="anchor-328"></a>	}
+	
+	status = ProUIDashboardpageComponentnameGet (page, &quot;pt_udf_ex_param_table&quot;, &amp;component_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+<a name="anchor-329"></a>	status = ProUIDashboardpageComponentnameGet (page, &quot;pt_udf_ex_vparam_input_base&quot;, &amp;input_base_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+	status = ProUIDashboardpageComponentnameGet (page, &quot;pt_udf_ex_vparam_bool_base&quot;, &amp;bool_base_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+<a name="anchor-330"></a>
+
+/*------------------------------------------------------------------------------------------------------*\
+	Setup the variable parameter table
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-331"></a>	if (event_type == PRO_UI_DASHBOARD_PAGE_SHOW)
+	{
+		int num_params;
+		char** row_names;
+		ProLine owner_label; 
+<a name="anchor-332"></a>		ProParamvalueType value_type;
+		int i;
+
+		if (db_data->page == NULL)
+		{
+<a name="anchor-333"></a>			PTUDFExPageDataInit (page, db_data);
+		}
+		
+		if (db_data->db_udf_data->varparam_array != NULL)
+		{
+<a name="anchor-334"></a>			num_params = db_data->db_udf_data->num_varparams;
+
+			row_names = (char**) calloc (num_params, sizeof (char*));
+
+			for (i = 0; i &lt; num_params; i++)
+<a name="anchor-335"></a>			{
+				row_names [i] = (char*) calloc (4, sizeof (char));
+				ProTKSprintf (row_names [i], &quot;%d&quot;, i);
+			}
+
+<a name="anchor-336"></a>			status = ProUITableRownamesSet (db_data->device_name, component_name, num_params, row_names);
+			PT_TEST_LOG_SUCC (&quot;ProUITableRownamesSet&quot;);
+
+			for (i = 0; i &lt; num_params; i++)
+			{
+<a name="anchor-337"></a>				char input_name [30];
+
+				status = ProUITableCellLabelSet (db_data->device_name, component_name, row_names [i],
+												&quot;Name&quot;, db_data->db_udf_data->varparam_array[i].param_name);
+				PT_TEST_LOG_SUCC (&quot;ProUITableCellLabelSet()&quot;);
+<a name="anchor-338"></a>
+				PTUDFExGetOwnerString (db_data->db_udf_data->varparam_array[i].owner_id, db_data->db_udf_data->varparam_array[i].owner_type,
+										owner_label);
+
+				status = ProUITableCellLabelSet (db_data->device_name, component_name, row_names [i],
+<a name="anchor-339"></a>												&quot;Owner&quot;, owner_label);
+				PT_TEST_LOG_SUCC (&quot;ProUITableCellLabelSet()&quot;);
+
+				ProTKSprintf (input_name, &quot;input_%s&quot;, row_names [i]);
+				value_type = db_data->db_udf_data->varparam_array[i].value.type;
+<a name="anchor-340"></a>
+				if (value_type == PRO_PARAM_BOOLEAN)
+				{
+					char option_value [2];
+					char* option_value_ptr = &amp;option_value [0];
+<a name="anchor-341"></a>
+					status = ProUITableCellComponentCopy (db_data->device_name, component_name, row_names [i],
+												&quot;Value&quot;,
+												db_data->device_name, bool_base_name, input_name);
+					PT_TEST_LOG_SUCC (&quot;ProUITableCellComponentCopy()&quot;);
+<a name="anchor-342"></a>
+					ProTKSprintf (option_value, &quot;%d&quot;, db_data->db_udf_data->varparam_array[i].value.value.l_val);
+
+					status = ProUIOptionmenuSelectednamesSet (db_data->device_name, input_name, 1, &amp;option_value_ptr);
+					PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuSelectednamesSet()&quot;);
+<a name="anchor-343"></a>				}
+				else
+				{
+					status = ProUITableCellComponentCopy (db_data->device_name, component_name, row_names [i],
+												&quot;Value&quot;,
+<a name="anchor-344"></a>												db_data->device_name, input_base_name, input_name);
+					PT_TEST_LOG_SUCC (&quot;ProUITableCellComponentCopy()&quot;);
+
+					switch (value_type)
+					{
+<a name="anchor-345"></a>					case PRO_PARAM_INTEGER:
+						status = ProUIInputpanelInputtypeSet (db_data->device_name, input_name,
+																PROUIINPUTTYPE_INTEGER);
+						PT_TEST_LOG_SUCC (&quot;ProUIInputpanelInputtypeSet()&quot;);
+
+<a name="anchor-346"></a>						status = ProUIInputpanelIntegerSet (db_data->device_name, input_name,
+															db_data->db_udf_data->varparam_array[i].value.value.i_val);
+						PT_TEST_LOG_SUCC (&quot;ProUIInputpanelIntegerSet()&quot;);
+						
+						break;
+<a name="anchor-347"></a>					case PRO_PARAM_DOUBLE:
+						status = ProUIInputpanelInputtypeSet (db_data->device_name, input_name,
+																PROUIINPUTTYPE_DOUBLE);
+						PT_TEST_LOG_SUCC (&quot;ProUIInputpanelInputtypeSet()&quot;);
+
+<a name="anchor-348"></a>						status = ProUIInputpanelDoubleSet (db_data->device_name, input_name,
+															db_data->db_udf_data->varparam_array[i].value.value.d_val);
+						PT_TEST_LOG_SUCC (&quot;ProUIInputpanelDoubleSet()&quot;);
+
+						break;
+<a name="anchor-349"></a>					case PRO_PARAM_STRING:
+						status = ProUIInputpanelInputtypeSet (db_data->device_name, input_name,
+																PROUIINPUTTYPE_WSTRING);
+						PT_TEST_LOG_SUCC (&quot;ProUIInputpanelInputtypeSet()&quot;);
+
+<a name="anchor-350"></a>						status = ProUIInputpanelWidestringSet (db_data->device_name, input_name,
+															db_data->db_udf_data->varparam_array[i].value.value.s_val);
+						PT_TEST_LOG_SUCC (&quot;ProUIInputpanelWidestringSet()&quot;);
+
+						break;
+<a name="anchor-351"></a>					}
+				}
+
+				free (row_names [i]);
+			}
+<a name="anchor-352"></a>
+			free (row_names);
+		}
+	}
+
+<a name="anchor-353"></a>/*------------------------------------------------------------------------------------------------------*\
+	Transfer data back into the dashboard data, and cleanup
+\*------------------------------------------------------------------------------------------------------*/
+	if (event_type == PRO_UI_DASHBOARD_PAGE_HIDE &amp;&amp; db_data->db_udf_data->varparam_array != NULL)
+	{
+<a name="anchor-354"></a>		char** row_names;
+		int n_rows;
+		int i;
+		char* input_name;
+		char** selnames;
+<a name="anchor-355"></a>		int n_selnames;
+		wchar_t* string_val;
+
+		status = ProUITableRownamesGet (db_data->device_name, component_name,  &amp;n_rows, &amp;row_names);
+		PT_TEST_LOG_SUCC (&quot;ProUITableRownamesGet()&quot;);
+<a name="anchor-356"></a>
+		for (i = 0; i &lt; n_rows; i++)
+		{	
+			status = ProUITableCellComponentNameGet (db_data->device_name, component_name, row_names [i],
+														&quot;Value&quot;, &amp;input_name);
+<a name="anchor-357"></a>			PT_TEST_LOG_SUCC (&quot;ProUITableCellComponentnameGet()&quot;);
+
+			switch (db_data->db_udf_data->varparam_array[i].value.type)
+			{
+			case PRO_PARAM_BOOLEAN:
+<a name="anchor-358"></a>				status = ProUIOptionmenuSelectednamesGet (db_data->device_name, input_name, &amp;n_selnames, &amp;selnames);
+				PT_TEST_LOG_SUCC (&quot;ProUIOptionmenuSelectednamesGet()&quot;);
+
+				db_data->db_udf_data->varparam_array[i].value.value.l_val = atoi (selnames [0]);
+
+<a name="anchor-359"></a>				ProStringarrayFree (selnames, n_selnames);
+
+				break;
+			case PRO_PARAM_INTEGER:
+				status = ProUIInputpanelIntegerGet (db_data->device_name, input_name, &amp;db_data->db_udf_data->varparam_array[i].value.value.i_val);
+<a name="anchor-360"></a>				PT_TEST_LOG_SUCC (&quot;ProUIInputpanelIntegerGet()&quot;);
+
+				break;
+			case PRO_PARAM_DOUBLE:
+				status = ProUIInputpanelDoubleGet (db_data->device_name, input_name, &amp;db_data->db_udf_data->varparam_array[i].value.value.d_val);
+<a name="anchor-361"></a>				PT_TEST_LOG_SUCC (&quot;ProUIInputpanelDoubleGet()&quot;);
+
+				break;
+
+			case PRO_PARAM_STRING:
+<a name="anchor-362"></a>				status = ProUIInputpanelWidestringGet (db_data->device_name, input_name, &amp;string_val);
+				PT_TEST_LOG_SUCC (&quot;ProUIInputpanelWidestringGet()&quot;);
+
+				ProWstringCopy (string_val, db_data->db_udf_data->varparam_array[i].value.value.s_val, PRO_VALUE_UNUSED);
+
+<a name="anchor-363"></a>				ProWstringFree (string_val);
+				break;
+			}
+			status = ProUITableCellComponentDelete (db_data->device_name, component_name, row_names [i],
+														&quot;Value&quot;);
+<a name="anchor-364"></a>			PT_TEST_LOG_SUCC (&quot;ProUITableCellComponentDelete()&quot;);
+
+			ProStringFree (input_name);
+		}
+
+<a name="anchor-365"></a>		status = ProUITableRowsDelete (db_data->device_name, component_name, n_rows, row_names);
+		PT_TEST_LOG_SUCC (&quot;ProUITableRowsDelete()&quot;);
+
+		ProStringarrayFree (row_names, n_rows);
+	}
+<a name="anchor-366"></a>
+	return (PRO_TK_NO_ERROR);
+}
+
+/*======================================================================================================*\
+<a name="anchor-367"></a>FUNCTION: PTUDFExUDFSelectorPageNotification
+PURPOSE: Notification function controlling the page for entering user reference selections.
+\*======================================================================================================*/
+static ProError PTUDFExUDFSelectorPageNotification (ProUIDashboardPage page,
+										ProUIDashboardPageEventType event_type,
+<a name="anchor-368"></a>			 							ProAppData appdata)
+{
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) appdata;
+	char* tree_name;
+
+<a name="anchor-369"></a>	if (event_type == PRO_UI_DASHBOARD_PAGE_CREATE)
+	{
+		status = ProUIDashboardpageTitleSet (page, L&quot;References&quot;);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageTitleSet()&quot;);
+	}
+<a name="anchor-370"></a>
+	status = ProUIDashboardpageComponentnameGet (page, &quot;pt_udf_ex_selector_tree&quot;, &amp;tree_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-371"></a>	Setup the reference selector (tree)
+\*------------------------------------------------------------------------------------------------------*/
+	if (event_type == PRO_UI_DASHBOARD_PAGE_SHOW)
+	{
+		int i;
+<a name="anchor-372"></a>		char node_name [30];
+		ProLine string;
+		char* node_type;
+	
+		if (db_data->page == NULL)
+<a name="anchor-373"></a>		{
+			PTUDFExPageDataInit (page, db_data);
+		}
+
+		status = ProUITreeNodeAdd (db_data->device_name, tree_name, PT_UDF_EX_TREE_ROOT_NODE, L&quot;&quot;, NULL, PT_UDF_EX_SELECTED_NODE_TYPE);
+<a name="anchor-374"></a>		PT_TEST_LOG_SUCC (&quot;ProUITreeNodeAdd&quot;);
+
+		for (i = 0; i &lt; db_data->db_udf_data->num_references; i++)
+		{
+			ProTKSprintf (node_name, &quot;tree_selector_node_%d&quot;, i);
+<a name="anchor-375"></a>			
+			ProStringToWstring (string, &quot;Select...&quot;);
+			node_type = PT_UDF_EX_UNSELECTED_NODE_TYPE;
+
+			if (db_data->db_udf_data->reference_array[i].sel_ref != NULL)
+<a name="anchor-376"></a>			{
+				PTUDFExCollectorStringGet (db_data->db_udf_data->reference_array[i].sel_ref, string);
+				node_type = PT_UDF_EX_SELECTED_NODE_TYPE;
+			}
+
+<a name="anchor-377"></a>			status = ProUITreeNodeAdd (db_data->device_name, tree_name, node_name, string, PT_UDF_EX_TREE_ROOT_NODE, node_type);
+			PT_TEST_LOG_SUCC (&quot;ProUITreeNodeAdd&quot;);
+		}
+	
+		status = ProUITreeNodeExpand (db_data->device_name, tree_name, PT_UDF_EX_TREE_ROOT_NODE, PRO_B_TRUE);
+<a name="anchor-378"></a>		PT_TEST_LOG_SUCC (&quot;ProUITreeNodeExpand()&quot;);
+
+		status = ProUITreeAllnodesDeselect (db_data->device_name, tree_name);
+		PT_TEST_LOG_SUCC (&quot;ProUITreeAllnodesDeselect()&quot;);
+
+<a name="anchor-379"></a>		status = ProUITreeTreeredrawSet (db_data->device_name, tree_name, PRO_B_TRUE);
+		PT_TEST_LOG_SUCC (&quot;ProUITreeTreeredrawSet()&quot;);
+
+		status = ProUITreeSelectActionSet (db_data->device_name, tree_name, PTUDFExTreeSelectAction, appdata);
+		PT_TEST_LOG_SUCC (&quot;ProUITreeSelectActionSet()&quot;);
+<a name="anchor-380"></a>	}
+
+/*------------------------------------------------------------------------------------------------------*\
+	Cleanup the reference selector tree
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-381"></a>	if (event_type == PRO_UI_DASHBOARD_PAGE_HIDE)
+	{
+		int i, num_nodes;
+		char** nodes;
+
+<a name="anchor-382"></a>		status = ProUITreeNodesOfTypeGet (db_data->device_name, tree_name, PT_UDF_EX_UNSELECTED_NODE_TYPE, &amp;nodes, &amp;num_nodes);
+		PT_TEST_LOG_SUCC (&quot;ProUITreeNodesOfTypeGet()&quot;);
+
+		for (i = 0; i &lt; num_nodes; i++)
+		{
+<a name="anchor-383"></a>			status = ProUITreeNodeDelete (db_data->device_name, tree_name, nodes [i]);
+			PT_TEST_LOG_SUCC (&quot;ProUITreeNodeDelete()&quot;);
+		}
+
+		status = ProUITreeNodesOfTypeGet (db_data->device_name, tree_name, PT_UDF_EX_SELECTED_NODE_TYPE, &amp;nodes, &amp;num_nodes);
+<a name="anchor-384"></a>		PT_TEST_LOG_SUCC (&quot;ProUITreeNodesOfTypeGet()&quot;);
+
+		for (i = 0; i &lt; num_nodes; i++)
+		{
+			status = ProUITreeNodeDelete (db_data->device_name, tree_name, nodes [i]);
+<a name="anchor-385"></a>			PT_TEST_LOG_SUCC (&quot;ProUITreeNodeDelete()&quot;);
+		}
+	}
+
+	return (PRO_TK_NO_ERROR);
+<a name="anchor-386"></a>}
+
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExUDFPropertyPageNotification
+<a name="anchor-387"></a>PURPOSE: Notification function controlling the page for entering UDF properties (name)
+\*======================================================================================================*/
+static ProError PTUDFExUDFPropertyPageNotification (ProUIDashboardPage page,
+										ProUIDashboardPageEventType event_type,
+			 							ProAppData appdata)
+<a name="anchor-388"></a>{
+	PTUDFExtUdfDBPageData* db_data = (PTUDFExtUdfDBPageData*) appdata;
+	char* input_name;
+
+	if (event_type == PRO_UI_DASHBOARD_PAGE_CREATE)
+<a name="anchor-389"></a>	{
+		status = ProUIDashboardpageTitleSet (page, L&quot;Properties&quot;);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageTitleSet()&quot;);
+	}
+
+<a name="anchor-390"></a>	status = ProUIDashboardpageComponentnameGet (page, &quot;pt_udf_ex_group_input&quot;, &amp;input_name);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageComponentnameGet()&quot;);
+
+/*------------------------------------------------------------------------------------------------------*\
+	Setup the new name UI
+<a name="anchor-391"></a>\*------------------------------------------------------------------------------------------------------*/
+	if (event_type == PRO_UI_DASHBOARD_PAGE_SHOW)
+	{
+		if (db_data->page == NULL)
+		{
+<a name="anchor-392"></a>			PTUDFExPageDataInit (page, db_data);
+		}
+
+		if (db_data->db_udf_data->udf_name_set)
+		{
+<a name="anchor-393"></a>			status = ProUIInputpanelValueSet (db_data->device_name, input_name, db_data->db_udf_data->udf_name);
+			PT_TEST_LOG_SUCC (&quot;ProUIInputpanelWidestringSet()&quot;);
+		}
+		else
+		{
+<a name="anchor-394"></a>			status = ProUIInputpanelValueSet (db_data->device_name, input_name, L&quot;&quot;);
+			PT_TEST_LOG_SUCC (&quot;ProUIInputpanelWidestringSet()&quot;);
+		}
+	}
+
+<a name="anchor-395"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	Transfer data back into the dashboard data, and cleanup
+\*------------------------------------------------------------------------------------------------------*/
+	if (event_type == PRO_UI_DASHBOARD_PAGE_HIDE)
+<a name="anchor-396"></a>	{
+		wchar_t* wstring;
+		int length;
+
+		status = ProUIInputpanelValueGet (db_data->device_name, input_name, &amp;wstring);
+<a name="anchor-397"></a>		PT_TEST_LOG_SUCC (&quot;ProUIInputpanelWidestringGet()&quot;);
+
+		ProWstringLengthGet (wstring, &amp;length);
+
+		if (length > 0)
+<a name="anchor-398"></a>		{
+			ProWstringCopy (wstring, db_data->db_udf_data->udf_name, PRO_VALUE_UNUSED);
+			db_data->db_udf_data->udf_name_set = PRO_B_TRUE;
+		}
+		else
+<a name="anchor-399"></a>			db_data->db_udf_data->udf_name_set = PRO_B_FALSE;
+
+		ProWstringFree (wstring);
+	}
+
+<a name="anchor-400"></a>	ProStringFree (input_name);
+
+	return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-401"></a>
+/*======================================================================================================*\
+FUNCTION: PTUDFExUDFMainPageSetup
+PURPOSE: Setup the main page for user placement of the UDF.
+\*======================================================================================================*/
+<a name="anchor-402"></a>static ProError PTUDFExUDFMainPageSetup (ProAppData data, ProUIDashboardPage* page_options)
+{
+	ProUIDashboardPage opts;
+
+	status = ProUIDashboardpageoptionsAlloc (PTUDFEX_DB_MAIN_PAGE_NAME, &quot;pt_udf_ex_main_page&quot;,
+<a name="anchor-403"></a>											data, &amp;opts);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsAlloc()&quot;);
+
+	status = 
+		ProUIDashboardpageoptionsNotificationSet (opts, (ProUIDashboardpageCallbackFunction)PTUDFExUDFMainPageNotification,
+<a name="anchor-404"></a>													data);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsNotificationSet()&quot;);
+
+	*page_options = opts;
+
+<a name="anchor-405"></a>	return (PRO_TK_NO_ERROR);
+}
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExUDFInstancePageSetup
+<a name="anchor-406"></a>PURPOSE: Setup the page for user selection of the UDF instance.
+\*======================================================================================================*/
+static ProError PTUDFExUDFInstancePageSetup (ProAppData data, ProUIDashboardPage* page_options)
+{
+	ProUIDashboardPage opts;
+<a name="anchor-407"></a>
+	status = ProUIDashboardpageoptionsAlloc (PTUDFEX_DB_INSTANCE_PAGE_NAME, &quot;pt_udf_ex_instance_page&quot;,
+											data, &amp;opts);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsAlloc()&quot;);
+
+<a name="anchor-408"></a>	status = 
+		ProUIDashboardpageoptionsNotificationSet (opts, (ProUIDashboardpageCallbackFunction)PTUDFExUDFInstancePageNotification,
+													data);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsNotificationSet()&quot;);
+
+<a name="anchor-409"></a>	*page_options = opts;
+	
+	return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-410"></a>/*======================================================================================================*\
+FUNCTION: PTUDFExUDFSelectorPageSetup
+PURPOSE: Setup the page for user reference selections.
+\*======================================================================================================*/
+static ProError PTUDFExUDFSelectorPageSetup (ProAppData data, ProUIDashboardPage* page_options)
+<a name="anchor-411"></a>{
+	ProUIDashboardPage opts;
+
+	status = ProUIDashboardpageoptionsAlloc (PTUDFEX_DB_SELECTOR_PAGE_NAME, &quot;pt_udf_ex_selector_page&quot;,
+											data, &amp;opts);
+<a name="anchor-412"></a>	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsAlloc()&quot;);
+
+	status = 
+		ProUIDashboardpageoptionsNotificationSet (opts, (ProUIDashboardpageCallbackFunction)PTUDFExUDFSelectorPageNotification,
+													data);
+<a name="anchor-413"></a>	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsNotificationSet()&quot;);
+
+	*page_options = opts;
+	
+	return (PRO_TK_NO_ERROR);
+<a name="anchor-414"></a>}
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExUDFDimPageSetup
+PURPOSE: Setup the page for entering variable dimensions.
+<a name="anchor-415"></a>\*======================================================================================================*/
+static ProError PTUDFExUDFDimPageSetup (ProAppData data, ProUIDashboardPage* page_options)
+{
+	ProUIDashboardPage opts;
+
+<a name="anchor-416"></a>	status = ProUIDashboardpageoptionsAlloc (PTUDFEX_DB_DIM_PAGE_NAME, &quot;pt_udf_ex_dim_page&quot;,
+											data, &amp;opts);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsAlloc()&quot;);
+
+	status = 
+<a name="anchor-417"></a>		ProUIDashboardpageoptionsNotificationSet (opts, (ProUIDashboardpageCallbackFunction)PTUDFExUDFDimPageNotification,
+													data);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsNotificationSet()&quot;);
+
+	*page_options = opts;
+<a name="anchor-418"></a>	
+	return (PRO_TK_NO_ERROR);
+}
+
+/*======================================================================================================*\
+<a name="anchor-419"></a>FUNCTION: PTUDFExUDFParamPageSetup
+PURPOSE: Setup the page for entering user-controllable parameters.
+\*======================================================================================================*/
+static ProError PTUDFExUDFParamPageSetup (ProAppData data, ProUIDashboardPage* page_options)
+{
+<a name="anchor-420"></a>	ProUIDashboardPage opts;
+
+	status = ProUIDashboardpageoptionsAlloc (PTUDFEX_DB_PARAM_PAGE_NAME, &quot;pt_udf_ex_param_page&quot;,
+											data, &amp;opts);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsAlloc()&quot;);
+<a name="anchor-421"></a>
+	status = 
+		ProUIDashboardpageoptionsNotificationSet (opts, (ProUIDashboardpageCallbackFunction)PTUDFExUDFParamPageNotification,
+													data);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsNotificationSet()&quot;);
+<a name="anchor-422"></a>
+	*page_options = opts;
+	
+	return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-423"></a>
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExUDFPropertyPageSetup
+PURPOSE: Setup the page for entering UDF properties
+<a name="anchor-424"></a>\*======================================================================================================*/
+static ProError PTUDFExUDFPropertyPageSetup (ProAppData data, ProUIDashboardPage* page_options)
+{
+	ProUIDashboardPage opts;
+
+<a name="anchor-425"></a>	status = ProUIDashboardpageoptionsAlloc (PTUDFEX_DB_PROPERTY_PAGE_NAME, &quot;pt_udf_ex_properties_page&quot;,
+											data, &amp;opts);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsAlloc()&quot;);
+
+	status = 
+<a name="anchor-426"></a>		ProUIDashboardpageoptionsNotificationSet (opts, (ProUIDashboardpageCallbackFunction)PTUDFExUDFPropertyPageNotification,
+													data);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardpageoptionsNotificationSet()&quot;);
+
+	*page_options = opts;
+<a name="anchor-427"></a>	
+	return (PRO_TK_NO_ERROR);
+}
+
+/*======================================================================================================*\
+<a name="anchor-428"></a>FUNCTION: PTUDFExUDFDashboardNotification
+PURPOSE:  Overall dashboard notification.
+\*======================================================================================================*/
+static ProError PTUDFExUDFDashboardNotification (ProUIDashboard dashboard,
+					       ProUIDashboardEventType event_type,
+<a name="anchor-429"></a>					       ProAppData appdata)
+{
+	switch (event_type)
+	{
+	case PRO_UI_DASHBOARD_CREATE:
+<a name="anchor-430"></a>/*-----------------------------------------------------------------------------------------------------*\
+Set the reference and parameter pages &amp; widgets to be disabled, until the user selects a UDF to place	
+\*-----------------------------------------------------------------------------------------------------*/
+		status = ProUIDashboardBitmapSet (dashboard, &quot;udf&quot;);
+		PT_TEST_LOG_SUCC (&quot;ProUIDashboardBitmapSet()&quot;);
+<a name="anchor-431"></a>
+		break;
+	}
+
+	return (PRO_TK_NO_ERROR);
+<a name="anchor-432"></a>}
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExPageDataClear
+PURPOSE:  Setup the page data before the dashboard is shown
+<a name="anchor-433"></a>\*======================================================================================================*/
+static void PTUDFExPageDataClear (PTUDFExtUdfDBPageData* db_data, PTUDFExUdfdata* db_udf_data)
+{
+	db_data->page = NULL;
+	db_data->device_name = NULL;
+<a name="anchor-434"></a>	db_data->main_page = NULL;
+	db_data->main_device_name = NULL;
+	db_data->db_udf_data = db_udf_data;
+}
+
+<a name="anchor-435"></a>static ProBoolean s_inUDFdb = PRO_B_FALSE;
+
+/*======================================================================================================*\
+FUNCTION: PTUDFExUDFDashboardMain
+PURPOSE: Show the dashboard for UDF placement.
+<a name="anchor-436"></a>\*======================================================================================================*/
+int PTUDFExUDFDashboardMain ()
+{
+	ProUIDashboardShowOptions options;
+	ProUIDashboardPageOptions main_page_options;
+<a name="anchor-437"></a>	ProUIDashboardPageOptions* slideup_panels;
+	PTUDFExUdfdata db_udf_data;
+	PTUDFExtUdfDBPageData main_page_data;
+	PTUDFExtUdfDBPageData instance_page_data;
+	PTUDFExtUdfDBPageData selector_page_data;
+<a name="anchor-438"></a>	PTUDFExtUdfDBPageData param_page_data;
+	PTUDFExtUdfDBPageData dim_page_data;
+	PTUDFExtUdfDBPageData property_page_data;
+
+	PTUDFExPageDataClear (&amp;main_page_data, &amp;db_udf_data);
+<a name="anchor-439"></a>	PTUDFExPageDataClear (&amp;instance_page_data, &amp;db_udf_data);
+	PTUDFExPageDataClear (&amp;selector_page_data, &amp;db_udf_data);
+	PTUDFExPageDataClear (&amp;param_page_data, &amp;db_udf_data);
+	PTUDFExPageDataClear (&amp;dim_page_data, &amp;db_udf_data);
+	PTUDFExPageDataClear (&amp;property_page_data, &amp;db_udf_data);
+<a name="anchor-440"></a>
+
+/*------------------------------------------------------------------------------------------------------*\
+	Setup 1 instance of PTUDFExUdfdata for this instance of the dashboard
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-441"></a>	ProStringToWstring (db_udf_data.udf_file_path, &quot;&quot;);
+	ProStringToWstring (db_udf_data.gph_name, &quot;&quot;);
+	db_udf_data.udf_data = NULL;
+	db_udf_data.reference_array = NULL;
+	db_udf_data.num_references = 0;
+<a name="anchor-442"></a>	db_udf_data.vardim_array = NULL;
+	db_udf_data.num_vardims = 0;
+	db_udf_data.varparam_array = NULL;
+	db_udf_data.num_varparams = 0;
+	db_udf_data.instance_names = NULL;
+<a name="anchor-443"></a>	db_udf_data.udf_name_set = PRO_B_FALSE;
+	ProStringToWstring (db_udf_data.instance_name, &quot;&quot;);
+
+	
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-444"></a>	Setup the page details for the main page and slideup panels
+\*------------------------------------------------------------------------------------------------------*/
+	status = ProArrayAlloc (5, sizeof (ProUIDashboardPageOptions), 1, (ProArray*)&amp;slideup_panels);
+
+	PTUDFExUDFMainPageSetup ((ProAppData)&amp;main_page_data, &amp;main_page_options);
+<a name="anchor-445"></a>
+	PTUDFExUDFInstancePageSetup ((ProAppData)&amp;instance_page_data, &amp;slideup_panels [0]);
+
+	PTUDFExUDFSelectorPageSetup ((ProAppData)&amp;selector_page_data, &amp;slideup_panels [1]);
+
+<a name="anchor-446"></a>	PTUDFExUDFDimPageSetup ((ProAppData)&amp;dim_page_data, &amp;slideup_panels [2]);
+
+	PTUDFExUDFParamPageSetup((ProAppData)&amp;param_page_data, &amp;slideup_panels [3]);
+
+	PTUDFExUDFPropertyPageSetup((ProAppData)&amp;property_page_data, &amp;slideup_panels [4]);
+<a name="anchor-447"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	Setup the dashboard for display
+\*------------------------------------------------------------------------------------------------------*/
+	status = ProUIDashboardshowoptionsAlloc (main_page_options, slideup_panels, (ProAppData)&amp;db_udf_data, &amp;options);
+<a name="anchor-448"></a>	PT_TEST_LOG_SUCC (&quot;ProUIDashboardshowoptionsAlloc()&quot;);
+
+	status = ProUIDashboardshowoptionsNotificationSet (options, (ProUIDashboardCallbackFunction)PTUDFExUDFDashboardNotification, 
+														(ProAppData)&amp;db_udf_data);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardshowoptionsNotificationSet()&quot;);
+<a name="anchor-449"></a>	
+	s_inUDFdb = PRO_B_TRUE;
+
+/*------------------------------------------------------------------------------------------------------*\
+	Launch the dashboard
+<a name="anchor-450"></a>\*------------------------------------------------------------------------------------------------------*/
+	status = ProUIDashboardShow (options);
+	PT_TEST_LOG_SUCC (&quot;ProUIDashboardShow()&quot;);
+
+	s_inUDFdb = PRO_B_FALSE;
+<a name="anchor-451"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	Clean up when finished
+\*------------------------------------------------------------------------------------------------------*/
+	ProArrayFree ((ProArray*)&amp;slideup_panels);
+<a name="anchor-452"></a>
+	ProStringFree (main_page_data.device_name);
+	ProStringFree (main_page_data.main_device_name);
+	ProStringFree (instance_page_data.device_name);
+	ProStringFree (instance_page_data.main_device_name);
+<a name="anchor-453"></a>	ProStringFree (selector_page_data.device_name);
+	ProStringFree (selector_page_data.main_device_name);
+	ProStringFree (param_page_data.device_name);
+	ProStringFree (param_page_data.main_device_name);
+	ProStringFree (dim_page_data.device_name);
+<a name="anchor-454"></a>	ProStringFree (dim_page_data.main_device_name);
+	ProStringFree (property_page_data.device_name);
+	ProStringFree (property_page_data.main_device_name);
+
+	return (0);
+<a name="anchor-455"></a>}
+	
+/*------------------------------------------------------------------------------------------------------*\
+	Access function for the UDF placement UI
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-456"></a>uiCmdAccessState PTUDFExAccessPlaceUDF (uiCmdAccessMode access_mode)
+{
+	ProMdl mdl;
+	ProMdlType type;
+
+<a name="anchor-457"></a>	status = ProMdlCurrentGet (&amp;mdl);
+	PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet()&quot;);
+
+	if (status == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-458"></a>		status = ProMdlTypeGet (mdl, &amp;type);
+		PT_TEST_LOG_SUCC (&quot;ProMdlTypeGet()&quot;);
+
+		if (type == PRO_MDL_PART || type == PRO_MDL_ASSEMBLY)
+			return (ACCESS_AVAILABLE);
+<a name="anchor-459"></a>	}
+	return (ACCESS_UNAVAILABLE);
+}
+
+/*
+<a name="anchor-460"></a>int PTUDFExUDFDismissCmd ()
+{
+	return (0);
+}
+
+<a name="anchor-461"></a>uiCmdAccessState PTUDFExAccessDismissCmd (uiCmdAccessMode access_mode)
+{
+	if (s_inUDFdb)
+		return (ACCESS_AVAILABLE);
+	else
+<a name="anchor-462"></a>		return (ACCESS_REMOVE);
+}
+*/
+</pre>
+</body>
+</html>

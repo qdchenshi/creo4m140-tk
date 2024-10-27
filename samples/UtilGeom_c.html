@@ -1,0 +1,1000 @@
+<html>
+<head>
+<title>UtilGeom.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProSurface.h>
+#include &lt;ProFeature.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProSelection.h>
+<a name="anchor-3"></a>#include &lt;ProSolid.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProEdge.h>
+#include &lt;ProAxis.h>
+#include &lt;ProCsys.h>
+<a name="anchor-4"></a>#include &lt;ProCurve.h>
+#include &lt;ProPoint.h>
+#include &lt;ProGeomitem.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-5"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestGeom.h&quot;
+#include &quot;UtilColor.h&quot;
+#include &quot;UtilGeom.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilIntfData.h&quot;
+#include &quot;UtilMath.h&quot;
+#include &quot;UtilMatrix.h&quot;
+#include &quot;UtilNames.h&quot;
+#include &quot;UtilString.h&quot;
+<a name="anchor-7"></a>#include &quot;UtilVisit.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &lt;UtilTypes.h>
+#include &lt;UtilMessage.h>
+#include &lt;UtilFiles.h>
+<a name="anchor-8"></a>#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProTKRunTime.h>
+/*====================================================================*\
+    FUNCTION :  ProUtilSurfaceMesh()
+    PURPOSE  :  Make a UV mesh over a specified surface
+<a name="anchor-9"></a>\*====================================================================*/
+int ProUtilSurfaceMesh(
+    ProSurface *surface,
+    double resolution,          /* The step size in model unit */
+    int nlines[2],              /* No of U and V lines */
+<a name="anchor-10"></a>    ProUtilMeshAct action,      /* Function to call at each mesh point */
+    ProAppData tmp_app_data)    /* General data */
+{
+    ProError status;
+    ProGeomitemdata  *sdata;
+<a name="anchor-11"></a>    double u_min, v_min, u_max, v_max, u_step, v_step, u_res, v_res,
+                                uv[2], last_uv[2], der1[2][3];
+    ProTestGeomData *app_data = (ProTestGeomData *) tmp_app_data;
+    ProUvStatus uvstatus;
+    int start, error;
+<a name="anchor-12"></a>    ProSolid solid;
+
+    solid = (ProSolid)*(app_data->model);
+/*--------------------------------------------------------------------*\
+    Get the maxmum and minium U and V for the surface
+<a name="anchor-13"></a>\*--------------------------------------------------------------------*/
+    status = ProSurfaceDataGet(*surface, &amp;sdata);
+    TEST_CALL_REPORT(&quot;ProSurfaceDataGet()&quot;,&quot;ProUtilSurfaceMesh()&quot;,
+                        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-14"></a>/*--------------------------------------------------------------------*\
+    Calculate the U and V parameters
+\*--------------------------------------------------------------------*/
+    u_min = sdata->data.p_surface_data->uv_min[0];
+    v_min = sdata->data.p_surface_data->uv_min[1];
+<a name="anchor-15"></a>    u_max = sdata->data.p_surface_data->uv_max[0];
+    v_max = sdata->data.p_surface_data->uv_max[1];
+    u_step = (u_max - u_min) / (nlines[0] + 1);
+    v_step = (v_max - v_min) / (nlines[1] + 1);
+
+<a name="anchor-16"></a>/*--------------------------------------------------------------------*\
+    Calculate the U and V resolution to give the correct resolution in
+    model units.
+\*--------------------------------------------------------------------*/
+    uv[0] = (u_max + u_min) / 2.0;
+<a name="anchor-17"></a>    uv[1] = (v_max + v_min) / 2.0;
+    status = ProSurfaceXyzdataEval(*surface, uv, NULL, der1, NULL, NULL);
+    TEST_CALL_REPORT(&quot;ProSurfaceXyzdataEval()&quot;,&quot;ProUtilSurfaceMesh()&quot;,
+                        status, status != PRO_TK_NO_ERROR);
+    u_res = resolution / ProUtilVectorLength(der1[0]);
+<a name="anchor-18"></a>    v_res = resolution / ProUtilVectorLength(der1[1]);
+
+/*--------------------------------------------------------------------*\
+    Adjust the upper limits to ensure that we get a mesh line at the max
+\*--------------------------------------------------------------------*/
+<a name="anchor-19"></a>    u_max += u_res/ 2.0;
+    v_max += v_res/ 2.0;
+/*--------------------------------------------------------------------*\
+    Do lines of constant U
+\*--------------------------------------------------------------------*/
+<a name="anchor-20"></a>    for(uv[0] =  u_min;
+        uv[0] &lt;= u_max;
+        uv[0] += u_step)
+    {
+        last_uv[1] = -1000000.0;
+<a name="anchor-21"></a>        for(uv[1] =  v_min;
+            uv[1] &lt;= v_max;
+            uv[1] += v_res)
+        {
+/*--------------------------------------------------------------------*\
+<a name="anchor-22"></a>            If this point is outside the domain, skip it
+\*--------------------------------------------------------------------*/
+            status = ProSurfaceUvpntVerify(solid, *surface, uv, &amp;uvstatus);
+            TEST_CALL_REPORT(&quot;ProSurfaceUvpntVerify()&quot;, &quot;ProUtilSurfaceMesh()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-23"></a>            if(uvstatus == PRO_UV_OUTSIDE)
+                continue;
+
+            start = (uv[1] - last_uv[1]) > (u_res + EPSM6);
+
+<a name="anchor-24"></a>            error = (*action)(surface, uv, start, app_data);
+            if(error != 0)
+	      { 
+		status = ProGeomitemdataFree(&amp;sdata);
+		TEST_CALL_REPORT(&quot;ProGeomitemdataFree()&quot;,&quot;ProUtilSurfaceMesh()&quot;                                  ,status, status != PRO_TK_NO_ERROR);
+<a name="anchor-25"></a>		return(error);
+	      }
+	  
+            last_uv[1] = uv[1];
+        }
+<a name="anchor-26"></a>    }
+
+/*--------------------------------------------------------------------*\
+    Do lines of constant V
+\*--------------------------------------------------------------------*/
+<a name="anchor-27"></a>    for(uv[1] =  v_min;
+        uv[1] &lt;= v_max;
+        uv[1] += v_step)
+    {
+        last_uv[0] = -1000000.0;
+<a name="anchor-28"></a>        for(uv[0] =  u_min;
+            uv[0] &lt;= u_max;
+            uv[0] += u_res)
+        {
+/*--------------------------------------------------------------------*\
+<a name="anchor-29"></a>            If this point is outside the domain, skip it
+\*--------------------------------------------------------------------*/
+            status = ProSurfaceUvpntVerify(solid, *surface, uv, &amp;uvstatus);
+            TEST_CALL_REPORT(&quot;ProSurfaceUvpntVerify()&quot;, &quot;ProUtilSurfaceMesh()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-30"></a>            if(uvstatus == PRO_UV_OUTSIDE)
+                continue;
+
+            start = (uv[0] - last_uv[0]) > (v_res + EPSM6);
+
+<a name="anchor-31"></a>            error = (*action)(surface, uv, start, tmp_app_data);
+            if(error != 0)
+	      {
+		status = ProGeomitemdataFree(&amp;sdata);
+		TEST_CALL_REPORT(&quot;ProGeomitemdataFree()&quot;,&quot;ProUtilSurfaceMesh()&quot;,
+<a name="anchor-32"></a>                        status, status != PRO_TK_NO_ERROR);
+		return(error);
+	      }
+	    last_uv[0] = uv[0];
+        }
+<a name="anchor-33"></a>    }
+    status = ProGeomitemdataFree(&amp;sdata);
+    TEST_CALL_REPORT(&quot;ProGeomitemdataFree()&quot;,&quot;ProUtilSurfaceMesh()&quot;,
+                        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-34"></a>    return(0);
+}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilGeomitemshapeDump()
+<a name="anchor-35"></a>    PURPOSE  :  Dump the geometry of a geometry item
+\*====================================================================*/
+int ProUtilGeomitemshapeDump(
+    FILE *fp,
+    ProGeomitemdata *geom)
+<a name="anchor-36"></a>{
+    ProUtilCname type_str;
+
+    switch(geom->obj_type)
+    {
+<a name="anchor-37"></a>    case PRO_AXIS :
+    case PRO_EDGE :
+    case PRO_CURVE :
+    case PRO_POINT :
+/*--------------------------------------------------------------------*\
+<a name="anchor-38"></a>        Get and dump geometry of the curve for the axis, edge, or curve
+\*--------------------------------------------------------------------*/
+        ProUtilObjtypeStr(geom->obj_type, type_str);
+
+        ProTKFprintf(fp,&quot;CURVE geometry for %s\n&quot;, type_str);
+<a name="anchor-39"></a>        ProUtilCurvedataPrint(fp, (char*)&quot;\0&quot;, geom->data.p_curve_data);
+        break;
+    case PRO_CSYS :
+/*--------------------------------------------------------------------*\
+        Dump directly the CSYS geometry
+<a name="anchor-40"></a>\*--------------------------------------------------------------------*/
+        ProTKFprintf(fp,&quot;CSYS geometry\n&quot;);
+        ProTKFprintf(fp,&quot;X vector = %.5f, %.5f, %.5f\n&quot;,
+                                geom->data.p_csys_data->x_vector[0],
+                                geom->data.p_csys_data->x_vector[1],
+<a name="anchor-41"></a>                                geom->data.p_csys_data->x_vector[2]);
+        ProTKFprintf(fp,&quot;Y vector = %.5f, %.5f, %.5f\n&quot;,
+                                geom->data.p_csys_data->y_vector[0],
+                                geom->data.p_csys_data->y_vector[1],
+                                geom->data.p_csys_data->y_vector[2]);
+<a name="anchor-42"></a>        ProTKFprintf(fp,&quot;Z vector = %.5f, %.5f, %.5f\n&quot;,
+                                geom->data.p_csys_data->z_vector[0],
+                                geom->data.p_csys_data->z_vector[1],
+                                geom->data.p_csys_data->z_vector[2]);
+        ProTKFprintf(fp,&quot;Shift vec= %.5f, %.5f, %.5f\n&quot;,
+<a name="anchor-43"></a>                                geom->data.p_csys_data->origin[0],
+                                geom->data.p_csys_data->origin[1],
+                                geom->data.p_csys_data->origin[2]);
+        break;
+    case PRO_SURFACE :
+<a name="anchor-44"></a>/*--------------------------------------------------------------------*\
+        Get and dump the surface geometry
+\*--------------------------------------------------------------------*/
+        ProUtilObjtypeStr(geom->obj_type, type_str);
+
+<a name="anchor-45"></a>        ProTKFprintf(fp,&quot;SURFACE geometry for %s\n&quot;, type_str);
+        ProUtilSurfacedataPrint(fp, (char*)&quot;\0&quot;, geom->data.p_surface_data);
+
+    default :;
+    }
+<a name="anchor-46"></a>
+    return(0);
+}
+
+/*====================================================================*\
+<a name="anchor-47"></a>    FUNCTION :  ProUtilGeomitemDump()
+    PURPOSE  :  Dump the geometry of a selected geometry item
+                EDGE, AXIS, CSYS, CURVE, POINT, QUILT, SURFACE
+\*====================================================================*/
+int ProUtilGeomitemDump(
+<a name="anchor-48"></a>    FILE *fp,
+    ProSelection *item)
+{
+    ProError status;
+    ProVector xyz_point,  xyz_min, xyz_max, dir;
+<a name="anchor-49"></a>    double area, length;
+    int m, i, n, curve_id, comp_crv_id;
+    ProMdl comp;
+    ProAsmcomppath temp_comp_path;
+    ProCharName name, type;
+<a name="anchor-50"></a>    ProGeomitemdata *gitem_data = NULL;
+    ProAxis axis;
+    ProPoint point, point2;
+    ProCsys p_csys;
+    ProCurve p_curve ;
+<a name="anchor-51"></a>    ProEdge p_edge;
+    ProQuilt p_quilt;
+    ProSurface p_surface;
+    ProAsmcomppath comp_path;
+    ProModelitem model_item;
+<a name="anchor-52"></a>    ProGeomitem geomitem;
+    ProCurvedata *p_curve_data;
+    ProSurfacedata *p_surf_data;
+    ProMdlType mdltype;
+    CurveComponent *curvecomps;
+<a name="anchor-53"></a>    ProEnttype curve_type;
+    ProVectorlist vect_list;
+    int         num, id;
+    double	t;
+    ProUvParam uv[2], uvd1[2], uvd2[2];
+<a name="anchor-54"></a>    ProCharName type_str;
+    ProContour  *p_contours;
+
+    status = ProSelectionAsmcomppathGet(*item, &amp;comp_path);
+    TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+<a name="anchor-55"></a>                    status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Dump the component id table (the path through the assembly)
+\*--------------------------------------------------------------------*/
+<a name="anchor-56"></a>    ProTKFprintf(fp,&quot;Component table ..\n&quot;);
+    memcpy(&amp;temp_comp_path, &amp;comp_path, sizeof(ProAsmcomppath));
+    for(m=0; m &lt; comp_path.table_num; m++)
+    {
+        temp_comp_path.table_num = m+1;
+<a name="anchor-57"></a>        status = ProAsmcomppathMdlGet(&amp;temp_comp_path, &amp;comp);
+        TEST_CALL_REPORT(&quot;ProAsmcomppathMdlGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+        ProUtilModelnameGet(&amp;comp, name, type);
+<a name="anchor-58"></a>
+        ProTKFprintf(fp, &quot;    comp_id_table[%2d] = %2d, model = %s.%s\n&quot;,
+                                m, comp_path.comp_id_table[m],
+                                name, type);
+    }
+<a name="anchor-59"></a>    ProTKFprintf(fp,&quot;\n&quot;);
+/*--------------------------------------------------------------------*\
+    Depending upon the object type, get its geometry
+\*--------------------------------------------------------------------*/
+    status = ProSelectionModelitemGet(*item, &amp;model_item);
+<a name="anchor-60"></a>    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Dump the geomitem type and id
+<a name="anchor-61"></a>\*--------------------------------------------------------------------*/
+    ProUtilObjtypeStr(model_item.type, type_str);
+
+    ProTKFprintf(fp, &quot;Geometry item %s id %d.\n&quot;,  type_str, model_item.id);
+
+<a name="anchor-62"></a>    switch(model_item.type)
+    {
+    case PRO_EDGE :
+/*--------------------------------------------------------------------*\
+        Get the length of the edge
+<a name="anchor-63"></a>\*--------------------------------------------------------------------*/
+        status = ProEdgeInit((ProSolid)model_item.owner, model_item.id, &amp;p_edge);
+        TEST_CALL_REPORT(&quot;ProEdgeInit()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-64"></a>        status = ProEdgeToGeomitem((ProSolid)model_item.owner, p_edge, &amp;geomitem);
+        TEST_CALL_REPORT(&quot;ProEdgeToGeomitem()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        status = ProGeomitemToEdge(&amp;geomitem, &amp;p_edge);
+        TEST_CALL_REPORT(&quot;ProGeomitemToEdge()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+<a name="anchor-65"></a>                                status, status != PRO_TK_NO_ERROR);
+
+        status = ProEdgeLengthEval(p_edge, &amp;length);
+        TEST_CALL_REPORT(&quot;ProEdgeLengthEval()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-66"></a>        ProTKFprintf(fp,&quot;Edge length = %6.2f\n\n&quot;, length);
+
+/*--------------------------------------------------------------------*\
+        Get the geometrical equations for the edge
+\*--------------------------------------------------------------------*/
+<a name="anchor-67"></a>        status = ProEdgeDataGet(p_edge, &amp;gitem_data);
+        TEST_CALL_REPORT(&quot;ProEdgeDataGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        if(status == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-68"></a>/*--------------------------------------------------------------------*\
+            Dump the edge geometry
+\*--------------------------------------------------------------------*/
+            ProUtilGeomitemshapeDump(fp, gitem_data);
+        }
+<a name="anchor-69"></a>/*--------------------------------------------------------------------*\
+            Edge to NURBS
+\*--------------------------------------------------------------------*/
+        status = ProEdgeToNURBS(p_edge, &amp;p_curve_data);
+        TEST_CALL_REPORT(&quot;ProEdgeToNURBS()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+<a name="anchor-70"></a>                                status, status != PRO_TK_NO_ERROR);
+        if(status == PRO_TK_NO_ERROR)
+        {
+	    ProTKFprintf(fp, &quot;Edge, translated to NURBS\n&quot;);
+            ProUtilCurvedataPrint(fp, (char*)&quot;    &quot;, p_curve_data);
+<a name="anchor-71"></a>            status = ProCurveDataFree(&amp;p_curve_data);
+            TEST_CALL_REPORT(&quot;ProCurveDataFree()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                    status, status != PRO_TK_NO_ERROR);
+        }
+
+<a name="anchor-72"></a>	status = ProEdgeTessellationGet(p_edge, &amp;vect_list, 
+	    NULL, NULL, NULL, &amp;num);
+	TEST_CALL_REPORT(&quot;ProEdgeTessellationGet()&quot;, 
+		&quot;ProUtilGeomitemDump()&quot;, status, status != PRO_TK_NO_ERROR);
+	ProTKFprintf(fp,&quot;Edge, tesselated with %d points\n&quot;, num);
+<a name="anchor-73"></a>	for (i = 0; i &lt; num ; i++)
+	{
+	    ProTKFprintf(fp,&quot;\tvector[%d] = %6.2f, %6.2f, %6.2f\n&quot;, i,
+					    vect_list[i][0],
+					    vect_list[i][1],
+<a name="anchor-74"></a>					    vect_list[i][2]);
+	}
+	
+	ProArrayFree((ProArray*)&amp;vect_list); 
+	ProTKFprintf(fp,&quot;Edge, UV data\n&quot;);
+<a name="anchor-75"></a>	ProTKFprintf(fp,&quot;\t    t   uv[0]   uv[1]   uvd1[0] uvd1[1]&quot;
+	    &quot; uvd2[0] uvd2[1]\n&quot;);
+	for (i=0; i&lt;=4; i++)
+	{
+	    t=i*0.25;
+<a name="anchor-76"></a>	    status = ProEdgeUvdataEval(p_edge, t, uv, uvd1, uvd2);
+	    TEST_CALL_REPORT(&quot;ProEdgeUvdataEval()&quot;, 
+		&quot;ProUtilGeomitemDump()&quot;, status, status != PRO_TK_NO_ERROR);
+
+	    ProTKFprintf(fp,&quot;\t %4.2f %7.2f %7.2f %7.2f %7.2f %7.2f %7.2f\n&quot;,
+<a name="anchor-77"></a>		t, uv[0][0], uv[0][1], uvd1[0][0], uvd1[0][1], uvd2[0][0],
+		uvd2[0][1]);
+
+	    ProTKFprintf(fp,&quot;\t %4.2f %7.2f %7.2f %7.2f %7.2f %7.2f %7.2f\n&quot;,
+		t, uv[1][0], uv[1][1], uvd1[1][0], uvd1[1][1], uvd2[1][0],
+<a name="anchor-78"></a>		uvd2[1][1]);
+	}
+
+        break;
+
+<a name="anchor-79"></a>    case PRO_AXIS :
+/*--------------------------------------------------------------------*\
+        Get the geometrical equations for the axis (a line)
+\*--------------------------------------------------------------------*/
+        status = ProAxisInit((ProSolid)model_item.owner, model_item.id, &amp;axis);
+<a name="anchor-80"></a>        TEST_CALL_REPORT(&quot;ProAxisInit()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+        status = ProAxisToGeomitem((ProSolid)model_item.owner, axis, &amp;geomitem);
+        TEST_CALL_REPORT(&quot;ProAxisToGeomitem()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+<a name="anchor-81"></a>                                status, status != PRO_TK_NO_ERROR);
+        status = ProGeomitemToAxis(&amp;geomitem, &amp;axis);
+        TEST_CALL_REPORT(&quot;ProGeomitemToAxis()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-82"></a>
+        status = ProAxisDataGet(axis, &amp;gitem_data);
+        TEST_CALL_REPORT(&quot;ProAxisDataGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-83"></a>        if(status == PRO_TK_NO_ERROR)
+        {
+/*--------------------------------------------------------------------*\
+            Dump the axis geometry
+\*--------------------------------------------------------------------*/
+<a name="anchor-84"></a>            ProUtilGeomitemshapeDump(fp, gitem_data);
+        }
+
+/*--------------------------------------------------------------------*\
+            Check the parent surface
+<a name="anchor-85"></a>\*--------------------------------------------------------------------*/
+	status = ProAxisSurfaceGet(model_item.owner, axis, &amp;p_surface); 
+	TEST_CALL_REPORT(&quot;ProAxisSurfaceGet()&quot;, &quot;ProTestGeomitemVisAct()&quot;,
+            status, status!=PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-86"></a>        if (status == PRO_TK_NO_ERROR)
+        {
+	    status = ProSurfaceIdGet(p_surface, &amp;id); 
+	    TEST_CALL_REPORT(&quot;ProAxisSurfaceGet()&quot;, 
+		&quot;ProTestGeomitemVisAct()&quot;, status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-87"></a>	
+	    ProTKFprintf(fp,&quot;\tAxis was created by surface %d\n&quot;, id);
+        }
+        break;
+    case PRO_CSYS :
+<a name="anchor-88"></a>/*--------------------------------------------------------------------*\
+        Get the geometry of the CSYS
+\*--------------------------------------------------------------------*/
+        status = ProCsysInit((ProSolid)model_item.owner,model_item.id,&amp;p_csys);
+        TEST_CALL_REPORT(&quot;ProCsysInit()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+<a name="anchor-89"></a>                                status, status != PRO_TK_NO_ERROR);
+
+        status = ProCsysToGeomitem((ProSolid)model_item.owner, p_csys, &amp;geomitem);
+        TEST_CALL_REPORT(&quot;ProCsysToGeomitem()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-90"></a>        status = ProGeomitemToCsys(&amp;geomitem, &amp;p_csys);
+        TEST_CALL_REPORT(&quot;ProGeomitemToCsys()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+        status = ProCsysDataGet(p_csys, &amp;gitem_data);
+<a name="anchor-91"></a>        TEST_CALL_REPORT(&quot;ProCsysDataGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+        if(status == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-92"></a>/*--------------------------------------------------------------------*\
+            Dump the geometry of the csys
+\*--------------------------------------------------------------------*/
+            ProUtilGeomitemshapeDump(fp, gitem_data);
+        }
+<a name="anchor-93"></a>        break;
+
+    case PRO_CURVE :
+/*--------------------------------------------------------------------*\
+        Get the geometrical equations for the CURVE
+<a name="anchor-94"></a>\*--------------------------------------------------------------------*/
+        status = ProCurveInit((ProSolid)model_item.owner,model_item.id,&amp;p_curve);
+        TEST_CALL_REPORT(&quot;ProCurveInit()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-95"></a>        status = ProCurveToGeomitem((ProSolid)model_item.owner, p_curve, &amp;geomitem);
+        TEST_CALL_REPORT(&quot;ProCurveToGeomitem()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        status = ProGeomitemToCurve(&amp;geomitem, &amp;p_curve);
+        TEST_CALL_REPORT(&quot;ProGeomitemToCurve()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+<a name="anchor-96"></a>                                status, status != PRO_TK_NO_ERROR);
+
+        status = ProCurveLengthEval(p_curve, &amp;length);
+        TEST_CALL_REPORT(&quot;ProCurveLengthEval()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-97"></a>        ProTKFprintf(fp,&quot;Curve length = %6.2f\n\n&quot;, length);
+
+/*--------------------------------------------------------------------*\
+        Maybe it's an ordinary datum curve
+\*--------------------------------------------------------------------*/
+<a name="anchor-98"></a>        status = ProCurveDataGet(p_curve, &amp;gitem_data);
+        TEST_CALL_REPORT(&quot;ProCurveDataGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        if(status == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-99"></a>/*--------------------------------------------------------------------*\
+            Dump the geometry of the curve
+\*--------------------------------------------------------------------*/
+            ProUtilGeomitemshapeDump(fp, gitem_data);
+        }
+<a name="anchor-100"></a>
+/*--------------------------------------------------------------------*\
+        Curve to NURBS
+\*--------------------------------------------------------------------*/
+        status = ProCurveToNURBS(p_curve, &amp;p_curve_data);
+<a name="anchor-101"></a>        TEST_CALL_REPORT(&quot;ProCurveToNURBS()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        if(status == PRO_TK_NO_ERROR)
+        {
+	    ProTKFprintf(fp, &quot;Curve, translated to NURBS\n&quot;);
+<a name="anchor-102"></a>            ProUtilCurvedataPrint(fp, (char*)&quot;    &quot;, p_curve_data);
+
+            status = ProCurveDataFree(&amp;p_curve_data);
+            TEST_CALL_REPORT(&quot;ProCurveDataFree()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-103"></a>        }
+/*--------------------------------------------------------------------*\
+        Maybe it's a composite curve.
+\*--------------------------------------------------------------------*/
+#ifndef PT_PRODUCTS_BUILD
+<a name="anchor-104"></a>	status = ProCurveTypeGet(p_curve, &amp;curve_type);
+        TEST_CALL_REPORT(&quot;ProCurveTypeGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                    status, status != PRO_TK_NO_ERROR);
+	if (curve_type == PRO_ENT_CMP_CRV )
+	{
+<a name="anchor-105"></a>	    status = ProUtilCollectCurveComponents(p_curve, &amp;curvecomps);
+	    if (status!=PRO_TK_NO_ERROR)
+		break;
+
+	    status = ProArraySizeGet((ProArray)curvecomps, &amp;n);
+<a name="anchor-106"></a>	    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	    for (i=0; i&lt;n; i++)
+	    {
+		status = ProCurveIdGet(curvecomps[i].p_owner, &amp;curve_id);
+<a name="anchor-107"></a>		TEST_CALL_REPORT(&quot;ProCurveIdGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+		status = ProCurveIdGet(curvecomps[i].p_curve, &amp;comp_crv_id);
+		TEST_CALL_REPORT(&quot;ProCurveIdGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-108"></a>
+		ProTKFprintf(fp, &quot;Curve %d, component %d, index %d, flip %d\n&quot;,
+		    curve_id, comp_crv_id, curvecomps[i].index,
+		    curvecomps[i].flip);
+	    }
+<a name="anchor-109"></a>	    status = ProArrayFree((ProArray*)&amp;curvecomps);
+	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	}  
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+<a name="anchor-110"></a>        break;
+    case PRO_POINT :
+/*--------------------------------------------------------------------*\
+        Get and dump directly the coordinates of the datum point
+\*--------------------------------------------------------------------*/
+<a name="anchor-111"></a>        status = ProPointInit((ProSolid)model_item.owner, model_item.id, &amp;point);
+        TEST_CALL_REPORT(&quot;ProPointInit()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+        status = ProPointIdGet(point, &amp;geomitem.id);
+<a name="anchor-112"></a>        TEST_CALL_REPORT(&quot;ProPointIdGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        status = ProPointToGeomitem((ProSolid)model_item.owner, point, &amp;geomitem);
+        TEST_CALL_REPORT(&quot;ProPointToGeomitem()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-113"></a>        status = ProGeomitemToPoint(&amp;geomitem, &amp;point2);
+        TEST_CALL_REPORT(&quot;ProGeomitemToPoint()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        status = ProPointCoordGet(point, xyz_point);
+        TEST_CALL_REPORT(&quot;ProPointCoordGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+<a name="anchor-114"></a>                                status, status != PRO_TK_NO_ERROR);
+
+        ProTKFprintf(fp,&quot;Geometry for datum point = %6.2f, %6.2f, %6.2f\n&quot;,
+                                xyz_point[0], xyz_point[1], xyz_point[2]);
+        break;
+<a name="anchor-115"></a>    case PRO_QUILT :
+#ifndef PT_PRODUCTS_BUILD
+        status = ProQuiltInit((ProSolid)model_item.owner, model_item.id, &amp;p_quilt);
+        TEST_CALL_REPORT(&quot;ProQuiltInit()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-116"></a>
+        status = ProQuiltIdGet(p_quilt, &amp;geomitem.id);
+        TEST_CALL_REPORT(&quot;ProQuiltIdGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        status = ProQuiltToGeomitem((ProSolid)model_item.owner, p_quilt, &amp;geomitem);
+<a name="anchor-117"></a>        TEST_CALL_REPORT(&quot;ProQuiltToGeomitem()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        status = ProGeomitemToQuilt(&amp;geomitem, &amp;p_quilt);
+        TEST_CALL_REPORT(&quot;ProGeomitemToQuilt()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-118"></a>        ProTKFprintf(fp,&quot;Quilt id %d\n&quot;, geomitem.id);
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+        break;
+    case PRO_SURFACE :
+/*--------------------------------------------------------------------*\
+<a name="anchor-119"></a>        Get and dump the area of the surface
+\*--------------------------------------------------------------------*/
+        status = ProSurfaceInit(model_item.owner, model_item.id, &amp;p_surface);
+        TEST_CALL_REPORT(&quot;ProSurfaceInit()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                    status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-120"></a>
+        status = ProSurfaceToGeomitem((ProSolid)model_item.owner, p_surface, &amp;geomitem);
+        TEST_CALL_REPORT(&quot;ProSurfaceToGeomitem()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        status = ProGeomitemToSurface(&amp;geomitem, &amp;p_surface);
+<a name="anchor-121"></a>        TEST_CALL_REPORT(&quot;ProGeomitemToSurface()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+        status = ProSurfaceAreaEval(p_surface, &amp;area);
+        TEST_CALL_REPORT(&quot;ProSurfaceAreaEval()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+<a name="anchor-122"></a>                    status, (status != PRO_TK_NO_ERROR &amp;&amp;
+                             status != PRO_TK_OUT_OF_RANGE));
+        if(status == PRO_TK_NO_ERROR)
+            ProTKFprintf(fp,&quot;Surface area is %6.2f\n\n&quot;, area);
+/*--------------------------------------------------------------------*\
+<a name="anchor-123"></a>        Get surface extremes
+\*--------------------------------------------------------------------*/
+        status = ProUtilCollectSurfaceContours(p_surface, &amp;p_contours);    
+        if (status == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-124"></a>            ProArrayFree((ProArray*)&amp;p_contours);
+            /* Do not calculate extremes if surface  doesn't have edges */
+            dir [0] = dir[1] = dir[2] = 0.7071;
+        
+            status = ProSurfaceExtremesEval(p_surface, dir, xyz_min, xyz_max);
+<a name="anchor-125"></a>            TEST_CALL_REPORT(&quot;ProSurfaceExtremesEval()&quot;,
+                &quot;ProUtilGeomitemDump()&quot;, status, status != PRO_TK_NO_ERROR);
+
+    
+            ProTKFprintf(fp,&quot;Surface extremes (min) %.2f %.2f %.2f\n&quot;,
+<a name="anchor-126"></a>	        xyz_min[0], xyz_min[1], xyz_min[2]);
+            ProTKFprintf(fp,&quot;Surface extremes (max) %.2f %.2f %.2f\n\n&quot;,
+	        xyz_max[0], xyz_max[1], xyz_max[2]);
+        }
+	status = ProMdlTypeGet(model_item.owner, &amp;mdltype);
+<a name="anchor-127"></a>        TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+					    status, status != PRO_TK_NO_ERROR );
+
+#ifndef PT_PRODUCTS_BUILD
+	if (mdltype == PRO_MDL_PART)
+<a name="anchor-128"></a>	{
+	    status = ProSurfaceQuiltGet((ProSolid)model_item.owner ,p_surface, &amp;p_quilt);
+	    TEST_CALL_REPORT(&quot; ProSurfaceQuiltGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+	    status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-129"></a>	    if (status == PRO_TK_NO_ERROR)
+		ProTKFprintf(fp, &quot;This surface belong to quilt\n&quot;);
+	}
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+/*--------------------------------------------------------------------*\
+<a name="anchor-130"></a>        Get the geometrical equations of the surface
+\*--------------------------------------------------------------------*/
+        status = ProSurfaceDataGet(p_surface, &amp;gitem_data);
+        TEST_CALL_REPORT(&quot;ProSurfaceDataGet()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-131"></a>
+        if(status == PRO_TK_NO_ERROR)
+        {
+/*--------------------------------------------------------------------*\
+            Dump the geometry of the surface
+<a name="anchor-132"></a>\*--------------------------------------------------------------------*/
+            ProUtilGeomitemshapeDump(fp, gitem_data);
+        }
+/*--------------------------------------------------------------------*\
+        Surface to NURBS
+<a name="anchor-133"></a>\*--------------------------------------------------------------------*/
+        status = ProSurfaceToNURBS(p_surface, &amp;p_surf_data);
+        TEST_CALL_REPORT(&quot;ProSurfaceToNURBS()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        if(status == PRO_TK_NO_ERROR)
+<a name="anchor-134"></a>        {
+	    ProTKFprintf(fp, &quot;Surface, translated to NURBS\n&quot;);
+            ProUtilSurfacedataPrint(fp, (char*)&quot;    &quot;, p_surf_data);
+
+            status = ProSurfaceDataFree(&amp;p_surf_data);
+<a name="anchor-135"></a>            TEST_CALL_REPORT(&quot;ProSurfaceDataFree()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                    status, status != PRO_TK_NO_ERROR);
+        }
+
+        break;
+<a name="anchor-136"></a>    default :;
+    }
+   
+    if (gitem_data != NULL)
+    {
+<a name="anchor-137"></a>        status = ProGeomitemdataFree(&amp;gitem_data);
+        TEST_CALL_REPORT(&quot;ProGeomitemdataFree()&quot;, &quot;ProUtilGeomitemDump()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-138"></a>   return(0);
+}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilPointMindist()
+<a name="anchor-139"></a>    PURPOSE  :  Minimum distance between a point and an edge, curve,
+                or surface.
+\*====================================================================*/
+int ProUtilPointMindist(
+    ProVector point,    /* I - Input point in root coords */
+<a name="anchor-140"></a>    ProSelection *item, /* I - Edge, Curve or Surface     */
+    double *distance,   /* O - Minimum distance           */
+    double *closest)    /* O - Closest point in root coords */
+{
+    ProError status;
+<a name="anchor-141"></a>    ProMatrix transform;
+    ProVector local_point;
+    double t;
+    ProUvParam uv;
+    ProCurve p_curve;
+<a name="anchor-142"></a>    ProEdge p_edge;
+    ProSurface p_surface;
+    ProAsmcomppath comp_path;
+    ProModelitem model_item;
+
+<a name="anchor-143"></a>    status = ProSelectionAsmcomppathGet(*item, &amp;comp_path);
+    TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProUtilPointMindist()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-144"></a>    Transform the distance point from root coords to the coords
+    local to the selected item.
+\*--------------------------------------------------------------------*/
+    status = ProAsmcomppathTrfGet(&amp;comp_path, PRO_B_FALSE, transform);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathTrfGet()&quot;, &quot;ProUtilPointMindist()&quot;,
+<a name="anchor-145"></a>                    status, status != PRO_TK_NO_ERROR);
+    ProUtilPointTrans(transform, point, local_point);
+
+/*--------------------------------------------------------------------*\
+    Calculate the mininum distance
+<a name="anchor-146"></a>\*--------------------------------------------------------------------*/
+    status = ProSelectionModelitemGet(*item, &amp;model_item);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProUtilPointMindist()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-147"></a>    switch(model_item.type)
+    {
+    case PRO_EDGE :
+/*--------------------------------------------------------------------*\
+        Calculate the value of &quot;t&quot; for the nearest point on the edge
+<a name="anchor-148"></a>\*--------------------------------------------------------------------*/
+        status = ProEdgeInit((ProSolid)model_item.owner, model_item.id, &amp;p_edge);
+        TEST_CALL_REPORT(&quot;ProEdgeInit()&quot;, &quot;ProUtilPointMindist()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+         if (status!= PRO_TK_NO_ERROR)
+<a name="anchor-149"></a>            return (1);
+
+        status = ProEdgeParamEval(p_edge, local_point, &amp;t);
+        TEST_CALL_REPORT(&quot;ProEdgeParamEval()&quot;, &quot;ProUtilPointMindist()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-150"></a>         if (status!= PRO_TK_NO_ERROR)
+            return (1);
+
+/*--------------------------------------------------------------------*\
+        Calculate the location for that &quot;t&quot; value.
+<a name="anchor-151"></a>\*--------------------------------------------------------------------*/
+        status = ProEdgeXyzdataEval(p_edge, t,
+                                        closest, NULL, NULL, NULL);
+        TEST_CALL_REPORT(&quot;ProEdgeXyzdataEval()&quot;, &quot;ProUtilPointMindist()&quot;,
+                status, status != PRO_TK_NO_ERROR );
+<a name="anchor-152"></a>         if (status!= PRO_TK_NO_ERROR)
+            return (1);
+
+        break;
+    case PRO_CURVE :
+<a name="anchor-153"></a>/*--------------------------------------------------------------------*\
+        Calculate the value of &quot;t&quot; for the nearest point on the curve
+\*--------------------------------------------------------------------*/
+        status = ProCurveInit((ProSolid)model_item.owner,model_item.id,&amp;p_curve);
+         if (status!= PRO_TK_NO_ERROR)
+<a name="anchor-154"></a>            return (1);
+        status = ProCurveParamEval(p_curve, local_point, &amp;t);
+        TEST_CALL_REPORT(&quot;ProCurveParamEval()&quot;, &quot;ProUtilPointMindist()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+         if (status!= PRO_TK_NO_ERROR)
+<a name="anchor-155"></a>            return (1);
+
+/*--------------------------------------------------------------------*\
+        Calculate the location for that &quot;t&quot; value.
+\*--------------------------------------------------------------------*/
+<a name="anchor-156"></a>        status = ProCurveInit((ProSolid)model_item.owner,model_item.id,&amp;p_curve);
+         if (status!= PRO_TK_NO_ERROR)
+            return (1);
+        status = ProCurveXyzdataEval(p_curve, t,closest, NULL, NULL);
+        TEST_CALL_REPORT(&quot;ProCurveXyzdataEval()&quot;, &quot;ProUtilPointMindist()&quot;,
+<a name="anchor-157"></a>                status, status != PRO_TK_NO_ERROR );
+         if (status!= PRO_TK_NO_ERROR)
+            return (1);
+
+        break;
+<a name="anchor-158"></a>    case PRO_SURFACE :
+        status = ProSurfaceInit(model_item.owner, model_item.id,
+               &amp;p_surface);
+        TEST_CALL_REPORT(&quot;ProSurfaceInit()&quot;, &quot;ProUtilPointMindist()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-159"></a>         if (status!= PRO_TK_NO_ERROR)
+            return (1);
+
+/*--------------------------------------------------------------------*\
+        Calculate the value of &quot;u&quot; and &quot;v&quot; for the nearest point on
+<a name="anchor-160"></a>        the surface
+\*--------------------------------------------------------------------*/
+        status = ProSurfaceParamEval((ProSolid)model_item.owner,
+                         p_surface, local_point, uv);
+        TEST_CALL_REPORT(&quot;ProSurfaceParamEval()&quot;, &quot;ProUtilPointMindist()&quot;,
+<a name="anchor-161"></a>                                        status, status != PRO_TK_NO_ERROR);
+         if (status!= PRO_TK_NO_ERROR)
+            return (1);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-162"></a>        Calculate the location for that &quot;uv&quot; value.
+\*--------------------------------------------------------------------*/
+        status = ProSurfaceXyzdataEval(p_surface, uv,
+                                        closest, NULL, NULL, NULL);
+        TEST_CALL_REPORT(&quot;ProSurfaceXyzdataEval()&quot;, &quot;ProUtilPointMindist()&quot;,
+<a name="anchor-163"></a>                status, status != PRO_TK_NO_ERROR );
+         if (status!= PRO_TK_NO_ERROR)
+            return (1);
+
+        break;
+<a name="anchor-164"></a>    default :
+        return(1);
+    }
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-165"></a>    Transform the closest point back to root coordinates
+\*--------------------------------------------------------------------*/
+    status = ProAsmcomppathTrfGet(&amp;comp_path, PRO_B_TRUE, transform);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathTrfGet()&quot;, &quot;ProUtilPointMindist()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-166"></a>    ProUtilPointTrans(transform, closest, closest);
+
+    *distance = ProUtilPointsDist(point, closest);
+
+    return(0);
+<a name="anchor-167"></a>}
+
+/*===========================================================================*\
+  Function : ProTestGeometryAtPoint
+  Purpose  : find what geometry a point is on
+<a name="anchor-168"></a>\*===========================================================================*/
+int ProTestGeometryAtPoint(ProAppData app_data, int b)
+{
+    Pro3dPnt pnt;
+    ProMdl model = ((ProMdl*)app_data)[0];
+<a name="anchor-169"></a>    ProPart part;
+    int i,p_count,edge_no=0,minId,k,l;
+    ProSelection *p_sel_arr, select;
+    ProError status;
+    FILE *fp;
+<a name="anchor-170"></a>    ProCharLine fname;
+    ProModelitem mod_item;
+    ProUvParam uv_par;
+    double uvpTemp;
+    ProMdlType mdltype;
+<a name="anchor-171"></a>    edgeInfo *edgeInfoCollect;
+    edgeInfo edgeInfo_indv;
+
+/*--------------------------------------------------------------------*\
+    Find out the model type
+<a name="anchor-172"></a>\*--------------------------------------------------------------------*/
+    status = ProMdlTypeGet(model, &amp;mdltype);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestGeometryAtPoint()&quot;,
+                                        status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-173"></a>    if (mdltype!=PRO_MDL_PART)
+    {
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;This function works on part only&quot;);
+	return (0);
+    }
+<a name="anchor-174"></a>
+    part = (ProPart)model;
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter X coordinate:&quot;);
+    if (ProUtilDoubleGet(NULL, NULL, &amp;pnt[0])==0)
+        return (0);
+<a name="anchor-175"></a>
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter Y coordinate:&quot;);
+    if (ProUtilDoubleGet(NULL, NULL, &amp;pnt[1])==0)
+        return (0);
+
+<a name="anchor-176"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter Z coordinate:&quot;);
+    if (ProUtilDoubleGet(NULL, NULL, &amp;pnt[2])==0)
+        return (0);
+
+    p_count = 0;
+<a name="anchor-177"></a>    status = ProGeometryAtPointFind(part, pnt, &amp;p_sel_arr, &amp;p_count);
+    TEST_CALL_REPORT(&quot;ProGeometryAtPointFind()&quot;, &quot;ProTestGeometryAtPoint()&quot;,
+          status, status != PRO_TK_NO_ERROR  &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+
+    if ( p_count == 0 || status != PRO_TK_NO_ERROR)
+<a name="anchor-178"></a>    {
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Point does not lie on geometry&quot;);
+	return (0);
+    }
+      else
+<a name="anchor-179"></a>        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Point lies on hilighted geometry&quot;);
+
+    ProTestQcrName((ProMdl*)&amp;part, (char*)&quot;.pgm&quot;, fname);
+    if ( (fp = PTApplsUnicodeFopen(fname,&quot;a&quot;)) == NULL )
+           return(-1);
+<a name="anchor-180"></a>
+    ProTKFprintf(fp,&quot;Point %0.2lf, %0.2lf, %0.2lf lies on the following geometry:\n&quot;,
+              pnt[0],pnt[1],pnt[2]);
+
+    status = ProArrayAlloc (0, sizeof(edgeInfo), 1, (ProArray*)&amp;edgeInfoCollect);
+<a name="anchor-181"></a>        TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,
+            &quot;ProTestGeometryAtPoint()&quot;, status, status != PRO_TK_NO_ERROR );
+
+    for (i=0; i&lt;p_count; i++)
+    {
+<a name="anchor-182"></a>
+        status = ProSelectionModelitemGet(p_sel_arr[i], &amp;mod_item);
+        TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+	    &quot;ProTestGeometryAtPoint()&quot;, status, status != PRO_TK_NO_ERROR );
+            
+<a name="anchor-183"></a>        status = ProSelectionAlloc(NULL, &amp;mod_item, &amp;select);
+        TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;, &quot;ProTestGeometryAtPoint()&quot;,
+                                        status, status != PRO_TK_NO_ERROR );
+        
+        status = ProSelectionHighlight(select, PRO_COLOR_HIGHLITE);
+<a name="anchor-184"></a>        TEST_CALL_REPORT(&quot;ProSelectionHighlight()&quot;, &quot;ProTestGeometryAtPoint()&quot;,
+                                        status, status != PRO_TK_NO_ERROR );
+        
+        status = ProSelectionUvParamGet(p_sel_arr[i], uv_par);
+        TEST_CALL_REPORT(&quot;ProSelectionUvParamGet()&quot;,
+<a name="anchor-185"></a>	    &quot;ProTestGeometryAtPoint()&quot;, status, status != PRO_TK_NO_ERROR );
+
+        if ( mod_item.type == PRO_EDGE )
+	  {
+            edgeInfo_indv.edgeId =mod_item.id;
+<a name="anchor-186"></a>            edgeInfo_indv.uvparam =uv_par[0];
+            ProArrayObjectAdd ((ProArray*)&amp;edgeInfoCollect, edge_no, 1, &amp;edgeInfo_indv);
+            edge_no++;
+	  }
+	
+<a name="anchor-187"></a>        else 
+          {
+	    ProTKFprintf(fp,&quot;\tPRO_SURFACE Id [%d] UV parameters: %0.2lf, %0.2lf\n&quot;,
+		    mod_item.id,uv_par[0],uv_par[1]);
+          }
+<a name="anchor-188"></a>	
+    }
+    
+    if ( mod_item.type == PRO_EDGE )
+      {
+<a name="anchor-189"></a>	if(edge_no>0)
+	  {
+	    for (k=0; k&lt;=edge_no-1; k++)
+	      {
+		for (l=k+1; l&lt;edge_no; l++)
+<a name="anchor-190"></a>		  {
+		    if ( edgeInfoCollect[k].edgeId > edgeInfoCollect[l].edgeId)
+		      {
+			minId =edgeInfoCollect[k].edgeId;
+			edgeInfoCollect[k].edgeId = edgeInfoCollect[l].edgeId;
+<a name="anchor-191"></a>			edgeInfoCollect[l].edgeId = minId;
+			
+                        uvpTemp = edgeInfoCollect[k].uvparam;
+                        edgeInfoCollect[k].uvparam = edgeInfoCollect[l].uvparam;
+                        edgeInfoCollect[l].uvparam = uvpTemp; 
+<a name="anchor-192"></a>		      }
+		  }
+	      }
+	    
+	    for (k=0; k&lt;=edge_no-1; k++)
+<a name="anchor-193"></a>	      {
+		
+		ProTKFprintf(fp, &quot;\tPRO_EDGE Id[%d] T parameter: %0.2lf\n&quot;,edgeInfoCollect[k].edgeId,edgeInfoCollect[k].uvparam); 
+	      }
+	  }
+<a name="anchor-194"></a>	else 
+	  {
+            ProTKFprintf(fp, &quot;\tPRO_EDGE Id[%d] T parameter: %0.2lf\n&quot;,edgeInfoCollect[0].edgeId, edgeInfoCollect[0].uvparam);
+	    ProTKFprintf(fp, &quot;\n&quot;);
+	  }
+<a name="anchor-195"></a>      }
+      
+    for ( i = 0; i &lt; p_count; i++ ) 
+      {
+	status = ProSelectionFree(&amp;p_sel_arr[i]);
+<a name="anchor-196"></a>        TEST_CALL_REPORT(&quot;ProSelectionFree()&quot;, &quot;ProTestGeometryAtPoint()&quot;,
+			 status, status != PRO_TK_NO_ERROR );
+	
+      }
+    status = ProArrayFree( (ProArray *) &amp;p_sel_arr );
+<a name="anchor-197"></a>    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestGeometryAtPoint()&quot;,
+		     status, status != PRO_TK_NO_ERROR );
+    fclose(fp);
+    
+    return(0);
+<a name="anchor-198"></a>}
+
+</pre>
+</body>
+</html>

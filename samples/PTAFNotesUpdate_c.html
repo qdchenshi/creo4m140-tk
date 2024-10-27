@@ -1,0 +1,354 @@
+<html>
+<head>
+<title>PTAFNotesUpdate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMenuBar.h>
+#include &lt;ProMdl.h>
+#include &lt;ProFeature.h>
+#include &lt;ProLayer.h>
+<a name="anchor-2"></a>#include &lt;ProAnnotationFeat.h>
+#include &lt;ProAnnotationElem.h>
+
+
+#include &lt;PTAFExamples.h>
+<a name="anchor-3"></a>#include &lt;ProTKRunTime.h>
+
+/*====================================================================*\
+  FUNCTION :	 TestPTAFExUpdatePatternNotes()
+  PURPOSE  :   Enable access to the Update Pattern Notes	
+<a name="anchor-4"></a>\*====================================================================*/
+uiCmdAccessState TestPTAFExUpdatePatternNotes(uiCmdAccessMode access_mode)
+{
+  ProMdl mdl;
+  ProMdlType mdltype;
+<a name="anchor-5"></a>  ProModelitem selected_item;
+  ProSelection *sel=NULL;
+  ProFeattype feat_type;
+  ProPattern annot_pattern;
+
+<a name="anchor-6"></a>/*---------------------------------------------------------------------*\
+Test to See if the current model is a Part / Assembly where annotation 
+features exist
+\*---------------------------------------------------------------------*/
+  status = ProMdlCurrentGet(&amp;mdl);
+<a name="anchor-7"></a>  if (status != PRO_TK_NO_ERROR) return (ACCESS_UNAVAILABLE);
+
+  ProMdlTypeGet(mdl, &amp;mdltype); 
+  if ((mdltype != PRO_MDL_PART) &amp;&amp; (mdltype != PRO_MDL_ASSEMBLY))
+    return (ACCESS_UNAVAILABLE);
+<a name="anchor-8"></a>
+/*---------------------------------------------------------------------*\
+Test to see if the Selection buffer if empty
+Get the Annotation Element from the Selection buffer
+\*---------------------------------------------------------------------*/
+<a name="anchor-9"></a>  status = PTAFExTestforSelectionsInBuffer();
+
+  PT_TEST_LOG_SUCC(&quot;PTAFExTestforSelectionsInBuffer &quot;);
+
+  if (status != PRO_TK_NO_ERROR) return (ACCESS_UNAVAILABLE);
+<a name="anchor-10"></a>  
+/*---------------------------------------------------------------------*\
+User gets the ProSelection from the selection buffer
+\*---------------------------------------------------------------------*/
+  status = ProSelbufferSelectionsGet(&amp;sel);
+<a name="anchor-11"></a>
+/*---------------------------------------------------------------------*\
+Get ModelItem from the ProSelection
+\*---------------------------------------------------------------------*/
+  status = ProSelectionModelitemGet(sel[0], &amp;selected_item);
+<a name="anchor-12"></a>  PT_TEST_LOG_SUCC(&quot;PTAFExCreateRoundfromAE::ProSelectionModelitemGet &quot;);
+  
+  ProSelectionarrayFree (sel);
+
+  if (selected_item.type == PRO_FEATURE) {
+<a name="anchor-13"></a>/*---------------------------------------------------------------------*\
+Make sure that the feature type is Annotation
+\*---------------------------------------------------------------------*/
+    status = ProFeatureTypeGet((ProFeature *)&amp;selected_item, &amp;feat_type);
+
+<a name="anchor-14"></a>    if (feat_type == PRO_FEAT_ANNOTATION) {
+/*---------------------------------------------------------------------*\
+Get the Pattern for this feature, if available
+\*---------------------------------------------------------------------*/
+      status = ProFeaturePatternGet((ProFeature *)&amp;selected_item, PRO_FEAT_PATTERN, &amp;annot_pattern);
+<a name="anchor-15"></a>
+      if (status == PRO_TK_NO_ERROR) 	return (ACCESS_AVAILABLE);
+      else return (ACCESS_UNAVAILABLE);
+    }
+  }
+<a name="anchor-16"></a>  return (ACCESS_UNAVAILABLE);
+}
+
+/*====================================================================*\
+  FUNCTION :   PTAFExFeatureAnnotElemUpdateVisitAction()
+<a name="anchor-17"></a>  PURPOSE  :   Enable access to the Update Pattern Notes	
+\*====================================================================*/
+ProError PTAFExFeatureAnnotElemUpdateVisitAction (ProAnnotationElem *annot_elem, 
+						  ProError status, 
+						  ProAppData p_new_string)
+<a name="anchor-18"></a>{
+  ProError err;
+  ProAnnotation note;
+  wchar_t** existing_note;
+  wchar_t** new_note;
+<a name="anchor-19"></a>  int i;
+  int p_size, new_size;
+
+/*---------------------------------------------------------------------*\
+Get the Annotation from the Annotation element
+<a name="anchor-20"></a>\*---------------------------------------------------------------------*/
+  err = ProAnnotationelemAnnotationGet(annot_elem, &amp;note);
+
+  ProAnnotationUndisplay (&amp;note, NULL, NULL);
+
+<a name="anchor-21"></a>/*---------------------------------------------------------------------*\
+Make sure that the annotation is a 3D note
+\*---------------------------------------------------------------------*/
+  if (note.type != PRO_NOTE) return PRO_TK_NO_ERROR;
+
+<a name="anchor-22"></a>  else {
+/*---------------------------------------------------------------------*\
+Get the existing Note from the ProNote
+\*---------------------------------------------------------------------*/
+    err = ProNoteTextGet((ProNote *)&amp;note, PRODISPMODE_SYMBOLIC, 
+<a name="anchor-23"></a>			 &amp;existing_note);
+
+/*---------------------------------------------------------------------*\
+Get the size (array) of the existing note
+\*---------------------------------------------------------------------*/
+<a name="anchor-24"></a>    err = ProArraySizeGet((ProArray)existing_note, &amp;p_size);
+
+/*---------------------------------------------------------------------*\
+Allocate the new note text as a new array. This allows us to use
+ProWstringproarrayFree on the existing note text array, later.
+<a name="anchor-25"></a>\*---------------------------------------------------------------------*/
+    err = ProArrayAlloc (p_size+1, sizeof (wchar_t*), 1, 
+			 (ProArray*)&amp;new_note);
+    for (i = 0; i &lt; p_size; i ++)
+      {
+<a name="anchor-26"></a>	new_note [i] = existing_note [i];
+      }
+
+    new_note [p_size] = (wchar_t*)calloc (strlen (p_new_string) + 1, 
+					  sizeof (wchar_t));
+<a name="anchor-27"></a>    
+/*---------------------------------------------------------------------*\
+Add the new string value to the array
+\*---------------------------------------------------------------------*/
+    
+<a name="anchor-28"></a>    ProStringToWstring(new_note[p_size], (char *)p_new_string);
+
+/*---------------------------------------------------------------------*\
+Add the new line to the 3D note
+\*---------------------------------------------------------------------*/
+<a name="anchor-29"></a>    err = ProNoteTextSet((ProNote *)&amp;note, new_note);
+
+    ProAnnotationDisplay (&amp;note, NULL, NULL, NULL);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-30"></a>Free allocated memory
+\*---------------------------------------------------------------------*/
+    free (new_note [p_size]);
+    ProArrayFree ((ProArray*)&amp;new_note);
+
+<a name="anchor-31"></a>    ProWstringproarrayFree (existing_note);
+  }
+
+  return PRO_TK_GENERAL_ERROR;
+}
+<a name="anchor-32"></a>
+/*====================================================================*\
+    FUNCTION :	 PTAFExFeatureAnnotElemVisitAction()
+    PURPOSE  :   Visit function for Annotation Elements in a Feature	
+\*====================================================================*/
+<a name="anchor-33"></a>ProError PTAFExFeatureAnnotElemVisitAction (ProAnnotationElem *annot_elem, 
+					    ProError status, 
+					    ProAppData dummy)
+{
+  ProError err;
+<a name="anchor-34"></a>  ProLayer layer;
+  ProLayerItem layer_item;
+  ProMdl current_model;
+  ProName layer_name;
+  ProFeature feature;
+<a name="anchor-35"></a>  ProNote note;
+
+  err = ProMdlCurrentGet(&amp;current_model);
+  if (status != PRO_TK_NO_ERROR) return (ACCESS_UNAVAILABLE);
+  
+<a name="anchor-36"></a>  ProStringToWstring(layer_name, &quot;PTAFEX_TK&quot;);
+
+/*---------------------------------------------------------------------*\
+Get the Feature from the Annotation element
+\*---------------------------------------------------------------------*/
+<a name="anchor-37"></a>  err = ProAnnotationelemFeatureGet(annot_elem, &amp;feature);
+  err = ProAnnotationelemAnnotationGet (annot_elem, &amp;note);
+ 
+/*---------------------------------------------------------------------*\
+Since the Annotation Erase does not work consistently, 
+<a name="anchor-38"></a>We will use the blanked layer approach
+\*---------------------------------------------------------------------*/
+  err = ProLayerCreate(current_model, layer_name, &amp;layer);
+  
+  if ((err == PRO_TK_NO_ERROR) || (err == PRO_TK_E_FOUND)) 
+<a name="anchor-39"></a>    {
+      
+/*---------------------------------------------------------------------*\
+Add the annotation element to the layer
+\*---------------------------------------------------------------------*/
+<a name="anchor-40"></a>      err = ProLayerItemInit(PRO_LAYER_FEAT, feature.id, current_model, &amp;layer_item);
+      
+      err = ProLayerItemAdd(&amp;layer, &amp;layer_item);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-41"></a>Set the layer status to BLANK and save 
+\*---------------------------------------------------------------------*/
+      err = ProLayerDisplaystatusSet(&amp;layer, PRO_LAYER_TYPE_BLANK);
+      err = ProLayerDisplaystatusSave(current_model);
+ 
+<a name="anchor-42"></a>    }
+	
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-43"></a>/*====================================================================*\
+  FUNCTION :	 TestPTAFExUpdatePatternNotes()
+  PURPOSE  :   Enable access to the Update Pattern Notes	
+\*====================================================================*/
+ProError PTAFExUpdateAnnotationLeader(ProMdl model, int leader_feat_id, int num_members)
+<a name="anchor-44"></a>{
+  ProFeature feat;
+  char new_string[PRO_LINE_SIZE];
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-45"></a>Initialize a feature object
+\*---------------------------------------------------------------------*/
+  status = ProFeatureInit(model, leader_feat_id, &amp;feat);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-46"></a>Create the New string to be passed to add to the Leader Annotation Feature
+\*---------------------------------------------------------------------*/
+  ProTKSprintf(new_string, &quot;%i: REF GENERAL PATTERN&quot;, num_members);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-47"></a>Visit the Annotation Elements in the Annotation Feature
+\*---------------------------------------------------------------------*/
+  status = ProFeatureAnnotationelemsVisit(&amp;feat, (ProAnnotationelemVisitAction)PTAFExFeatureAnnotElemUpdateVisitAction, NULL, (ProAppData)new_string);
+	
+  return PRO_TK_NO_ERROR;
+<a name="anchor-48"></a>}
+
+
+/*====================================================================*\
+  FUNCTION :	 TestPTAFExUpdatePatternNotes()
+<a name="anchor-49"></a>  PURPOSE  :   Enable access to the Update Pattern Notes	
+\*====================================================================*/
+ProError PTAFExHidePatternAnnotation (ProMdl model, int pattern_feat_id)
+{
+  ProFeature feat;
+<a name="anchor-50"></a>  int dummy=0;
+
+/*---------------------------------------------------------------------*\
+Initialize a feature object
+\*---------------------------------------------------------------------*/
+<a name="anchor-51"></a>  status = ProFeatureInit(model, pattern_feat_id, &amp;feat);
+
+/*---------------------------------------------------------------------*\
+Visit the Annotation Elements in the Annotation Feature
+\*---------------------------------------------------------------------*/
+<a name="anchor-52"></a>  status = ProFeatureAnnotationelemsVisit(&amp;feat, (ProAnnotationelemVisitAction)PTAFExFeatureAnnotElemVisitAction, NULL, NULL);
+  
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-53"></a>/*====================================================================*\
+  FUNCTION :	 TestPTAFExUpdatePatternNotes()
+  PURPOSE  :   Enable access to the Update Pattern Notes	
+\*====================================================================*/
+ProError PTAFExUpdateNotePattern()
+<a name="anchor-54"></a>{
+  ProSelection *sel=NULL;
+  ProModelitem feature;
+  ProFeature pattern_leader;
+  ProFeattype feat_type;
+<a name="anchor-55"></a>  ProPattern annot_pattern;
+  ProMdl curr_mdl;
+  ProFeature* feat_members;
+  int num_members;
+  int i=0, j=0;
+<a name="anchor-56"></a>
+  
+  
+  status = ProMdlCurrentGet(&amp;curr_mdl);
+  if (status != PRO_TK_NO_ERROR) return (ACCESS_UNAVAILABLE);
+<a name="anchor-57"></a>/*---------------------------------------------------------------------*\
+Check to see if the pre-selected item is a Pattern of Annotation Features
+User gets the ProSelection from the selection buffer
+\*---------------------------------------------------------------------*/
+  status = ProSelbufferSelectionsGet(&amp;sel);
+<a name="anchor-58"></a>
+/*---------------------------------------------------------------------*\
+Get ModelItem from the ProSelection
+\*---------------------------------------------------------------------*/
+  status = ProSelectionModelitemGet(sel[0], &amp;feature);
+<a name="anchor-59"></a>
+  ProSelectionarrayFree (sel); 
+
+/*---------------------------------------------------------------------*\
+Make sure the item selected is a feature
+<a name="anchor-60"></a>\*---------------------------------------------------------------------*/
+  if (feature.type != PRO_FEATURE) {
+    ProMessageDisplay(message_file_init, &quot;PTAFEX ERROR %0s&quot;, &quot;Object selected is not a Pro/E Feature.&quot;);
+    return PRO_TK_NO_ERROR;
+  }
+<a name="anchor-61"></a>
+  status = ProFeatureTypeGet(&amp;feature, &amp;feat_type);
+  
+  if (feat_type == PRO_FEAT_ANNOTATION) {
+/*---------------------------------------------------------------------*\
+<a name="anchor-62"></a>Get the Pattern for this feature
+\*---------------------------------------------------------------------*/
+    status = ProFeaturePatternGet(&amp;feature, PRO_FEAT_PATTERN, &amp;annot_pattern);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-63"></a>Get the leader of the pattern
+\*---------------------------------------------------------------------*/
+    status = ProPatternLeaderGet(&amp;annot_pattern, &amp;pattern_leader);
+
+
+<a name="anchor-64"></a>/*---------------------------------------------------------------------*\
+Get the pattern information from the Pro/DEVELOP functions
+\*---------------------------------------------------------------------*/
+
+	status = ProPatternMembersGet(&amp;annot_pattern, &amp;feat_members);
+<a name="anchor-65"></a>	status = ProArraySizeGet(feat_members, &amp;num_members);
+	status = PTAFExUpdateAnnotationLeader(curr_mdl, feat_members[0].id, num_members);
+
+/*---------------------------------------------------------------------*\
+Erase the annotation in the feature
+<a name="anchor-66"></a>\*---------------------------------------------------------------------*/
+
+	for (i=1; i&lt;num_members; i++) 
+	{
+		status = PTAFExHidePatternAnnotation(curr_mdl, feat_members[i].id);
+<a name="anchor-67"></a>
+	}
+
+
+
+<a name="anchor-68"></a>  }
+
+  ProWindowRepaint (PRO_VALUE_UNUSED);
+
+  return PRO_TK_NO_ERROR;
+<a name="anchor-69"></a>}
+</pre>
+</body>
+</html>

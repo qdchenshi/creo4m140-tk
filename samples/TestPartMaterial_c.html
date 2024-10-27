@@ -1,0 +1,287 @@
+<html>
+<head>
+<title>TestPartMaterial.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+    Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProObjects.h>
+<a name="anchor-2"></a>#include &lt;ProPart.h>
+#include &lt;ProUtil.h>
+#include &lt;ProMaterial.h>
+#include &lt;ProMenu.h>
+#include &lt;ProWstring.h>
+<a name="anchor-3"></a>#include &lt;ProMessage.h>
+#include &lt;ProTKRunTime.h>
+
+/*--------------------------------------------------------------------*\
+    Application includes
+<a name="anchor-4"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+    Macros
+\*--------------------------------------------------------------------*/
+#define USER_ADD     0
+#define USER_DELETE  1
+<a name="anchor-6"></a>#define USER_ASSIGN  2
+#define USER_DENSITY 3
+#define USER_READ    4
+#define USER_WRITE   5
+
+<a name="anchor-7"></a>/*--------------------------------------------------------------------*\
+    Application global/external data
+\*--------------------------------------------------------------------*/
+static struct pro_material_props def_props = {
+ 29e6, /*yonug_modulus*/
+<a name="anchor-8"></a> 0.27, /*poisson_ratio*/
+ 11e6,
+ 0.00879, /*mass_density*/
+ 6.78, 
+ 32.0, /*tharm_exp_ref_temp*/
+<a name="anchor-9"></a> 0.01, 
+ 36000.0, /*stress_lim_tension*/
+ 36000.0,
+ 36000.0, /*stress_lim_shear*/
+ 0.0,
+<a name="anchor-10"></a> 1.0, /*emisisivity*/
+ 1.0,
+ 1.0, /*hardness*/
+ {0},
+ 0.0, /*init_bend_y_factor*/
+<a name="anchor-11"></a> {0}
+};
+
+/*=============================================================*\
+ Function: ProTestPartMaterial()
+<a name="anchor-12"></a> Purpose:  Get/Set the part material name
+\*=============================================================*/
+int ProTestPartMaterial( ProMdl* part)
+{
+    int ProTestMaterialAction();
+<a name="anchor-13"></a>    int menu_id, action;
+
+    ProMenuFileRegister((char*)&quot;TkMaterial&quot;,(char*)&quot;tkmaterial.mnu&quot;, NULL);
+    ProMenubuttonActionSet((char*)&quot;TkMaterial&quot;,(char*)&quot;TkMaterial&quot;,
+                           (ProMenubuttonAction)ProMenuDelete, NULL,  0);
+<a name="anchor-14"></a>    ProMenubuttonActionSet((char*)&quot;TkMaterial&quot;,(char*)&quot;-Done/Return&quot;,
+                           (ProMenubuttonAction)ProMenuDelete, NULL,  0);
+    ProMenubuttonActionSet((char*)&quot;TkMaterial&quot;,(char*)&quot;-Add&quot;,
+               	(ProMenubuttonAction)ProTestMaterialAction, part, USER_ADD);
+    ProMenubuttonActionSet((char*)&quot;TkMaterial&quot;,(char*)&quot;-Delete&quot;,
+<a name="anchor-15"></a>               	(ProMenubuttonAction)ProTestMaterialAction, part, USER_DELETE);
+    ProMenubuttonActionSet((char*)&quot;TkMaterial&quot;,(char*)&quot;-Assign&quot;,
+               	(ProMenubuttonAction)ProTestMaterialAction, part, USER_ASSIGN);
+    ProMenubuttonActionSet((char*)&quot;TkMaterial&quot;,(char*)&quot;-Density&quot;,
+               	(ProMenubuttonAction)ProTestMaterialAction, part, USER_DENSITY);
+<a name="anchor-16"></a>    ProMenubuttonActionSet((char*)&quot;TkMaterial&quot;,(char*)&quot;-Read&quot;,
+               	(ProMenubuttonAction)ProTestMaterialAction, part, USER_READ);
+    ProMenubuttonActionSet((char*)&quot;TkMaterial&quot;,(char*)&quot;-Write&quot;,
+               	(ProMenubuttonAction)ProTestMaterialAction, part, USER_WRITE);
+    
+<a name="anchor-17"></a>    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkMaterial&quot;, &amp;menu_id);
+    ProMenuProcess((char*)&quot;TkMaterial&quot;, &amp;action);
+
+    return 0;
+}
+<a name="anchor-18"></a>
+
+/*=============================================================*\
+ Function: ProUtilSelectMaterial()
+ Purpose: select one material from part 
+<a name="anchor-19"></a>\*=============================================================*/
+ProError ProUtilSelectMaterial(ProSolid *part, ProMaterial *material)
+{
+    ProError status, st;
+    ProName * p_name, w_name;
+<a name="anchor-20"></a>    wchar_t empty = 0, **w_sel;
+    ProWstring *w_array, p_empty; 
+    int i, n_lines, n_sel;
+
+    status = ProArrayAlloc(0, sizeof(ProName), 1, (ProArray*) &amp;p_name);
+<a name="anchor-21"></a>    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProUtilSelectMaterial()&quot;,
+					    status,status != PRO_TK_NO_ERROR);
+    status = ProPartMaterialsGet(*part, &amp;p_name);
+    TEST_CALL_REPORT(&quot;ProPartMaterialsGet()&quot;, &quot;ProUtilSelectMaterial()&quot;,
+					    status,status != PRO_TK_NO_ERROR);
+<a name="anchor-22"></a>    if (status != PRO_TK_NO_ERROR)
+    {
+	ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Unable select material&quot;);
+    }
+    else
+<a name="anchor-23"></a>    {
+	status = ProArrayAlloc(0, sizeof(ProWstring), 1, (ProArray*)&amp;w_array);
+        TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProUtilSelectMaterial()&quot;,
+					    status,status != PRO_TK_NO_ERROR);
+	status = ProArraySizeGet((ProArray)p_name, &amp;n_lines);
+<a name="anchor-24"></a>        TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProUtilSelectMaterial()&quot;,
+					    status,status != PRO_TK_NO_ERROR);
+
+	for (i=0; i&lt;n_lines; i++)
+	{
+<a name="anchor-25"></a>	    p_empty = p_name[i];
+ 	    status = ProWstringArrayObjectAdd(&amp;w_array, PRO_VALUE_UNUSED, 
+	    	1, (ProWstring*)&amp;p_empty);
+            TEST_CALL_REPORT(&quot;ProWstringArrayObjectAdd()&quot;, 
+	    	&quot;ProUtilSelectMaterial()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-26"></a>	}
+	status = ProWstringArraySizeSet(&amp;w_array, n_lines + 1);
+        TEST_CALL_REPORT(&quot;ProWstringArraySizeSet()&quot;, 
+	    &quot;ProUtilSelectMaterial()&quot;, status, status != PRO_TK_NO_ERROR);
+	p_empty = &amp;empty;
+<a name="anchor-27"></a>	w_array[n_lines] = p_empty;
+	ProStringToWstring(w_name, (char*)&quot;Materials&quot;);
+	ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Select material&quot;);
+	st = ProMenuStringsSelect(w_name, w_array, 1, NULL, &amp;w_sel, &amp;n_sel);
+	status = ProWstringArrayObjectRemove(&amp;w_array, n_lines, 1);
+<a name="anchor-28"></a>        TEST_CALL_REPORT(&quot;ProWstringArrayObjectRemove()&quot;, 
+	    &quot;ProUtilSelectMaterial()&quot;, status, status != PRO_TK_NO_ERROR);
+	status = ProWstringArrayFree(&amp;w_array);
+        TEST_CALL_REPORT(&quot;ProWstringArrayFree()&quot;, 
+	    &quot;ProUtilSelectMaterial()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-29"></a>	if (st == PRO_TK_NO_ERROR)
+	{
+	    ProUtilWstrcpy(material->matl_name, w_sel[0]);
+	    material->part = *part; 
+	}
+<a name="anchor-30"></a>	status = st;
+    }
+    st = ProArrayFree((ProArray*)&amp;p_name);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProUtilSelectMaterial()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-31"></a>    return (status);
+}
+
+/*=============================================================*\
+ Function: ProTestMaterialAction()
+<a name="anchor-32"></a> Purpose:  all material actions 
+\*=============================================================*/
+int ProTestMaterialAction(ProSolid *part, int action)
+{
+    static int current_get, data_get, current_set;
+<a name="anchor-33"></a>    ProMaterial material;
+    ProName w_name;
+    ProError status;
+    ProMaterialdata mat_data;
+    ProCharLine line;
+<a name="anchor-34"></a>    double drange[2] = {1e-3, 1e10}, dens;
+    char name[PRO_NAME_SIZE];
+	ProMaterialItem matItem;
+	ProParamvalue    matValue;
+	ProUnititem      matUnits;
+<a name="anchor-35"></a>
+    switch (action)
+    {
+    case USER_ADD:
+	ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Enter new material name:&quot;);
+<a name="anchor-36"></a>	status = ProMessageStringRead(PRO_NAME_SIZE, w_name);
+	if (status == PRO_TK_NO_ERROR)
+	{
+	    status = ProMaterialCreate(*part, w_name, &amp;def_props, &amp;material);
+       	    TEST_CALL_REPORT(&quot;ProMaterialCreate()&quot;, &quot;ProTestMaterialAction()&quot;,
+<a name="anchor-37"></a>                                        status, status != PRO_TK_NO_ERROR);
+ 	    if (status == PRO_TK_NO_ERROR)
+		ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, 
+					    &quot;Material created successfully&quot;);
+	}
+<a name="anchor-38"></a>	break;
+    case USER_DELETE:
+	status = ProUtilSelectMaterial(part, &amp;material);
+	if (status == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-39"></a>	    status = ProMaterialDelete(&amp;material);
+       	    TEST_CALL_REPORT(&quot;ProMaterialDelete()&quot;, &quot;ProTestMaterialAction()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+ 	    if (status == PRO_TK_NO_ERROR)
+		ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, 
+<a name="anchor-40"></a>					    &quot;Material removed successfully&quot;);
+	}
+	break;
+    case USER_ASSIGN:
+	status = ProUtilSelectMaterial(part, &amp;material);
+<a name="anchor-41"></a>
+	if (status != PRO_TK_NO_ERROR)
+		break;
+	if ((current_set++) &amp; 1)
+	  {
+<a name="anchor-42"></a>		status = ProMaterialCurrentSet(&amp;material);
+       	    	TEST_CALL_REPORT(&quot;ProMaterialCurrentSet()&quot;, 
+		   &quot;ProTestMaterialAction()&quot;,status,status != PRO_TK_NO_ERROR);
+
+		 if (status == PRO_TK_NO_ERROR)	    
+<a name="anchor-43"></a> 	      ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, 
+					    &quot;Material assigned successfully&quot;);
+	   }	    	
+	break;
+    case USER_DENSITY:
+<a name="anchor-44"></a>	if ((current_get++) &amp; 1)
+	{
+	    status = ProMaterialCurrentGet(*part, &amp;material);
+       	    TEST_CALL_REPORT(&quot;ProMaterialCurrentGet()&quot;, 
+	   	&quot;ProTestMaterialAction()&quot;,status,status != PRO_TK_NO_ERROR);
+<a name="anchor-45"></a>   
+		status = ProModelitemByNameInit(*part,PRO_RP_MATERIAL,material.matl_name,&amp;matItem);
+		TEST_CALL_REPORT( &quot;ProModelitemByNameInit()&quot;, 
+	    	&quot;ProTestMaterialAction()&quot;,status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-46"></a>		status = ProMaterialPropertyGet(&amp;matItem,PRO_MATPROP_MASS_DENSITY, &amp;matValue,&amp;matUnits);
+		TEST_CALL_REPORT( &quot;ProMaterialPropertyGet()&quot;, 
+	    	&quot;ProTestMaterialAction()&quot;,status, status != PRO_TK_NO_ERROR);
+	
+	}
+<a name="anchor-47"></a>	ProTKSprintf(line, (char*)&quot;Enter new density value [%.3f]:&quot;,matValue.value.d_val);
+	ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, line);
+	status = ProMessageDoubleRead(drange, &amp;dens);
+	if (status == PRO_TK_NO_ERROR)
+	   matValue.value.d_val = dens;
+<a name="anchor-48"></a>
+	status = ProMaterialPropertySet(&amp;matItem,PRO_MATPROP_MASS_DENSITY, &amp;matValue,&amp;matUnits);
+		TEST_CALL_REPORT( &quot;ProMaterialPropertySet()&quot;, 
+	    	&quot;ProTestMaterialAction()&quot;,status, status != PRO_TK_NO_ERROR);
+	break;
+<a name="anchor-49"></a>    case USER_READ:
+	ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Enter material name:&quot;);
+	status = ProMessageStringRead(PRO_NAME_SIZE, w_name);
+	if (status != PRO_TK_NO_ERROR)
+	    break;
+<a name="anchor-50"></a>	status = ProMaterialfileRead(*part, w_name);
+       	TEST_CALL_REPORT(&quot;ProMaterialfileRead()&quot;, 
+	   	&quot;ProTestMaterialAction()&quot;,status,status != PRO_TK_NO_ERROR);
+	break;
+    case USER_WRITE:
+<a name="anchor-51"></a>	status = ProUtilSelectMaterial(part, &amp;material);
+	if (status != PRO_TK_NO_ERROR)
+	    break;
+	ProUtilMsgPrint((char*)&quot;gen&quot;,(char*)&quot;TEST %0s&quot;,(char*)&quot;Enter file name to store material:&quot;);
+	status = ProMessageStringRead(PRO_NAME_SIZE, w_name);
+<a name="anchor-52"></a>	ProWstringToString(name, w_name);
+	if (strchr(name, '.') == NULL)
+	    ProUtilstrcat(name, &quot;.mat&quot;);
+	ProStringToWstring(w_name, name);
+	status = ProMaterialfileWrite(&amp;material, w_name);
+<a name="anchor-53"></a>       	TEST_CALL_REPORT(&quot;ProMaterialfileWrite()&quot;, 
+	   	&quot;ProTestMaterialAction()&quot;,status,status != PRO_TK_NO_ERROR);
+	if (status == PRO_TK_NO_ERROR)
+	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, 
+					&quot;Material file stored successfilly&quot;);
+<a name="anchor-54"></a>	break;
+    default:
+	ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Error!!&quot;);
+	break;
+    }
+<a name="anchor-55"></a>    return (0);
+}
+
+
+</pre>
+</body>
+</html>

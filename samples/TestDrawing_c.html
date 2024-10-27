@@ -1,0 +1,191 @@
+<html>
+<head>
+<title>TestDrawing.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMenu.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProMessage.h>
+<a name="anchor-3"></a>#include &lt;ProUtil.h>
+#include &lt;ProDwgtable.h>
+/*--------------------------------------------------------------------*\
+Pro/DEVELOP includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-4"></a>
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+/*--------------------------------------------------------------------*\
+<a name="anchor-6"></a>Application macros
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application data types
+<a name="anchor-7"></a>\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+<a name="anchor-8"></a>
+ProError ProTestDrawingMerge();
+/*====================================================================*\
+    FUNCTION :  ProTestDraw()
+    PURPOSE  :  Define and activate menu of Toolkit Test commands drawing
+<a name="anchor-9"></a>\*====================================================================*/
+int ProTestDraw()
+{
+    ProError status;
+    ProMdl   model;
+<a name="anchor-10"></a>    int action;
+    int ProTestLayerMenu        (ProMdl *mod);
+    int ProTestDrwSimpRep       ();
+    int ProTestDrwSheets        ();
+    int ProTestDetail           ();
+<a name="anchor-11"></a>    int ProTestDrawingView      (ProMdl *mod);
+    int ProTestDimensionMenu    (ProMdl *model);
+    ProError ProTestDrawingInfo();
+    ProError ProTestDrwTable();
+
+<a name="anchor-12"></a>    status = ProMdlCurrentGet(&amp;model);
+    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestDraw()&quot;,
+                     status, status != PRO_TK_NO_ERROR);
+    ProMenuPush ();
+    ProMenuFileRegister((char*)&quot;TkDrawing&quot;,(char*)&quot;tkdrawing.mnu&quot;, NULL);
+<a name="anchor-13"></a>    ProMenubuttonActionSet((char*)&quot;TkDrawing&quot;,(char*)&quot;-Layer&quot;,
+        (ProMenubuttonAction)ProTestLayerMenu, &amp;model,  0);
+    ProMenubuttonActionSet((char*)&quot;TkDrawing&quot;,(char*)&quot;-Dimension&quot;,
+        (ProMenubuttonAction)ProTestDimensionMenu, &amp;model,  0);
+    ProMenubuttonActionSet((char*)&quot;TkDrawing&quot;,(char*)&quot;-Table&quot;,
+<a name="anchor-14"></a>        (ProMenubuttonAction)ProTestDrwTable, NULL,  0);
+    ProMenubuttonActionSet((char*)&quot;TkDrawing&quot;,(char*)&quot;-Sheets&quot;,
+        (ProMenubuttonAction)ProTestDrwSheets, &amp;model, 0);
+    ProMenubuttonActionSet((char*)&quot;TkDrawing&quot;,(char*)&quot;-Simp Rep&quot;,
+        (ProMenubuttonAction)ProTestDrwSimpRep, NULL, 0);
+<a name="anchor-15"></a>    ProMenubuttonActionSet((char*)&quot;TkDrawing&quot;,(char*)&quot;-Detail&quot;,
+        (ProMenubuttonAction)ProTestDetail, &amp;model, 0);
+    ProMenubuttonActionSet((char*)&quot;TkDrawing&quot;,(char*)&quot;-View&quot;,
+        (ProMenubuttonAction)ProTestDrawingView, &amp;model,  0);
+    ProMenubuttonActionSet((char*)&quot;TkDrawing&quot;,(char*)&quot;-Info&quot;,
+<a name="anchor-16"></a>        (ProMenubuttonAction)ProTestDrawingInfo,&amp;model,  0);
+    ProMenubuttonActionSet((char*)&quot;TkDrawing&quot;,(char*)&quot;-Drawing Merge&quot;,
+        (ProMenubuttonAction)ProTestDrawingMerge,&amp;model,  0);
+    ProMenubuttonActionSet((char*)&quot;TkDrawing&quot;,(char*)&quot;TkDrawing&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL,  0);
+<a name="anchor-17"></a>    ProMenubuttonActionSet((char*)&quot;TkDrawing&quot;,(char*)&quot;-Done/Return&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL,  0);
+
+    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkDrawing&quot;, NULL);
+    ProMenuProcess((char*)&quot;&quot;, &amp;action);
+<a name="anchor-18"></a>    ProMenuPop();
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-19"></a>    FUNCTION :  ProTestDetail()
+    PURPOSE  :  Define and activate menu of Toolkit Test commands drawing
+\*====================================================================*/
+int ProTestDetail (void** app_data, int int_dummy)
+{
+<a name="anchor-20"></a>    ProDrawing drawing = (ProDrawing)*app_data;
+    int menu_id;
+    ProError err;
+
+    int ProTestEntity();
+<a name="anchor-21"></a>    int ProTestDtlNoteMenu();
+    int ProTestSymInst();
+    int ProTestDtlGroupMenu();
+    int ProTestSymDefMenu(ProDrawing drawing);
+
+<a name="anchor-22"></a>    err = ProMenuFileRegister((char*)&quot;-Detail&quot;,(char*)&quot;tkdetail.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;-Detail&quot;,(char*)&quot;-Detail&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;-Detail&quot;,(char*)&quot;Entity&quot;,
+        (ProMenubuttonAction)ProTestEntity, &amp;drawing, 0);
+<a name="anchor-23"></a>    err = ProMenubuttonActionSet((char*)&quot;-Detail&quot;,(char*)&quot;Note&quot;,
+        (ProMenubuttonAction)ProTestDtlNoteMenu, &amp;drawing, 0);
+    err = ProMenubuttonActionSet((char*)&quot;-Detail&quot;,(char*)&quot;Symdef&quot;,
+        (ProMenubuttonAction)ProTestSymDefMenu, drawing, 0);
+    err = ProMenubuttonActionSet((char*)&quot;-Detail&quot;,(char*)&quot;Syminst&quot;,
+<a name="anchor-24"></a>        (ProMenubuttonAction)ProTestSymInst, drawing, 0);
+    err = ProMenubuttonActionSet((char*)&quot;-Detail&quot;,(char*)&quot;Group&quot;,
+        (ProMenubuttonAction)ProTestDtlGroupMenu, drawing, 0);
+    err = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;-Detail&quot;,&amp;menu_id);
+    err = ProMenuProcess((char*)&quot;&quot;, &amp;menu_id);
+<a name="anchor-25"></a>    
+    return (0);
+}
+
+
+<a name="anchor-26"></a>/*====================================================================*
+  Function : ProTestDrawingMerge
+  Purpose  : Merge two drawings
+\*====================================================================*/
+ProError ProTestDrawingMerge()
+<a name="anchor-27"></a>{
+  ProDrawing drawing1,drawing2;
+  wchar_t name [PRO_FAMILY_MDLNAME_SIZE];
+  ProError status;
+
+<a name="anchor-28"></a>  ProFileName WMSGFIL = {'u','s','e','r','m','s','g','.','t','x','t','\0'};
+
+  /*------------------------------------------------------------*\
+      Get the current model
+  \*------------------------------------------------------------*/
+<a name="anchor-29"></a>  status = ProMdlCurrentGet ((ProMdl*)&amp;drawing1);
+  TEST_CALL_REPORT (&quot;UserDrawingMerge&quot;, &quot;ProMdlCurrentGet&quot;, status,
+	     status != PRO_TK_NO_ERROR);
+  if (status != PRO_TK_NO_ERROR) return(status);
+
+<a name="anchor-30"></a>  /*------------------------------------------------------------*\
+      Get drawings to merge 
+  \*------------------------------------------------------------*/
+  status = ProMessageDisplay (WMSGFIL, (char*)&quot;USER %0s&quot;,
+		&quot;Enter model name which you want to merge&quot;);
+<a name="anchor-31"></a>  TEST_CALL_REPORT (&quot;UserDrawingMerge&quot;, &quot;ProMessageDisplay&quot;, status, 
+		status != PRO_TK_NO_ERROR);
+
+  status = ProMessageStringRead (PRO_FAMILY_MDLNAME_SIZE, (wchar_t*)name);
+  TEST_CALL_REPORT (&quot;ProMessageStringRead&quot;, &quot;UserDrawingMerge&quot;, status,
+<a name="anchor-32"></a>	       status != PRO_TK_NO_ERROR);
+  if (status != PRO_TK_NO_ERROR) return(status);
+
+  status = ProMdlnameRetrieve (name, PRO_MDLFILE_DRAWING ,
+		 (ProMdl*)&amp;drawing2);
+<a name="anchor-33"></a>  TEST_CALL_REPORT (&quot;ProMdlnameRetrieve&quot;, &quot;UserDrawingMerge&quot;, status,
+	       status != PRO_TK_NO_ERROR);
+  if (status != PRO_TK_NO_ERROR) return(status);
+
+  status = ProDrawingMerge (drawing1, drawing2);
+<a name="anchor-34"></a>  TEST_CALL_REPORT (&quot;UserDrawingMerge&quot;, &quot;ProDrawingMerge&quot;, status,
+               status != PRO_TK_NO_ERROR);
+
+ /*--------------------------------------------------------------*\
+           To get handle for second drawing
+<a name="anchor-35"></a> \*--------------------------------------------------------------*/
+  status = ProMdlnameRetrieve (name,PRO_MDLFILE_DRAWING , (ProMdl*)&amp;drawing2);
+  TEST_CALL_REPORT (&quot;ProMdlnameRetrieve&quot;, &quot;UserDrawingMerge&quot;, status,
+	       status != PRO_TK_NO_ERROR);
+
+<a name="anchor-36"></a>  return (status);
+}
+
+</pre>
+</body>
+</html>

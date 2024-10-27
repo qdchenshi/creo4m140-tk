@@ -1,0 +1,407 @@
+<html>
+<head>
+<title>TestError.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+<a name="anchor-2"></a>#include &quot;ProArray.h&quot;
+
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-3"></a>#include &lt;time.h>
+#include &lt;string.h>
+#include &lt;stdlib.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-4"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+#include &quot;UtilString.h&quot;
+<a name="anchor-5"></a>
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+#define MAX_STAT_SIZE 38
+<a name="anchor-6"></a>/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+typedef struct
+{
+<a name="anchor-7"></a>    int num;
+    ProError status;
+    char call[MAX_STAT_SIZE];
+}TestStatistic;
+
+<a name="anchor-8"></a>typedef struct 
+{
+    char     function_name[40];
+    ProError permited_err_code;
+} PermitedErrors;
+<a name="anchor-9"></a>    
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+<a name="anchor-10"></a>static FILE *errlog_fp=NULL;
+static char errlog_name[PRO_PATH_SIZE]={'\0'};
+TestStatistic *statistic = NULL;
+char	trail_name[PRO_PATH_SIZE] = &quot;&quot;; /* The name of currently running
+					   trail file */
+<a name="anchor-11"></a>
+static PermitedErrors permited_errors[] = {
+    {&quot;ProMenuProcess&quot;, PRO_TK_E_FOUND},
+    {&quot;ProModelitemNameGet&quot;, PRO_TK_E_NOT_FOUND},
+    {&quot;ProSelect&quot;, PRO_TK_PICK_ABOVE},
+<a name="anchor-12"></a>    {&quot;ProSelect&quot;, PRO_TK_USER_ABORT},
+    {&quot;ProSolidDisplay&quot;, PRO_TK_E_FOUND},
+    {&quot;ProGraphicsColorSet&quot;, PRO_TK_NO_CHANGE},
+    {&quot;ProLinestyleSet&quot;, PRO_TK_NO_CHANGE}
+};
+<a name="anchor-13"></a>
+
+
+/*====================================================================*\
+  Function : ProTestStatisticCmp()
+<a name="anchor-14"></a>  Purpose  : compare two files by version
+\*====================================================================*/
+int ProTestStatisticCmp(TestStatistic *st1, TestStatistic *st2)
+{
+    int call_result;
+<a name="anchor-15"></a>    call_result = strncmp (st1->call, st2->call, MAX_STAT_SIZE);
+    if (call_result == 0)
+    {
+        call_result = st1->status - st2->status; 
+    }
+<a name="anchor-16"></a>    return (call_result);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestStatisticWrite()
+<a name="anchor-17"></a>    PURPOSE  :	Write the specified params to the statistic file.
+\*====================================================================*/
+int ProTestStatisticWrite (char *call, char *from, ProError status)
+{
+    int i, line_num, line_found = 0;
+<a name="anchor-18"></a>    TestStatistic line;
+
+    ProArraySizeGet ((ProArray)statistic, &amp;line_num);
+    if (errlog_fp == NULL)
+	return (0);
+<a name="anchor-19"></a>
+    for (i = 0; i &lt; line_num; i++)
+    {
+        if (strncmp (statistic[i].call, call, MAX_STAT_SIZE)==0)
+        {
+<a name="anchor-20"></a>            if (statistic[i].status == status)
+            {
+                statistic[i].num++;
+                line_found = 1;
+                break;
+<a name="anchor-21"></a>            }
+        }
+    }
+    if (!line_found)
+    {
+<a name="anchor-22"></a>        ProUtilstrncpy (line.call, (const char *)call, MAX_STAT_SIZE);
+        if (strlen (call) >= MAX_STAT_SIZE)
+        {
+            line.call[MAX_STAT_SIZE-4] = '\0';
+            ProUtilstrcat (line.call, &quot;..&quot;);
+<a name="anchor-23"></a>        }
+        line.status = status;
+        line.num = 1;
+        ProArrayObjectAdd ((ProArray*)&amp;statistic, PRO_VALUE_UNUSED,
+            1, &amp;line);
+<a name="anchor-24"></a>        if (line_num > 1)
+        {
+            qsort(statistic, line_num+1, sizeof(TestStatistic), 
+	        (int (*)(const void *, const void *))
+  	        ProTestStatisticCmp);
+<a name="anchor-25"></a>  	}
+    }
+    return (1);
+}
+
+<a name="anchor-26"></a>/*====================================================================*\
+    FUNCTION : TEST_CALL_REPORT
+    PURPOSE  : report a Pro/TOOLKIT function call, and status,
+                        if status expression false
+
+<a name="anchor-27"></a>    call   = name of Pro/TOOLKIT function
+    from   = name of function calling the Pro/Toolkit function
+    status = status returned by Pro/Toolkit function
+    error  =  BOOLEAN expression whether status is reportable
+\*====================================================================*/
+<a name="anchor-28"></a>void ProTestCallReport(const char *call, const char *from, ProError status,int error)    
+{                                                       
+    int i, mode;                                           
+    char str[100], *p_ch, line[100];
+
+<a name="anchor-29"></a>    if (error)
+    {
+	ProUtilstrcpy(line, call);
+	p_ch =  strchr(line, '(');
+	if (p_ch != NULL)
+<a name="anchor-30"></a>	   *p_ch = '\0';
+        for (i=0; i&lt;sizeof(permited_errors)/sizeof(permited_errors[0]); i++)
+        {
+            if ((status == permited_errors[i].permited_err_code) &amp;&amp; 
+                (strcmp(permited_errors[i].function_name, line) == 0))
+<a name="anchor-31"></a>                error = 0;
+        }
+    }
+    
+    mode = ProTestRunmodeGet();
+<a name="anchor-32"></a>    switch (mode)
+    {
+    case  TEST_RUN_MODE_STAT:       
+        ProTestStatisticWrite ((char *)call, (char *)from, status);
+        break;
+<a name="anchor-33"></a>    case TEST_RUN_MODE_CRASH:
+    case TEST_RUN_MODE_REPORT:
+	ProTKSprintf(str,&quot;%-37s %-37.37s% -d\n&quot;, call, from, status);
+	ProTestErrlogWrite(str);
+        if(mode == TEST_RUN_MODE_CRASH &amp;&amp; error)            
+<a name="anchor-34"></a>        {                                                   
+            ProTKPrintf(&quot;\n*** CRASHING Pro/TOOLKIT TEST ***\n&quot;);
+            ProTKPrintf(&quot;    Function         : %s\n&quot;, call);    
+            ProTKPrintf(&quot;    Calling function : %s\n&quot;, from);    
+            ProTKPrintf(&quot;    Status           : %d\n&quot;, status);  
+<a name="anchor-35"></a>            TEST_CRASH()                                    
+        }
+        break;
+    case TEST_RUN_MODE_CRASH_REP:
+        if (error)
+<a name="anchor-36"></a>        {
+            /* Report only potential crashes in crash mode*/
+	    ProTKSprintf(str,&quot;%-37s %-37.37s% -d\n&quot;, call, from, status);
+	    ProTestErrlogWrite(str);
+        } 
+<a name="anchor-37"></a>    }                                                  
+}
+
+
+/*====================================================================*\
+<a name="anchor-38"></a>    FUNCTION :	ProTestErrlogOpen()
+    PURPOSE  :	Open the Error Log file
+\*====================================================================*/
+int ProTestErrlogOpen(
+    char *regtest_name,	/* Reg test name */
+<a name="anchor-39"></a>    char *proe_vsn,	/* Pro/E version */
+    char *build)	/* Pro/E build   */
+{
+  int runmode, path_size;
+  char *dot, *p_env, log_dir[PRO_PATH_SIZE];
+<a name="anchor-40"></a>  time_t t;
+  char *default_regtest_name = (char *)&quot;regtest&quot;;
+  ProError status;
+
+  /*--------------------------------------------------------------------*\
+<a name="anchor-41"></a>    Don't open it if the run mode is &quot;silent&quot;
+    \*--------------------------------------------------------------------*/
+  runmode = ProTestRunmodeGet();
+  if(runmode == TEST_RUN_MODE_SILENT)
+    return(0);
+<a name="anchor-42"></a>
+  /*--------------------------------------------------------------------*\
+    Find the directory in which to put the logfile
+    \*--------------------------------------------------------------------*/
+  p_env = getenv(&quot;PROTOOL_LOG_DIR&quot;);
+<a name="anchor-43"></a>
+  if ( p_env == NULL )
+    log_dir[0] = '\0';
+  else
+    {
+<a name="anchor-44"></a>      ProUtilstrcpy(log_dir, (const char *)p_env);
+      path_size = strlen(log_dir);
+      if ( log_dir[path_size - 1] != '/')
+	{
+	  log_dir[path_size] = '/';
+<a name="anchor-45"></a>	  log_dir[path_size + 1] = '\0';
+	}
+    }
+
+  ProTKPrintf(&quot;   Logfile dir : %s\n&quot;, log_dir);
+<a name="anchor-46"></a>    
+  /*--------------------------------------------------------------------*\
+    Make the name &quot;&lt;regtest>.log&quot; and open the file for write.
+    \*--------------------------------------------------------------------*/
+  p_env = getenv( &quot;PROTOOL_LOG_FILE&quot; );
+<a name="anchor-47"></a>  if ( p_env != NULL )
+    regtest_name = p_env;
+
+  if( regtest_name == NULL )
+    regtest_name = default_regtest_name;
+<a name="anchor-48"></a>
+  if (  ! strcmp( regtest_name, &quot;stderr&quot; )  )
+    {
+      ProUtilstrcpy( errlog_name, (const char *)regtest_name );
+      errlog_fp = stderr;
+<a name="anchor-49"></a>    }
+  else if (  ! strcmp( regtest_name, &quot;stdout&quot; )  )
+    {
+      ProUtilstrcpy( errlog_name, (const char *)regtest_name );
+      errlog_fp = stdout;
+<a name="anchor-50"></a>    }
+  else
+    {
+      dot = strchr(regtest_name, '.');
+      if(dot != NULL)
+<a name="anchor-51"></a>	*dot = '\0';
+      ProUtilstrcpy(errlog_name, (const char *)regtest_name);
+      ProUtilstrcat(errlog_name, &quot;.log&quot;);
+      ProUtilstrcat(log_dir, (const char *)errlog_name);
+      ProUtilstrcpy(errlog_name, (const char *)log_dir);
+<a name="anchor-52"></a>      errlog_fp = PTApplsUnicodeFopen(errlog_name,&quot;a&quot;);
+    }
+
+  /*--------------------------------------------------------------------*\
+    Write a header
+<a name="anchor-53"></a>    \*--------------------------------------------------------------------*/
+  t = time(NULL);
+  ProTKFprintf(errlog_fp, &quot;# Pro/TOOLKIT Regression Test Log\n&quot;);
+  fflush(errlog_fp);
+  ProTKFprintf(errlog_fp, &quot;#--------------------------------\n&quot;);
+<a name="anchor-54"></a>  fflush(errlog_fp);
+  ProTKFprintf(errlog_fp, &quot;# Pro/ENGINEER version : %s\n&quot;, proe_vsn);
+  fflush(errlog_fp);
+  ProTKFprintf(errlog_fp, &quot;# Pro/ENGINEER build   : %s\n&quot;, build);
+  fflush(errlog_fp);
+<a name="anchor-55"></a>  ProTKFprintf(errlog_fp, &quot;# Started at           : %s&quot;, ctime(&amp;t));
+  fflush(errlog_fp);
+  if( strlen( trail_name ) )
+    {
+      ProTKFprintf(errlog_fp, &quot;# Trail file name      : %s\n&quot;, trail_name );
+<a name="anchor-56"></a>      fflush(errlog_fp);
+    }
+  ProTKFprintf(errlog_fp, &quot;#\n&quot; );
+  fflush(errlog_fp);
+  ProTKFprintf(errlog_fp, 
+<a name="anchor-57"></a>	  &quot;# Pro/TOOLKIT Function         Called From                   Status\n#\n&quot;);
+  fflush(errlog_fp);
+
+  if (runmode == TEST_RUN_MODE_STAT)
+    {
+<a name="anchor-58"></a>      if (statistic == NULL)
+        {
+	  status = ProArrayAlloc (0, sizeof (TestStatistic), 
+				  10, (ProArray*)&amp;statistic);
+        }
+<a name="anchor-59"></a>    }
+
+  return(0);
+}
+
+<a name="anchor-60"></a>/*====================================================================*\
+    FUNCTION :	ProTestErrlogReopen()
+    PURPOSE  :	To reopen an ongoing error log file
+\*====================================================================*/
+int ProTestErrlogReopen()
+<a name="anchor-61"></a>{
+  if (  strlen( errlog_name ) > 0 )
+    {
+      if (  ! strcmp( errlog_name, &quot;stderr&quot; )  )
+	errlog_fp = stderr;
+<a name="anchor-62"></a>      else if (  ! strcmp( errlog_name, &quot;stdout&quot; )  )
+	errlog_fp = stdout;
+      else
+	errlog_fp = PTApplsUnicodeFopen(errlog_name,&quot;a&quot;);
+    }
+<a name="anchor-63"></a>
+  return(0);
+}
+
+/*====================================================================*\
+<a name="anchor-64"></a>    FUNCTION :	ProTestErrlogClose()
+    PURPOSE  :	Flush and close the error log file.
+\*====================================================================*/
+int ProTestErrlogClose()
+{
+<a name="anchor-65"></a>  int num, i;
+    
+  if(errlog_fp != NULL)
+    {
+      if (statistic != NULL)
+<a name="anchor-66"></a>        {
+	  ProArraySizeGet ((ProArray)statistic, &amp;num);
+	  for (i = 0; i &lt; num; i++)
+            {
+	      ProTKFprintf (errlog_fp, &quot;%-37s% -20s% -6d% -6d\n&quot;,
+<a name="anchor-67"></a>		       statistic[i].call, 
+		       &quot;internal()&quot;,
+		       statistic[i].status,
+		       statistic[i].num);
+            }
+<a name="anchor-68"></a>	  ProArrayFree ((ProArray*)&amp;statistic);
+        }  
+      fflush(errlog_fp);
+      if (
+	  strcmp( errlog_name, &quot;stderr&quot; )	&amp;&amp;
+<a name="anchor-69"></a>	  strcmp( errlog_name, &quot;stdout&quot; )
+	  )
+	{
+	  fclose(errlog_fp);
+	  errlog_fp = NULL;
+<a name="anchor-70"></a>	}
+    }
+
+  return(0);
+}
+<a name="anchor-71"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestErrlogWrite()
+    PURPOSE  :	Write the specified string to the error log file.
+\*====================================================================*/
+<a name="anchor-72"></a>int ProTestErrlogWrite(
+    char *str)
+{
+    if(errlog_fp == NULL)
+	return(0);
+<a name="anchor-73"></a>
+    ProTKFprintf(errlog_fp, &quot;%s&quot;, str);
+    fflush(errlog_fp);
+    ProTestErrlogClose();
+    ProTestErrlogReopen();
+<a name="anchor-74"></a>
+    return(0);
+}
+
+
+<a name="anchor-75"></a>
+/*====================================================================*\
+    FUNCTION :  ProUtilCommandLineParse()
+    PURPOSE  :  Parse the specified command line setting global params
+\*====================================================================*/
+<a name="anchor-76"></a>int ProUtilCommandLineParse( int argc, char *argv[] )
+{
+    char		*p;
+    int			i;
+
+<a name="anchor-77"></a>
+    for( i=1; i&lt;argc; i++ )
+    {
+	if( strstr( argv[i], &quot;+trail:&quot; ) )
+	{
+<a name="anchor-78"></a>	    p = strchr( argv[i], ':' );
+	    ProUtilstrcpy( trail_name, (const char *)(p+1) );
+	}
+    }
+
+<a name="anchor-79"></a>
+    return PRO_TK_NO_ERROR;
+}
+
+</pre>
+</body>
+</html>

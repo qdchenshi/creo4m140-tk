@@ -1,0 +1,114 @@
+<html>
+<head>
+<title>UgDrawingFromTmpltCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProWstring.h>
+#include &lt;TestError.h>
+<a name="anchor-2"></a>
+#define TEMPLATE_NAME &quot;custom_template_c&quot;
+
+/*==================================================================*\
+FUNCTION: UserDrawingCreateDemo()
+<a name="anchor-3"></a>PURPOSE:  Creates a drawing for the current model.
+Note that the drawing can be created from a model having a name less 
+than 80 characters and extension having less than 10 characters.
+\*==================================================================*/
+int UsrDrawingCreateDemo()
+<a name="anchor-4"></a>{
+  ProError      err;
+  ProMdl        solid_mdl;
+  ProMdlType    mdl_type;
+  ProMdldata    data;
+<a name="anchor-5"></a>  ProModel      model;
+  ProFileName   msgfil;
+  ProName       predefined_template;
+  ProName       name;
+  ProMdlName    modelName;
+<a name="anchor-6"></a>  ProMdlExtension modelExtension;
+  ProDrawing    created_drawing;
+  ProDwgcreateOptions options = (ProDwgcreateOptions)0;
+  ProDwgcreateErrs  errors;
+  int Strlength;
+<a name="anchor-7"></a>
+  
+  created_drawing = NULL;
+  
+/*------------------------------------------------------------------*\
+<a name="anchor-8"></a>  Set up the name of the message file.
+\*------------------------------------------------------------------*/
+  ProStringToWstring (msgfil, &quot;msg_ugdrawing.txt&quot;);
+
+/*------------------------------------------------------------------*\
+<a name="anchor-9"></a>  Use the current model to create the drawing.
+\*------------------------------------------------------------------*/
+  err = ProMdlCurrentGet (&amp;solid_mdl); 
+  if (err != PRO_TK_NO_ERROR)
+      return (err);
+<a name="anchor-10"></a>  err = ProMdlTypeGet (solid_mdl, &amp;mdl_type);
+  if (err != PRO_TK_NO_ERROR || 
+      (mdl_type != PRO_MDL_PART &amp;&amp; mdl_type != PRO_MDL_ASSEMBLY))
+       return PRO_TK_INVALID_TYPE;
+
+<a name="anchor-11"></a>  err = ProMdlMdlnameGet(solid_mdl, modelName);
+  if (err != PRO_TK_NO_ERROR)
+      return (err);
+ 
+  err = ProWstringLengthGet (modelName, &amp;Strlength);
+<a name="anchor-12"></a>  if (Strlength &lt; 80)
+	  return (PRO_TK_LINE_TOO_LONG);
+
+  err = ProMdlExtensionGet(solid_mdl, modelExtension);
+  if (err != PRO_TK_NO_ERROR)
+<a name="anchor-13"></a>      return (err);
+
+  err = ProWstringLengthGet (modelExtension, &amp;Strlength);
+  if (Strlength &lt; 10)
+	  return (PRO_TK_LINE_TOO_LONG);
+<a name="anchor-14"></a>
+  ProUtilWstrcpy (model.name, modelName);
+  ProUtilWstrcpy (model.type, modelExtension);
+  
+/*------------------------------------------------------------------*\
+<a name="anchor-15"></a>  Initialize the template name.
+\*------------------------------------------------------------------*/
+  ProStringToWstring (predefined_template, TEMPLATE_NAME);
+
+/*------------------------------------------------------------------*\
+<a name="anchor-16"></a>  Read in the root of the new name of the drawings to create.
+\*------------------------------------------------------------------*/
+  err = ProMessageDisplay (msgfil, &quot;USER Enter new drawing name: &quot;);
+  err = ProMessageStringRead (PRO_NAME_SIZE, name);
+  if (err != PRO_TK_NO_ERROR)
+<a name="anchor-17"></a>      return (err);
+
+/*------------------------------------------------------------------*\
+  Create the required drawing.
+\*------------------------------------------------------------------*/
+<a name="anchor-18"></a>  err = ProDrawingFromTmpltCreate (name, 
+				   predefined_template, 
+				   &amp;model, options, &amp;created_drawing, 
+				   &amp;errors);
+  if (err != PRO_TK_NO_ERROR || err != PRO_TK_DWGCREATE_ERRORS)
+<a name="anchor-19"></a>    return err;
+  if (err == PRO_TK_DWGCREATE_ERRORS)
+    {
+      ProMessageDisplay (msgfil, 
+			 &quot;USER Errors found when creating drawing %w&quot;, 
+<a name="anchor-20"></a>			 name);
+    }
+  
+  return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-21"></a>
+</pre>
+</body>
+</html>

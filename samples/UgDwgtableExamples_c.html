@@ -1,0 +1,331 @@
+<html>
+<head>
+<title>UgDwgtableExamples.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProDwgtable.h>
+#include &lt;ProPoint.h>
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-2"></a>    Data structure for information needed about datum points 
+\*--------------------------------------------------------------------*/ 
+typedef struct point_t {
+     ProFeature feature;
+     ProVector  position;
+<a name="anchor-3"></a>     ProName    name;
+ } Point_t;
+
+int UsrPointsCollect();
+int UsrTableTextAdd();
+<a name="anchor-4"></a>/*====================================================================*\ 
+FUNCTION : UsrPointTable() 
+PURPOSE  : Command to create a table of datum points 
+\*====================================================================*/ 
+int UsrPointTable ()
+<a name="anchor-5"></a>{
+     ProError status;
+     ProSelection *sel;
+     int n_sel, n_points, p;
+     ProSolid solid;
+<a name="anchor-6"></a>     ProCharName csys_name;
+	 char name[PRO_MDLNAME_SIZE], type[PRO_MDLEXTENSION_SIZE];
+     ProName wname;
+     ProGeomitem csys_geom;
+     ProAsmcomppath csys_comppath;
+<a name="anchor-7"></a>     ProMatrix from_csys, to_csys, trf;
+     ProGeomitemdata *gdata;
+     ProMouseButton button;
+     ProVector pos;
+     Point_t *points;
+<a name="anchor-8"></a>     ProDwgtabledata tdata;
+     double widths[] = {8.0, 8.0, 10.0, 10.0, 10.0};
+     ProHorzJust justs[] = {
+                            PROHORZJUST_LEFT,
+                            PROHORZJUST_LEFT,
+<a name="anchor-9"></a>                            PROHORZJUST_LEFT,
+                            PROHORZJUST_LEFT,
+                            PROHORZJUST_LEFT};
+     double *heights;
+     int last_feat_row;
+<a name="anchor-10"></a>     ProDrawing drawing;
+     ProDwgtable table;     
+     ProCharLine line;
+     ProFileName msgfil;
+	 ProMdlName modelName;
+<a name="anchor-11"></a>	 ProMdlExtension modelExtension;
+
+     ProStringToWstring (msgfil, &quot;msg_ugdrawing.txt&quot;);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-12"></a>    Select a coordinate system. This defines the model (the top one
+     in that view), and the reference for the datum point positions. 
+\*--------------------------------------------------------------------*/ 
+     ProMessageDisplay(msgfil,&quot;USER Select csys&quot;);
+     status = ProSelect(&quot;csys&quot;,1,NULL,NULL,NULL,NULL,&amp;sel,&amp;n_sel);
+<a name="anchor-13"></a>     if(status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+         return(0);
+
+/*--------------------------------------------------------------------*\ 
+    Extract the csys handle, and assembly path. 
+<a name="anchor-14"></a>\*--------------------------------------------------------------------*/ 
+     ProSelectionModelitemGet(sel[0], &amp;csys_geom);
+     ProSelectionAsmcomppathGet(sel[0], &amp;csys_comppath);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-15"></a>    Extract the csys location 
+\*--------------------------------------------------------------------*/ 
+     ProGeomitemdataGet(&amp;csys_geom, &amp;gdata);
+     ProMatrixInit(gdata->data.p_csys_data->x_vector,
+                   gdata->data.p_csys_data->y_vector,
+<a name="anchor-16"></a>                   gdata->data.p_csys_data->z_vector,
+                   gdata->data.p_csys_data->origin,
+                         from_csys);
+
+     ProUtilMatrixInvert(from_csys, to_csys);
+<a name="anchor-17"></a>     ProGeomitemdataFree(&amp;gdata);
+
+/*--------------------------------------------------------------------*\ 
+    Extract the csys name 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-18"></a>     ProModelitemNameGet(&amp;csys_geom, wname);
+     ProWstringToString(csys_name, wname);
+
+/*--------------------------------------------------------------------*\ 
+    Get the root solid, and the transform from the root to the
+<a name="anchor-19"></a>     component owning the csys 
+\*--------------------------------------------------------------------*/ 
+    
+     if(csys_comppath.table_num > 0)
+     {         
+<a name="anchor-20"></a>	solid = csys_comppath.owner;
+        ProAsmcomppathTrfGet(&amp;csys_comppath, PRO_B_FALSE, trf);
+     }     	
+     else
+     {         
+<a name="anchor-21"></a>	solid = csys_geom.owner;
+        ProUtilMatrixCopy(NULL, trf);
+     }
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-22"></a>    Get a list of datum points in the model 
+\*--------------------------------------------------------------------*/ 
+     UsrPointsCollect(solid, &amp;points);
+     ProArraySizeGet(points, &amp;n_points);
+     if(n_points &lt; 1)
+<a name="anchor-23"></a>         return(0);
+
+/*--------------------------------------------------------------------*\ 
+    Get the user to select the table position 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-24"></a>     ProMessageDisplay(msgfil,&quot;USER Pick table position&quot;);
+     if(ProMousePickGet(PRO_ANY_BUTTON, &amp;button, pos) != PRO_TK_NO_ERROR)
+         return(0);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-25"></a>    Setup the table data 
+\*--------------------------------------------------------------------*/ 
+     ProDwgtabledataAlloc(&amp;tdata);
+     ProDwgtabledataOriginSet(tdata, pos);
+     ProDwgtabledataSizetypeSet(tdata, PRODWGTABLESIZE_CHARACTERS);
+<a name="anchor-26"></a>     ProDwgtabledataColumnsSet(tdata, 5, widths, justs);
+
+     heights = (double*)calloc(n_points+2, sizeof(double));
+     for(p=0;p&lt;n_points+2;p++)
+         heights[p] = 1.0;
+<a name="anchor-27"></a>     ProDwgtabledataRowsSet(tdata, n_points+2, heights);
+     free(heights);
+
+/*--------------------------------------------------------------------*\ 
+    Create the table 
+<a name="anchor-28"></a>\*--------------------------------------------------------------------*/ 
+     ProMdlCurrentGet((ProMdl*)&amp;drawing);
+     ProDrawingTableCreate(drawing, tdata, PRO_B_FALSE, &amp;table);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-29"></a>    Merge the top row cells to form the header 
+\*--------------------------------------------------------------------*/ 
+     ProDwgtableCellsMerge(&amp;table, 1, 1, 5, 1, PRO_B_FALSE);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-30"></a>    Write header text specifying model and csys 
+\*--------------------------------------------------------------------*/ 
+     
+	 ProMdlMdlnameGet(solid, modelName);        
+	
+<a name="anchor-31"></a>     ProMdlExtensionGet(solid, modelExtension);
+     
+
+     ProWstringToString(name, modelName);
+     ProWstringToString(type, modelExtension);
+<a name="anchor-32"></a>
+     ProTKSprintf(line, &quot;Datum points for %s.%s, w.r.t csys %s\n&quot;,
+                 name, type, csys_name);
+
+     UsrTableTextAdd(&amp;table, 1, 1, line);
+<a name="anchor-33"></a>
+/*--------------------------------------------------------------------*\ 
+    Add subheadings to columns 
+\*--------------------------------------------------------------------*/ 
+     UsrTableTextAdd(&amp;table, 1, 2, &quot;Feat id&quot;);
+<a name="anchor-34"></a>     UsrTableTextAdd(&amp;table, 2, 2, &quot;Point&quot;);
+     UsrTableTextAdd(&amp;table, 3, 2, &quot;X&quot;);
+     UsrTableTextAdd(&amp;table, 4, 2, &quot;Y&quot;);
+     UsrTableTextAdd(&amp;table, 5, 2, &quot;Z&quot;);
+
+<a name="anchor-35"></a>/*--------------------------------------------------------------------*\ 
+    For each datum point... 
+\*--------------------------------------------------------------------*/ 
+    for(p=0;p&lt;n_points;p++)
+     { 
+<a name="anchor-36"></a>/*--------------------------------------------------------------------*\ 
+        If the owning feature is the same as the last one, just
+         merge column 1 with the cell above, else enter the feature id 
+\*--------------------------------------------------------------------*/ 
+        if(p == 0 || points[p].feature.id != points[p-1].feature.id)
+<a name="anchor-37"></a>         {
+             ProTKSprintf(name, &quot;%d&quot;, points[p].feature.id);
+             UsrTableTextAdd(&amp;table, 1, p+3, name);
+             last_feat_row = p+3;
+         }
+<a name="anchor-38"></a>
+         else
+             ProDwgtableCellsMerge(&amp;table, 1, last_feat_row, 1, p+3,
+                                    PRO_B_FALSE);
+
+<a name="anchor-39"></a>/*--------------------------------------------------------------------*\ 
+        Add the point name to column 2 
+\*--------------------------------------------------------------------*/ 
+         ProWstringToString(name, points[p].name);
+         UsrTableTextAdd(&amp;table, 2, p+3, name);
+<a name="anchor-40"></a>
+/*--------------------------------------------------------------------*\ 
+        Transform the location w.r.t to the csys 
+\*--------------------------------------------------------------------*/ 
+         ProPntTrfEval(points[p].position, trf,     points[p].position);
+<a name="anchor-41"></a>         ProPntTrfEval(points[p].position, to_csys, points[p].position);
+
+/*--------------------------------------------------------------------*\ 
+        Add the XYZ to column 3,4,5 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-42"></a>         ProTKSprintf(name,&quot;%8.3f&quot;, points[p].position[0]);
+         UsrTableTextAdd(&amp;table, 3, p+3, name);
+         ProTKSprintf(name,&quot;%8.3f&quot;, points[p].position[1]);
+         UsrTableTextAdd(&amp;table, 4, p+3, name);
+         ProTKSprintf(name,&quot;%8.3f&quot;, points[p].position[2]);
+<a name="anchor-43"></a>         UsrTableTextAdd(&amp;table, 5, p+3, name);     
+}
+
+/*--------------------------------------------------------------------*\ 
+    Display the table 
+<a name="anchor-44"></a>\*--------------------------------------------------------------------*/ 
+    ProDwgtableDisplay(&amp;table);
+
+    return(1);
+ }
+<a name="anchor-45"></a>
+/*====================================================================*\ 
+FUNCTION : UsrTableTextAdd() 
+PURPOSE  : Utility to add one text line to a table cell 
+\*====================================================================*/ 
+<a name="anchor-46"></a>int UsrTableTextAdd(
+     ProDwgtable *table,
+     int col,
+     int row,
+     char *text)
+<a name="anchor-47"></a> {
+     ProWstring *lines;
+     ProArrayAlloc(1, sizeof(ProWstring), 1, (ProArray*)&amp;lines);
+     lines[0] = (wchar_t*)calloc(strlen(text) + 1, sizeof(wchar_t));
+     ProStringToWstring(lines[0], text);
+<a name="anchor-48"></a>     ProDwgtableTextEnter(table, col, row, lines);
+     ProArrayFree((ProArray*)&amp;lines);
+ }
+
+/*====================================================================*\ 
+<a name="anchor-49"></a>FUNCTION : UsrPointAction() 
+PURPOSE  : Visit action function called for each datum point 
+\*====================================================================*/ 
+ProError UsrPointAction(
+     ProGeomitem *geomitem,
+<a name="anchor-50"></a>     ProError filt_status,
+     ProAppData data)
+ {
+     Point_t point;
+     ProPoint p;
+<a name="anchor-51"></a>/*--------------------------------------------------------------------*\ 
+    Find out which feature the datum point belongs to 
+\*--------------------------------------------------------------------*/ 
+    ProGeomitemFeatureGet(geomitem, &amp;point.feature);
+
+<a name="anchor-52"></a>/*--------------------------------------------------------------------*\ 
+    Get the point position 
+\*--------------------------------------------------------------------*/ 
+    ProPointInit(geomitem->owner, geomitem->id, &amp;p);
+    ProPointCoordGet(p, point.position);
+<a name="anchor-53"></a>
+/*--------------------------------------------------------------------*\ 
+    Get the point name 
+\*--------------------------------------------------------------------*/ 
+    ProModelitemNameGet(geomitem, point.name);
+<a name="anchor-54"></a>
+/*--------------------------------------------------------------------*\ 
+    Add the point to the array 
+\*--------------------------------------------------------------------*/ 
+    ProArrayObjectAdd((ProArray*)data, -1, 1, &amp;point);
+<a name="anchor-55"></a>
+    return(PRO_TK_NO_ERROR);
+ }
+
+/*====================================================================*\ 
+<a name="anchor-56"></a>FUNCTION : UsrFeatureAction() 
+PURPOSE  : Visit action function called for each feature
+\*====================================================================*/ 
+ProError UsrFeatureAction(
+     ProFeature *feature,
+<a name="anchor-57"></a>     ProError filt_status,
+     ProAppData data)
+ {
+     ProFeatStatus fstatus;
+
+<a name="anchor-58"></a>/*--------------------------------------------------------------------*\ 
+    If the feature is not active, skip it 
+\*--------------------------------------------------------------------*/ 
+     ProFeatureStatusGet(feature, &amp;fstatus);
+     if(fstatus != PRO_FEAT_ACTIVE)
+<a name="anchor-59"></a>         return(PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\ 
+    Visit the datum points in the feature 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-60"></a>    ProFeatureGeomitemVisit(feature, PRO_POINT, UsrPointAction, 
+                              NULL, data);
+
+    return(PRO_TK_NO_ERROR);
+ }
+<a name="anchor-61"></a>
+/*====================================================================*\ 
+FUNCTION : UsrPointsCollect() 
+PURPOSE  : Collect an array of datum points in the solid 
+\*====================================================================*/ 
+<a name="anchor-62"></a>int UsrPointsCollect(
+     ProSolid solid,
+     Point_t **points) { 
+/*--------------------------------------------------------------------*\ 
+    Allocate the array 
+<a name="anchor-63"></a>\*--------------------------------------------------------------------*/ 
+    ProArrayAlloc(0, sizeof(Point_t), 1, (ProArray*)points);
+
+/*--------------------------------------------------------------------*\ 
+    Visit the features 
+<a name="anchor-64"></a>\*--------------------------------------------------------------------*/ 
+    ProSolidFeatVisit(solid, UsrFeatureAction, NULL, points);
+ }
+</pre>
+</body>
+</html>

@@ -1,0 +1,1117 @@
+<html>
+<head>
+<title>TestMfgMenu.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes -- include this first
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMenu.h>
+
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+<a name="anchor-3"></a>#include &quot;UtilString.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;TestMfgNew.h&quot;
+#include &quot;UtilCollect.h&quot;
+/*--------------------------------------------------------------------*\
+<a name="anchor-4"></a>Application data types
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+<a name="anchor-5"></a>\*--------------------------------------------------------------------*/
+#include &quot;MfgMenu.h&quot;
+
+int ProTestTkClcmdsAct (ProAppData data, int dummy);
+
+<a name="anchor-6"></a>/*====================================================================*\
+FUNCTION : ProTestMfgNew()
+PURPOSE  : Top level menu for new manufacturing functions.
+\*====================================================================*/
+int ProTestMfgNew()
+<a name="anchor-7"></a>{
+  ProMdl model;
+  ProError status;
+  static char *menu[] = {&quot;TkMfgNew&quot;,&quot;TkMfgAct&quot;,&quot;TkMfgDQ&quot;,&quot;&quot;};
+  MfgMenuChoice obj_action;
+<a name="anchor-8"></a>  MfgObjList    *mfgobj_list;
+  int id;
+
+  int ProTestChooseMfgAction();
+  int ProTestExecMfgAction();
+<a name="anchor-9"></a>  int user_exit_from_process();
+  int ProTestCollection();
+
+        /* Get mfg. model. */
+    ProMdlCurrentGet(&amp;model);
+<a name="anchor-10"></a>
+        /* Init valuse to 0/NULL. */
+    mfgobj_list = (MfgObjList *)calloc(1,sizeof(MfgObjList));
+
+        /* Test which mfg. objects are defined. */
+<a name="anchor-11"></a>    ProTestMfgObjectsCollect(model, mfgobj_list);
+
+
+        /* Set initial state of the menu. */
+    obj_action.mfgobj_type   = MFGOBJ_WKCELL;
+<a name="anchor-12"></a>    obj_action.mfgobj_action = MFGACT_CREATE;
+    obj_action.mfgobj_list   = mfgobj_list;
+
+     status = ProMenuPush();
+     TEST_CALL_REPORT (&quot;ProMenuPush&quot;, &quot;ProTestMfgNew&quot;, status,
+<a name="anchor-13"></a>         status != PRO_TK_NO_ERROR);
+
+     status = ProMenuFileRegister((char*)&quot;TkMfgNew&quot;,(char*)&quot;tkmfgnew.mnu&quot;, &amp;id);
+     TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+<a name="anchor-14"></a>
+     status = ProMenubuttonActionSet((char*)&quot;TkMfgNew&quot;,(char*)&quot;TkMfgNew&quot;, (ProMenubuttonAction)ProMenuHold,NULL,0);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+
+<a name="anchor-15"></a>     status = ProMenubuttonActionSet((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Workcell&quot;,
+                        (ProMenubuttonAction)ProTestChooseMfgAction, &amp;obj_action, MFGOBJ_WKCELL);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+     status = ProMenubuttonActionSet((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Fixture&quot;,
+<a name="anchor-16"></a>                        (ProMenubuttonAction)ProTestChooseMfgAction, &amp;obj_action, MFGOBJ_FIXTURE);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+     status = ProMenubuttonActionSet((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Operation&quot;,
+                        (ProMenubuttonAction)ProTestChooseMfgAction, &amp;obj_action, MFGOBJ_OPER);
+<a name="anchor-17"></a>     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+     status = ProMenubuttonActionSet((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;,
+                        (ProMenubuttonAction)ProTestChooseMfgAction, &amp;obj_action, MFGOBJ_NC_SEQ);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+<a name="anchor-18"></a>         status != PRO_TK_NO_ERROR);
+     status = ProMenubuttonActionSet((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Tool&quot;,
+                        (ProMenubuttonAction)ProTestChooseMfgAction, &amp;obj_action, MFGOBJ_TOOL);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+<a name="anchor-19"></a>     status = ProMenubuttonActionSet((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Collection&quot;,
+                        (ProMenubuttonAction)ProTestCollection, &amp;model, 0 );
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+     
+<a name="anchor-20"></a>         status = ProMenubuttonActionSet((char*)&quot;TkMfgNew&quot;,(char*)&quot;-CLcmds&quot;,
+                        (ProMenubuttonAction)ProTestTkClcmdsAct, &amp;model, 0 );
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR)
+     
+<a name="anchor-21"></a>     status = ProMenuDatamodeSet((char*)&quot;TkMfgNew&quot;, (ProBoolean)0);
+     TEST_CALL_REPORT (&quot;ProMenuDatamodeSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+
+     status = ProMenuFileRegister((char*)&quot;TkMfgAct&quot;,(char*)&quot;tkmfgact.mnu&quot;, &amp;id);
+<a name="anchor-22"></a>     TEST_CALL_REPORT (&quot;ProMenuPush&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+
+     status = ProMenubuttonActionSet((char*)&quot;TkMfgAct&quot;,(char*)&quot;TkMfgAct&quot;, (ProMenubuttonAction)ProMenuHold,NULL,0);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+<a name="anchor-23"></a>         status != PRO_TK_NO_ERROR);
+     status = ProMenubuttonActionSet((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Create&quot;,
+                        (ProMenubuttonAction)ProTestChooseMfgAction, &amp;obj_action, MFGACT_CREATE);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+<a name="anchor-24"></a>     status = ProMenubuttonActionSet((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;,
+                        (ProMenubuttonAction)ProTestChooseMfgAction, &amp;obj_action, MFGACT_REDEFINE);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+     status = ProMenubuttonActionSet((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;,
+<a name="anchor-25"></a>                        (ProMenubuttonAction)ProTestChooseMfgAction, &amp;obj_action, MFGACT_DISPLAY);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+     status = ProMenubuttonActionSet((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;,
+                        (ProMenubuttonAction)ProTestChooseMfgAction, &amp;obj_action, MFGACT_ROUTE);
+<a name="anchor-26"></a>     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+     status = ProMenuDatamodeSet((char*)&quot;TkMfgAct&quot;, (ProBoolean)0);
+     TEST_CALL_REPORT (&quot;ProMenuDatamodeSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+<a name="anchor-27"></a>
+     status = ProMenuFileRegister((char*)&quot;TkMfgDQ&quot;,(char*)&quot;tkmfgdq.mnu&quot;, &amp;id);
+     TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+
+<a name="anchor-28"></a>     status = ProMenubuttonActionSet((char*)&quot;TkMfgDQ&quot;,(char*)&quot;TkMfgDQ&quot;, (ProMenubuttonAction)ProMenuHold,NULL,0);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+     status = ProMenubuttonActionSet((char*)&quot;TkMfgDQ&quot;,(char*)&quot;Done&quot;, (ProMenubuttonAction)ProTestExecMfgAction, &amp;obj_action,0);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+<a name="anchor-29"></a>         status != PRO_TK_NO_ERROR);
+     status = ProMenubuttonActionSet((char*)&quot;TkMfgDQ&quot;,(char*)&quot;Quit&quot;, (ProMenubuttonAction)user_exit_from_process,NULL,0);
+     TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+     status = ProCompoundmenuCreate(menu, &amp;id);
+<a name="anchor-30"></a>     TEST_CALL_REPORT (&quot;ProCompoundmenuCreate&quot;, &quot;ProTestMfgNew&quot;, status,
+         status != PRO_TK_NO_ERROR);
+     status = ProMenubuttonHighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Workcell&quot;);
+     TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, 
+		&quot;ProTestMfgNew&quot;,
+<a name="anchor-31"></a>	        status, status != PRO_TK_NO_ERROR);
+     status = ProMenubuttonHighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Create&quot;);
+     TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, 
+		&quot;ProTestMfgNew&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-32"></a>            
+     if(mfgobj_list->n_wcell &lt;= 0)
+     {
+         status = ProMenubuttonDeactivate((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Operation&quot;);     
+         TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+<a name="anchor-33"></a>		&quot;ProTestMfgNew&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+     }
+     if(mfgobj_list->n_oper &lt;= 0)
+     {
+<a name="anchor-34"></a>         status = ProMenubuttonDeactivate((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;);     
+         TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+		&quot;ProTestMfgNew&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+     }
+<a name="anchor-35"></a>
+     if(mfgobj_list->n_wcell &lt;= 0)
+     {
+         status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);     
+         TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+<a name="anchor-36"></a>		&quot;ProTestMfgNew&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+     }
+     status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);     
+     TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+<a name="anchor-37"></a>		&quot;ProTestMfgNew&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+
+     status = ProMenuProcess(menu[0], &amp;id);
+     TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, 
+<a name="anchor-38"></a>                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+     status = ProMenuPop();
+     TEST_CALL_REPORT (&quot;ProMenuPop&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+<a name="anchor-39"></a>	           status, status != PRO_TK_NO_ERROR);
+
+     return(0);
+}
+
+<a name="anchor-40"></a>
+
+/*====================================================================*\
+    FUNCTION :  ProTestMfgObjectsCollect()
+    PURPOSE  :  Collects the array of Mfg. objects using Visit func.
+<a name="anchor-41"></a>\*====================================================================*/
+ProError ProTestMfgObjectsCollect(
+    ProMdl model,
+    MfgObjList *mfgobj_list)
+{
+<a name="anchor-42"></a>  ProSolid      mfg_wkpc = NULL;
+  ProAssembly   mfg_asm = NULL;
+  ProError status;
+  ProFeature *features;
+  int features_num, i;
+<a name="anchor-43"></a>  ProTool *tools;
+  int tools_num;
+  ProMfgType mfg_type;
+  
+
+<a name="anchor-44"></a>  ProError ProTestMfgFeatVisitAction(ProFeature *feature, ProError filt_status,
+                                    ProAppData app_data);
+  ProError ProTestMfgToolVisitAction(PRO_CONST_ARG ProTool* tool, 
+                                                   ProAppData app_data);
+
+<a name="anchor-45"></a>
+      /* Free memory if already alocated. */
+    if(mfgobj_list->wcell != NULL)
+    {
+        status = ProArrayFree( (ProArray*)&amp;(mfgobj_list->wcell) );
+<a name="anchor-46"></a>        mfgobj_list->n_wcell = 0;
+    }
+    if(mfgobj_list->fixture != NULL)
+    {
+        status = ProArrayFree( (ProArray*)&amp;(mfgobj_list->wcell) );
+<a name="anchor-47"></a>        mfgobj_list->n_fixture = 0;
+    }
+    if(mfgobj_list->oper != NULL)
+    {
+        status = ProArrayFree( (ProArray*)&amp;(mfgobj_list->wcell) );
+<a name="anchor-48"></a>        mfgobj_list->n_oper = 0;
+    }
+    if(mfgobj_list->nc_seq != NULL)
+    {
+        status = ProArrayFree( (ProArray*)&amp;(mfgobj_list->wcell) );
+<a name="anchor-49"></a>        mfgobj_list->n_nc_seq = 0;
+    }
+
+
+    status = ProArrayAlloc(0, sizeof(ProWcell), 1,
+<a name="anchor-50"></a>                                    (ProArray*)&amp;(mfgobj_list->wcell));
+    status = ProArrayAlloc(0, sizeof(ProFixture), 1,
+                                    (ProArray*)&amp;(mfgobj_list->fixture));
+    status = ProArrayAlloc(0, sizeof(ProMfgoper), 1,
+                                    (ProArray*)&amp;(mfgobj_list->oper));
+<a name="anchor-51"></a>    status = ProArrayAlloc(0, sizeof(ProNcseq), 1,
+                                    (ProArray*)&amp;(mfgobj_list->nc_seq));
+
+    status = ProMfgSolidGet((ProMfg)model, &amp;mfg_wkpc);
+    TEST_CALL_REPORT(&quot;ProMfgSolidGet()&quot;, &quot;ProTestMfgObjectsCollect&quot;,
+<a name="anchor-52"></a>                                       status, status!=PRO_TK_NO_ERROR);
+                                          
+    status = ProUtilCollectSolidFeatures (mfg_wkpc, &amp;features);
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-53"></a>        status = ProArraySizeGet ((ProArray)features, &amp;features_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestMfgObjectsCollect()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; features_num; i++)
+        {
+<a name="anchor-54"></a>            status = ProTestMfgFeatVisitAction (&amp;features[i],
+                PRO_TK_NO_ERROR, (ProAppData)mfgobj_list);
+        }
+        status = ProArrayFree ((ProArray*)&amp;features);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestMfgObjectsCollect()&quot;, 
+<a name="anchor-55"></a>            status, status != PRO_TK_NO_ERROR );
+    }
+    
+    status = ProMfgAssemGet((ProMfg)model, &amp;mfg_asm);
+    TEST_CALL_REPORT(&quot;ProMfgAssemGet()&quot;, &quot;ProTestMfgObjectsCollect&quot;,
+<a name="anchor-56"></a>                                       status, status!=PRO_TK_NO_ERROR);
+    status = ProMfgTypeGet((ProMfg)model, &amp;mfg_type);
+    TEST_CALL_REPORT(&quot;ProMfgTypeGet()&quot;, &quot;ProTestMfgObjectsCollect&quot;,
+                                       status, status!=PRO_TK_NO_ERROR);
+    if (mfg_type == PRO_MFGTYPE_MACH_PART)
+<a name="anchor-57"></a>    {
+	status = ProUtilCollectSolidFeatures (mfg_asm, &amp;features);
+	if (status == PRO_TK_NO_ERROR)
+	{
+	    status = ProArraySizeGet ((ProArray)features, &amp;features_num);
+<a name="anchor-58"></a>	    TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestMfgObjectsCollect()&quot;
+			      ,status, status != PRO_TK_NO_ERROR );
+	    for (i = 0; i &lt; features_num; i++)
+	    {
+		status = ProTestMfgFeatVisitAction (features+i,
+<a name="anchor-59"></a>	             PRO_TK_NO_ERROR, (ProAppData)mfgobj_list);
+	    }
+	    status = ProArrayFree ((ProArray*)&amp;features);
+	    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestMfgObjectsCollect()&quot;,
+			      status, status != PRO_TK_NO_ERROR );
+<a name="anchor-60"></a>	}
+    }
+    
+    status = ProArraySizeGet((ProArray*)mfgobj_list->wcell,
+                                        &amp;(mfgobj_list->n_wcell));
+<a name="anchor-61"></a>    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestMfgObjectsCollect&quot;,
+                                          status, status!=PRO_TK_NO_ERROR);
+
+    status = ProArraySizeGet((ProArray*)mfgobj_list->fixture,
+                                        &amp;(mfgobj_list->n_fixture));
+<a name="anchor-62"></a>    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestMfgObjectsCollect&quot;,
+                                          status, status!=PRO_TK_NO_ERROR);
+
+    status = ProArraySizeGet((ProArray*)mfgobj_list->oper,
+                                        &amp;(mfgobj_list->n_oper));
+<a name="anchor-63"></a>    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestMfgObjectsCollect&quot;,
+                                          status, status!=PRO_TK_NO_ERROR);
+
+    status = ProArraySizeGet((ProArray*)mfgobj_list->nc_seq,
+                                        &amp;(mfgobj_list->n_nc_seq));
+<a name="anchor-64"></a>    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestMfgObjectsCollect&quot;,
+                                          status, status!=PRO_TK_NO_ERROR);
+
+    status = ProArrayAlloc(0, sizeof(ProTool), 1,
+                                    (ProArray*)&amp;(mfgobj_list->tool));
+<a name="anchor-65"></a>    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProTestMfgObjectsCollect&quot;,
+                                          status, status!=PRO_TK_NO_ERROR);
+    
+    status = ProUtilCollectMfgTools ((ProMfg)model, &amp;tools);
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-66"></a>    {
+        status = ProArraySizeGet ((ProArray)tools, &amp;tools_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;PProTestMfgObjectsCollect()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; tools_num; i++)
+<a name="anchor-67"></a>        {
+            status = ProTestMfgToolVisitAction (tools+i,
+	        (ProAppData)mfgobj_list);
+        }
+        status = ProArrayFree ((ProArray*)&amp;tools);
+<a name="anchor-68"></a>        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestMfgObjectsCollect()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+    }
+
+    status = ProArraySizeGet((ProArray*)mfgobj_list->tool,
+<a name="anchor-69"></a>                                        &amp;(mfgobj_list->n_tool));
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestMfgObjectsCollect&quot;,
+                                          status, status!=PRO_TK_NO_ERROR);
+
+  return((ProError)0);
+<a name="anchor-70"></a>}
+
+
+/*====================================================================*\
+    FUNCTION :  ProTestMfgFeatVisitAction()
+<a name="anchor-71"></a>    PURPOSE  :  Generalized action function for visiting mfg. features.
+\*====================================================================*/
+ProError ProTestMfgFeatVisitAction(
+    ProFeature *feature,
+    ProError filt_status,
+<a name="anchor-72"></a>    ProAppData app_data)
+{
+  int status;
+  ProFeattype type;
+  MfgObjList   *mfgobj_list;
+<a name="anchor-73"></a>
+    mfgobj_list = (MfgObjList*)app_data;
+
+    status = ProFeatureTypeGet(feature, &amp;type);
+    TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;, &quot;ProTestMfgFeatVisitAction()&quot;,
+<a name="anchor-74"></a>                      (ProError)status, (status != PRO_TK_NO_ERROR));
+
+     switch(type)
+     {
+	  case PRO_FEAT_WORKCELL:
+<a name="anchor-75"></a>        status = ProArrayObjectAdd((ProArray*)&amp;(mfgobj_list->wcell), -1, 1, feature);
+        TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestMfgFeatVisitAction()&quot;,
+                          (ProError)status, status != PRO_TK_NO_ERROR);
+	    break;
+
+<a name="anchor-76"></a>	  case PRO_FEAT_OPERATION:
+        status = ProArrayObjectAdd((ProArray*)&amp;(mfgobj_list->oper), -1, 1, feature);
+        TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestMfgFeatVisitAction()&quot;,
+                          (ProError)status, status != PRO_TK_NO_ERROR);
+	    break;
+<a name="anchor-77"></a>
+	  case PRO_FEAT_FIXSETUP:
+        status = ProArrayObjectAdd((ProArray*)&amp;(mfgobj_list->fixture), -1, 1, feature);
+        TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestMfgFeatVisitAction()&quot;,
+                          (ProError)status, status != PRO_TK_NO_ERROR);
+<a name="anchor-78"></a>	    break;
+
+	  case PRO_FEAT_SAW:
+	  case PRO_FEAT_TURN:
+	  case PRO_FEAT_MILL:
+<a name="anchor-79"></a>	  case PRO_FEAT_DRILL:
+	 case PRO_FEAT_AUXILIARY:
+        status = ProArrayObjectAdd((ProArray*)&amp;(mfgobj_list->nc_seq), -1, 1, feature);
+        TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestMfgFeatVisitAction()&quot;,
+                          (ProError)status, status != PRO_TK_NO_ERROR);
+<a name="anchor-80"></a>	    break;
+
+      default:
+	       break;
+     }
+<a name="anchor-81"></a>
+  return(PRO_TK_NO_ERROR);
+}
+
+
+<a name="anchor-82"></a>/*====================================================================*\
+    FUNCTION :  ProTestMfgToolVisitAction()
+    PURPOSE  :  Generalized action function for visiting mfg. objects.
+\*====================================================================*/
+ProError ProTestMfgToolVisitAction(
+<a name="anchor-83"></a>    PRO_CONST_ARG ProTool* tool,
+    ProAppData app_data)
+{
+  int status;
+  MfgObjList   *mfgobj_list;
+<a name="anchor-84"></a>
+    mfgobj_list = (MfgObjList*)app_data;
+
+    status = ProArrayObjectAdd((ProArray*)&amp;(mfgobj_list->tool),
+					 	-1, 1, (ProTool *) tool);
+<a name="anchor-85"></a>    TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestWcellVisitAction()&quot;,
+                      (ProError)status, status != PRO_TK_NO_ERROR);
+
+  return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-86"></a>
+
+
+/*====================================================================*\
+    FUNCTION :  user_exit_from_process()
+<a name="anchor-87"></a>    PURPOSE  :  Exits up from mfg. test menu.
+\*====================================================================*/
+int user_exit_from_process()
+{
+     ProError status;
+<a name="anchor-88"></a>     status = ProMenuDelete();
+     TEST_CALL_REPORT (&quot;ProMenudelete&quot;, 
+                   &quot;user_exit_from_process&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+     status = ProMenuDelete();
+<a name="anchor-89"></a>     TEST_CALL_REPORT (&quot;ProMenudelete&quot;, 
+                   &quot;user_exit_from_process&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+     status = ProMenuDelete();
+     TEST_CALL_REPORT (&quot;ProMenudelete&quot;, 
+<a name="anchor-90"></a>                   &quot;user_exit_from_process&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+
+     return(0);
+}
+<a name="anchor-91"></a>
+
+
+/*====================================================================*\
+    FUNCTION : ProTestMfgActionMenuSet
+<a name="anchor-92"></a>    PURPOSE  : Set menus based on selection and exsisting mfg. objects.
+\*====================================================================*/
+int ProTestMfgActionMenuSet(MfgMenuChoice *obj_action)
+{
+     ProError status;
+<a name="anchor-93"></a>        /* Set mfg. menu display type. */
+     switch(obj_action->mfgobj_action)
+     {
+	  case MFGACT_CREATE:
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);
+<a name="anchor-94"></a>	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+<a name="anchor-95"></a>		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+<a name="anchor-96"></a>	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonHighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Create&quot;);
+            TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);  
+<a name="anchor-97"></a>	    break;
+
+	  case MFGACT_REDEFINE:
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Create&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+<a name="anchor-98"></a>		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+<a name="anchor-99"></a>	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-100"></a>            status = ProMenubuttonHighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+	    break;
+<a name="anchor-101"></a>
+	  case MFGACT_DISPLAY:
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Create&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+<a name="anchor-102"></a>	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-103"></a>            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            ProMenubuttonHighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);
+<a name="anchor-104"></a>	    TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+	    break;
+
+<a name="anchor-105"></a>	  case MFGACT_ROUTE:
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Create&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-106"></a>            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);
+<a name="anchor-107"></a>	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonHighlight((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestMfgActionMenuSet&quot;, status,
+<a name="anchor-108"></a>	        status != PRO_TK_NO_ERROR);
+	    break;
+
+      default:
+	       break;
+<a name="anchor-109"></a>     }
+
+  return(0);
+}
+
+<a name="anchor-110"></a>
+/*====================================================================*\
+    FUNCTION : ProTestMfgTypeMenuSet
+    PURPOSE  : Set menus based on selection and exsisting mfg. objects.
+\*====================================================================*/
+<a name="anchor-111"></a>int ProTestMfgTypeMenuSet(MfgMenuChoice *obj_action)
+{
+     ProError status;
+        /* Set mfg. menu display type. */
+     switch(obj_action->mfgobj_type)
+<a name="anchor-112"></a>     {
+	  case MFGOBJ_WKCELL:
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Fixture&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+<a name="anchor-113"></a>	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Operation&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-114"></a>            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Tool&quot;);
+<a name="anchor-115"></a>	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+
+            status = ProMenubuttonHighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Workcell&quot;);
+<a name="anchor-116"></a>            TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, 
+		&quot;ProTestMfTypeMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            
+            if(obj_action->mfgobj_list->n_wcell &lt;= 0)
+<a name="anchor-117"></a>            {
+                status = ProMenubuttonDeactivate((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Operation&quot;);     
+                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-118"></a>            }
+            if(obj_action->mfgobj_list->n_oper &lt;= 0)
+            {
+                status = ProMenubuttonDeactivate((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;);
+                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+<a name="anchor-119"></a>                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            }
+            status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);
+            TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+<a name="anchor-120"></a>                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);     
+            TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+<a name="anchor-121"></a>	           status, status != PRO_TK_NO_ERROR);
+	    break;
+
+	  case MFGOBJ_FIXTURE:
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Workcell&quot;);
+<a name="anchor-122"></a>	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Operation&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+<a name="anchor-123"></a>		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+<a name="anchor-124"></a>	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Tool&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-125"></a>
+            status = ProMenubuttonHighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Fixture&quot;);
+            TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, 
+		&quot;ProTestMfTypeMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-126"></a>
+            if(obj_action->mfgobj_list->n_wcell &lt;= 0)
+            {
+                status = ProMenubuttonDeactivate((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Operation&quot;);     
+                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+<a name="anchor-127"></a>                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            }
+            if(obj_action->mfgobj_list->n_oper &lt;= 0)
+            {
+<a name="anchor-128"></a>                status = ProMenubuttonDeactivate((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;);    
+                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            }
+<a name="anchor-129"></a>	    if(obj_action->mfgobj_list->n_fixture &lt;= 0)
+              {
+                status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);     
+                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+<a name="anchor-130"></a>	           status, status != PRO_TK_NO_ERROR);
+                status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);
+                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-131"></a>              }
+            else
+              {
+                status = ProMenubuttonActivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;); 
+        	TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, 
+<a name="anchor-132"></a>	           &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+                status = ProMenubuttonActivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);
+        	TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, 
+	           &quot;ProTestMfgTypeMenuSet&quot;,
+<a name="anchor-133"></a>	           status, status != PRO_TK_NO_ERROR);
+              }
+
+            status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);     
+            TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+<a name="anchor-134"></a>                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+	    break;
+
+	  case MFGOBJ_OPER:
+<a name="anchor-135"></a>            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Workcell&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Fixture&quot;);
+<a name="anchor-136"></a>	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+<a name="anchor-137"></a>		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Tool&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+<a name="anchor-138"></a>	        status, status != PRO_TK_NO_ERROR);
+
+            status = ProMenubuttonHighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Operation&quot;);
+            TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, 
+		&quot;ProTestMfTypeMenuSet&quot;,
+<a name="anchor-139"></a>	        status, status != PRO_TK_NO_ERROR);
+
+            if(obj_action->mfgobj_list->n_oper &lt;= 0)
+            {
+                status = ProMenubuttonDeactivate((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;);
+<a name="anchor-140"></a>                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            }
+            else
+<a name="anchor-141"></a>            {
+                status = ProMenubuttonActivate((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;);
+        	TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, 
+	           &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-142"></a>            }
+            status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);
+            TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-143"></a>
+            if(obj_action->mfgobj_list->n_nc_seq &lt;= 0)
+            {
+                status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);
+                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+<a name="anchor-144"></a>                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            }
+            else
+            {
+<a name="anchor-145"></a>                status = ProMenubuttonActivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);     
+        	TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, 
+	           &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            }
+<a name="anchor-146"></a>	    break;
+
+	  case MFGOBJ_NC_SEQ:
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Workcell&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+<a name="anchor-147"></a>		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Fixture&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+<a name="anchor-148"></a>	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Operation&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-149"></a>            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Tool&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonHighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;);
+<a name="anchor-150"></a>            TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, 
+		&quot;ProTestMfTypeMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+
+            if(obj_action->mfgobj_list->n_nc_seq &lt;= 0)
+<a name="anchor-151"></a>            {
+                status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);
+                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-152"></a>                status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);
+                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            }
+<a name="anchor-153"></a>            else
+            {
+                status = ProMenubuttonActivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);     
+        	TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, 
+	           &quot;ProTestMfgTypeMenuSet&quot;,
+<a name="anchor-154"></a>	           status, status != PRO_TK_NO_ERROR);
+                status = ProMenubuttonActivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);     
+        	TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, 
+	           &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-155"></a>            }
+	    break;
+
+	  case MFGOBJ_TOOL:
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Workcell&quot;);
+<a name="anchor-156"></a>	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Fixture&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+<a name="anchor-157"></a>		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Operation&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+<a name="anchor-158"></a>	        status, status != PRO_TK_NO_ERROR);
+            status = ProMenubuttonUnhighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;);
+	    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, 
+		&quot;ProTestMfgActionMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-159"></a>
+            status = ProMenubuttonHighlight((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Tool&quot;);
+            TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, 
+		&quot;ProTestMfTypeMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-160"></a>
+            if(obj_action->mfgobj_list->n_wcell &lt;= 0)
+            {
+                status = ProMenubuttonDeactivate((char*)&quot;TkMfgNew&quot;,(char*)&quot;-Operation&quot;);     
+                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+<a name="anchor-161"></a>                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            }
+            if(obj_action->mfgobj_list->n_oper &lt;= 0)
+            {
+<a name="anchor-162"></a>                status = ProMenubuttonDeactivate((char*)&quot;TkMfgNew&quot;,(char*)&quot;-NC Sequence&quot;);
+                TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            }
+<a name="anchor-163"></a>
+            status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Display&quot;);     
+            TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-164"></a>	           
+/*          Added tool redefine */
+/*            status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);
+            TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+<a name="anchor-165"></a>	           status, status != PRO_TK_NO_ERROR);*/
+      
+            if(obj_action->mfgobj_list->n_tool&lt;=0) 
+            {
+              status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);
+<a name="anchor-166"></a>              TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+	      status = ProMenubuttonDeactivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);
+              TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, 
+<a name="anchor-167"></a>                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            }
+            else
+            {
+<a name="anchor-168"></a>              status = ProMenubuttonActivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);
+       	      TEST_CALL_REPORT (&quot;ProMenubuttonactivate&quot;, 
+		&quot;ProTestMfgTypeMenuSet&quot;,
+	        status, status != PRO_TK_NO_ERROR);
+	      status = ProMenubuttonActivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);
+<a name="anchor-169"></a>              TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, 
+                   &quot;ProTestMfgTypeMenuSet&quot;,
+	           status, status != PRO_TK_NO_ERROR);
+            }
+	    break;
+<a name="anchor-170"></a>
+      default:
+	break;
+     }
+
+<a name="anchor-171"></a>   return(0);
+}
+
+
+/*====================================================================*\
+<a name="anchor-172"></a>    FUNCTION : ProTestChooseMfgAction
+    PURPOSE  : Chose action for an mfg. object.
+\*====================================================================*/
+int ProTestChooseMfgAction(MfgMenuChoice *obj_action, int opt)
+{
+<a name="anchor-173"></a>
+     switch(opt)
+     {
+        /* Set mfg. object type. */
+	  case MFGOBJ_WKCELL:
+<a name="anchor-174"></a>            obj_action->mfgobj_type = MFGOBJ_WKCELL;
+	    break;
+
+	  case MFGOBJ_FIXTURE:
+            obj_action->mfgobj_type = MFGOBJ_FIXTURE;
+<a name="anchor-175"></a>	    break;
+
+	  case MFGOBJ_OPER:
+            obj_action->mfgobj_type = MFGOBJ_OPER;
+	    break;
+<a name="anchor-176"></a>
+	  case MFGOBJ_NC_SEQ:
+            obj_action->mfgobj_type = MFGOBJ_NC_SEQ;
+	    break;
+
+<a name="anchor-177"></a>	  case MFGOBJ_TOOL:
+            obj_action->mfgobj_type = MFGOBJ_TOOL;
+	    break;
+
+
+<a name="anchor-178"></a>        /* Set mfg. action. */
+	  case MFGACT_CREATE:
+            obj_action->mfgobj_action = MFGACT_CREATE;
+	    break;
+
+<a name="anchor-179"></a>	  case MFGACT_REDEFINE:
+            obj_action->mfgobj_action = MFGACT_REDEFINE;
+	    break;
+
+	  case MFGACT_DISPLAY:
+<a name="anchor-180"></a>            obj_action->mfgobj_action = MFGACT_DISPLAY;
+	    break;
+
+	  case MFGACT_ROUTE:
+            obj_action->mfgobj_action = MFGACT_ROUTE;
+<a name="anchor-181"></a>	    break;
+
+      default:
+	       break;
+     }
+<a name="anchor-182"></a>
+    ProTestMfgTypeMenuSet(obj_action);
+    ProTestMfgActionMenuSet(obj_action);
+
+  return(0);
+<a name="anchor-183"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestWkcellAction
+PURPOSE  : ProTestWkcellAction
+<a name="anchor-184"></a>\*====================================================================*/
+int ProTestWkcellAction(MfgMenuChoice *obj_action)
+{
+
+     switch(obj_action->mfgobj_action)
+<a name="anchor-185"></a>     {
+     case MFGACT_CREATE:
+        ProTestWkcellCreate(obj_action);
+        break;
+     case MFGACT_REDEFINE:
+<a name="anchor-186"></a>        ProTestWkcellRedefine(obj_action);
+        break;
+
+     case MFGACT_DISPLAY:
+        break;
+<a name="anchor-187"></a>
+     case MFGACT_ROUTE:
+        break;
+
+     default:
+<a name="anchor-188"></a>        break;
+     }
+
+  return(0);
+}
+<a name="anchor-189"></a>
+/*====================================================================*\
+FUNCTION : ProTestFixtureAction
+PURPOSE  : ProTestFixtureAction
+\*====================================================================*/
+<a name="anchor-190"></a>int ProTestFixtureAction(MfgMenuChoice *obj_action)
+{
+  ProError status;
+
+     switch(obj_action->mfgobj_action)
+<a name="anchor-191"></a>     {
+     case MFGACT_CREATE:
+        ProTestFixtureCreate(obj_action);
+        break;
+
+<a name="anchor-192"></a>     case MFGACT_REDEFINE:
+	status = (ProError)ProTestFixtList( obj_action );
+        break;
+
+     case MFGACT_DISPLAY:
+<a name="anchor-193"></a>        status = ProTestFixtureDisp( obj_action );
+        break;
+
+     case MFGACT_ROUTE:
+        break;
+<a name="anchor-194"></a>
+     default:
+        break;
+     }
+
+<a name="anchor-195"></a>  return(0);
+}
+
+
+/*====================================================================*\
+<a name="anchor-196"></a>FUNCTION : ProTestOperationAction
+PURPOSE  : ProTestOperationAction
+\*====================================================================*/
+int ProTestOperationAction(MfgMenuChoice *obj_action)
+{
+<a name="anchor-197"></a>     switch(obj_action->mfgobj_action)
+     {
+     case MFGACT_CREATE:
+        ProTestOperationCreate(obj_action);
+        break;
+<a name="anchor-198"></a>
+     case MFGACT_REDEFINE:
+        break;
+
+     case MFGACT_DISPLAY:
+<a name="anchor-199"></a>        ProTestOperationDisplay( obj_action );
+        break;
+
+     case MFGACT_ROUTE:
+        break;
+<a name="anchor-200"></a>
+     default:
+        break;
+     }
+
+<a name="anchor-201"></a>  return(0);
+}
+
+
+/*====================================================================*\
+<a name="anchor-202"></a>FUNCTION : ProTestNcseqAction
+PURPOSE  : ProTestNcseqAction
+\*====================================================================*/
+int ProTestNcseqAction(MfgMenuChoice *obj_action)
+{
+<a name="anchor-203"></a>  ProError status;
+
+     switch(obj_action->mfgobj_action)
+     {
+     case MFGACT_CREATE:
+<a name="anchor-204"></a>        status = ProTestNCSequenceCreate(obj_action);
+        break;
+
+     case MFGACT_REDEFINE:
+        break;
+<a name="anchor-205"></a>
+     case MFGACT_DISPLAY:
+        status = ProTestNcseqToolPathDisplay();
+        break;
+
+<a name="anchor-206"></a>     default:
+        break;
+     }
+
+  return(0);
+<a name="anchor-207"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestToolAction
+PURPOSE  : ProTestToolAction
+<a name="anchor-208"></a>\*====================================================================*/
+int ProTestToolAction(MfgMenuChoice *obj_action)
+{
+  ProError status;
+
+<a name="anchor-209"></a>     switch(obj_action->mfgobj_action)
+     {
+     case MFGACT_CREATE:
+        status = ProTestCreateTool(obj_action);
+        break;
+<a name="anchor-210"></a>
+     case MFGACT_REDEFINE:
+        status = ProTestToolRedefine (obj_action);
+        break;
+
+<a name="anchor-211"></a>     case MFGACT_DISPLAY:
+        break;
+
+     case MFGACT_ROUTE:
+        status = ProTestRouteTool();
+<a name="anchor-212"></a>        break;
+
+     default:
+        break;
+     }
+<a name="anchor-213"></a>
+  return(0);
+}
+
+/*====================================================================*\
+<a name="anchor-214"></a>FUNCTION : ProTestExecMfgAction
+PURPOSE  : ProTestExecMfgAction
+\*====================================================================*/
+int ProTestExecMfgAction(MfgMenuChoice *obj_action, int opt)
+{
+<a name="anchor-215"></a>  ProMdl model;
+
+        /* Get mfg. model. */
+    ProMdlCurrentGet(&amp;model);
+
+<a name="anchor-216"></a>     switch(obj_action->mfgobj_type)
+     {
+     case MFGOBJ_WKCELL:
+        ProTestWkcellAction(obj_action);
+	break;
+<a name="anchor-217"></a>
+     case MFGOBJ_FIXTURE:
+        ProTestFixtureAction(obj_action);
+        break;
+
+<a name="anchor-218"></a>     case MFGOBJ_OPER:
+        ProTestOperationAction(obj_action);
+        break;
+
+     case MFGOBJ_NC_SEQ:
+<a name="anchor-219"></a>        ProTestNcseqAction(obj_action);
+        break;
+
+     case MFGOBJ_TOOL:
+        ProTestToolAction(obj_action);
+<a name="anchor-220"></a>        break;
+
+     default:
+        break;
+     }
+<a name="anchor-221"></a>
+  return(0);
+}
+
+</pre>
+</body>
+</html>

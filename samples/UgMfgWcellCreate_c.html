@@ -1,0 +1,672 @@
+<html>
+<head>
+<title>UgMfgWcellCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMfg.h>
+#include &lt;ProSolid.h>
+#include &lt;ProSelection.h>
+#include &lt;ProAsmcomppath.h>
+<a name="anchor-2"></a>#include &lt;ProElement.h>
+#include &lt;ProElemId.h>
+#include &lt;ProValue.h>
+#include &lt;ProFeature.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>#include &lt;ProWcell.h>
+#include &lt;ProUtil.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProMfgOptions.h>
+#include &lt;ProFeatType.h>
+<a name="anchor-4"></a>#include &lt;ProToolinput.h>
+#include &lt;ProMdlUnits.h>
+#include &lt;ProTool.h>
+#include &lt;ProTKRunTime.h>
+
+<a name="anchor-5"></a>#include &lt;TestError.h>
+#include &lt;UtilString.h>
+#include &lt;UtilTree.h>
+#include &lt;TestConsts.h>
+#include &lt;UgMfg.h>
+<a name="anchor-6"></a>
+
+/*====================================================================*\
+FUNCTION : UserMfgWcellInitTools
+PURPOSE  : Create tools and add to tool table
+<a name="anchor-7"></a>\*====================================================================*/
+static ProError UserMfgWcellInitTools( ProMfg         mfg_model,
+                                       ProElement     tool_arr_elem  )
+{
+ ProTool		tool;
+<a name="anchor-8"></a> ProError		err = PRO_TK_NO_ERROR;
+ static MfgPrmDblValue  drill_params[] =
+ {
+   { &quot;CUTTER_DIAM&quot;,         12.0   },
+   { &quot;LENGTH&quot;,              80.0   },
+<a name="anchor-9"></a>   { &quot;POINT_ANGLE&quot;,         118.0  }
+ };
+ static MfgPrmDblValue  center_drill_params[] =
+ {
+   { &quot;CUTTER_DIAM&quot;,         13.0  },
+<a name="anchor-10"></a>   { &quot;POINT_ANGLE&quot;,         118.0 },
+   { &quot;LENGTH&quot;,              50.0  },
+   { &quot;CSINK_ANGLE&quot;,         90.0  },
+   { &quot;DRILL_DIAMETER&quot;,      5.0   },
+   { &quot;DRILL_LENGTH&quot;,        5.0   },
+<a name="anchor-11"></a> };
+ static MfgPrmDblValue  end_mill_params[] =
+ {
+   { &quot;CUTTER_DIAM&quot;,         20.0 },
+   { &quot;LENGTH&quot;,              60.0 }
+<a name="anchor-12"></a> };
+ int			n_params= 0;
+ int			pocket_num;
+ ProPath		tool_file;
+
+<a name="anchor-13"></a>
+ /*-----------------------------------------------*/
+ /* Add drill                                     */
+ /*-----------------------------------------------*/
+ pocket_num = 1;
+<a name="anchor-14"></a>
+ n_params = sizeof( drill_params )/sizeof( MfgPrmDblValue );
+ err = UserParamToolCreate( mfg_model, PRO_TOOL_DRILL, L&quot;DRILL_D12&quot;,
+                            drill_params, n_params, PRO_UNITLENGTH_MM,
+                            &amp;tool );
+<a name="anchor-15"></a> ERROR_CHECK( &quot;UserMfgWcellInitTools&quot;, &quot;UserParamToolCreate&quot;, err );
+
+ err = UserMfgWcellAddToolSetup( &amp;tool, pocket_num, tool_arr_elem );
+ ERROR_CHECK( &quot;UserMfgWcellInitTools&quot;, &quot;UserMfgWcellAddToolSetup&quot;, err );
+
+<a name="anchor-16"></a> /*-----------------------------------------------*/
+ /* Add center-drill                              */
+ /*-----------------------------------------------*/
+ pocket_num = 2;
+
+<a name="anchor-17"></a> n_params = sizeof( center_drill_params )/sizeof( MfgPrmDblValue );
+ err = UserParamToolCreate( mfg_model, PRO_TOOL_CENTER_DRL, L&quot;C-DRILL_D12&quot;,
+                            center_drill_params, n_params, PRO_UNITLENGTH_MM,
+                            &amp;tool );
+ ERROR_CHECK( &quot;UserMfgWcellInitTools&quot;, &quot;UserParamToolCreate&quot;, err );
+<a name="anchor-18"></a>
+ err = UserMfgWcellAddToolSetup( &amp;tool, pocket_num, tool_arr_elem );
+ ERROR_CHECK( &quot;UserMfgWcellInitTools&quot;, &quot;UserMfgWcellAddToolSetup&quot;, err );
+
+ /*-----------------------------------------------*/
+<a name="anchor-19"></a> /* Add end mill                                  */
+ /*-----------------------------------------------*/
+ pocket_num = 3;
+
+ n_params = sizeof( end_mill_params )/sizeof( MfgPrmDblValue );
+<a name="anchor-20"></a> err = UserParamToolCreate( mfg_model, PRO_TOOL_END_MILL, L&quot;END_MILL_D20&quot;,
+                            end_mill_params, n_params, PRO_UNITLENGTH_MM,
+                            &amp;tool );
+ ERROR_CHECK( &quot;UserMfgWcellInitTools&quot;, &quot;UserParamToolCreate&quot;, err );
+
+<a name="anchor-21"></a> err = UserMfgWcellAddToolSetup( &amp;tool, pocket_num, tool_arr_elem );
+ ERROR_CHECK( &quot;UserMfgWcellInitTools&quot;, &quot;UserMfgWcellAddToolSetup&quot;, err );
+
+ /*-----------------------------------------------*/
+ /* Add drill by reading a file                   */
+<a name="anchor-22"></a> /*-----------------------------------------------*/
+ pocket_num = 4;
+ 
+ ProStringToWstring ( tool_file, &quot;mill_d20.xml&quot;);
+
+<a name="anchor-23"></a> err = UserToolFileRead( mfg_model, L&quot;MILL_D20&quot;, tool_file, PRO_B_TRUE, 
+                         &amp;tool );
+
+ ERROR_CHECK( &quot;UserMfgWcellInitTools&quot;, &quot;UserToolFileRead&quot;, err );
+
+<a name="anchor-24"></a> err = UserMfgWcellAddToolSetup( &amp;tool, pocket_num, tool_arr_elem );
+ ERROR_CHECK( &quot;UserMfgWcellInitTools&quot;, &quot;UserMfgWcellAddToolSetup&quot;, err );
+
+ return ( err );
+}
+<a name="anchor-25"></a>
+/*====================================================================*\
+Function : UserToolHeadSet()
+Purpose  : Setup a tool table
+\*====================================================================*/
+<a name="anchor-26"></a>static ProError UserToolHeadSet( ProElement head_elem )
+{
+ ProError	err = PRO_TK_NO_ERROR;
+ ProMfg		mfg_model;
+ ProElement	tool_arr_elem;
+<a name="anchor-27"></a>
+ err = ProMdlCurrentGet( (ProMdl*)&amp;mfg_model );
+ ERROR_CHECK( &quot;UserToolHeadSet&quot;,&quot;ProMdlCurrentGet&quot;, err );
+
+ err = ProElementAlloc( PRO_E_MFG_WCELL_TOOL_SETUP_ARR, &amp;tool_arr_elem );
+<a name="anchor-28"></a> ERROR_CHECK( &quot;UserToolHeadSet&quot;, &quot;ProElementAlloc&quot;, err );
+
+ err = UserMfgWcellInitTools( mfg_model, tool_arr_elem );
+ ERROR_CHECK( &quot;UserToolHeadSet&quot;,&quot;UserMfgWcellInitTools&quot;,err );
+
+<a name="anchor-29"></a> err = ProElemtreeElementAdd( head_elem, NULL, tool_arr_elem );
+ ERROR_CHECK( &quot;UserToolHeadSet&quot;,&quot;ProElemtreeElementAdd&quot;,err );
+
+ return ( err );
+}
+<a name="anchor-30"></a>
+/*====================================================================*\
+FUNCTION : UserWorkcellCreate
+PURPOSE  : Create a workcell
+\*====================================================================*/
+<a name="anchor-31"></a>int UserWorkcellCreate ()
+{
+ ProMdl			mfg_model;
+ ProElement		element = NULL;      /* Individual element */
+ ProElement		elem_tree = NULL; /* Entire tree        */
+<a name="anchor-32"></a> ProValueData		value_data;
+ ProValue		value;
+ ProFeature		wc_feature;
+ ProError		err = PRO_TK_NO_ERROR;
+ int                    n_dbl_params = 0;
+<a name="anchor-33"></a> int                    n_str_params = 0;
+ int			ii = 0, num_elems = 0;
+ static ElemTable	elem_table[] = 
+ {
+   { PRO_E_FEATURE_TYPE,        PRO_VALUE_TYPE_INT     },
+<a name="anchor-34"></a>   { PRO_E_WCELL_TYPE,          PRO_VALUE_TYPE_INT     },
+   { PRO_E_STD_FEATURE_NAME,    PRO_VALUE_TYPE_WSTRING },
+   { PRO_E_MFG_WCELL_NUM_AXES,  PRO_VALUE_TYPE_INT     },
+   { PRO_E_MFG_PARAM_ARR,       ARRAY                  },
+   { PRO_E_MFG_WCELL_HEAD_1,    COMPOUND               },
+<a name="anchor-35"></a>   { PRO_E_MFG_COMMENTS,        PRO_VALUE_TYPE_WSTRING }
+ };
+ static MfgPrmDblValue  dbl_params[] =  /* example (not required) */
+ {
+   { &quot;RAPID_FEED_RATE&quot;,    500.0    }
+<a name="anchor-36"></a> };
+ static MfgPrmStrValue  str_params[] =  /* examples (not required) */
+ {
+   { &quot;MACH_NAME&quot;,              L&quot;GPOST348&quot;         },
+   { &quot;MACH_ID&quot;,                L&quot;5&quot;                },
+<a name="anchor-37"></a>   { &quot;CONTROLLER&quot;,             L&quot;FANUC 6M&quot;         },
+   { &quot;LOADTL_OUTPUT&quot;,          L&quot;MODAL_OUTPUT&quot;     },
+   { &quot;SPINDL_OFF_OUTPUT&quot;,      L&quot;NO&quot;               },
+   { &quot;COOLNT_OFF_OUTPUT&quot;,      L&quot;NO&quot;               },
+   { &quot;CUTCOM_GEOMETRY_TYPE&quot;,   L&quot;OUTPUT_ON_CENTER&quot; }
+<a name="anchor-38"></a> };
+
+
+ n_dbl_params = sizeof( dbl_params ) / sizeof( MfgPrmDblValue );
+ n_str_params = sizeof( str_params ) / sizeof( MfgPrmStrValue );
+<a name="anchor-39"></a>/*
+*/
+
+ num_elems = sizeof( elem_table ) / sizeof( ElemTable );
+   
+<a name="anchor-40"></a> err = ProElementAlloc( PRO_E_FEATURE_TREE, &amp;elem_tree );
+ ERROR_CHECK( &quot;UserWorkcellCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+    
+ for ( ii = 0 ; ii &lt; num_elems; ii++ )
+ {
+<a name="anchor-41"></a>   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserWorkcellCreate&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( elem_table[ii].elem_type )
+   {
+<a name="anchor-42"></a>     case PRO_E_FEATURE_TYPE:
+	value_data.v.i = PRO_FEAT_WORKCELL;
+	break;
+
+     case PRO_E_WCELL_TYPE:
+<a name="anchor-43"></a>	value_data.v.i = PRO_WCELL_MILL;
+	break;
+
+     case PRO_E_MFG_WCELL_NUM_AXES:
+	value_data.v.i = PRO_WCELL_3_AXIS;
+<a name="anchor-44"></a>	break;
+
+     case PRO_E_MFG_PARAM_ARR:
+        if ( n_dbl_params != 0 || n_str_params != 0 )
+        {
+<a name="anchor-45"></a>          err = UserMfgParamArrSet( dbl_params, n_dbl_params,
+                                    str_params, n_str_params,
+                                    element );
+          ERROR_CHECK( &quot;UserWorkcellCreate&quot;, &quot;UserMfgParamArrSet()&quot;, err );
+        }
+<a name="anchor-46"></a>        else
+        {
+          err = ProElementFree( &amp;element );
+          continue;
+        }
+<a name="anchor-47"></a>        break;
+
+     case PRO_E_STD_FEATURE_NAME:
+	 value_data.v.w = (wchar_t*) malloc( sizeof( ProName ) );
+	if ( value_data.v.w != NULL )
+<a name="anchor-48"></a>	   ProStringToWstring( value_data.v.w, &quot;Mill_3_Axis&quot; );
+	break;
+
+     case PRO_E_MFG_COMMENTS:
+       value_data.v.w = (wchar_t*) malloc( sizeof(ProComment) );
+<a name="anchor-49"></a>	if ( value_data.v.w != NULL )
+	   ProStringToWstring( value_data.v.w, &quot;Just example&quot; );
+	break;
+
+     case PRO_E_MFG_WCELL_HEAD_1:
+<a name="anchor-50"></a>	err = UserToolHeadSet( element );
+	break;
+
+     default:
+	ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-51"></a>	err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserWorkcellCreate&quot;, &quot;UserWorkcellCreate()&quot;, err );
+	break;
+   }
+
+<a name="anchor-52"></a>   if ( elem_table[ii].val_type == PRO_VALUE_TYPE_INT)
+   	{
+		err = ProElementIntegerSet (element, value_data.v.i);
+		ERROR_CHECK( &quot;UserWorkcellCreate&quot;,&quot;ProElementIntegerSet()&quot;, err );
+   	}
+<a name="anchor-53"></a>   else if (elem_table[ii].val_type == PRO_VALUE_TYPE_WSTRING )
+   {
+		err = ProElementWstringSet(element, value_data.v.w);
+		ERROR_CHECK( &quot;UserWorkcellCreate&quot;, &quot;ProElementWstringSet()&quot;, err );
+   }
+<a name="anchor-54"></a>
+  	err = ProElemtreeElementAdd( elem_tree, NULL, element );
+   	ERROR_CHECK( &quot;UserWorkcellCreate&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+ }
+
+<a name="anchor-55"></a> ProUtilElementtreePrint( elem_tree, PRO_TEST_INFO_WINDOW, NULL );
+
+ err = ProMdlCurrentGet( &amp;mfg_model );
+ ERROR_CHECK( &quot;UserWorkcellCreate&quot;,&quot;ProMdlCurrentGet&quot;, err );
+
+<a name="anchor-56"></a> /*********************************************/
+ /* Create feature                            */
+ /*********************************************/
+ err = UserMfgModelFeatureCreate( mfg_model, elem_tree, &amp;wc_feature );
+ ERROR_CHECK( &quot;UserWorkcellCreate&quot;, &quot;UserMfgModelFeatureCreate()&quot;, err );
+<a name="anchor-57"></a>
+ err = ProElementFree( &amp;elem_tree );
+ ERROR_CHECK( &quot;UserWorkcellCreate&quot;, &quot;ProElementFree()&quot;, err );
+
+ return( (int)err );
+<a name="anchor-58"></a>}
+
+/*====================================================================*\
+Function : UserWpieceSelCreate()
+Purpose  : Create a selection handle for the mfg assembly or items in it
+<a name="anchor-59"></a>\*====================================================================*/
+ProError UserWpieceSelCreate (
+/*--------------------------------------------------------------------*/
+ProMfg		mfg_model,
+int		item_id,
+<a name="anchor-60"></a>ProType		item_type,
+ProSelection	*selection
+
+)
+/*--------------------------------------------------------------------*/
+<a name="anchor-61"></a>{
+ ProSolid	mfg_solid;
+ ProAsmcomppath	comp_path;
+ ProModelitem	wkpiece_item;
+ ProError	err = PRO_TK_NO_ERROR;
+<a name="anchor-62"></a>
+ err = ProMfgSolidGet( mfg_model, &amp;mfg_solid );
+ ERROR_CHECK( &quot;UserWpieceSelCreate&quot;, &quot;ProMfgSolidGet()&quot;, err );
+
+ if ( err == PRO_TK_NO_ERROR )
+<a name="anchor-63"></a> {
+   err= ProMfgFeatureOwnerGet( mfg_model, &amp;comp_path );
+   ERROR_CHECK( &quot;UserWpieceSelCreate&quot;, &quot;ProMfgSolidGet()&quot;, err );
+ }
+
+<a name="anchor-64"></a> if ( err == PRO_TK_NO_ERROR )
+ {
+   err = ProModelitemInit( mfg_solid, item_id, item_type, &amp;wkpiece_item );
+   ERROR_CHECK( &quot;UserWpieceSelCreate&quot;, &quot;ProModelitemInit()&quot;, err );
+ }
+<a name="anchor-65"></a>
+ if ( err == PRO_TK_NO_ERROR )
+ {
+   err = ProSelectionAlloc( &amp;comp_path, &amp;wkpiece_item, selection );
+   ERROR_CHECK( &quot;UserWpieceSelCreate&quot;, &quot;ProSelectionAlloc()&quot;, err );
+<a name="anchor-66"></a> }
+
+ return ( err );
+}
+
+<a name="anchor-67"></a>/*====================================================================*\
+FUNCTION : UserToolSetupSet
+PURPOSE  : Create tools and add to tool table
+\*====================================================================*/
+ProError UserToolSetupSet( 
+<a name="anchor-68"></a>/*--------------------------------------------------------------------*/
+ProTool		*tool,
+int		pocket_num,
+ProElement	tool_setup_elem
+
+<a name="anchor-69"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element = NULL;
+<a name="anchor-70"></a> ProValueData		value_data;
+ ProValue		value;
+ int			ii = 0, table_size = 0;
+ static ElemTable	tsetup_elem_table[] = 
+ {
+<a name="anchor-71"></a>   { PRO_E_MFG_WCELL_TOOL_POCKET_NUM, PRO_VALUE_TYPE_INT     },
+   { PRO_E_MFG_WCELL_TOOL_ID,         PRO_VALUE_TYPE_WSTRING }
+ };
+
+ table_size = sizeof( tsetup_elem_table ) / sizeof( ElemTable );
+<a name="anchor-72"></a>
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+   err = ProElementAlloc( tsetup_elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserToolSetupSet&quot;,&quot;ProElementAlloc()&quot;, err );
+<a name="anchor-73"></a>
+   switch ( tsetup_elem_table[ii].elem_type )
+   {
+     case PRO_E_MFG_WCELL_TOOL_POCKET_NUM:
+        value_data.v.i = pocket_num;
+<a name="anchor-74"></a>		err = ProElementIntegerSet (element, value_data.v.i);
+        break;
+
+     case PRO_E_MFG_WCELL_TOOL_ID:
+        value_data.v.w = (wchar_t*) malloc( sizeof( ProName ) );
+<a name="anchor-75"></a>        if ( value_data.v.w != NULL )
+        {
+          err = ProWstringCopy( tool->tool_id, value_data.v.w, 
+                                PRO_VALUE_UNUSED );
+          ERROR_CHECK( &quot;UserToolSetupSet&quot;,&quot;ProWstringCopy()&quot;, err );
+<a name="anchor-76"></a>        }
+		err = ProElementWstringSet(element,  value_data.v.w);
+		ERROR_CHECK( &quot;UserToolSetupSet&quot;,&quot;ProElementWstringSet()&quot;, err );
+        break;
+
+<a name="anchor-77"></a>     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserToolSetupSet&quot;,&quot;UserToolSetupSet()&quot;, err );
+        break;
+<a name="anchor-78"></a>   }
+
+   err = ProElemtreeElementAdd( tool_setup_elem, NULL, element );
+   ERROR_CHECK( &quot;UserToolSetupSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+<a name="anchor-79"></a>
+ return ( err );
+}
+
+/*====================================================================*\
+<a name="anchor-80"></a>FUNCTION : UserMfgWcellAddToolSetup
+PURPOSE  : Adds tool setup element
+\*====================================================================*/
+ProError UserMfgWcellAddToolSetup( ProTool	*tool,
+                                   int		pocket_num,
+<a name="anchor-81"></a>                                   ProElement	tool_arr_elem )
+                                  
+{
+ ProError	err = PRO_TK_NO_ERROR;
+ ProElement	tool_setup_elem = NULL;
+<a name="anchor-82"></a>
+ err = ProElementAlloc( PRO_E_MFG_WCELL_TOOL_SETUP, &amp;tool_setup_elem );
+ ERROR_CHECK( &quot;UserMfgWcellAddToolSetup&quot;, &quot;ProElementAlloc&quot;, err );
+
+ err = UserToolSetupSet( tool, pocket_num, tool_setup_elem );
+<a name="anchor-83"></a> ERROR_CHECK( &quot;UserMfgWcellAddToolSetup&quot;, &quot;UserToolSetupSet&quot;, err );
+
+ err = ProElemtreeElementAdd( tool_arr_elem, NULL, tool_setup_elem );
+ ERROR_CHECK( &quot;UserMfgWcellAddToolSetup&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+
+<a name="anchor-84"></a> return ( err );
+}
+
+/*====================================================================*\
+FUNCTION : UserWorkcellTreeToolPocketGet
+<a name="anchor-85"></a>PURPOSE  : Finds pocket by tool id (first found)
+\*====================================================================*/
+ProBool UserWorkcellTreeToolPocketGet( 
+/*--------------------------------------------------------------------*/
+ProElement		wc_elem_tree,
+<a name="anchor-86"></a>ProMfgToolHeadType	head_num,
+ProLine			tool_name,
+int			*p_pocket_num
+
+)
+<a name="anchor-87"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		elem_tree;
+ ProElempath		path;
+<a name="anchor-88"></a> ProElempath		id_path;
+ ProElempath		pocket_path;
+ ProElement		tool_arr_elem;
+ ProElement		*tool_setups;
+ ProElement		tool_id_elem;
+<a name="anchor-89"></a> ProElement		pocket_elem;
+ ProLine		tool_name_upper;
+ ProValue		value;
+ wchar_t		*tool_id = NULL;
+ int			tool_arr_path_size;
+<a name="anchor-90"></a> int			pocket_num = 1;
+ int			result;
+ int			ii, num;
+ ProBool		found = PRO_B_FALSE;
+ ProElempathItem	p_items[3];
+<a name="anchor-91"></a> ProElempathItem        tooling_path_items[2] =
+ {
+   { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_MFG_WCELL_HEAD_1         },
+   { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_MFG_WCELL_TOOL_SETUP_ARR }
+ };
+<a name="anchor-92"></a>
+ tool_arr_path_size = sizeof( tooling_path_items )/sizeof( ProElempathItem );
+
+ /*-------------------------------------------------------*\
+    Get element PRO_E_MFG_WCELL_TOOL_SETUP_ARR
+<a name="anchor-93"></a> \*-------------------------------------------------------*/
+ if ( head_num == PRO_MFG_TOOL_HEAD_2 )
+   tooling_path_items[0].path_item.elem_id = PRO_E_MFG_WCELL_HEAD_2;
+
+ ProElempathAlloc( &amp;path );
+<a name="anchor-94"></a> ProElempathDataSet( path, tooling_path_items, tool_arr_path_size );
+
+ ProArrayAlloc( 0, sizeof(ProElement), 4, (ProArray *)&amp;tool_setups );
+
+ err = ProElementChildrenGet( wc_elem_tree, path, &amp;tool_setups );
+<a name="anchor-95"></a> ERROR_CHECK( &quot;UserWorkcellTreeToolPocketGet&quot;, &quot;ProElementChildrenGet&quot;, err );
+
+ ProElempathFree( &amp;path );
+
+ ProArraySizeGet( (ProArray)tool_setups, &amp;num );
+<a name="anchor-96"></a>
+ ProElempathAlloc( &amp;pocket_path );
+ p_items[0].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+ p_items[0].path_item.elem_id = PRO_E_MFG_WCELL_TOOL_POCKET_NUM ;
+ ProElempathDataSet( pocket_path, p_items, 1 );
+<a name="anchor-97"></a>
+ ProElempathAlloc( &amp;id_path );
+ p_items[0].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+ p_items[0].path_item.elem_id = PRO_E_MFG_WCELL_TOOL_ID ;
+ ProElempathDataSet( id_path, p_items, 1 );
+<a name="anchor-98"></a>
+ for ( ii = 0; ii &lt; num; ii++ )
+ {
+   /*-------------------------------------------------------*\
+      Get element PRO_E_MFG_WCELL_TOOL_ID
+<a name="anchor-99"></a>   \*-------------------------------------------------------*/
+   err = ProElemtreeElementGet( tool_setups[ii], id_path, &amp;tool_id_elem );
+   ERROR_CHECK( &quot;UserWorkcellTreeToolPocketGet&quot;, &quot;ProElemtreeElementGet&quot;, 
+                err );
+
+<a name="anchor-100"></a>   err = ProElementWstringGet( tool_id_elem, NULL, &amp;tool_id );
+   ERROR_CHECK( &quot;UserWorkcellTreeToolPocketGet&quot;, &quot;ProElementWstringGet&quot;, err );
+
+   err = ProWstringCompare( tool_name, tool_id, PRO_VALUE_UNUSED, &amp;result );
+   ERROR_CHECK( &quot;UserWorkcellTreeToolPocketGet&quot;, &quot;ProWstringCompare&quot;, err );
+<a name="anchor-101"></a>
+   ProWstringFree( tool_id );
+
+   if ( result == 0 )
+   {
+<a name="anchor-102"></a>     err = ProElemtreeElementGet( tool_setups[ii], pocket_path, 
+                                  &amp;pocket_elem );
+     ERROR_CHECK( &quot;UserWorkcellTreeToolPocketGet&quot;, &quot;ProElemtreeElementGet&quot;, 
+                  err );
+
+<a name="anchor-103"></a>     err = ProElementIntegerGet( pocket_elem, NULL, &amp;pocket_num );
+     ERROR_CHECK( &quot;UserWorkcellTreeToolPocketGet&quot;, &quot;ProElementIntegerGet&quot;, 
+                  err );
+
+     found = PRO_B_TRUE;
+<a name="anchor-104"></a>     break;
+   }
+ }
+
+ if ( p_pocket_num != NULL )
+<a name="anchor-105"></a>   *p_pocket_num = pocket_num;
+
+ ProElempathFree( &amp;id_path );
+ ProElempathFree( &amp;pocket_path );
+ ProArrayFree( (ProArray *)&amp;tool_setups );
+<a name="anchor-106"></a>
+ return ( found );
+}
+
+/*====================================================================*\
+<a name="anchor-107"></a>FUNCTION : UserWorkcellToolAdd
+PURPOSE  : Add flat mill cutter to workcell tooling
+\*====================================================================*/
+ProError UserWorkcellToolAdd( 
+/*--------------------------------------------------------------------*/
+<a name="anchor-108"></a>ProMfg			mfg_model,
+ProSelection		workcell,
+ProMfgToolHeadType	head_num,
+ProToolType		tool_type,
+ProLine			tool_name,
+<a name="anchor-109"></a>MfgPrmDblValue		params[],
+int			n_params,
+ProUnitLength		units,
+ProBool			allow_reuse_existing,
+int			*p_pocket_num
+<a name="anchor-110"></a>
+)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+<a name="anchor-111"></a> ProErrorlist		errors;
+ ProElement		elem_tree;
+ ProFeature		wcell_feat;
+ ProTool		tool;
+ ProElempath		path;
+<a name="anchor-112"></a> ProElement		tool_arr_elem;
+ ProElement		tool_setup_elem;
+ ProBool		found = PRO_B_FALSE;
+ int			path_size;
+ int			pocket_num = 1;
+<a name="anchor-113"></a> ProElempathItem        tooling_path_items[2] =
+ {
+   { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_MFG_WCELL_HEAD_1         },
+   { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_MFG_WCELL_TOOL_SETUP_ARR }
+ };
+<a name="anchor-114"></a> ProFeatureCreateOptions opts[] = {PRO_FEAT_CR_NO_OPTS};
+
+
+ path_size = sizeof( tooling_path_items ) / sizeof( ProElempathItem );
+
+<a name="anchor-115"></a> err = ProToolInit( tool_name, mfg_model, &amp;tool );
+ ERROR_CHECK( &quot;UserWorkcellToolAdd&quot;, &quot;ProToolInit&quot;, err );
+
+ /*-------------------------------------------------------*\
+    Verify that tool doesn't exist in mfg model
+<a name="anchor-116"></a> \*-------------------------------------------------------*/
+ err = ProToolVerify( &amp;tool );
+
+ if ( err == PRO_TK_E_NOT_FOUND )
+ {
+<a name="anchor-117"></a>   /*-------------------------------------------------------*\
+      Add tool to mfg model if it doesn't exist 
+   \*-------------------------------------------------------*/
+   err = UserParamToolCreate( mfg_model, tool_type, tool_name, 
+                              params, n_params, units, &amp;tool );
+<a name="anchor-118"></a>   ERROR_CHECK( &quot;UserWorkcellToolAdd&quot;, &quot;UserParamToolCreate&quot;, err );
+ }
+
+ /*-------------------------------------------------------*\
+    Extract workcell elem tree to modify (to add new tool)
+<a name="anchor-119"></a> \*-------------------------------------------------------*/
+ err = ProSelectionModelitemGet( workcell, &amp;wcell_feat );
+ ERROR_CHECK( &quot;UserWorkcellToolAdd&quot;, &quot;ProSelectionModelitemGet&quot;, err );
+
+ err = ProFeatureElemtreeExtract( &amp;wcell_feat, NULL, 
+<a name="anchor-120"></a>                                  PRO_FEAT_EXTRACT_NO_OPTS, 
+                                  &amp;elem_tree );
+ ERROR_CHECK( &quot;UserWorkcellToolAdd&quot;, &quot;ProFeatureElemtreeExtract&quot;, err );
+
+ /*-------------------------------------------------------*\
+<a name="anchor-121"></a>    Pocket number 
+ \*-------------------------------------------------------*/
+ if ( allow_reuse_existing )
+ {
+   found = UserWorkcellTreeToolPocketGet( elem_tree, head_num, tool_name,
+<a name="anchor-122"></a>                                          &amp;pocket_num );
+   if ( found )
+   {
+     if ( p_pocket_num != NULL )
+       *p_pocket_num = pocket_num;
+<a name="anchor-123"></a>
+     return ( PRO_TK_NO_ERROR );
+   }
+ }
+
+<a name="anchor-124"></a> err = ProWcellMaxToolPosGet( &amp;wcell_feat, head_num, &amp;pocket_num );
+ ERROR_CHECK( &quot;UserWorkcellToolAdd&quot;, &quot;ProWcellMaxToolPosGet&quot;, err );
+
+ pocket_num++;
+
+<a name="anchor-125"></a> /*-------------------------------------------------------*\
+    Get element PRO_E_MFG_WCELL_TOOL_SETUP_ARR
+ \*-------------------------------------------------------*/
+ if ( head_num == PRO_MFG_TOOL_HEAD_2 )
+   tooling_path_items[0].path_item.elem_id = PRO_E_MFG_WCELL_HEAD_2;
+<a name="anchor-126"></a>
+ ProElempathAlloc( &amp;path );
+ ProElempathDataSet( path, tooling_path_items, path_size );
+
+ err = ProElemtreeElementGet( elem_tree, path, &amp;tool_arr_elem );
+<a name="anchor-127"></a> ERROR_CHECK( &quot;UserWorkcellToolAdd&quot;, &quot;ProElemtreeElementGet&quot;, err );
+
+ ProElempathFree( &amp;path );
+
+ /*-------------------------------------------------------*\
+<a name="anchor-128"></a>    Add tool setup 
+ \*-------------------------------------------------------*/
+ err = UserMfgWcellAddToolSetup( &amp;tool, pocket_num, tool_arr_elem );
+ ERROR_CHECK( &quot;UserWorkcellToolAdd&quot;, &quot;UserMfgWcellAddToolSetup&quot;, err );
+
+<a name="anchor-129"></a> /*-------------------------------------------------------*\
+    Redefined workcell feature
+ \*-------------------------------------------------------*/
+ err = ProFeatureRedefine( NULL, &amp;wcell_feat, elem_tree, opts, 1, &amp;errors );
+
+<a name="anchor-130"></a> if ( err != PRO_TK_NO_ERROR )
+   ProTKFprintf( stderr, &quot;Error in element %d\n&quot;,
+                 errors.error_list[0].err_item_id );
+
+ ERROR_CHECK( &quot;UserWorkcellToolAdd&quot;,&quot;ProFeatureRedefine&quot;, err );
+<a name="anchor-131"></a>
+ if ( tool_name != NULL )
+   ProWstringCopy( tool.tool_id, tool_name, PRO_VALUE_UNUSED );
+
+ if ( p_pocket_num != NULL )
+<a name="anchor-132"></a>   *p_pocket_num = pocket_num;
+
+ return ( err );
+}
+</pre>
+</body>
+</html>

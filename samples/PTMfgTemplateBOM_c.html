@@ -1,0 +1,495 @@
+<html>
+<head>
+<title>PTMfgTemplateBOM.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProAnnotationFeat.h>
+#include &lt;ProAnnotationElem.h>
+#include &lt;ProMenuBar.h>
+#include &lt;ProPopupmenu.h>
+<a name="anchor-2"></a>#include &lt;ProSelbuffer.h>
+#include &lt;ProSurface.h>
+#include &lt;ProGtol.h>
+#include &lt;ProUIMessage.h>
+#include &lt;ProParameter.h>
+<a name="anchor-3"></a>#include &lt;ProMdl.h>
+
+#include &lt;PTAFExamples.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-4"></a>
+/*====================================================================*\
+  FUNCTION :   PTTestAccessInfoMfgTemplate()
+  PURPOSE  :   Enable/Disable access to the manufacturing template info button
+\*====================================================================*/
+<a name="anchor-5"></a>uiCmdAccessState PTTestAccessInfoMfgTemplate (uiCmdAccessMode access_mode)
+{
+  ProMdl mdl;
+  ProMdlType type;
+
+<a name="anchor-6"></a>  status = ProMdlCurrentGet (&amp;mdl);
+  PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet()&quot;);
+  if (status != PRO_TK_NO_ERROR) return (ACCESS_UNAVAILABLE);
+
+  status = ProMdlTypeGet (mdl, &amp;type);
+<a name="anchor-7"></a>  PT_TEST_LOG_SUCC (&quot;ProMdlTypeGet()&quot;);
+
+  if (type != PRO_MDL_PART &amp;&amp; type != PRO_MDL_ASSEMBLY)
+	return ACCESS_INVISIBLE;
+
+<a name="anchor-8"></a>  return ACCESS_AVAILABLE;		  
+}
+
+#define MSGFIL L&quot;pt_mfgtemplatebom.txt&quot;
+
+<a name="anchor-9"></a>int PTANCPPParamsList();
+int PTMfgTemplateAEWriteBOM ();
+
+#define MFG_TEMPLATE_NAME L&quot;MFG_AE_TEMPLATE_NAME&quot;
+
+<a name="anchor-10"></a>typedef struct
+{
+  ProLine template_type;
+  ProVector orientation;
+  ProName orientation_label;
+<a name="anchor-11"></a>  ProBoolean is_completed;  /* runtime flag - indicates we processed this AE
+			     into the BOM already */
+} PTMfgTemplateOrientationData;
+
+typedef struct
+<a name="anchor-12"></a>{
+  ProAnnotationElem ae;
+  ProAnnotationType type;
+
+  int feat_id;
+<a name="anchor-13"></a>  void* app_data;
+} PTAEInfo;
+
+typedef ProError (*PTAEAppDataCollectionFunction) (ProAnnotationElem* ae,
+												   void** app_data);
+<a name="anchor-14"></a>
+typedef struct 
+{
+  PTAEAppDataCollectionFunction app_collection_function;
+  PTAEInfo* collected_aes;
+<a name="anchor-15"></a>} PTAECollectionData;
+
+/*====================================================================*\
+  FUNCTION :   PTMfgTemplateAEInfoCollect()
+  PURPOSE  :   Collect information about the mfg template AE
+<a name="anchor-16"></a>\*====================================================================*/
+ProError PTMfgTemplateAEInfoCollect (ProAnnotationElem* ae,
+				     void** app_data)
+{
+  PTMfgTemplateOrientationData* data;
+<a name="anchor-17"></a>  ProParameter param;
+  ProParamvalue pvalue;
+
+  data = (PTMfgTemplateOrientationData*) calloc (1, 
+												 sizeof (PTMfgTemplateOrientationData));
+<a name="anchor-18"></a>  
+/*---------------------------------------------------------------------*\
+Extract the value of the template name parameter
+\*---------------------------------------------------------------------*/
+  status = ProParameterInit (ae, MFG_TEMPLATE_NAME, &amp;param);
+<a name="anchor-19"></a>  PT_TEST_LOG_SUCC (&quot;ProParameterInit()&quot;);
+  
+  status = ProParameterValueGet (&amp;param, &amp;pvalue);
+  PT_TEST_LOG_SUCC (&quot;ProParameterValueGet()&quot;);
+
+<a name="anchor-20"></a>  ProWstringCopy (pvalue.value.s_val, data->template_type, PRO_VALUE_UNUSED);
+
+/*---------------------------------------------------------------------*\
+Not implemented; for future use
+\*---------------------------------------------------------------------*/
+<a name="anchor-21"></a>  data->orientation [0] = 0.0;
+  data->orientation [1] = 0.0;
+  data->orientation [2] = 0.0;
+  
+  data->orientation_label [0] = (wchar_t)0;
+<a name="anchor-22"></a>
+  data->is_completed = PRO_B_FALSE;
+
+  *app_data = data;
+
+<a name="anchor-23"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+  FUNCTION :   PTAEIsMfgTemplate()
+<a name="anchor-24"></a>  PURPOSE  :   Identifies if the AE is a manufacturing template AE
+\*====================================================================*/
+ProError PTAEIsMfgTemplate (ProAnnotationElem* ae, ProAppData data)
+{
+  ProAnnotationType type;
+<a name="anchor-25"></a>  ProParameter param;
+
+/*---------------------------------------------------------------------*\
+Check the annotation element type
+\*---------------------------------------------------------------------*/
+<a name="anchor-26"></a>  status = ProAnnotationelemTypeGet (ae, &amp;type);
+  PT_TEST_LOG_SUCC (&quot;ProAnnotationelemTypeGet()&quot;);
+  
+  if (type != PRO_ANNOT_TYPE_CUSTOM)
+	return PRO_TK_CONTINUE;
+<a name="anchor-27"></a>  
+/*---------------------------------------------------------------------*\
+Check for the mfg template parameter
+\*---------------------------------------------------------------------*/
+  status = ProParameterInit (ae, MFG_TEMPLATE_NAME, &amp;param);
+<a name="anchor-28"></a>  PT_TEST_LOG (&quot;ProParameterInit()&quot;, status, 
+			   status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+
+  if (status != PRO_TK_NO_ERROR)
+	return PRO_TK_CONTINUE;
+<a name="anchor-29"></a>
+  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+<a name="anchor-30"></a>  FUNCTION :   PTAEInfoCollect()
+  PURPOSE  :   Collect information on annotation elements
+\*====================================================================*/
+ProError PTAEInfoCollect (ProAnnotationElem* ae, ProError status,
+							ProAppData data)
+<a name="anchor-31"></a>{
+  PTAECollectionData* ae_data = (PTAECollectionData*) data;
+  PTAEInfo info;
+  ProFeature feat;
+
+<a name="anchor-32"></a>/*---------------------------------------------------------------------*\
+Collect basic AE information: owner, id, feature that owns it
+\*---------------------------------------------------------------------*/
+  info.ae.owner = ae->owner;
+  info.ae.id = ae->id;
+<a name="anchor-33"></a>  info.ae.type = ae->type;
+  
+  status = ProAnnotationelemTypeGet (ae, &amp;info.type);
+  PT_TEST_LOG_SUCC (&quot;ProAnnotationelemTypeGet()&quot;);
+
+<a name="anchor-34"></a>  status = ProAnnotationelemFeatureGet (ae, &amp;feat);
+  PT_TEST_LOG_SUCC (&quot;ProAnnotationelemFeatureGet()&quot;);
+
+  info.feat_id = feat.id;
+
+<a name="anchor-35"></a>/*---------------------------------------------------------------------*\
+Use the stored callback function to collect specific needed data
+\*---------------------------------------------------------------------*/
+  if (ae_data->app_collection_function != NULL)
+    (*ae_data->app_collection_function) (ae, (void**) &amp;info.app_data);
+<a name="anchor-36"></a>
+  status = ProArrayObjectAdd ((ProArray*)&amp;ae_data->collected_aes,
+							  -1, 1, &amp;info);
+  PT_TEST_LOG_SUCC (&quot;ProArrayObjectAdd()&quot;);
+
+<a name="anchor-37"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+  FUNCTION :   PTMfgTemplateAEPrint()
+<a name="anchor-38"></a>  PURPOSE  :   Print the properties of the mfg template AE (JavaScript)
+\*====================================================================*/
+ProError  PTMfgTemplateAEPrint (FILE* fp, int parent, int node, PTAEInfo* info)
+{
+  ProFeature feature;
+<a name="anchor-39"></a>  ProName ae_name, af_name;
+  ProMdlName owner_name;
+  ProCharName c_ae_name, c_af_name;
+  char c_owner_name[PRO_MDLNAME_SIZE];
+  char* owner_type;
+<a name="anchor-40"></a>  ProMdlType type;
+
+/*---------------------------------------------------------------------*\
+Extract needed info from the AE
+\*---------------------------------------------------------------------*/
+<a name="anchor-41"></a>  ProModelitemNameGet (&amp;info->ae, ae_name);
+  ProWstringToString (c_ae_name, ae_name);
+
+  feature.owner = info->ae.owner;
+  feature.type = PRO_FEATURE;
+<a name="anchor-42"></a>  feature.id = info->feat_id;
+
+  status = ProModelitemNameGet (&amp;feature, af_name);
+  PT_TEST_LOG_SUCC (&quot;ProModelitemNameGet()&quot;);
+  ProWstringToString (c_af_name, af_name);
+<a name="anchor-43"></a>
+  if (status != PRO_TK_NO_ERROR)
+    ProTKSprintf (c_af_name, &quot;with id %d&quot;, feature.id);
+
+  status = ProMdlMdlnameGet (info->ae.owner, owner_name);
+<a name="anchor-44"></a>  ProWstringToString (c_owner_name, owner_name);
+
+  status = ProMdlTypeGet (info->ae.owner, &amp;type);
+  if (type == PRO_MDL_PART)
+    owner_type = &quot;PRT&quot;;
+<a name="anchor-45"></a>  else
+    owner_type = &quot;ASM&quot;;
+
+/*---------------------------------------------------------------------*\
+Print the JavaScript tree node.
+<a name="anchor-46"></a>First half includes the node level, parent, and label
+Second half produces proep: URL to highlight the AE
+\*---------------------------------------------------------------------*/
+  ProTKFprintf (fp, &quot;d.add(%d,%d,'Annotation element %s (belongs to feature %s)',&quot;,
+	   node, parent, c_ae_name, c_af_name); 
+<a name="anchor-47"></a>
+  ProTKFprintf (fp, &quot;'proep://local_proesession?oid=%s.%s&amp;item=annotation_element&amp;id=%d&amp;action=highlight');\n&quot;, c_owner_name, owner_type, info->ae.id);
+
+  return PRO_TK_NO_ERROR;
+}
+<a name="anchor-48"></a>
+#define MFGINFOFILENAME &quot;mfgtemplateinfo.html&quot;
+
+/*====================================================================*\
+  FUNCTION :   PTMFGTemplateBOMHTMLWrite()
+<a name="anchor-49"></a>  PURPOSE  :   Print the mfg template BOM to the HTML file
+\*====================================================================*/
+ProError PTMFGTemplateBOMHTMLWrite (ProMdl mdl, PTAECollectionData data)
+{
+  ProMdlName name;
+<a name="anchor-50"></a>  char c_name[PRO_MDLNAME_SIZE];
+  ProMdlType type;
+  char* type_str;
+  FILE* fp;
+  int size;
+<a name="anchor-51"></a>  int index;
+
+  int node_counter = 1;
+  int parent_node = 0;
+  
+<a name="anchor-52"></a>/*---------------------------------------------------------------------*\
+Open and print the HTML introductory lines
+\*---------------------------------------------------------------------*/
+  fp = PTApplsUnicodeFopen (MFGINFOFILENAME, &quot;w&quot;);
+  
+<a name="anchor-53"></a>  ProTKFprintf (fp, &quot;&lt;html>\n&quot;);
+  ProTKFprintf (fp, &quot;&lt;head>\n&quot;);
+  ProTKFprintf (fp, &quot;&lt;meta http-equiv=\&quot;Content-Type\&quot; content=\&quot;text/html; charset=UTF-8\&quot; /=\&quot;\&quot;>\n&quot;);
+  ProTKFprintf (fp, &quot;&lt;title>Manufaturing template info&lt;/title>\n&quot;);
+  ProTKFprintf (fp, &quot;&lt;link rel=\&quot;StyleSheet\&quot; href=\&quot;dtree.css\&quot; type=\&quot;text/css\&quot;/>\n&quot;);
+<a name="anchor-54"></a>  ProTKFprintf (fp, &quot;&lt;script type=\&quot;text/javascript\&quot; src=\&quot;dtree.js\&quot;>&lt;/script>\n&quot;);
+  
+  ProTKFprintf (fp, &quot;&lt;/head>\n&quot;);
+  ProTKFprintf (fp, &quot;&lt;body>\n&quot;);
+
+<a name="anchor-55"></a>/*---------------------------------------------------------------------*\
+Print the title of the page using the model name &amp; type
+\*---------------------------------------------------------------------*/ 
+  status = ProMdlMdlnameGet (mdl, name);
+  PT_TEST_LOG_SUCC (&quot;ProMdlMdlnameGet()&quot;);
+<a name="anchor-56"></a>  
+  ProWstringToString (c_name, name);
+  
+  status = ProMdlTypeGet (mdl, &amp;type);
+  PT_TEST_LOG_SUCC (&quot;ProMdlTypeGet()&quot;);
+<a name="anchor-57"></a>  
+  if (type == PRO_MDL_PART)
+    type_str = &quot;Part&quot;;
+  else
+    type_str = &quot;Assembly&quot;;
+<a name="anchor-58"></a>  
+  ProTKFprintf (fp, &quot;&lt;h2>Manufacturing template information for %s %s&lt;/h2>\n&quot;, type_str, c_name);
+ 
+/*---------------------------------------------------------------------*\
+Print the JavaScript tree initialization code
+<a name="anchor-59"></a>\*---------------------------------------------------------------------*/ 
+  ProTKFprintf (fp, &quot;&lt;div class=\&quot;dtree\&quot;>\n&quot;);
+  ProTKFprintf (fp, &quot;&lt;script type=\&quot;text/javascript\&quot;>\n&quot;);
+  ProTKFprintf (fp, &quot;&lt;!--\n&quot;);
+  
+<a name="anchor-60"></a>  ProTKFprintf (fp, &quot;d = new dTree('d');\n&quot;);
+  ProTKFprintf (fp, &quot;d.config.useIcons = false;\n&quot;);
+  ProTKFprintf (fp, &quot;d.config.useCookies = false;\n&quot;);
+  ProTKFprintf (fp, &quot;d.config.useSelection = false;\n&quot;);
+  
+<a name="anchor-61"></a>  ProTKFprintf (fp, &quot;d.add(0,-1,'');\n&quot;);
+  
+/*---------------------------------------------------------------------*\
+For each AE, extract the MFG template data
+\*---------------------------------------------------------------------*/ 
+<a name="anchor-62"></a>  status = ProArraySizeGet (data.collected_aes, &amp;size);
+  PT_TEST_LOG_SUCC (&quot;ProArraySizeGet()&quot;);
+    
+  for (index = 0; index &lt; size; index ++)
+    {
+<a name="anchor-63"></a>      PTMfgTemplateOrientationData* mfg_data;
+      ProCharPath template_name;
+      int j, n_instances;
+      
+      
+<a name="anchor-64"></a>      mfg_data = (PTMfgTemplateOrientationData*)
+	data.collected_aes [index].app_data;
+
+/*---------------------------------------------------------------------*\
+Runtime flag indicates if we've already traversed and printed this AE
+<a name="anchor-65"></a>\*---------------------------------------------------------------------*/      
+      if (mfg_data->is_completed)
+	continue;
+      
+      ProWstringToString (template_name, mfg_data->template_type);
+<a name="anchor-66"></a>      
+      n_instances = 1;
+
+/*---------------------------------------------------------------------*\
+The first loop through the remaining AE's is to generate a count of the
+<a name="anchor-67"></a>AE's that use a certain template name
+\*---------------------------------------------------------------------*/  
+      for (j = index + 1; j &lt; size; j ++)
+	{
+	  PTMfgTemplateOrientationData* second_mfg_data;
+<a name="anchor-68"></a>	  int result;
+	  
+	  second_mfg_data = (PTMfgTemplateOrientationData*)
+	    data.collected_aes [j].app_data;
+	  
+<a name="anchor-69"></a>	  ProWstringCompare (mfg_data->template_type,
+			     second_mfg_data->template_type,
+			     PRO_VALUE_UNUSED,
+			     &amp;result);
+	  
+<a name="anchor-70"></a>	  if (result == 0)
+	    {
+	      n_instances ++;
+	    }
+	}
+<a name="anchor-71"></a>
+/*---------------------------------------------------------------------*\
+Print the tree parent node, containing the count
+\*---------------------------------------------------------------------*/  
+      ProTKFprintf (fp, &quot;d.add(%d,0,'Template: %d x\t%s','');\n&quot;,node_counter,n_instances,template_name);
+<a name="anchor-72"></a>      parent_node = node_counter;
+      node_counter++;
+
+/*---------------------------------------------------------------------*\
+Print the current AE as the first child to the parent node
+<a name="anchor-73"></a>\*---------------------------------------------------------------------*/  
+      PTMfgTemplateAEPrint (fp, parent_node, node_counter, &amp;data.collected_aes[index]);
+      node_counter++;
+      mfg_data->is_completed = PRO_B_TRUE;
+      
+<a name="anchor-74"></a>/*---------------------------------------------------------------------*\
+Loop through the remaining AE's again and print each matching AE as a child
+of the parent node
+\*---------------------------------------------------------------------*/ 
+      for (j = index + 1; j &lt; size; j ++)
+<a name="anchor-75"></a>	{
+	  PTMfgTemplateOrientationData* second_mfg_data;
+	  int result;
+	  
+	  second_mfg_data = (PTMfgTemplateOrientationData*)
+<a name="anchor-76"></a>	    data.collected_aes [j].app_data;
+	  
+	  ProWstringCompare (mfg_data->template_type,
+			     second_mfg_data->template_type,
+			     PRO_VALUE_UNUSED,
+<a name="anchor-77"></a>			     &amp;result);
+	  
+	  if (result == 0)
+	    {
+	      PTMfgTemplateAEPrint (fp, parent_node, node_counter, &amp;data.collected_aes[j]);
+<a name="anchor-78"></a>	      second_mfg_data->is_completed = PRO_B_TRUE;
+	      node_counter ++;
+	    }
+	}
+    }
+<a name="anchor-79"></a>  
+/*---------------------------------------------------------------------*\
+Free the collected AE data
+\*---------------------------------------------------------------------*/ 
+  for (index = 0; index &lt; size; index ++)
+<a name="anchor-80"></a>    {
+      PTMfgTemplateOrientationData* mfg_data;
+      
+      mfg_data = (PTMfgTemplateOrientationData*)
+	data.collected_aes [index].app_data;
+<a name="anchor-81"></a>      
+      free (mfg_data);
+    }
+  ProArrayFree ((ProArray*)&amp;data.collected_aes);
+  
+<a name="anchor-82"></a>/*---------------------------------------------------------------------*\
+Complete the HTML BOM
+\*---------------------------------------------------------------------*/ 
+  ProTKFprintf (fp, &quot;document.write(d);\n&quot;);
+  
+<a name="anchor-83"></a>  ProTKFprintf (fp, &quot;//-->\n&quot;);
+  ProTKFprintf (fp, &quot;&lt;/script>\n&quot;);
+  
+  ProTKFprintf (fp, &quot;&lt;/div>\n&quot;);
+
+<a name="anchor-84"></a>  ProTKFprintf (fp, &quot;&lt;/body>\n&quot;);
+  ProTKFprintf (fp, &quot;&lt;/html>\n&quot;);
+  
+  fclose (fp);
+
+<a name="anchor-85"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+  FUNCTION :   PTMfgTemplateAEWriteBOM()
+<a name="anchor-86"></a>  PURPOSE  :   Menu button to write and display HTML BOM for mfg templates
+\*====================================================================*/
+int PTMfgTemplateAEWriteBOM ()
+{
+  ProMdl mdl;
+<a name="anchor-87"></a>  PTAECollectionData data;
+  ProFileName filename;
+  ProPath dir_path, path;
+  int window_id;
+  ProCharPath char_path;
+<a name="anchor-88"></a>
+/*---------------------------------------------------------------------*\
+Collect the AE's in the model that match the criteria (only MFG template
+AE's should be collected).
+\*---------------------------------------------------------------------*/
+<a name="anchor-89"></a>  status = ProMdlCurrentGet (&amp;mdl);
+  PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet()&quot;);
+  if (status != PRO_TK_NO_ERROR) return (ACCESS_UNAVAILABLE);
+
+  data.app_collection_function = PTMfgTemplateAEInfoCollect;
+<a name="anchor-90"></a>
+  status = ProArrayAlloc (0, sizeof (PTAEInfo),
+			  5, (ProArray*) &amp;data.collected_aes);
+
+  status = ProSolidAnnotationelemsVisit (mdl, 
+<a name="anchor-91"></a>					 PTAEInfoCollect,
+					 PTAEIsMfgTemplate,
+					 (ProAppData)&amp;data);
+  PT_TEST_LOG_SUCC (&quot;ProSolidAnnotationelemsVisit()&quot;);
+
+<a name="anchor-92"></a>/*---------------------------------------------------------------------*\
+Output and display the BOM HTML
+\*---------------------------------------------------------------------*/
+  if (status == PRO_TK_NO_ERROR)
+  {
+<a name="anchor-93"></a>    PTMFGTemplateBOMHTMLWrite (mdl, data);
+    
+    ProDirectoryCurrentGet (dir_path);
+    
+    ProStringToWstring (path, &quot;file://&quot;);
+<a name="anchor-94"></a>    
+    ProWstringConcatenate (dir_path, path, 
+			   PRO_VALUE_UNUSED);
+    
+    ProStringToWstring (filename, MFGINFOFILENAME);
+<a name="anchor-95"></a>    ProWstringConcatenate (filename, path, 
+			   PRO_VALUE_UNUSED);
+    
+    ProWstringToString (char_path, path);
+    
+<a name="anchor-96"></a>    ProWindowCurrentGet (&amp;window_id);
+    
+    ProWindowURLShow(window_id, path);	
+  }
+ 
+<a name="anchor-97"></a>  return PRO_TK_NO_ERROR;
+}
+</pre>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<html>
+<head>
+<title>UgAsmCompVisit.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*------------------------ ProToolkit includes ---------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProFeature.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProUtil.h>
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProAsmcomp.h>
+<a name="anchor-3"></a>#include &lt;ProSolid.h>
+/*----------------------- Application includes --------------------------*/
+#include &lt;TestError.h>
+
+/*------------------------- Global definition ---------------------------*/
+<a name="anchor-4"></a>#define FILENAME &quot;assembly.lst&quot;
+
+typedef struct user_appdata
+{
+    FILE *fp;
+<a name="anchor-5"></a>    int level;
+} UserAppdata;
+
+
+/*------------------------ Function prototypes --------------------------*/
+<a name="anchor-6"></a>int  UserAsmCompVisit(void *dummy, int dummy2);
+ProError UserAsmCompFilter(ProFeature *feature,ProAppData app_data);
+ProError user_action(ProFeature *feature,ProError status,ProAppData appdata);
+
+ 
+<a name="anchor-7"></a>/*---------------------------------------------------------------------*\
+    Write the information to a file
+\*---------------------------------------------------------------------*/
+
+ProError user_action(
+<a name="anchor-8"></a>    ProFeature *feature,
+    ProError status,
+    ProAppData appdata)
+{
+    FILE *fp;
+<a name="anchor-9"></a>    int l,level;
+    ProError err;
+    ProMdl mdl;
+    char name[PRO_MDLNAME_SIZE];
+    char type[PRO_MDLEXTENSION_SIZE];
+<a name="anchor-10"></a>    wchar_t wname[PRO_NAME_SIZE];
+    UserAppdata *appd,appd1;
+    ProMdldata mdldata;
+	ProMdlName modelName;
+	ProMdlExtension modelExtension;
+<a name="anchor-11"></a>
+    appd = (UserAppdata *)appdata;
+    fp = appd->fp;
+    level = appd->level;
+    err = ProAsmcompMdlGet(feature , &amp;mdl);
+<a name="anchor-12"></a>    ERROR_CHECK( &quot;user_action&quot;, &quot;ProAsmcompMdlGet&quot;, err );
+
+	
+	err = ProMdlMdlnameGet(mdl, modelName);
+    ERROR_CHECK( &quot;user_action&quot;, &quot;ProMdlMdlnameGet&quot;, err );
+<a name="anchor-13"></a> 
+	err = ProMdlExtensionGet(mdl, modelExtension);
+    ERROR_CHECK( &quot;user_action&quot;, &quot;ProMdlExtensionGet&quot;, err );
+
+
+<a name="anchor-14"></a>    ProWstringToString(name,modelName);
+    ProWstringToString(type,modelExtension);
+    for(l=0;l&lt;level;l++)
+            ProTKFprintf(fp,&quot;    &quot;);
+    ProTKFprintf(fp,&quot;%s	%s\n&quot;,name,type);
+<a name="anchor-15"></a>    if (strncmp(type,&quot;ASM&quot;,3) == 0)
+    {
+	appd1.fp = appd->fp;
+	appd1.level = appd->level+1;
+        err = ProSolidFeatVisit(mdl, user_action, UserAsmCompFilter, &amp;appd1);
+<a name="anchor-16"></a>    	ERROR_CHECK( &quot;user_action&quot;, &quot;ProSolidFeatVisit&quot;, err );
+    }
+    if (feature != NULL) return(PRO_TK_NO_ERROR);
+    return(PRO_TK_CONTINUE);
+}
+<a name="anchor-17"></a>
+/*---------------------------------------------------------------------*\
+Function : to write out the members of the current assembly, and display
+ 		the result in an information window.
+\*---------------------------------------------------------------------*/
+<a name="anchor-18"></a>int UserAsmCompVisit(void *dummy, int dummy2)
+{
+    char name[PRO_MDLNAME_SIZE];
+    char type[PRO_MDLEXTENSION_SIZE];
+    wchar_t wname[PRO_NAME_SIZE];    
+<a name="anchor-19"></a>    ProError err;
+    UserAppdata appdata;
+    FILE *fp;
+    ProMdl p_asm;
+	ProMdlName modelName;
+<a name="anchor-20"></a>	ProMdlExtension modelExtension;
+
+    err = ProMdlCurrentGet(&amp;p_asm);
+    ERROR_CHECK( &quot;UserAsmCompVisit&quot;, &quot;ProMdlCurrentGet&quot;, err );
+/*---------------------------------------------------------------------*\
+<a name="anchor-21"></a>    Open the text file.
+\*---------------------------------------------------------------------*/
+    strcpy(name,FILENAME);
+    fp = PTApplsUnicodeFopen(name,&quot;w&quot;);
+
+<a name="anchor-22"></a>	err = ProMdlMdlnameGet(p_asm, modelName);
+    ERROR_CHECK( &quot;user_action&quot;, &quot;ProMdlMdlnameGet&quot;, err );
+ 
+	err = ProMdlExtensionGet(p_asm, modelExtension);
+    ERROR_CHECK( &quot;user_action&quot;, &quot;ProMdlExtensionGet&quot;, err );
+<a name="anchor-23"></a>
+    ProWstringToString(name,modelName);
+    ProWstringToString(type,modelExtension);
+    ProTKFprintf(fp, &quot;%s	%s\n&quot;,name,type);
+    appdata.fp = fp;
+<a name="anchor-24"></a>    appdata.level = 1;
+/*---------------------------------------------------------------------*\
+    List the assembly members
+\*---------------------------------------------------------------------*/
+    err = ProSolidFeatVisit(p_asm, user_action, UserAsmCompFilter, &amp;appdata);
+<a name="anchor-25"></a>    ERROR_CHECK( &quot;UserAsmCompVisit&quot;, &quot;ProSolidFeatVisit&quot;, err );
+
+/*-------- ------------------------------------------------------------*\
+    Close the file, and display it.
+\*---------------------------------------------------------------------*/
+<a name="anchor-26"></a>    fclose(fp);
+    ProStringToWstring(wname, FILENAME);
+    err = ProInfoWindowDisplay(wname, NULL, NULL);
+    ERROR_CHECK( &quot;UserAsmCompVisit&quot;, &quot;ProInfoWindowDisplay&quot;, err ); 
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-27"></a>}
+
+/*====================================================================*\
+    FUNCTION :  UserAsmCompFilter()
+    PURPOSE  :  A filter used by ProSolidFeatVisit() to visit
+<a name="anchor-28"></a>                features which are assembly components
+\*====================================================================*/
+ProError UserAsmCompFilter(
+    ProFeature *feature,
+    ProAppData app_data)
+<a name="anchor-29"></a>{
+    ProError status;
+    ProFeattype ftype;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-30"></a>    Get the feature type
+\*--------------------------------------------------------------------*/
+    status = ProFeatureTypeGet(feature, &amp;ftype);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-31"></a>    If the feature is an assembly component,
+        return NO ERROR,
+    else
+        return CONTINUE
+\*--------------------------------------------------------------------*/
+<a name="anchor-32"></a>    if(ftype == PRO_FEAT_COMPONENT)
+        return(PRO_TK_NO_ERROR);
+    return(PRO_TK_CONTINUE);
+}
+</pre>
+</body>
+</html>

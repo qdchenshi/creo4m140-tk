@@ -1,0 +1,394 @@
+<html>
+<head>
+<title>TestGeneRandom.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/DEVELOP includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-2"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+<a name="anchor-3"></a>#include &quot;ProExtdata.h&quot;
+#include &quot;ProUtil.h&quot;
+
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilFiles.h&quot;
+<a name="anchor-4"></a>#include &quot;TestError.h&quot;
+#include &quot;TestGenedata.h&quot;
+
+/*--------------------------------------------------------------------*\
+C System includes
+<a name="anchor-5"></a>\*--------------------------------------------------------------------*/
+#include &lt;ctype.h>
+#include &lt;time.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-6"></a>Application macros
+\*--------------------------------------------------------------------*/
+#define USER_MAX_STRING 120
+#define USER_MAX_STREAM 120
+
+<a name="anchor-7"></a>/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+
+
+<a name="anchor-8"></a>/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+
+
+<a name="anchor-9"></a>/*--------------------------------------------------------------------*\
+Application static data/function
+\*--------------------------------------------------------------------*/
+static int ProTestRdmSlotName(
+        ProExtdataClass *p_class,
+<a name="anchor-10"></a>        int             maxsize,
+        ProName         name,
+        int             *format,
+        char            **data);
+
+<a name="anchor-11"></a>static int ProTestRdmInt(
+	);
+
+static char ProTestRdmAlpha(
+	);
+<a name="anchor-12"></a>
+static char ProTestRdmAlphaNum(
+	);
+
+static int ProTestRdmName(
+<a name="anchor-13"></a>        char *name,
+        int maxlen);
+
+static double ProTestRdmDouble(
+	);
+<a name="anchor-14"></a>
+static int ProTestRdmFmt(
+	);
+
+static int ProTestRdmStr(
+<a name="anchor-15"></a>        int maxsize,
+        char *str);
+
+static unsigned char ProTestRdmByte(
+	);
+<a name="anchor-16"></a>
+static int ProTestRdmStream(
+        int maxsize,
+        unsigned char **p_stream);
+
+<a name="anchor-17"></a>static int ProTestRdmKeyType(
+	);
+
+
+
+<a name="anchor-18"></a>/*====================================================================*\
+  Function : ProTestRdmSlotName
+  Purpose  : Generate random slot name, data type and data
+\*====================================================================*/
+static int ProTestRdmSlotName(
+<a name="anchor-19"></a>	ProExtdataClass	*p_class,
+        int		maxsize,
+	ProName 	name,
+	int		*format,
+	char		**data)
+<a name="anchor-20"></a>{ 
+      char	s_name[PRO_NAME_SIZE];
+      int	*p_int;
+      double	*p_double;
+      wchar_t	*wstr;
+<a name="anchor-21"></a>      char      str[USER_MAX_STRING], dummy[PRO_NAME_SIZE];
+          
+      ProWstringToString(dummy, p_class->class_name);
+      ProTestRdmName(s_name, (PRO_NAME_SIZE-strlen(dummy)-1));   
+
+<a name="anchor-22"></a>      ProStringToWstring(name, s_name);
+
+      *format = ProTestRdmFmt();
+      switch(*format)
+      {
+<a name="anchor-23"></a>        case PRO_INTEGER_TYPE :
+        p_int = (int*)calloc(1,sizeof(int));
+        *p_int = ProTestRdmInt();
+        (*data)=(char*)p_int;
+        return(sizeof(int));
+<a name="anchor-24"></a>        break;
+    case PRO_DOUBLE_TYPE :
+        p_double = (double*)calloc(1,sizeof(double));
+        *p_double = ProTestRdmDouble();
+        (*data)=(char*)p_double;
+<a name="anchor-25"></a>        return(sizeof(double));
+        break;
+    case PRO_WIDE_STRING_TYPE :
+        ProTestRdmStr(PRO_LINE_SIZE,str);
+        wstr = (wchar_t*)calloc(strlen(str)+1,sizeof(wchar_t));
+<a name="anchor-26"></a>        ProStringToWstring(wstr,str);
+        (*data)=(char*)wstr;
+        return((strlen(str)+1) * sizeof(wchar_t));
+        break;
+    case PRO_STREAM_TYPE :
+<a name="anchor-27"></a>        return(ProTestRdmStream(maxsize,(unsigned char **)data));
+        break;
+    default :
+        return(1);
+    }
+<a name="anchor-28"></a>}
+
+/*====================================================================*\
+  Function : ProTestRdmInt
+  Purpose  : Generate random int
+<a name="anchor-29"></a>\*====================================================================*/
+static int ProTestRdmInt()
+{
+    unsigned int i=0;
+    int b;
+<a name="anchor-30"></a> 
+    for(b=0;b&lt;sizeof(int);b++)
+        i = (i&lt;&lt;8) + ProTestRdmByte();
+    return((int)i);
+}
+<a name="anchor-31"></a>
+/*====================================================================*\
+  Function : ProTestRdmAlpha
+  Purpose  : Generate  alphabetical string
+\*====================================================================*/
+<a name="anchor-32"></a>static char ProTestRdmAlpha()
+{
+    static char *a=(char*)&quot;abcdefghijklmnopqrstuvwxyz_&quot;;
+ 
+    return(a[rand() % 27]);
+<a name="anchor-33"></a>}
+
+/*====================================================================*\
+  Function : ProTestRdmAlpha
+  Purpose  : Generate  alphabetical-numerical mixed string
+<a name="anchor-34"></a>\*====================================================================*/
+static char ProTestRdmAlphaNum()
+{
+    static char *a=(char*)&quot;abcdefghijklmnopqrstuvwxyz_0123456789&quot;;
+ 
+<a name="anchor-35"></a>    return(a[rand() % 37]);
+}
+
+/*====================================================================*\
+  Function : ProTestRdmName
+<a name="anchor-36"></a>  Purpose  : Generate random name string
+\*====================================================================*/ 
+static int ProTestRdmName(
+	char *name,
+	int maxlen)
+<a name="anchor-37"></a>{
+    int len,i;
+ 
+    do{
+        len = rand() % maxlen;
+<a name="anchor-38"></a>    } while(len == 0);
+    name[0] = ProTestRdmAlpha();
+    for(i=1;i&lt;len;i++)
+        name[i]=ProTestRdmAlphaNum();
+    name[len]='\0';
+<a name="anchor-39"></a>    return(1);
+}
+
+/*====================================================================*\
+  Function : ProTestRdmDouble
+<a name="anchor-40"></a>  Purpose  : Generate random double
+\*====================================================================*/ 
+static double ProTestRdmDouble()
+{
+    double i,d;
+<a name="anchor-41"></a> 
+    i = (double)rand();
+    d = (double)rand();
+    while(d > 1.0)
+        d = d/10.0;
+<a name="anchor-42"></a>    if(rand() % 2)
+        return(i+d);
+    else
+        return(-i-d);
+}
+<a name="anchor-43"></a>
+/*====================================================================*\
+  Function : ProTestRdmFmt
+  Purpose  : Generate random data format
+\*====================================================================*/ 
+<a name="anchor-44"></a>static int ProTestRdmFmt()
+{
+    static int a[] = {  PRO_INTEGER_TYPE,
+                        PRO_DOUBLE_TYPE,
+                        PRO_WIDE_STRING_TYPE,
+<a name="anchor-45"></a>                        PRO_STREAM_TYPE};
+    return(a[rand() % 4]);
+}
+
+/*====================================================================*\
+<a name="anchor-46"></a>  Function : ProTestRdmStr
+  Purpose  : Generate random string
+\*====================================================================*/ 
+static int ProTestRdmStr(
+	int maxsize,
+<a name="anchor-47"></a>	char *str)
+{
+    int len,i;
+ 
+    do{
+<a name="anchor-48"></a>        len = rand() % USER_MAX_STRING;
+    } while (len==0 || len > maxsize);
+    for(i=0;i&lt;len;i++)
+        do {
+            str[i]=(char)(rand() % 128);
+<a name="anchor-49"></a>        } while(!isprint(str[i]));
+ 
+    str[len] = '\0';
+    return(strlen(str));
+}
+<a name="anchor-50"></a>
+/*====================================================================*\
+  Function : ProTestRdmByte
+  Purpose  : Generate random type
+\*====================================================================*/
+<a name="anchor-51"></a>static unsigned char ProTestRdmByte()
+{
+    return((unsigned char)(rand() % 256));
+}
+
+<a name="anchor-52"></a>/*====================================================================*\
+  Function : ProTestRdmStream
+  Purpose  : Generate random stream
+\*====================================================================*/ 
+static int ProTestRdmStream(
+<a name="anchor-53"></a>	int maxsize,
+  	unsigned char **p_stream)
+{
+    int len,i;
+ 
+<a name="anchor-54"></a>    do{
+        len = rand() % USER_MAX_STREAM;
+    } while (len==0 || len > maxsize);
+    *p_stream = (unsigned char*)calloc(len,1);
+    for(i=0;i&lt;len;i++)
+<a name="anchor-55"></a>        (*p_stream)[i]=(unsigned char)(rand() % 256);
+    return(len);
+}
+
+/*====================================================================*\
+<a name="anchor-56"></a>  Function : ProTestRdmKeyType
+  Purpose  : Generate random key type
+\*====================================================================*/ 
+static int ProTestRdmKeyType()
+{
+<a name="anchor-57"></a>    static int a[]={KEY_BY_NAME, KEY_BY_ID};
+    return(a[rand() % 2]);
+}
+
+/*====================================================================*\
+<a name="anchor-58"></a>  Function : ProTestSvRdmData
+  Purpose  : Save the random data to random slot
+\*====================================================================*/
+ProError ProTestSvRdmData(
+	ProExtdataClass	*p_class,
+<a name="anchor-59"></a>	int		maxsize)
+{
+    ProExtdataSlot	p_slot;
+    ProName		slot_name;
+    ProExtdataErr	err;
+<a name="anchor-60"></a>    int size,totalsize=0;
+    int type, key_type, n_slots;
+    char *data;
+    long t1,t2;
+ 
+<a name="anchor-61"></a>    t1 = time(NULL);
+    n_slots = 0;
+ 
+/*-------------------------------------------------------------*\
+    While the volume of data is still less than asked..
+<a name="anchor-62"></a>\*-------------------------------------------------------------*/
+    while(totalsize&lt;maxsize)
+    {
+/*-------------------------------------------------------------*\
+        Generate a random slot name, not bigger than the
+<a name="anchor-63"></a>        remaining size needed.
+\*-------------------------------------------------------------*/
+        size = ProTestRdmSlotName(p_class, maxsize-totalsize, slot_name,
+                                        &amp;type, &amp;data);
+ 
+<a name="anchor-64"></a>/*-------------------------------------------------------------*\
+        Get at random KEY_BY_NAME or KEY_BY_ID, and
+        create the slot accordingly
+\*-------------------------------------------------------------*/
+        key_type = ProTestRdmKeyType();
+<a name="anchor-65"></a>
+        if(key_type == KEY_BY_NAME)
+        {
+ 	    err = ProExtdataSlotCreate(p_class, slot_name, &amp;p_slot);
+        }
+<a name="anchor-66"></a>        else
+        {
+            err = ProExtdataSlotCreate(p_class, NULL, &amp;p_slot);
+        }
+  
+<a name="anchor-67"></a>        TEST_CALL_REPORT(&quot;ProExtdataSlotCreate()&quot;, &quot;ProTestSvRdmData( )&quot;,
+                                (ProError)err, (ProError)err != PRO_TK_NO_ERROR &amp;&amp;
+                                err != PROEXTDATA_TK_CLASS_OR_SLOT_EXISTS);
+
+        if(err == PROEXTDATA_TK_CLASS_OR_SLOT_EXISTS)
+<a name="anchor-68"></a>        {
+            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Slot %0ws already exists&quot;,slot_name);
+            continue;
+        }
+
+<a name="anchor-69"></a>        n_slots++;
+
+        if(err != PROEXTDATA_TK_NO_ERROR)
+        {
+            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataSlotCreate() status : %0s&quot;,
+<a name="anchor-70"></a>                    ProTestProAppdataErr(err));
+            continue;
+        }
+ 
+/*-------------------------------------------------------------*\
+<a name="anchor-71"></a>        Write the random data to the slot
+\*-------------------------------------------------------------*/
+        err = ProExtdataSlotWrite(&amp;p_slot, key_type, type, size, data); 
+
+        TEST_CALL_REPORT(&quot;ProExtdataSlotWrite()&quot;, &quot;ProTestSvRdmData( )&quot;,
+<a name="anchor-72"></a>                                (ProError)err, (ProError)err != PRO_TK_NO_ERROR);
+
+        if(err != PROEXTDATA_TK_NO_ERROR)
+        {
+            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST ProExtdataSlotWrite() : status %0s&quot;,
+<a name="anchor-73"></a>                    ProTestProAppdataErr(err));
+            return(PRO_TK_GENERAL_ERROR);
+        }
+
+        free(data);
+<a name="anchor-74"></a>        totalsize+=size;
+ 
+        if(n_slots%100 == 0)
+        {
+            t2 = time(NULL) - t1;
+<a name="anchor-75"></a>            ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Saved %0d slots, %1d bytes in %2d seconds&quot;
+,
+                                &amp;n_slots, &amp;totalsize, &amp;t2);
+        }
+    }
+<a name="anchor-76"></a>    t2 = time(NULL) - t1;
+    ProUtilMsgPrint(&quot;gendata&quot;,&quot;TEST Time to save %0d bytes was %1d seconds&quot;,
+                                &amp;totalsize, &amp;t2);
+ 
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-77"></a>}
+</pre>
+</body>
+</html>

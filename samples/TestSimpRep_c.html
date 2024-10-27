@@ -1,0 +1,1723 @@
+<html>
+<head>
+<title>TestSimpRep.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProSimprep.h>
+#include &lt;ProSimprepdata.h>
+#include &lt;ProRule.h>
+#include &lt;ProFeature.h>
+#include &lt;ProSolid.h>
+<a name="anchor-3"></a>#include &lt;ProMdl.h>
+#include &lt;ProSelection.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProArray.h>
+#include &lt;ProMenu.h>
+<a name="anchor-4"></a>#include &lt;ProUtil.h>
+#include &lt;ProAsmcomp.h>
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-5"></a>#include &quot;TestSimpRep.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;TestConsts.h&quot;
+<a name="anchor-6"></a>#include &quot;TestRule.h&quot;
+#include &quot;UtilCollect.h&quot;
+
+#include &lt;string.h>
+#include &quot;PTApplsUnicodeUtils.h&quot;
+<a name="anchor-7"></a>/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-8"></a>Application data types
+\*--------------------------------------------------------------------*/
+#define SEL_BY_PICK		1
+#define SEL_BY_RULE		2
+
+<a name="anchor-9"></a>
+typedef struct 
+	{
+	    ProSelection	*p_sel;
+	    int			num;
+<a name="anchor-10"></a>	    char		*p_option; 
+	    ProError		status;
+	} SelAppData;
+
+static int   def_num;
+<a name="anchor-11"></a>static SimpRepActions rule_default;
+
+ProError ProTestSelectModelMenu(char*,ProSelection**,int*); 
+
+/*====================================================================*\
+<a name="anchor-12"></a>FUNCTION : ProTestSimpRep
+PURPOSE  : Top level simp rep test menu
+\*====================================================================*/
+int ProTestSimpRep(ProSolid *p_solid )
+{
+<a name="anchor-13"></a>#ifndef PT_PRODUCTS_BUILD
+    ProError		status;
+    int			menu_id;    /* The identifier of the created menu */
+    int			menu_action;
+
+<a name="anchor-14"></a>ProMdlType type;
+status = ProMdlTypeGet (*p_solid, &amp;type);
+/*--------------------------------------------------------------------*\
+    Create menus
+\*--------------------------------------------------------------------*/
+<a name="anchor-15"></a>    status = ProMenuFileRegister( (char *)&quot;SIMPL REPR&quot;, (char *)&quot;tksimplrep.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestSimpRep()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    ProMenubuttonActionSet((char *)&quot;SIMPL REPR&quot;,(char *)&quot;Create&quot;,
+<a name="anchor-16"></a>		(ProMenubuttonAction)ProTestSRepDefRule,p_solid,0);
+    ProMenubuttonActionSet((char *)&quot;SIMPL REPR&quot;,(char *)&quot;Set Current&quot;,
+		(ProMenubuttonAction)ProTestSRepList,p_solid, SET_CURR_REP);
+    ProMenubuttonActionSet((char *)&quot;SIMPL REPR&quot;,(char *)&quot;Copy&quot;,
+		(ProMenubuttonAction)ProTestSRepList,p_solid,COPY_REP);
+<a name="anchor-17"></a>    ProMenubuttonActionSet((char *)&quot;SIMPL REPR&quot;,(char *)&quot;Redefine&quot;,
+		(ProMenubuttonAction)ProTestSRepList,p_solid, REDEFINE_REP);
+    ProMenubuttonActionSet((char *)&quot;SIMPL REPR&quot;,(char *)&quot;Delete&quot;,
+		(ProMenubuttonAction)ProTestSRepList,p_solid,DELETE_REP);
+    ProMenubuttonActionSet((char *)&quot;SIMPL REPR&quot;,(char *)&quot;List&quot;,
+<a name="anchor-18"></a>		(ProMenubuttonAction)ProTestSRepInfo,p_solid,0);
+    ProMenubuttonActionSet((char *)&quot;SIMPL REPR&quot;,(char *)&quot;Info&quot;,
+		(ProMenubuttonAction)ProTestSRepList,p_solid,REP_INFO);
+    ProMenubuttonActionSet((char *)&quot;SIMPL REPR&quot;,(char *)&quot;Done/Return&quot;,
+		(ProMenubuttonAction)ProMenuDelete,NULL,0);
+<a name="anchor-19"></a>    ProMenubuttonActionSet((char *)&quot;SIMPL REPR&quot;,(char *)&quot;SIMPL REPR&quot;,
+		(ProMenubuttonAction)ProMenuDelete,NULL,0);
+
+/*--------------------------------------------------------------------*\
+    Make main menu visible
+<a name="anchor-20"></a>\*--------------------------------------------------------------------*/
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;SIMPL REPR&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestSimpRep()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-21"></a>    {
+	status = ProMenuProcess( (char *)&quot;SIMPL REPR&quot;, &amp;menu_action );
+	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSimpRep()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+<a name="anchor-22"></a>
+
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-23"></a>
+/*====================================================================*\
+FUNCTION : ProTestSRepRetrieve
+PURPOSE  : Retreive a simp rep from named assembly
+\*====================================================================*/
+<a name="anchor-24"></a>int ProTestSRepRetrieve()
+{
+#ifndef PT_PRODUCTS_BUILD
+    ProSolid  assembly;
+    ProError status;
+<a name="anchor-25"></a>    wchar_t assm_name[PRO_FAMILY_MDLNAME_SIZE], def[PRO_LINE_SIZE], rep_name[PRO_NAME_SIZE];
+    char default_asm[] = &quot;block-world&quot;;
+    char default_rep[] = &quot;Use Default&quot;;
+    char message[PRO_LINE_SIZE];
+    int def_act = 0;
+<a name="anchor-26"></a>    int range[] = {1,2};
+    ProMdlfileType   file_type = PRO_MDLFILE_ASSEMBLY;
+
+    ProStringToWstring(def,default_asm);
+    ProTKSprintf(message, &quot;Enter assembly name [%s] : &quot;, default_asm);
+<a name="anchor-27"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, message);
+    ProUtilStringGet (assm_name, def, PRO_LINE_SIZE);
+
+    ProStringToWstring(def,default_rep);
+    ProTKSprintf(message, &quot;Enter simp rep name [%s] : &quot;, default_rep);
+<a name="anchor-28"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, message);
+    
+    if (ProUtilStringGet (rep_name, NULL, PRO_NAME_SIZE))
+    {
+        status = ProAssemblySimprepMdlnameRetrieve(assm_name, file_type, rep_name, NULL, &amp;assembly);
+<a name="anchor-29"></a>        TEST_CALL_REPORT(&quot;ProAssemblySimprepMdlnameRetrieve()&quot;, &quot;ProTestSRepRetrieve()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+        status = ProSolidDisplay(assembly);
+        TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, &quot;ProTestSRepRetrieve()&quot;,
+<a name="anchor-30"></a>                                status, status != PRO_TK_NO_ERROR &amp;&amp;
+                                status != PRO_TK_E_FOUND);
+        return(0);
+    }
+
+<a name="anchor-31"></a>    ProTKSprintf(message, 
+	&quot;Enter default action type [1=Geom,2=Grfx]: &quot;);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, message);
+    if (!ProUtilIntGet(range,NULL,&amp;def_act))
+	return(0);
+<a name="anchor-32"></a>
+    switch(def_act)
+    {
+	case 1:  
+		status = ProSimprepMdlnameRetrieve(assm_name, PRO_MDLFILE_ASSEMBLY, PRO_SIMPREP_GEOM_REP, NULL, &amp;assembly);
+<a name="anchor-33"></a>                TEST_CALL_REPORT(&quot;ProSimprepMdlnameRetrieve()&quot;, 
+				 &quot;ProTestSRepRetrieve()&quot;,
+                                 status, status != PRO_TK_NO_ERROR &amp;&amp;
+										 status != PRO_TK_BAD_INPUTS);
+	break;
+<a name="anchor-34"></a>	case 2: 
+		status = ProSimprepMdlnameRetrieve(assm_name, PRO_MDLFILE_ASSEMBLY, PRO_SIMPREP_GRAPH_REP, NULL, &amp;assembly);
+                TEST_CALL_REPORT(&quot;ProSimprepMdlnameRetrieve()&quot;, 
+				 &quot;ProTestSRepRetrieve()&quot;,
+                                 status, status != PRO_TK_NO_ERROR &amp;&amp;
+<a name="anchor-35"></a>								         status != PRO_TK_BAD_INPUTS);
+        break;
+	default:
+	        return(0);
+    }
+<a name="anchor-36"></a>	if(status == PRO_TK_NO_ERROR) {
+		status = ProSolidDisplay(assembly);
+		TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, &quot;ProTestSRepRetrieve()&quot;,
+								status, status != PRO_TK_NO_ERROR &amp;&amp;
+								status != PRO_TK_E_FOUND &amp;&amp;
+<a name="anchor-37"></a>								status != PRO_TK_BAD_INPUTS);
+	}
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+    return 0;
+}
+<a name="anchor-38"></a>
+#ifndef PT_PRODUCTS_BUILD
+
+/*====================================================================*\
+FUNCTION : ProTestSRepCreate
+<a name="anchor-39"></a>PURPOSE  : Create a new simplified rep
+\*====================================================================*/
+int ProTestSRepCreate(SimpRepData *rep, SimpRepActions action)
+{
+    ProSimprep simp_rep;
+<a name="anchor-40"></a>    ProError status;
+
+    ProTestSRepEdit(rep,action);
+
+    status = ProSimprepCreate(*(rep->owner), rep->data, &amp;simp_rep);
+<a name="anchor-41"></a>    TEST_CALL_REPORT(&quot;ProSimprepCreate()&quot;, &quot;ProTestSRepCreate()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+        
+    status = ProSimprepActivate(*(rep->owner), &amp;simp_rep);    
+    TEST_CALL_REPORT(&quot;ProSimprepActivate()&quot;, &quot;ProTestSRepCreate()&quot;,
+<a name="anchor-42"></a>                                status, status != PRO_TK_NO_ERROR);
+    status = (ProError)ProTestSRepRepaint(rep->owner);
+
+    ProMenuDelete();
+
+<a name="anchor-43"></a>    return (0);
+}
+
+/*====================================================================*\
+FUNCTION : ProTestSRepList
+<a name="anchor-44"></a>PURPOSE  : List exisiting simplified reps and perform a specified action
+\*====================================================================*/
+int ProTestSRepList(ProSolid *p_solid, SimpRepActions action)
+{
+    SimpRepData     simp_rep;
+<a name="anchor-45"></a>    ProSimprep	    sel_simp_rep;
+    ProSimprep      active;
+    ProError        status;
+    ProSimprepType  type, active_type;
+    
+<a name="anchor-46"></a>    /* Select a simp rep */
+    status = ProSimprepSelect (*p_solid, &amp;sel_simp_rep );
+    TEST_CALL_REPORT(&quot;ProSimprepSelect()&quot;, &quot;ProTestSRepList()&quot;, status, 
+        status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-47"></a>    /* Use selected simp rep to init the other simp rep */
+    status = ProSimprepInit( NULL, sel_simp_rep.id, 
+        *p_solid, &amp;(simp_rep.simp_rep) );
+    TEST_CALL_REPORT( &quot;ProSimprepInit()&quot;, &quot;ProTestSRepList()&quot;, status, 
+        status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND );
+<a name="anchor-48"></a>        
+    if (status != PRO_TK_NO_ERROR ) 
+        return status;
+
+    status = ProSimprepTypeGet (&amp;(simp_rep.simp_rep), &amp;type);
+<a name="anchor-49"></a>    TEST_CALL_REPORT( &quot;ProSimprepTypeGet()&quot;, &quot;ProTestSRepList()&quot;, 
+        status, status != PRO_TK_NO_ERROR);
+
+    simp_rep.owner = p_solid;
+
+<a name="anchor-50"></a>    switch (action)
+    {
+    case REDEFINE_REP:
+/*--------------------------------------------------------------------*\
+        Can't redefine master rep
+<a name="anchor-51"></a>\*--------------------------------------------------------------------*/
+        if ( type == PRO_SIMPREP_MASTER_REP)
+            return PRO_TK_NO_ERROR;
+
+        status = ProSimprepActivate(*p_solid, &amp;(simp_rep.simp_rep));
+<a name="anchor-52"></a>        TEST_CALL_REPORT(&quot;ProSimprepActivate()&quot;, &quot;ProTestSRepList()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+            status = ProSolidDisplay(*p_solid);
+        TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, &quot;ProTestSRepList()&quot;,
+<a name="anchor-53"></a>                    status, status != PRO_TK_NO_ERROR &amp;&amp;
+                    status != PRO_TK_E_FOUND);
+
+        status = (ProError)ProTestSRepRedefineMenu(&amp;simp_rep, action);
+            break;
+<a name="anchor-54"></a>
+    case SET_CURR_REP:
+        status = ProSimprepActivate(*p_solid, &amp;(simp_rep.simp_rep));
+        TEST_CALL_REPORT(&quot;ProSimprepActivate()&quot;, &quot;ProTestSRepList()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-55"></a>         
+
+        status = ProSimprepActiveGet(*p_solid, &amp;active);
+        TEST_CALL_REPORT(&quot;ProSimprepActiveGet()&quot;, &quot;ProTestSRepList()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-56"></a>        status = ProSolidDisplay(*p_solid);
+        TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, &quot;ProTestSRepList()&quot;,
+                    status, status != PRO_TK_NO_ERROR &amp;&amp;
+                    status != PRO_TK_E_FOUND);
+
+<a name="anchor-57"></a>        if (status != PRO_TK_NO_ERROR)
+            return PRO_TK_GENERAL_ERROR;
+
+/*--------------------------------------------------------------------*\
+        Selected and active reps should be the same id and type
+<a name="anchor-58"></a>\*--------------------------------------------------------------------*/
+        status = ProSimprepTypeGet (&amp;active, &amp;active_type);
+        TEST_CALL_REPORT( &quot;ProSimprepTypeGet()&quot;, &quot;ProTestSRepList()&quot;, 
+            status, status != PRO_TK_NO_ERROR);
+        
+<a name="anchor-59"></a>        if ((active_type != type) || (active.id != simp_rep.simp_rep.id) )
+        {
+            ProTKFprintf(stderr,&quot;Error setting active simp rep!\n&quot;);
+            return PRO_TK_GENERAL_ERROR;
+        }
+<a name="anchor-60"></a>        break;
+ 
+    case DELETE_REP:
+/*--------------------------------------------------------------------*\
+        Can't delete master rep
+<a name="anchor-61"></a>\*--------------------------------------------------------------------*/
+        if ( type == PRO_SIMPREP_MASTER_REP)
+            return PRO_TK_NO_ERROR;
+        status = ProSimprepDelete(&amp;(simp_rep.simp_rep));
+        TEST_CALL_REPORT(&quot;ProSimprepDelete()&quot;, &quot;ProTestSRepList()&quot;,
+<a name="anchor-62"></a>                    status, status != PRO_TK_NO_ERROR);
+            break;
+
+    case COPY_REP:
+/*--------------------------------------------------------------------*\
+<a name="anchor-63"></a>        Can't copy master rep
+\*--------------------------------------------------------------------*/
+        if ( type == PRO_SIMPREP_MASTER_REP)
+           return PRO_TK_NO_ERROR;
+        status = ProTestSRepCopy(&amp;(simp_rep.simp_rep));
+<a name="anchor-64"></a>        break;
+
+    case REP_INFO:
+/*--------------------------------------------------------------------*\
+        Can't print info about master rep
+<a name="anchor-65"></a>\*--------------------------------------------------------------------*/
+        if ( type == PRO_SIMPREP_MASTER_REP)
+            return PRO_TK_NO_ERROR;
+        status = ProTestSRepItemInfo(&amp;(simp_rep.simp_rep), NULL);
+        break;
+<a name="anchor-66"></a>
+    default:
+        ProTKFprintf(stderr,&quot;Error, selection error!\n&quot;);
+            status = PRO_TK_BAD_INPUTS;
+    }
+<a name="anchor-67"></a>
+    return status;
+}
+
+/*====================================================================*\
+<a name="anchor-68"></a>FUNCTION : ProTestSRepInfo
+PURPOSE  : Print out def rule information about models simplified reps
+\*====================================================================*/
+int ProTestSRepInfo(
+    ProSolid *p_solid)
+<a name="anchor-69"></a>{
+    ProError status;
+    FILE *simp_rep_fp;
+    char filename[] = &quot;simp_rep.inf&quot;;
+    wchar_t wfilename[PRO_LINE_SIZE];
+<a name="anchor-70"></a>    ProInfoWindowLocation   win_location = { 0.0, 0.0 };
+    ProInfoWindowSize	    win_size = { 25, 80 };
+
+    if ( (simp_rep_fp = PTApplsUnicodeFopen(filename,&quot;w&quot;)) == NULL)
+    {
+<a name="anchor-71"></a>    ProTKFprintf(stderr,&quot;Error opening file for writing\n&quot;);
+        return -1;
+    }
+    status = ProSolidSimprepVisit(*p_solid, NULL,
+             (ProGeomitemAction)ProTestSRepVisitInfo, (ProAppData)simp_rep_fp);
+<a name="anchor-72"></a>    TEST_CALL_REPORT(&quot;ProSolidSimprepVisit()&quot;, &quot;ProTestSRepInfo()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+
+    fclose(simp_rep_fp);
+
+<a name="anchor-73"></a>    status = ProInfoWindowDisplay( ProStringToWstring(wfilename, filename),
+				    &amp;win_location, &amp;win_size );
+    TEST_CALL_REPORT( &quot;ProInfoWindowDisplay()&quot;, &quot;ProTestSRepInfo()&quot;,
+			status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-74"></a>
+    return 0;
+}
+
+/*====================================================================*\
+<a name="anchor-75"></a>FUNCTION : ProTestSRepVisitInfo
+PURPOSE  : Display info window of an assembly's simplified reps
+\*====================================================================*/
+ProError ProTestSRepVisitInfo(
+    ProSimprep *simp_rep,
+<a name="anchor-76"></a>    ProError err, 
+    ProAppData tmp_fp)
+{
+    ProError status;
+    wchar_t  wname[PRO_NAME_SIZE];
+<a name="anchor-77"></a>    char     name[PRO_PATH_SIZE];
+    char     str[30];
+    ProSimprepActionType def_action;
+    ProSimprepdata *data;
+    FILE *fp = (FILE *)tmp_fp;
+<a name="anchor-78"></a>
+    if (simp_rep == NULL || fp == NULL)
+    {
+    status = PRO_TK_GENERAL_ERROR;
+    }
+<a name="anchor-79"></a>
+    status = ProSimprepdataGet(simp_rep, &amp;data);
+    TEST_CALL_REPORT(&quot;ProSimprepdataGet()&quot;, &quot;ProTestSRepVisitInfo()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-80"></a>    if (status == PRO_TK_NO_ERROR) 
+    {
+    status = ProSimprepdataNameGet(data, wname);
+    TEST_CALL_REPORT(&quot;ProSimprepdataNameGet()&quot;, &quot;ProTestSRepVisitInfo()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-81"></a>    }
+       
+    if (status == PRO_TK_NO_ERROR) 
+    {
+    status = ProSimprepdataDefltGet(data, &amp;def_action);
+<a name="anchor-82"></a>    TEST_CALL_REPORT(&quot;ProSimprepdataDefltGet()&quot;, &quot;ProTestSRepVisitInfo()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+    }    
+
+    ProWstringToString(name, wname);
+<a name="anchor-83"></a>
+    if (status == PRO_TK_NO_ERROR)
+    {
+    switch (def_action)
+    {
+<a name="anchor-84"></a>    case PRO_SIMPREP_INCLUDE:
+        ProTKSprintf (str, &quot;Include&quot;);
+        break;
+    case PRO_SIMPREP_EXCLUDE:
+        ProTKSprintf (str, &quot;Exclude&quot;);
+<a name="anchor-85"></a>        break;
+    case PRO_SIMPREP_GEOM:
+        ProTKSprintf (str, &quot;Geometry&quot;);
+        break;
+    case PRO_SIMPREP_GRAPHICS:
+<a name="anchor-86"></a>        ProTKSprintf (str, &quot;Graphics&quot;);
+        break;
+    case PRO_SIMPREP_SUBSTITUTE:
+ 	ProTKSprintf (str, &quot;Substitute&quot;);
+	break;
+<a name="anchor-87"></a>    default:
+        ProTKSprintf (str, &quot;unknown&quot;);
+        break;
+    }
+    ProTKFprintf(fp, &quot;%s - %s components as default rule\n&quot;, 
+<a name="anchor-88"></a>        name, str);
+    ProTKFprintf(fp, &quot;Item info:\n&quot;);
+       fflush(fp);
+           
+    status = ProTestSRepItemInfo ( simp_rep, fp );
+<a name="anchor-89"></a>    }    
+
+    return status ;
+}
+
+<a name="anchor-90"></a>
+/*====================================================================*\
+FUNCTION : ProTestSRepItemInfo 
+PURPOSE  : Print out information about each simp rep 
+\*====================================================================*/
+<a name="anchor-91"></a>ProError ProTestSRepItemInfo(
+    ProSimprep *simp_rep,
+    FILE *fp)
+{
+    ProSimprepdata *data;
+<a name="anchor-92"></a>    char name[PRO_PATH_SIZE];
+    char filename[] = &quot;srep_info.inf&quot;;
+    wchar_t wfilename[PRO_LINE_SIZE];
+    ProError status;
+    SolidFpData sfp_data;
+<a name="anchor-93"></a>    int num = 0, local_file = 0;
+    ProInfoWindowLocation   win_location = { 0.0, 0.0 };
+    ProInfoWindowSize	    win_size = { 25, 80 };
+    char str[30];
+    ProSimprepitem    *simprepitems;
+<a name="anchor-94"></a>    int simprepitems_num, i;
+    
+    if (fp == NULL)
+    {
+        if ( (fp = PTApplsUnicodeFopen(filename,&quot;w&quot;)) == NULL)
+<a name="anchor-95"></a>        {
+            ProTKFprintf(stderr,&quot;Error opening file for writing\n&quot;);
+            return PRO_TK_GENERAL_ERROR;
+        }
+
+<a name="anchor-96"></a>        local_file = 1;
+    }
+
+    status = ProSimprepdataGet(simp_rep, &amp;data);
+    TEST_CALL_REPORT(&quot;ProSimprepdataGet()&quot;, &quot;ProTestSRepItemInfo()&quot;,
+<a name="anchor-97"></a>        status, status != PRO_TK_NO_ERROR);
+
+    if (status == PRO_TK_NO_ERROR &amp;&amp; data != NULL)
+    {
+        status = ProArraySizeGet((ProArray)(data->items),&amp;num);
+<a name="anchor-98"></a>        TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestSRepItemInfo()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+        switch (data->deflt)
+        {
+        case PRO_SIMPREP_INCLUDE:
+<a name="anchor-99"></a>            ProTKSprintf (str, &quot;Include&quot;);
+            break;
+        case PRO_SIMPREP_EXCLUDE:
+            ProTKSprintf (str, &quot;Exclude&quot;);
+            break;
+<a name="anchor-100"></a>        case PRO_SIMPREP_GEOM:
+            ProTKSprintf (str, &quot;Geometry&quot;);
+            break;
+        case PRO_SIMPREP_GRAPHICS:
+            ProTKSprintf (str, &quot;Graphics&quot;);
+<a name="anchor-101"></a>            break;
+        case PRO_SIMPREP_SUBSTITUTE:
+            ProTKSprintf (str, &quot;Substitute&quot;);
+            break;
+        default:
+<a name="anchor-102"></a>            ProTKSprintf (str, &quot;unknown&quot;);
+            break;
+        }
+        ProTKFprintf(fp, &quot;Name      : %s\nTemp      : %s\nDef rule  : %s\nItem cnt  : %d\n&quot;, 
+                 ProWstringToString(name, data->name),
+<a name="anchor-103"></a>                 data->temp == PRO_B_TRUE ? &quot;True&quot; : &quot;False&quot;,
+                 str, num);
+
+
+        sfp_data.solid = (ProSolid *)&amp;(simp_rep->owner);
+<a name="anchor-104"></a>        sfp_data.fp    = fp; 
+
+        status = ProUtilCollectSimprepsdataitems (data, &amp;simprepitems);
+        if (status == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-105"></a>            status = ProArraySizeGet ((ProArray)simprepitems, &amp;simprepitems_num);
+            TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestSRepItemInfo()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+            for (i = 0; i &lt; simprepitems_num; i++)
+            {
+<a name="anchor-106"></a>                status = ProTestSRepItemsVisit (simprepitems+i,
+     	            PRO_TK_NO_ERROR,( SolidFpData*) &amp;sfp_data);
+            }
+            status = ProArrayFree ((ProArray*)&amp;simprepitems);
+            TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestSRepItemInfo()&quot;, 
+<a name="anchor-107"></a>                status, status != PRO_TK_NO_ERROR );
+        }
+    }
+
+    if (local_file == 1)
+<a name="anchor-108"></a>    {
+        fclose(fp);
+        status = ProInfoWindowDisplay( ProStringToWstring(wfilename, filename),
+            &amp;win_location, &amp;win_size );
+        TEST_CALL_REPORT( &quot;ProInfoWindowDisplay()&quot;, &quot;ProTestSRepItemInfo()&quot;,
+<a name="anchor-109"></a>			status, status != PRO_TK_NO_ERROR);
+    }
+    else
+    {
+        fflush(fp);
+<a name="anchor-110"></a>    }
+
+    if (data) 
+    {
+        status = ProSimprepdataFree(&amp;data);
+<a name="anchor-111"></a>        TEST_CALL_REPORT(&quot;ProSimprepdataFree()&quot;, &quot;ProTestSRepItemInfo()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+    } 
+
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-112"></a>}
+
+
+/*====================================================================*\
+FUNCTION : ProTestSRepItemsVisit
+<a name="anchor-113"></a>PURPOSE  : Print out info about each item visited
+\*====================================================================*/
+ProError ProTestSRepItemsVisit (
+    ProSimprepitem *item,
+    ProError          err,
+<a name="anchor-114"></a>    SolidFpData    *fp_data )
+{
+    wchar_t wname[PRO_MDLNAME_SIZE];
+    char     name[PRO_MDLNAME_SIZE];
+    ProAsmcomppath comp_path;
+<a name="anchor-115"></a>    ProMdl    model;
+    ProFeature feature;
+    ProFeattype type;
+    ProBoolean is_visibile;
+    ProError status;
+<a name="anchor-116"></a>
+    if ( item->item_path.path_size == PRO_VALUE_UNUSED )
+    {
+/*--------------------------------------------------------------------*\
+    Feature simp rep
+<a name="anchor-117"></a>\*--------------------------------------------------------------------*/
+        status = ProFeatureInit(*(fp_data->solid), item->item_path.feat_id, &amp;feature);
+    TEST_CALL_REPORT(&quot;ProFeatureInit()&quot;, &quot;ProTestSRepItemsVisit()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+    status = ProFeatureTypeGet(&amp;feature, &amp;type);
+<a name="anchor-118"></a>    
+    ProTKFprintf(fp_data->fp, &quot;Item type : %d\n&quot;, type);    
+    }
+    else
+    {
+<a name="anchor-119"></a>/*--------------------------------------------------------------------*\
+    Assembly simp rep
+\*--------------------------------------------------------------------*/
+    status = ProAsmcomppathInit(*(fp_data->solid), item->item_path.comp_path,
+                item->item_path.path_size, &amp;comp_path);
+<a name="anchor-120"></a>    TEST_CALL_REPORT(&quot;ProAsmcomppathInit()&quot;, &quot;ProTestSRepItemsVisit()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+    
+    status = ProAsmcomppathMdlGet(&amp;comp_path, &amp;model);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathMdlGet()&quot;, &quot;ProTestSRepItemsVisit()&quot;,
+<a name="anchor-121"></a>                status, status != PRO_TK_NO_ERROR);
+
+    status = ProMdlMdlnameGet(model, wname);
+
+    ProTKFprintf(fp_data->fp,&quot;Item name : %s\n&quot;, ProWstringToString(name, wname));    
+<a name="anchor-122"></a>
+    is_visibile = PRO_B_TRUE;
+    status = ProAsmcompVisibilityGet( &amp;comp_path, NULL, &amp;is_visibile );
+    TEST_CALL_REPORT(&quot;ProAsmcompVisibilityGet()&quot;, &quot;ProTestSRepItemsVisit()&quot;,
+                status, status != PRO_TK_NO_ERROR &amp;&amp;
+<a name="anchor-123"></a>                status != PRO_TK_BAD_CONTEXT);
+    if( status == PRO_TK_NO_ERROR )
+	ProTKFprintf( fp_data->fp,&quot;Item visibility : %s\n&quot;, 
+		   is_visibile == PRO_B_TRUE ? &quot;Visible&quot; : &quot;Invisible&quot; );
+    }
+<a name="anchor-124"></a>    return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION : ProTestSRepDefRule
+<a name="anchor-125"></a>PURPOSE  : Menu for default create rule
+\*====================================================================*/
+int ProTestSRepDefRule(ProSolid *p_solid)
+{
+    ProError		status;
+<a name="anchor-126"></a>    int			menu_id;    /* The identifier of the created menu */
+    int			menu_action;
+    ProType		type;
+    SimpRepData		rep;
+    wchar_t wmessage[PRO_NAME_SIZE];
+<a name="anchor-127"></a>
+/*  Get rep name */
+    status = ProTestSRepNewNameGet(wmessage);
+    ProUtilWstrcpy(rep.name, wmessage);
+    rep.owner = p_solid;
+<a name="anchor-128"></a>    
+    status = ProMdlTypeGet (*p_solid, (ProMdlType*)&amp;type);
+    ProMenuPush ();
+    if (type == PRO_ASSEMBLY)
+    {
+<a name="anchor-129"></a>        status = ProMenuFileRegister((char *) &quot;ASM DFLT RULE&quot;, (char *)&quot;tkasrdefr.mnu&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestSRepDefRule()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+	ProMenubuttonActionSet((char *)&quot;ASM DFLT RULE&quot;,(char *)&quot;Include Comp&quot;,
+<a name="anchor-130"></a>		(ProMenubuttonAction)ProTestSRepCreate,&amp;rep,CREATE_REP_IN);
+        ProMenubuttonActionSet((char *)&quot;ASM DFLT RULE&quot;,(char *)&quot;Exclude Comp&quot;,
+		(ProMenubuttonAction)ProTestSRepCreate,&amp;rep,CREATE_REP_EX);
+        ProMenubuttonActionSet((char *)&quot;ASM DFLT RULE&quot;,(char *)&quot;Graphics Rep&quot;,
+		(ProMenubuttonAction)ProTestSRepCreate,&amp;rep,CREATE_REP_GRAPH);
+<a name="anchor-131"></a>        ProMenubuttonActionSet((char *)&quot;ASM DFLT RULE&quot;,(char *)&quot;Geometry Rep&quot;,
+  		(ProMenubuttonAction)ProTestSRepCreate,&amp;rep,CREATE_REP_GEOM);
+/*        ProMenubuttonActionSet((char *)&quot;ASM DFLT RULE&quot;,(char *)&quot;Done&quot;,
+  		(ProMenubuttonAction)ProMenuDelete,NULL,0);*/
+        ProMenubuttonActionSet((char *)&quot;ASM DFLT RULE&quot;,(char *)&quot;ASM DFLT RULE&quot;,
+<a name="anchor-132"></a>		(ProMenubuttonAction)ProMenuDelete,NULL,0);
+
+        status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;ASM DFLT RULE&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestSRepDefRule()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-133"></a>        if( status == PRO_TK_NO_ERROR )
+        {
+	    status = ProMenuProcess( (char *)&quot;DFLT RULE&quot;, &amp;menu_action );
+            TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSRepDefRule()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-134"></a>        }
+    }
+    else if (type == PRO_PART)
+    {
+        status = ProMenuFileRegister( (char *)&quot;PART DFLT RULE&quot;, (char *)&quot;tkpsrdefr.mnu&quot;, &amp;menu_id );
+<a name="anchor-135"></a>        TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestSRepDefRule()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+        ProMenubuttonActionSet((char *)&quot;PART DFLT RULE&quot;,(char *)&quot;Include Feat&quot;,
+		(ProMenubuttonAction)ProTestSRepCreate,&amp;rep,CREATE_REP_IN);
+        ProMenubuttonActionSet((char *)&quot;PART DFLT RULE&quot;,(char *)&quot;Exclude Feat&quot;,
+<a name="anchor-136"></a>		(ProMenubuttonAction)ProTestSRepCreate,&amp;rep,CREATE_REP_EX);
+/*        ProMenubuttonActionSet((char *)&quot;PART DFLT RULE&quot;,(char *)&quot;Done&quot;,
+  		(ProMenubuttonAction)ProMenuDelete,NULL,0);*/
+        ProMenubuttonActionSet((char *)&quot;PART DFLT RULE&quot;,(char *)&quot;PART DFLT RULE&quot;,
+		(ProMenubuttonAction)ProMenuDelete,NULL,0);
+<a name="anchor-137"></a>
+        status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;PART DFLT RULE&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestSRepDefRule()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+        if( status == PRO_TK_NO_ERROR )
+<a name="anchor-138"></a>        {
+	    status = ProMenuProcess( (char *)&quot;PART DFLT RULE&quot;, &amp;menu_action );
+            TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSRepDefRule()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+        }
+<a name="anchor-139"></a>    }
+    ProMenuPop ();
+    return 0;
+}
+
+<a name="anchor-140"></a>/*====================================================================*\
+FUNCTION : ProTestSRepEdit
+PURPOSE  : Edit rep menu
+\*====================================================================*/
+int ProTestSRepEdit(SimpRepData *sr_data, SimpRepActions action)
+<a name="anchor-141"></a>{ 
+    ProError status;
+    int menu_id;    /* The identifier of the created menu */
+    int menu_action;
+    ProMdl *owner = (ProMdl*)sr_data->owner;
+<a name="anchor-142"></a>    ProMdlType type;
+    ProSimprepActionType action_type, action_type_for_vis;
+    
+    ProMdlTypeGet (*owner, &amp;type);
+/*--------------------------------------------------------------------*\
+<a name="anchor-143"></a>    Create menu
+\*--------------------------------------------------------------------*/
+    ProMenuPush ();
+    if (type == PRO_MDL_ASSEMBLY)
+    {
+<a name="anchor-144"></a>        status = ProMenuFileRegister( (char *)&quot;ASM EDIT REPRS&quot;,(char *) &quot;tkasreped.mnu&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestSRepEdit()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+	ProMenubuttonActionSet((char *)&quot;ASM EDIT REPRS&quot;,(char *)&quot;Include&quot;,
+		(ProMenubuttonAction)ProTestSRepAction, sr_data,CREATE_REP_IN);
+<a name="anchor-145"></a>        ProMenubuttonActionSet((char *)&quot;ASM EDIT REPRS&quot;,(char *)&quot;Exclude&quot;,
+		(ProMenubuttonAction)ProTestSRepAction, sr_data,CREATE_REP_EX);
+        ProMenubuttonActionSet((char *)&quot;ASM EDIT REPRS&quot;,(char *)&quot;Graphics Rep&quot;,
+		(ProMenubuttonAction)ProTestSRepAction, sr_data,CREATE_REP_GRAPH);
+        ProMenubuttonActionSet((char *)&quot;ASM EDIT REPRS&quot;,(char *)&quot;Geometry Rep&quot;,
+<a name="anchor-146"></a>  		(ProMenubuttonAction)ProTestSRepAction, sr_data,CREATE_REP_GEOM);
+        ProMenubuttonActionSet((char *)&quot;ASM EDIT REPRS&quot;,(char *)&quot;Substitute&quot;,
+  		(ProMenubuttonAction)ProTestSRepAction, sr_data,SUBSTITUTE);
+        ProMenubuttonActionSet((char *)&quot;ASM EDIT REPRS&quot;,(char *)&quot;Default&quot;,
+  		(ProMenubuttonAction)ProTestSRepAction, sr_data,DEFAULT);
+<a name="anchor-147"></a>        ProMenubuttonActionSet((char *)&quot;ASM EDIT REPRS&quot;,(char *)&quot;Done&quot;,
+  		(ProMenubuttonAction)ProMenuDelete,NULL,0);
+        ProMenubuttonActionSet((char *)&quot;ASM EDIT REPRS&quot;,(char *)&quot;ASM EDIT REPRS&quot;,
+		(ProMenubuttonAction)ProMenuDelete,NULL,0);
+    }
+<a name="anchor-148"></a>    else if (type == PRO_MDL_PART)
+    {
+        status = ProMenuFileRegister((char *) &quot;PART EDIT REPRS&quot;, (char *)&quot;tkpsreped.mnu&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestSRepEdit()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-149"></a>        ProMenubuttonActionSet((char *)&quot;PART EDIT REPRS&quot;,(char *)&quot;Include&quot;,
+		(ProMenubuttonAction)ProTestSRepAction, sr_data,CREATE_REP_IN);
+        ProMenubuttonActionSet((char *)&quot;PART EDIT REPRS&quot;,(char *)&quot;Exclude&quot;,
+		(ProMenubuttonAction)ProTestSRepAction, sr_data,CREATE_REP_EX);
+        ProMenubuttonActionSet((char *)&quot;PART EDIT REPRS&quot;,(char *)&quot;Default&quot;,
+<a name="anchor-150"></a>		(ProMenubuttonAction)ProTestSRepAction, sr_data,DEFAULT);
+        ProMenubuttonActionSet((char *)&quot;PART EDIT REPRS&quot;,(char *)&quot;Done&quot;,
+  		(ProMenubuttonAction)ProMenuDelete,NULL,0);
+        ProMenubuttonActionSet((char *)&quot;PART EDIT REPRS&quot;,(char *)&quot;PART EDIT REPRS&quot;,
+		(ProMenubuttonAction)ProMenuDelete,NULL,0);
+<a name="anchor-151"></a>    }    
+    rule_default = action;
+/*--------------------------------------------------------------------*\
+    Check whether rep is new or exisiting and find default rule
+\*--------------------------------------------------------------------*/
+<a name="anchor-152"></a>    switch (action)
+    {
+    case CREATE_REP_IN:
+        action_type_for_vis = action_type = PRO_SIMPREP_INCLUDE;
+        break;
+<a name="anchor-153"></a>    case CREATE_REP_EX:
+        action_type_for_vis = action_type = PRO_SIMPREP_EXCLUDE;
+        break;
+    case CREATE_REP_GEOM:
+        action_type = PRO_SIMPREP_INCLUDE;
+<a name="anchor-154"></a>        action_type_for_vis = PRO_SIMPREP_GEOM;
+        break;
+    case CREATE_REP_GRAPH:
+        action_type = PRO_SIMPREP_INCLUDE;
+        action_type_for_vis = PRO_SIMPREP_GRAPHICS;
+<a name="anchor-155"></a>        break;
+    }
+    if (action == CREATE_REP_IN ||
+       action == CREATE_REP_EX ||
+       action == CREATE_REP_GEOM ||
+<a name="anchor-156"></a>       action == CREATE_REP_GRAPH)
+    {
+        status = ProSimprepdataAlloc(sr_data->name, PRO_B_FALSE, 
+                    action_type, &amp;(sr_data->data));
+        TEST_CALL_REPORT(&quot;ProSimprepdataAlloc()&quot;, &quot;ProTestSRepEdit()&quot;,
+<a name="anchor-157"></a>                     status, status != PRO_TK_NO_ERROR);
+        ProTestSRepVisActionSet(action_type_for_vis); 
+    }
+    else
+    {
+<a name="anchor-158"></a>        status = ProSimprepdataGet(&amp;(sr_data->simp_rep), &amp;(sr_data->data));
+        TEST_CALL_REPORT(&quot;ProSimprepdataGet()&quot;, &quot;ProTestSRepEdit()&quot;,
+                     status, status != PRO_TK_NO_ERROR);
+        ProTestSRepVisActionSet(sr_data->data->deflt);
+    }
+<a name="anchor-159"></a>    if (type == PRO_MDL_ASSEMBLY)
+    {
+        status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;ASM EDIT REPRS&quot;, &amp;menu_id );
+        TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestSRepEdit()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-160"></a>        if( status == PRO_TK_NO_ERROR )
+        {
+            status = ProMenuProcess( (char *)&quot;ASM EDIT REPRS&quot;, &amp;menu_action );
+            TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSRepEdit()&quot;, 
+ 			    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-161"></a>        }
+    }
+    else
+    {
+        status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;PART EDIT REPRS&quot;, &amp;menu_id );
+<a name="anchor-162"></a>        TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestSRepEdit()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+        if( status == PRO_TK_NO_ERROR )
+        {
+            status = ProMenuProcess((char *) &quot;PART EDIT REPRS&quot;, &amp;menu_action );
+<a name="anchor-163"></a>            TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSRepEdit()&quot;, 
+ 			    status, status != PRO_TK_NO_ERROR );
+        }
+    }
+    ProMenuPop ();
+<a name="anchor-164"></a>    return(0);
+}
+
+/*====================================================================*\
+FUNCTION : ProTestSRepAction
+<a name="anchor-165"></a>PURPOSE  : General action function
+\*====================================================================*/
+int ProTestSRepAction(
+    SimpRepData *sr_data, 
+    SimpRepActions action)
+<a name="anchor-166"></a>{
+    ProError status;
+
+    switch (action)
+    {
+<a name="anchor-167"></a>    case DEFAULT:
+        action = rule_default;
+        break;
+    case CREATE_REP_IN:
+    case CREATE_REP_EX:
+<a name="anchor-168"></a>    case CREATE_REP_GEOM:
+    case CREATE_REP_GRAPH:
+    case SUBSTITUTE:
+        status = ProTestSRepCreateNew(sr_data, action);
+        break;
+<a name="anchor-169"></a>    case REDEFINE_REP: 
+        status = (ProError)ProTestSRepRedefineMenu(sr_data, action);
+        break;
+    }
+
+<a name="anchor-170"></a>    return status;
+}
+
+/*====================================================================*\
+FUNCTION : ProTestSRepCreateNew
+<a name="anchor-171"></a>PURPOSE  : Create a new simp rep
+\*====================================================================*/
+ProError ProTestSRepCreateNew(
+    SimpRepData *sr_data,
+    SimpRepActions action)
+<a name="anchor-172"></a>{
+    ProType type;
+    ProSelection *sels;
+    int num, i;
+    ProError status;
+<a name="anchor-173"></a>    ProSimprepAction sr_act;
+    ProSubstitution subst;
+    ProSimprepitem item;
+    ProMdlExtension mdl_ext;
+    ProAsmcomppath comp_path;
+<a name="anchor-174"></a>    ProModelitem sel_obj;
+    char name[10], option[40];
+    ProSimprepActionType act_type;
+
+    ProModelitem sel0_obj;
+<a name="anchor-175"></a>    ProMdl sel_mdl;
+
+/*--------------------------------------------------------------------*\
+    Find current owner type
+\*--------------------------------------------------------------------*/
+<a name="anchor-176"></a>    status = ProMdlExtensionGet(*(sr_data->owner), mdl_ext);
+    TEST_CALL_REPORT(&quot;ProMdlExtensionGet()&quot;, &quot;ProTestSRepCreateNew()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+    ProWstringToString (name, mdl_ext);
+<a name="anchor-177"></a>
+    if(  strcmp ( name, &quot;ASM&quot;) == 0 )
+    {
+        type = PRO_PART;
+        ProUtilstrcpy(option, &quot;prt_or_asm&quot;);
+<a name="anchor-178"></a>    }
+    else
+    {
+        type = PRO_FEATURE;
+        ProUtilstrcpy(option, &quot;feature&quot;);
+<a name="anchor-179"></a>    }
+    switch (action)
+    {
+    case CREATE_REP_EX:
+        act_type = PRO_SIMPREP_EXCLUDE;
+<a name="anchor-180"></a>        break;
+    case CREATE_REP_IN:
+        act_type = PRO_SIMPREP_INCLUDE;
+        break;
+    case CREATE_REP_GEOM:
+<a name="anchor-181"></a>        act_type = PRO_SIMPREP_GEOM;
+        break;
+    case CREATE_REP_GRAPH:
+        act_type = PRO_SIMPREP_GRAPHICS;
+        break;
+<a name="anchor-182"></a>    case SUBSTITUTE:
+        act_type = PRO_SIMPREP_SUBSTITUTE;
+        break;
+    }
+    
+<a name="anchor-183"></a>    ProUtilMsgPrint(&quot;gen&quot;,&quot;TEST %0s&quot;, 
+        &quot;Select model(s) (feature) to include&quot;);
+	
+    status = ProTestSelectModelMenu( option, &amp;sels, &amp;num );
+
+<a name="anchor-184"></a>    if( status != PRO_TK_NO_ERROR )
+        return (status);
+
+    status = ProSelectionModelitemGet(sels[0], &amp;sel0_obj);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;, &quot;ProTestSRepCreateNew()&quot;,  
+<a name="anchor-185"></a>                          status, status != PRO_TK_NO_ERROR);  
+
+    status = ProModelitemMdlGet(&amp;sel0_obj, &amp;sel_mdl);  
+    TEST_CALL_REPORT(&quot;ProModelitemMdlGet&quot;, &quot;ProTestSRepCreateNew()&quot;,  
+                          status, status != PRO_TK_NO_ERROR);  
+<a name="anchor-186"></a>
+    if (act_type == PRO_SIMPREP_SUBSTITUTE)
+    {
+       status = ProTestSubstitutionInit( (ProSolid*)&amp;sel_mdl, &amp;subst );
+        
+<a name="anchor-187"></a>        if( status == PRO_TK_NO_ERROR )
+        {
+	    status = ProSimprepActionInit( act_type, &amp;subst, 
+		&amp;sr_act );
+            TEST_CALL_REPORT(&quot;ProSimprepActionInit()&quot;, &quot;ProTestSRepCreateNew()&quot;,
+<a name="anchor-188"></a>                          status, status != PRO_TK_NO_ERROR);
+        }
+    }
+    else
+    {
+<a name="anchor-189"></a>        status = ProSimprepActionInit( act_type, NULL, &amp;sr_act);
+        TEST_CALL_REPORT(&quot;ProSimprepActionInit()&quot;, &quot;ProTestSRepCreateNew()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-190"></a>    if (status == PRO_TK_NO_ERROR &amp;&amp; num >= 1)
+    {
+        for (i = 0; i &lt; num; i++)
+        {
+            ProSelectionAsmcomppathGet(sels[i], &amp;comp_path);
+<a name="anchor-191"></a>            TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, 
+                &quot;ProTestSRepCreateNew()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+
+            ProSelectionModelitemGet(sels[i], &amp;sel_obj);
+<a name="anchor-192"></a>            TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+		&quot;ProTestSRepCreateNew()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+
+            status = ProSimprepdataitemInit( comp_path.comp_id_table,
+<a name="anchor-193"></a>		type == PRO_PART ? comp_path.table_num : PRO_VALUE_UNUSED, 
+                        sel_obj.id, &amp;sr_act, &amp;item);
+            TEST_CALL_REPORT(&quot;ProSimprepdataitemInit()&quot;, 
+		&quot;ProTestSRepCreateNew()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-194"></a>                        
+            status = ProSimprepdataitemAdd(sr_data->data, &amp;item);
+            TEST_CALL_REPORT(&quot;ProSimprepdataitemAdd()&quot;, 
+ 		&quot;ProTestSRepCreateNew()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-195"></a>
+            if (status == PRO_TK_NO_ERROR)
+                sr_data->item_count++;
+        }
+    }
+<a name="anchor-196"></a>    return(status);
+}
+
+/*====================================================================*\
+FUNCTION : ProTestSRepRedefineMenu
+<a name="anchor-197"></a>PURPOSE  : Redefine existing rep
+\*====================================================================*/
+int ProTestSRepRedefineMenu(
+    SimpRepData *sr_data,
+    SimpRepActions action )
+<a name="anchor-198"></a>{
+    ProError status = PRO_TK_NO_ERROR;
+    ProBoolean is_temp;
+    int			menu_id;    /* The identifier of the created menu */
+    int			menu_action;
+<a name="anchor-199"></a>
+
+    status = ProTestSRep2ColorDisplay(sr_data);
+    status = ProSimprepdataGet(&amp;(sr_data->simp_rep), &amp;(sr_data->data));
+    TEST_CALL_REPORT(&quot;ProSimprepdataGet()&quot;, &quot;ProTestSRepRedefineMenu()&quot;,
+<a name="anchor-200"></a>                    status, status != PRO_TK_NO_ERROR);
+      
+    status = ProMenuFileRegister( (char *)&quot;REDEFINE SR&quot;, (char *)&quot;tksrredef.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestSRepRedefineMenu()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-201"></a>
+    ProMenubuttonActionSet((char *)&quot;REDEFINE SR&quot;,(char *)&quot;Rename&quot;,
+		(ProMenubuttonAction)ProTestSRepRedefine, sr_data,RENAME);
+    ProMenubuttonActionSet((char *)&quot;REDEFINE SR&quot;,(char *)&quot;Make perm&quot;,
+		(ProMenubuttonAction)ProTestSRepRedefine, sr_data, MAKE_PERM);
+<a name="anchor-202"></a>    ProMenubuttonActionSet((char *)&quot;REDEFINE SR&quot;,(char *)&quot;Def rule&quot;,
+		(ProMenubuttonAction)ProTestSRepRedefine, sr_data,DEF_RULE);
+    ProMenubuttonActionSet((char *)&quot;REDEFINE SR&quot;, (char *)&quot;Add item&quot;, 
+		(ProMenubuttonAction)ProTestSRepRedefine, sr_data, ADD_ITEM);
+    ProMenubuttonActionSet((char *)&quot;REDEFINE SR&quot;,(char *)&quot;Del item&quot;,
+<a name="anchor-203"></a>		(ProMenubuttonAction)ProTestSRepRedefine, sr_data, DEL_ITEM);
+    ProMenubuttonActionSet((char *)&quot;REDEFINE SR&quot;,(char *)&quot;REDEFINE SR&quot;, 
+		(ProMenubuttonAction)ProMenuDelete,NULL,0);
+
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;REDEFINE SR&quot;, &amp;menu_id );
+<a name="anchor-204"></a>    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestSRepRedefine()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    status = ProSimprepdataTmpvalGet(sr_data->data, &amp;is_temp);
+    TEST_CALL_REPORT(&quot;ProSimprepdataTmpvalGet()&quot;, &quot;ProTestSRepRedefine()&quot;,
+<a name="anchor-205"></a>                    status, status != PRO_TK_NO_ERROR);
+    if ( is_temp == PRO_B_FALSE )
+    {
+	status = ProMenubuttonDeactivate( (char *)&quot;REDEFINE SR&quot;, (char *)&quot;Make perm&quot; );
+	TEST_CALL_REPORT( &quot;ProMenubuttonDeactivate()&quot;, &quot;ProTestSRepRedefine()&quot;, 
+<a name="anchor-206"></a>			    status, status != PRO_TK_NO_ERROR );
+    }
+    else 
+    {
+	status = ProMenubuttonActivate((char *) &quot;REDEFINE SR&quot;, (char *)&quot;Make perm&quot; );
+<a name="anchor-207"></a>	TEST_CALL_REPORT( &quot;ProMenubuttonDeactivate()&quot;, &quot;ProTestSRepRedefine()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+
+    status = ProMenuProcess((char *) &quot;REDEFINE SR&quot;, &amp;menu_action );
+<a name="anchor-208"></a>    TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSRepRedefine()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+
+    return 0;
+<a name="anchor-209"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestSRepRedefine
+PURPOSE  : Define all redefine actions
+<a name="anchor-210"></a>\*====================================================================*/
+int ProTestSRepRedefine (
+    SimpRepData *sr_data, 
+    SimpRepActions action )
+{
+<a name="anchor-211"></a>    ProError status;
+    wchar_t wname[PRO_LINE_SIZE];
+    char name[10], option[40];
+    ProSimprepActionType def_act;
+    ProSimprepdata *data;
+<a name="anchor-212"></a>    ProSimprepitem item;
+    ProSimprepAction sr_act ;
+    ProSelection *sels;
+    ProAsmcomppath comp_path;
+    ProModelitem sel_obj;
+<a name="anchor-213"></a>    ProMdlExtension mdl_ext;
+    int     num, i;
+    ProType type;
+    char str[30];
+
+<a name="anchor-214"></a>/*--------------------------------------------------------------------*\
+    Find current owner type
+\*--------------------------------------------------------------------*/
+    status = ProMdlExtensionGet(*(sr_data->owner), mdl_ext);
+    TEST_CALL_REPORT(&quot;ProMdlExtensionGet()&quot;, &quot;ProTestSRepRedefine()&quot;,
+<a name="anchor-215"></a>                    status, status != PRO_TK_NO_ERROR);
+
+    ProWstringToString (name, mdl_ext);
+
+    if(  strcmp ( name, &quot;ASM&quot;) == 0 )
+<a name="anchor-216"></a>    {
+        type = PRO_PART;
+        ProUtilstrcpy(option, &quot;prt_or_asm&quot;);  
+    }
+    else
+<a name="anchor-217"></a>    {
+        type = PRO_FEATURE;
+        ProUtilstrcpy(option, &quot;feature&quot;);
+    }
+
+<a name="anchor-218"></a>
+/*--------------------------------------------------------------------*\
+    Get Simp reps data
+\*--------------------------------------------------------------------*/
+    status = ProSimprepdataGet(&amp;(sr_data->simp_rep), &amp;data);
+<a name="anchor-219"></a>    TEST_CALL_REPORT(&quot;ProSimprepdataGet()&quot;, &quot;ProTestSRepRedefine()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+    status = ProSimprepdataDefltGet(data, &amp;def_act);
+    TEST_CALL_REPORT(&quot;ProSimprepdataDefltGet()&quot;, &quot;ProTestSRepRedefine()&quot;,
+<a name="anchor-220"></a>                    status, status != PRO_TK_NO_ERROR);
+
+    switch (action)
+    {
+    case RENAME:
+<a name="anchor-221"></a>        status = ProTestSRepNewNameGet(wname);
+        status = ProSimprepdataNameSet(data, wname);
+        TEST_CALL_REPORT(&quot;ProSimprepdataNameSet()&quot;, &quot;ProTestSRepRedefine()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+        if (status != PRO_TK_NO_ERROR)
+<a name="anchor-222"></a>            return status;
+        status = ProSimprepdataSet(&amp;(sr_data->simp_rep), data); 
+        TEST_CALL_REPORT(&quot;ProSimprepdataSet()&quot;, &quot;ProTestSRepRedefine()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+        ProMenuDelete();
+<a name="anchor-223"></a>        break;
+        
+    case MAKE_PERM:
+        status = ProSimprepdataTmpvalSet(data, PRO_B_FALSE);
+        TEST_CALL_REPORT(&quot;ProSimprepdataTmpvalSet()&quot;, &quot;ProTestSRepRedefine()&quot;,
+<a name="anchor-224"></a>                    status, status != PRO_TK_NO_ERROR);
+        if (status != PRO_TK_NO_ERROR)
+        return status;
+        status = ProSimprepdataSet(&amp;(sr_data->simp_rep), data); 
+        TEST_CALL_REPORT(&quot;ProSimprepdataSet()&quot;, &quot;ProTestSRepRedefine()&quot;,
+<a name="anchor-225"></a>                    status, status != PRO_TK_NO_ERROR);
+        ProMenuDelete();
+        break;
+    case DEF_RULE:
+        status = ProSimprepdataDefltSet (data, PRO_SIMPREP_REVERSE);
+<a name="anchor-226"></a>        TEST_CALL_REPORT(&quot;ProSimprepdataDefltSet()&quot;, 
+        &quot;ProTestSRepRedefine()&quot;, status, status != PRO_TK_NO_ERROR);
+        
+        status = ProSimprepdataSet(&amp;(sr_data->simp_rep), data); 
+        TEST_CALL_REPORT(&quot;ProSimprepdataSet()&quot;, &quot;ProTestSRepRedefine()&quot;,
+<a name="anchor-227"></a>                    status, status != PRO_TK_NO_ERROR);
+        ProMenuDelete();
+        break;
+
+    case ADD_ITEM:
+<a name="anchor-228"></a>	status = ProTestSelectModelMenu( option, &amp;sels, &amp;num );
+	if( status != PRO_TK_NO_ERROR )
+	    break;
+        switch (def_act)
+        {
+<a name="anchor-229"></a>        case PRO_SIMPREP_INCLUDE:
+            ProTKSprintf (str, &quot;Include&quot;);
+            break;
+        case PRO_SIMPREP_EXCLUDE:
+            ProTKSprintf (str, &quot;Exclude&quot;);
+<a name="anchor-230"></a>            break;
+        case PRO_SIMPREP_GEOM:
+            ProTKSprintf (str, &quot;Geometry&quot;);
+            break;
+        case PRO_SIMPREP_GRAPHICS:
+<a name="anchor-231"></a>            ProTKSprintf (str, &quot;Graphics&quot;);
+            break;
+        case PRO_SIMPREP_SUBSTITUTE:
+            ProTKSprintf (str, &quot;Substitute&quot;);
+            break;
+<a name="anchor-232"></a>        default:
+            ProTKSprintf (str, &quot;unknown&quot;);
+            break;
+        }
+        status = ProSimprepActionInit( def_act , 
+<a name="anchor-233"></a>                    NULL, &amp;sr_act);
+        TEST_CALL_REPORT(&quot;ProSimprepActionInit()&quot;, &quot;ProTestSRepRedefine()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+
+        for (i = 0; i &lt; num; i++)
+<a name="anchor-234"></a>        {
+	    ProSelectionAsmcomppathGet(sels[i], &amp;comp_path);
+            TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, 
+		&quot;ProTestSRepRedefine()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-235"></a>
+            ProSelectionModelitemGet(sels[i], &amp;sel_obj);
+            TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+		&quot;ProTestSRepRedefine()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-236"></a>
+ 	    status = ProSimprepdataitemInit(comp_path.comp_id_table,
+		type == PRO_PART ? comp_path.table_num : PRO_TK_NOT_USED, 
+                sel_obj.id, &amp;sr_act, &amp;item);
+	    TEST_CALL_REPORT(&quot;ProSimprepdataitemInit()&quot;, &quot;ProTestSRepItem()&quot;, 
+<a name="anchor-237"></a>           	status, status != PRO_TK_NO_ERROR);
+                        
+	    status = ProSimprepdataitemAdd(data, &amp;item);
+	    TEST_CALL_REPORT(&quot;ProSimprepdataitemAdd()&quot;, &quot;ProTestSRepItem()&quot;,
+       		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-238"></a>        }
+        /* bug in the function ProSimprepdataitemAdd */
+        status = ProSimprepdataSet(&amp;(sr_data->simp_rep), data); 
+        TEST_CALL_REPORT(&quot;ProSimprepdataSet()&quot;, &quot;ProTestSRepRedefine()&quot;,
+                          status, 0);
+<a name="anchor-239"></a>        ProMenuDelete();
+
+        break;
+
+    case DEL_ITEM:
+<a name="anchor-240"></a>	status = ProTestSelectModelMenu( option, &amp;sels, &amp;num );
+	if( status != PRO_TK_NO_ERROR )
+	    break;
+
+        status = ProSimprepActionInit( def_act,
+<a name="anchor-241"></a>                    NULL, &amp;sr_act);
+        TEST_CALL_REPORT(&quot;ProSimprepActionInit()&quot;, &quot;ProTestSRepRedefine()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+
+        for (i = 0; i &lt; num; i++)
+<a name="anchor-242"></a>        {
+            status = ProSelectionAsmcomppathGet(sels[i], &amp;comp_path);
+            TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, 
+		&quot;ProTestSRepRedefine()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-243"></a>
+            status = ProSelectionModelitemGet(sels[i], &amp;sel_obj);
+            TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+		&quot;ProTestSRepRedefine()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-244"></a>
+	    status = ProSimprepdataitemInit(comp_path.comp_id_table,
+		type == PRO_PART ? comp_path.table_num : PRO_TK_NOT_USED, 
+                sel_obj.id, &amp;sr_act, &amp;item);
+	    TEST_CALL_REPORT(&quot;ProSimprepdataitemInit()&quot;, 
+<a name="anchor-245"></a>		&quot;ProTestSRepRedefine()&quot;, 
+                status, status != PRO_TK_NO_ERROR);
+		
+	    item.action.type = PRO_SIMPREP_NONE;
+	    
+<a name="anchor-246"></a>	    status = ProSimprepdataitemDelete (data, &amp;item);
+	    TEST_CALL_REPORT(&quot;ProSimprepdataitemDelete()&quot;, 
+		&quot;ProTestSRepItem()&quot;, status,
+		( status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND));
+        }
+<a name="anchor-247"></a>        /* bug in function ProSimprepdataitemDelete */
+        status = ProSimprepdataSet(&amp;(sr_data->simp_rep), data); 
+        TEST_CALL_REPORT(&quot;ProSimprepdataSet()&quot;, &quot;ProTestSRepRedefine()&quot;,
+                    status, 0);
+        ProMenuDelete();
+<a name="anchor-248"></a>
+        break;
+
+    default:
+        ProTKFprintf(stderr, &quot;Error - fall through redefine!\n&quot;);
+<a name="anchor-249"></a>    }
+
+    status = ProSimprepdataFree(&amp;data);
+    TEST_CALL_REPORT(&quot;ProSimprepdataFree()&quot;, &quot;ProTestSRepRedefine()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-250"></a>
+    return 0;
+}
+
+/*====================================================================*\
+<a name="anchor-251"></a>FUNCTION : ProTestSRepCopy
+PURPOSE  : Copies an exisiting simplified rep
+\*====================================================================*/
+ProError ProTestSRepCopy(
+    ProSimprep* simp_rep)
+<a name="anchor-252"></a>{
+     
+    ProSimprepdata *data;
+    wchar_t wname[PRO_LINE_SIZE];
+    ProError status;
+<a name="anchor-253"></a>    ProSimprep new_rep;
+
+    status = ProTestSRepNewNameGet(wname);
+
+    status = ProSimprepdataGet(simp_rep, &amp;data);
+<a name="anchor-254"></a>    TEST_CALL_REPORT(&quot;ProSimprepdataGet()&quot;, &quot;ProTestSRepCopy()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+    if (status != PRO_TK_NO_ERROR)
+    return status;
+<a name="anchor-255"></a> 
+    status = ProSimprepdataNameSet(data, wname);
+    TEST_CALL_REPORT(&quot;ProSimprepdataNameSet()&quot;, &quot;ProTestSRepCopy()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-256"></a>    return status;
+
+    status = ProSimprepCreate((ProSolid) simp_rep->owner,  data, &amp;new_rep);
+    TEST_CALL_REPORT(&quot;ProSimprepCreate()&quot;, &quot;ProTestSRepCopy()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-257"></a>
+    if (status != PRO_TK_NO_ERROR)
+    return status;
+
+    status = ProSimprepdataFree(&amp;data);
+<a name="anchor-258"></a>    TEST_CALL_REPORT(&quot;ProSimprepdataFree()&quot;, &quot;ProTestSRepCopy()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+    status = ProSimprepActivate((ProSolid)simp_rep->owner, &amp;new_rep);
+    TEST_CALL_REPORT(&quot;ProSimprepActivate()&quot;, &quot;ProTestSRepCopy()&quot;,
+<a name="anchor-259"></a>                    status, status != PRO_TK_NO_ERROR);
+
+    ProTestSRepRepaint((ProSolid *)&amp;(simp_rep->owner));
+
+    return status;
+<a name="anchor-260"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestSRep2ColorDisplay
+PURPOSE  : 
+<a name="anchor-261"></a>\*====================================================================*/
+ProError ProTestSRep2ColorDisplay(SimpRepData *sr_data)
+{
+    ProError status;
+    ProModelitem mdl_item;
+<a name="anchor-262"></a>    ProSelection selection;
+    ProAsmcomppath comp_path;
+    ProSimprepdata *data;
+    ProSimprep simp_rep;
+    ItemColorData color_data;
+<a name="anchor-263"></a>    ProType model_type;
+    int model_id;
+    ProSimprepitem    *simprepitems;
+    int simprepitems_num, i;
+
+<a name="anchor-264"></a>
+/*--------------------------------------------------------------------*\
+    Display generic model/assembly
+\*--------------------------------------------------------------------*/
+    memcpy ( &amp;simp_rep, &amp;(sr_data->simp_rep), sizeof(ProSimprep));
+<a name="anchor-265"></a>    simp_rep.id = PRO_TK_NOT_USED;
+
+    status = ProSimprepActivate(*(sr_data->owner), &amp;simp_rep);
+    TEST_CALL_REPORT(&quot;ProSimprepActivate()&quot;, &quot;ProTestSRep2ColorDisplay()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-266"></a>
+    status = ProSolidDisplay(*(sr_data->owner));
+    TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, &quot;ProTestSRep2ColorDisplay()&quot;,
+                    status, status != PRO_TK_NO_ERROR &amp;&amp;
+                    status != PRO_TK_E_FOUND);
+<a name="anchor-267"></a>
+/*--------------------------------------------------------------------*\
+    Set active assembly back to one we are editing
+\*--------------------------------------------------------------------*/
+    status = ProSimprepActivate(*(sr_data->owner), &amp;(sr_data->simp_rep));
+<a name="anchor-268"></a>    TEST_CALL_REPORT(&quot;ProSimprepActivate()&quot;, &quot;ProTestSRep2ColorDisplay()&quot;,
+                                    status, status != PRO_TK_NO_ERROR);
+ 
+/*--------------------------------------------------------------------*\
+    Parts and assemblies need to be handled differently
+<a name="anchor-269"></a>\*--------------------------------------------------------------------*/
+    memset(&amp;comp_path, -1, sizeof(ProAsmcomppath));
+
+    status = ProMdlTypeGet(sr_data->simp_rep.owner, (ProMdlType *)&amp;model_type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestSRep2ColorDisplay()&quot;,
+<a name="anchor-270"></a>                                    status, status != PRO_TK_NO_ERROR);
+    if (model_type == PRO_ASSEMBLY)
+    {
+		comp_path.table_num = 0;
+		ProMdlIdGet(sr_data->simp_rep.owner, &amp;model_id);
+<a name="anchor-271"></a>		comp_path.owner = (ProSolid)(sr_data->simp_rep.owner);
+    }
+    
+    status = ProModelitemInit(sr_data->simp_rep.owner, model_id, 
+				    (ProType)model_type, &amp;mdl_item);
+<a name="anchor-272"></a>    TEST_CALL_REPORT(&quot;ProModelitemInit()&quot;, &quot;ProTestSRep2ColorDisplay()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+
+    status = ProSelectionAlloc(model_type==PRO_ASSEMBLY?&amp;comp_path:NULL,
+        &amp;mdl_item, &amp;selection);
+<a name="anchor-273"></a>    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;, &quot;ProTestSRep2ColorDisplay()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Highlight entire model
+<a name="anchor-274"></a>\*--------------------------------------------------------------------*/
+    status = ProSelectionHighlight(selection, PRO_COLOR_ERROR);
+    TEST_CALL_REPORT(&quot;ProSelectionHighlight()&quot;, &quot;ProTestSRep2ColorDisplay()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-275"></a>    status = ProSimprepdataGet(&amp;(sr_data->simp_rep), &amp;data);
+    TEST_CALL_REPORT(&quot;ProSimprepdataGet()&quot;, &quot;ProTestSRep2ColorDisplay()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-276"></a>    Highlight those data items in simp rep in WARNING color
+\*--------------------------------------------------------------------*/
+    color_data.owner = &amp;(sr_data->simp_rep);
+    color_data.color = PRO_COLOR_WARNING;
+
+<a name="anchor-277"></a>    status = ProUtilCollectSimprepsdataitems (data, &amp;simprepitems);
+        if (status == PRO_TK_NO_ERROR)
+        {
+            status = ProArraySizeGet ((ProArray)simprepitems, &amp;simprepitems_num);
+            TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestSRep2ColorDisplay()&quot;, 
+<a name="anchor-278"></a>            status, status != PRO_TK_NO_ERROR );
+            for (i = 0; i &lt; simprepitems_num; i++)
+            {
+                status = ProTestSRepItemsColor (simprepitems+i,
+     	            PRO_TK_NO_ERROR,( ItemColorData*)&amp;color_data);
+<a name="anchor-279"></a>            }
+            status = ProArrayFree ((ProArray*)&amp;simprepitems);
+            TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestSRep2ColorDisplay()&quot;, 
+                status, status != PRO_TK_NO_ERROR );
+        }
+<a name="anchor-280"></a>    
+    status = ProSimprepdataFree(&amp;data);
+    TEST_CALL_REPORT(&quot;ProSimprepdataFree()&quot;, &quot;ProTestSRep2ColorDisplay()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-281"></a>    return status;
+
+}
+
+/*====================================================================*\
+<a name="anchor-282"></a>FUNCTION : ProTestSRepItemsColor 
+PURPOSE  : Highlight a simplified rep item
+\*====================================================================*/
+ProError ProTestSRepItemsColor (
+    ProSimprepitem *p_item, 
+<a name="anchor-283"></a>    ProError err, 
+    ItemColorData *color_data)
+{
+    ProModelitem mdl_item;
+    ProMdl model;
+<a name="anchor-284"></a>    ProSelection p_sel_init;
+    ProError status;
+    ProAsmcomppath comp_path;
+    ProMdlType model_type;
+    int model_id;
+<a name="anchor-285"></a>    
+    status = ProMdlTypeGet(color_data->owner->owner, &amp;model_type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestSRepItemsColor()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+    if ( model_type == PRO_MDL_ASSEMBLY )
+<a name="anchor-286"></a>    {
+	status = ProAsmcomppathInit((ProSolid)color_data->owner->owner,
+				p_item->item_path.comp_path,
+				p_item->item_path.path_size,
+				&amp;comp_path);
+<a name="anchor-287"></a>	TEST_CALL_REPORT(&quot;ProAsmcomppathInit()&quot;, &quot;ProTestSRepItemsColor()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+    
+	status = ProAsmcomppathMdlGet(&amp;comp_path, &amp;model);    
+        
+<a name="anchor-288"></a>        if (status == PRO_TK_GENERAL_ERROR)
+          return (PRO_TK_E_NOT_FOUND);
+          
+	TEST_CALL_REPORT(&quot;ProAsmcomppathMdlGet()&quot;, &quot;ProTestSRepItemsColor()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-289"></a>
+	status = ProMdlIdGet(model, &amp;model_id);
+	TEST_CALL_REPORT(&quot;ProMdlIdGet()&quot;, &quot;ProTestSRepItemsColor()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-290"></a>	status = ProModelitemInit (model, model_id, (ProType) model_type, &amp;mdl_item);
+	TEST_CALL_REPORT(&quot;ProModelitemInit()&quot;, &quot;ProTestSRepItemsColor()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+        
+    }
+<a name="anchor-291"></a>    else
+    {
+	status = ProFeatureInit((ProSolid)color_data->owner->owner, 
+			    p_item->item_path.feat_id, &amp;mdl_item);
+	TEST_CALL_REPORT(&quot;ProFeatureInit()&quot;, &quot;ProTestSRepItemsColor()&quot;,
+<a name="anchor-292"></a>				    status, status != PRO_TK_NO_ERROR);
+
+	status = ProAsmcomppathInit((ProSolid)color_data->owner->owner,NULL,0,&amp;comp_path);
+	TEST_CALL_REPORT(&quot;ProAsmcomppathInit()&quot;, &quot;ProTestSRepItemsColor()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-293"></a>    }
+    
+    status = ProSelectionAlloc(&amp;comp_path, &amp;mdl_item, &amp;p_sel_init);
+    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;, &quot;ProTestSRepItemsColor()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-294"></a>
+    status = ProSelectionHighlight(p_sel_init, color_data->color );
+    TEST_CALL_REPORT(&quot;ProSelectionHighlight()&quot;, &quot;ProTestSRepItemsColor()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-295"></a>    return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION : ProTestSRepRepaint
+<a name="anchor-296"></a>PURPOSE  : Re-display assembly
+\*====================================================================*/
+int ProTestSRepRepaint(
+    ProSolid *p_solid)
+{
+<a name="anchor-297"></a>    ProError status;
+
+    status = ProSolidDisplay(*p_solid);
+    TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, &quot;ProTestSRepRepaint()&quot;,
+                    status, status != PRO_TK_NO_ERROR &amp;&amp;
+<a name="anchor-298"></a>                    status != PRO_TK_E_FOUND);
+    return 0;
+}
+
+/*====================================================================*\
+<a name="anchor-299"></a>FUNCTION : ProTestSRepNewNameGet
+PURPOSE  : 
+\*====================================================================*/
+ProError ProTestSRepNewNameGet(
+    wchar_t *wmessage)
+<a name="anchor-300"></a>{
+    wchar_t wdef[PRO_NAME_SIZE];
+    char    def[PRO_NAME_SIZE], message[PRO_LINE_SIZE];    
+
+    ProTKSprintf(def,&quot;REP%03d&quot;,++def_num);
+<a name="anchor-301"></a>    ProTKSprintf(message,&quot;Enter name of new simp rep [%s]: &quot;, def);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, message);
+    ProStringToWstring(wdef,def);
+    ProUtilStringGet(wmessage, wdef, PRO_NAME_SIZE);
+
+<a name="anchor-302"></a>    return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION : ProTestSRepVisActionSet
+<a name="anchor-303"></a>PURPOSE  : Sets the visible action button on the EDIT REP menu
+\*====================================================================*/
+void ProTestSRepVisActionSet (
+    ProSimprepActionType action )
+{
+<a name="anchor-304"></a>    ProMdlType type;
+    ProMdl model;
+    char str_type[30];
+    
+    ProMdlCurrentGet (&amp;model);
+<a name="anchor-305"></a>    ProMdlTypeGet (model, &amp;type);
+    if (type == PRO_MDL_ASSEMBLY)
+        ProTKSprintf (str_type, &quot;ASM EDIT REPRS&quot;);
+    else
+        ProTKSprintf (str_type, &quot;PART EDIT REPRS&quot;);
+<a name="anchor-306"></a>    switch (action)
+    {
+    case PRO_SIMPREP_EXCLUDE:
+        ProMenubuttonVisibilitySet(str_type,(char *)&quot;Exclude&quot;,PRO_B_FALSE);
+        break;
+<a name="anchor-307"></a>    case PRO_SIMPREP_INCLUDE:
+        ProMenubuttonVisibilitySet(str_type,(char *)&quot;Include&quot;,PRO_B_FALSE);
+        break;
+    case PRO_SIMPREP_GRAPHICS:
+        ProMenubuttonVisibilitySet(str_type,(char *)&quot;Graphics Rep&quot;,PRO_B_FALSE);
+<a name="anchor-308"></a>        break;
+    case PRO_SIMPREP_GEOM:
+        ProMenubuttonVisibilitySet(str_type,(char *)&quot;Geometry Rep&quot;,PRO_B_FALSE);
+        break;
+    }
+<a name="anchor-309"></a>}
+
+
+
+/*====================================================================*\
+<a name="anchor-310"></a>FUNCTION : ProTestSubstitutionInit
+PURPOSE  : Init the structure ProSubstitution.
+\*====================================================================*/
+ProError ProTestSubstitutionInit( ProSolid* p_solid, ProSubstitution* p_subst )
+{
+<a name="anchor-311"></a>    ProError		status;
+    int			menu_id;    /* The identifier of the created menu */
+    ProSubstType	subst_type = PRO_SUBST_NONE;
+    ProSimprep		simp_rep;
+
+<a name="anchor-312"></a>    /* Create menus */
+    status = ProMenuFileRegister( (char *)&quot;Subst Type&quot;, (char *)&quot;tksubst.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestSubstitutionInit()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-313"></a>    ProMenubuttonActionSet( (char *)&quot;Subst Type&quot;, (char *)&quot;PRO_SUBST_PRT_REP&quot;,
+	(ProMenubuttonAction)ProTestSubstTypeSet, &amp;subst_type, PRO_SUBST_PRT_REP );
+    ProMenubuttonActionSet( (char *)&quot;Subst Type&quot;, (char *)&quot;PRO_SUBST_ASM_REP&quot;,
+	(ProMenubuttonAction)ProTestSubstTypeSet, &amp;subst_type, PRO_SUBST_ASM_REP );
+    ProMenubuttonActionSet( (char *)&quot;Subst Type&quot;, (char *)&quot;Done/Return&quot;, 
+<a name="anchor-314"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+    ProMenubuttonActionSet((char *) &quot;Subst Type&quot;,(char *) &quot;Subst Type&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+    /* Make menu visible */
+<a name="anchor-315"></a>    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;Subst Type&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestSubstitutionInit()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-316"></a>	status = ProMenuProcess((char *) &quot;Subst Type&quot;, (int*)&amp;subst_type );
+	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSubstitutionInit()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+    switch( subst_type )
+<a name="anchor-317"></a>    {
+      case PRO_SUBST_PRT_REP:
+      case PRO_SUBST_ASM_REP:
+	/* Select a simp rep */
+        ProUtilMsgPrint( &quot;gen&quot;,&quot;TEST %0s&quot;,  &quot;Select simp rep to substitute with&quot; );
+<a name="anchor-318"></a>
+                 status = ProSimprepSelect(*p_solid, &amp;simp_rep );
+ 	 TEST_CALL_REPORT( &quot;ProSimprepSelect()&quot;, &quot;ProTestSubstitutionInit()&quot;,
+		 	    status, status != PRO_TK_NO_ERROR 
+			 	    &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+<a name="anchor-319"></a>
+         if( status == PRO_TK_NO_ERROR )
+         {
+	     status = ProSubstitutionInit( subst_type, PRO_VALUE_UNUSED, NULL, 
+	  				    &amp;simp_rep, p_subst );
+<a name="anchor-320"></a> 	     TEST_CALL_REPORT( &quot;ProSubstitutionInit()&quot;, 	&quot;ProTestSubstitutionInit()&quot;,
+			 	status, status != PRO_TK_NO_ERROR );
+         }
+      
+
+<a name="anchor-321"></a>        break;
+    }
+
+
+    return status;
+<a name="anchor-322"></a>}
+
+
+/*====================================================================*\
+FUNCTION : ProTestSubstTypeSet
+<a name="anchor-323"></a>PURPOSE  : On-button func. Set variable p_type to the value type.
+\*====================================================================*/
+int ProTestSubstTypeSet( ProSubstType* p_subst_type, ProSubstType subst_type )
+{
+    *p_subst_type = subst_type;
+<a name="anchor-324"></a>    ProMenuDeleteWithStatus (subst_type);
+    return 0;
+}
+
+
+<a name="anchor-325"></a>
+/*====================================================================*\
+FUNCTION : ProTestSelectModel
+PURPOSE  : On-button func. Select by mouse pick or by rules
+\*====================================================================*/
+<a name="anchor-326"></a>ProError ProTestSelectModel(
+    SelAppData		*p_sel_data,
+    int                 mode
+)
+{
+<a name="anchor-327"></a>    switch( mode )
+    {
+      case SEL_BY_RULE:
+	p_sel_data->status = ProSelectWithRules( p_sel_data->p_option, -1, 
+		NULL, NULL, NULL, NULL, 
+<a name="anchor-328"></a>		&amp;(p_sel_data->p_sel), &amp;(p_sel_data->num) );
+	break;
+
+      default:
+	p_sel_data->status = ProSelect( p_sel_data->p_option, -1, 
+<a name="anchor-329"></a>		NULL, NULL, NULL, NULL,
+        	 &amp;(p_sel_data->p_sel), &amp;(p_sel_data->num) );
+    }
+
+    ProMenuDelete();
+<a name="anchor-330"></a>
+
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-331"></a>
+
+/*====================================================================*\
+FUNCTION : ProTestSelectModelMenu
+PURPOSE  : On-button func. SELECT MDL menu
+<a name="anchor-332"></a>\*====================================================================*/
+ProError ProTestSelectModelMenu( 
+    char		*p_option,	/* In */
+    ProSelection	**p_sel,	/* Out */
+    int			*p_num		/* Out */
+<a name="anchor-333"></a>)
+{
+    ProError		status;
+    SelAppData		sel_data;
+    int			menu_id;
+<a name="anchor-334"></a>    int			menu_action;
+
+
+    sel_data.p_option = p_option;
+    sel_data.p_sel = NULL;
+<a name="anchor-335"></a>    sel_data.num = 0;
+    sel_data.status = PRO_TK_GENERAL_ERROR;
+
+/*--------------------------------------------------------------------*\
+    Create menus
+<a name="anchor-336"></a>\*--------------------------------------------------------------------*/
+    status = ProMenuFileRegister( (char *)&quot;SELECT MDL BY&quot;, (char *)&quot;tksrsel.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestSelectModelMenu()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-337"></a>    ProMenubuttonActionSet((char *) &quot;SELECT MDL BY&quot;, (char *)&quot;By Pick&quot;,
+	(ProMenubuttonAction)ProTestSelectModel, &amp;sel_data, SEL_BY_PICK );
+    ProMenubuttonActionSet( (char *)&quot;SELECT MDL BY&quot;,(char *) &quot;By Rule&quot;,
+	(ProMenubuttonAction)ProTestSelectModel, &amp;sel_data, SEL_BY_RULE );
+
+<a name="anchor-338"></a>    ProMenubuttonActionSet((char *) &quot;SELECT MDL BY&quot;, (char *)&quot;SELECT MDL BY&quot;,
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+/*--------------------------------------------------------------------*\
+    Make  menu visible
+<a name="anchor-339"></a>\*--------------------------------------------------------------------*/
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;SELECT MDL BY&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestSelectModelMenu()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-340"></a>    {
+	status = ProMenuProcess( (char *)&quot;SELECT MDL BY&quot;, &amp;menu_action );
+	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSelectModelMenu()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+<a name="anchor-341"></a>
+    *p_sel = sel_data.p_sel;
+    *p_num = sel_data.num;
+
+
+<a name="anchor-342"></a>    return sel_data.status;
+}
+
+
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+</pre>
+</body>
+</html>

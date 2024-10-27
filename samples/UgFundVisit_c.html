@@ -1,0 +1,176 @@
+<html>
+<head>
+<title>UgFundVisit.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProAxis.h&quot;
+#include &quot;ProFeature.h&quot;
+<a name="anchor-2"></a>#include &quot;ProFeatType.h&quot;
+#include &quot;ProGeomitem.h&quot;
+#include &quot;ProMdl.h&quot;
+#include &quot;ProModelitem.h&quot;
+#include &quot;ProObjects.h&quot;
+<a name="anchor-3"></a>#include &quot;ProSelection.h&quot;
+#include &quot;ProSizeConst.h&quot;
+#include &quot;ProSolid.h&quot;
+#include &quot;ProUtil.h&quot;
+
+<a name="anchor-4"></a>/*---------------------- Application Includes ------------------------*/
+#include &quot;TestError.h&quot;
+
+
+/*---------------------- Global Data ------------------------*/
+<a name="anchor-5"></a>typedef struct surface_visit_data
+{
+    FILE *fp;
+    ProSolid part;
+} AxisVisitData_t;
+<a name="anchor-6"></a>
+/*---------------------- Function Prototypes -------------------------*/
+ProError UserDemoAxisAct();
+ProError UserDemoHoleList();
+int UserVisitDemo();
+<a name="anchor-7"></a>
+
+/*====================================================================*\
+    FUNCTION :  UserDemoAxisAct()
+    PURPOSE  :  Axis-visit action function, to write the
+<a name="anchor-8"></a>		axis name to a file.
+\*====================================================================*/
+ProError UserDemoAxisAct(
+    ProAxis axis,
+    ProError filt_status,
+<a name="anchor-9"></a>    ProAppData app_data)
+{
+    ProError status;
+    AxisVisitData_t *p_data = (AxisVisitData_t*)app_data;
+    ProSolid part=p_data->part;
+<a name="anchor-10"></a>    FILE *fp=p_data->fp;
+    int id;
+    ProModelitem modelitem;
+    ProFeature feature;
+    ProFeattype ftype;
+<a name="anchor-11"></a>    ProName wname;
+    char name[PRO_NAME_SIZE];
+    ProSelection selection;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-12"></a>    Get the axis id
+\*--------------------------------------------------------------------*/
+    status = ProAxisIdGet(axis, &amp;id);
+    if(status != PRO_TK_NO_ERROR)
+        return(status);
+<a name="anchor-13"></a>
+/*--------------------------------------------------------------------*\
+    Make a Modelitem handle for the axis
+\*--------------------------------------------------------------------*/
+    status = ProModelitemInit(part, id, PRO_AXIS, &amp;modelitem);
+<a name="anchor-14"></a>    if(status != PRO_TK_NO_ERROR)
+        return(status);
+
+/*--------------------------------------------------------------------*\
+    Get the feature the axis belongs to
+<a name="anchor-15"></a>\*--------------------------------------------------------------------*/
+    status = ProGeomitemFeatureGet(&amp;modelitem, &amp;feature);
+    if(status != PRO_TK_NO_ERROR)
+        return(status);
+
+<a name="anchor-16"></a>/*--------------------------------------------------------------------*\
+    Get the type of the feature
+\*--------------------------------------------------------------------*/
+    status = ProFeatureTypeGet(&amp;feature, &amp;ftype);
+    if(status != PRO_TK_NO_ERROR)
+<a name="anchor-17"></a>        return(status);
+    
+/*--------------------------------------------------------------------*\
+    If the type was not HOLE, skip
+\*--------------------------------------------------------------------*/
+<a name="anchor-18"></a>    if(ftype != PRO_FEAT_HOLE)
+        return(PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Get the name of the axis
+<a name="anchor-19"></a>\*--------------------------------------------------------------------*/
+    status = ProModelitemNameGet(&amp;modelitem, wname);
+    if(status != PRO_TK_NO_ERROR)
+        return(status);
+    ProWstringToString(name,wname);
+<a name="anchor-20"></a>
+/*--------------------------------------------------------------------*\
+    Print out the axis name and hole id
+\*--------------------------------------------------------------------*/
+    ProTKFprintf(fp, &quot;Axis %s belongs to hole feature %d\n&quot;, name, feature.id);
+<a name="anchor-21"></a>
+/*--------------------------------------------------------------------*\
+    Highlight the owning hole
+\*--------------------------------------------------------------------*/
+    ProSelectionAlloc(NULL, &amp;feature, &amp;selection);
+<a name="anchor-22"></a>    ProSelectionHighlight(selection, PRO_COLOR_HIGHLITE);
+    ProSelectionFree(&amp;selection);
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-23"></a>
+
+/*====================================================================*\
+    FUNCTION :  UserDemoHoleList()
+    PURPOSE  :  Function to list the axes which belong to hole features
+<a name="anchor-24"></a>                in a part, and report their names
+\*====================================================================*/
+ProError UserDemoHoleList(
+    ProSolid part)
+{
+<a name="anchor-25"></a>    ProError status;
+    AxisVisitData_t data;
+
+    data.part = part;
+
+<a name="anchor-26"></a>/*--------------------------------------------------------------------*\
+    Open the text file
+\*--------------------------------------------------------------------*/
+    data.fp = PTApplsUnicodeFopen(&quot;visit_test.dat&quot;,&quot;w&quot;);
+
+<a name="anchor-27"></a>/*--------------------------------------------------------------------*\
+    Visit all the axes using the visit and filter functions above.
+    Pass the owning sold, and the text file pointer using the app_data argument.
+\*--------------------------------------------------------------------*/
+    status = ProSolidAxisVisit(part, UserDemoAxisAct,
+<a name="anchor-28"></a>                                NULL, (ProAppData)&amp;data);
+    ERROR_CHECK(&quot;UserDemoHoleList&quot;,&quot;ProSolidAxisVisit&quot;,status);
+/*--------------------------------------------------------------------*\
+    Close the file
+\*--------------------------------------------------------------------*/
+<a name="anchor-29"></a>    fclose(data.fp);
+
+    return( PRO_TK_NO_ERROR );
+}
+
+<a name="anchor-30"></a>/*====================================================================*\
+    FUNCTION :  UserVisitDemo
+    PURPOSE  :  call UserDemoHoleList on current model
+\*====================================================================*/
+
+<a name="anchor-31"></a>int UserVisitDemo( )
+{
+  ProMdl model;
+  ProError status;
+  
+<a name="anchor-32"></a>  status = ProMdlCurrentGet( &amp;model );
+  ERROR_CHECK( &quot;UserDemoVisit&quot;, &quot;ProMdlCurrentGet&quot;, status );
+
+  if ( status == PRO_TK_NO_ERROR )
+    status = UserDemoHoleList( (ProSolid)model );
+<a name="anchor-33"></a>
+  return( (int)status );
+}
+</pre>
+</body>
+</html>

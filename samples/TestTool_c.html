@@ -1,0 +1,631 @@
+<html>
+<head>
+<title>TestTool.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProToolinput.h>
+#include &lt;ProElement.h>
+#include &lt;ProTool.h>
+#include &lt;ProWcell.h>
+#include &lt;ProMdl.h>
+<a name="anchor-3"></a>#include &lt;ProMenu.h>
+#include &lt;ProToolElem.h>
+#include &lt;ProMessage.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;ProUtil.h>
+<a name="anchor-4"></a>
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestMfgNew.h&quot;
+<a name="anchor-5"></a>#include &quot;UtilMfgNew.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilGeom.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &quot;TestError.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilMessage.h&quot;
+
+/*--------------------------------------------------------------------*\
+Application data
+\*--------------------------------------------------------------------*/
+<a name="anchor-7"></a>struct Pro_TestToolType
+{
+   
+    ProToolType ToolType;
+    char *ToolTypeName;
+<a name="anchor-8"></a>    
+} ProTestToolType[] ={
+  {PRO_TOOL_NONE,        (char*)&quot;TOOL_NONE&quot;},
+  {PRO_TOOL_DRILL,       (char*)&quot;DRILL&quot;},
+  {PRO_TOOL_TURN,        (char*)&quot;TURN&quot;},
+<a name="anchor-9"></a>  {PRO_TOOL_SAW,         (char*)&quot;SAW&quot;},
+  {PRO_TOOL_MILL,        (char*)&quot;MILL&quot;},
+  {PRO_TOOL_GROOVE,      (char*)&quot;GROOVE&quot;},
+  {PRO_TOOL_NIBBLE,      (char*)&quot;NIBBLE&quot;},
+  {PRO_TOOL_PUNCH,       (char*)&quot;PUNCH&quot;},
+<a name="anchor-10"></a>  {PRO_TOOL_AUXILIARY,   (char*)&quot;AUXILIARY&quot;},
+  {PRO_TOOL_FORM,        (char*)&quot;FORM&quot;},
+  {PRO_TOOL_PUNPNT,      (char*)&quot;PUNPNT&quot;},
+  {PRO_TOOL_AREA_NIB,    (char*)&quot;AREA_NIB&quot;},
+  {PRO_TOOL_MFG_REFINE,  (char*)&quot;MFG REFINE&quot;},
+<a name="anchor-11"></a>  {PRO_TOOL_BORE,        (char*)&quot;BORE&quot;},
+  {PRO_TOOL_TAP,         (char*)&quot;TAP&quot;},
+  {PRO_TOOL_CSINK,       (char*)&quot;CSINK&quot;},
+  {PRO_TOOL_REAM,        (char*)&quot;REAM&quot;},
+  {PRO_TOOL_CENTER_DRL,  (char*)&quot;CDRILL&quot;},
+<a name="anchor-12"></a>  {PRO_TOOL_TURN_GRV,    (char*)&quot;TURN_GRV&quot;},
+  {PRO_TOOL_MILL_THREAD, (char*)&quot;MILL_THRD&quot;},
+  {PRO_TOOL_TURN_THREAD, (char*)&quot;TURN_THRD&quot;},
+  {PRO_TOOL_SHEAR,       (char*)&quot;SHEAR&quot;},
+  {PRO_TOOL_SIDE_MILL,   (char*)&quot;SIDE MILL&quot;},
+<a name="anchor-13"></a>  {PRO_TOOL_CMM_FIXED,   (char*)&quot;CMM FIXED&quot;},
+  {PRO_TOOL_CMM_ROTATED, (char*)&quot;CMM ROTATED&quot;},   /* 1&lt;&lt;25 */
+  {PRO_TOOL_BACK,        (char*)&quot;BACK&quot;},          /* 1&lt;&lt;27 */
+  {PRO_TOOL_PLUNGE_MILL, (char*)&quot;PLUNG MILL&quot;}};
+    
+<a name="anchor-14"></a>/*--------------------------------------------------------------------*\
+Function prototypes
+\*--------------------------------------------------------------------*/
+ProError ProUtilToolChoose(ProMfg *p_mfg, ProTool *p_sel_tool);
+
+<a name="anchor-15"></a>/*====================================================================*\
+FUNCTION : ProTestToolRedefine
+PURPOSE  : Redefine tool
+\*====================================================================*/
+ProError ProTestToolRedefine(MfgMenuChoice *obj_action)
+<a name="anchor-16"></a>{
+    ProTool tool;
+    ProToolinputPtr tool_input;
+    ProMfg mfg_model;
+    ProSolid mfg_solid;
+<a name="anchor-17"></a>    ProAsmcomppath comp_path;
+    ProToolElem tool_elem;
+    ProErrorlist err_list;
+    ProError status;
+    ProToolType tool_type;
+<a name="anchor-18"></a>    ToolCreationType creation_type;
+    char str[PRO_LINE_SIZE];
+    wchar_t wstr[PRO_LINE_SIZE];
+    char p_param_file[PRO_LINE_SIZE];
+    int attrs;
+<a name="anchor-19"></a>    
+    
+    status=ProTestGetModels(&amp;mfg_model, &amp;mfg_solid, &amp;comp_path);
+/*--------------------------------------------------------------------*\
+    Get tool's name
+<a name="anchor-20"></a>\*--------------------------------------------------------------------*/
+    status = ProUtilToolChoose(&amp;mfg_model, &amp;tool);
+
+    if (status != PRO_TK_NO_ERROR)
+    {
+<a name="anchor-21"></a>        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,(char*)&quot;No Tools available&quot;);
+        return (PRO_TK_NO_ERROR);
+    }
+    	
+    status = ProToolVerify (&amp;tool);
+<a name="anchor-22"></a>    TEST_CALL_REPORT(&quot;ProToolVerify()&quot;,
+        &quot;ProTestToolRedefine()&quot;, status,
+        (status != PRO_TK_NO_ERROR));
+    if (status != PRO_TK_NO_ERROR)
+    {
+<a name="anchor-23"></a>        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Tool is not valid&quot;);
+        return (PRO_TK_NO_ERROR);
+    }
+    
+    status = ProToolTypeGet (&amp;tool, &amp;tool_type);
+<a name="anchor-24"></a>    TEST_CALL_REPORT(&quot;ProToolTypeGet()&quot;,
+        &quot;ProTestToolRedefinel()&quot;, status,
+        (status != PRO_TK_NO_ERROR));
+        
+    status = ProToolinputAlloc(&amp;tool_input);
+<a name="anchor-25"></a>    TEST_CALL_REPORT(&quot;ProToolinputAlloc()&quot;,
+	    &quot;ProTestToolRedefine()&quot;, status, status != PRO_TK_NO_ERROR);
+    
+/*--------------------------------------------------------------------*\
+    Query the user the type of creation: from param file or solid part 
+<a name="anchor-26"></a>\*--------------------------------------------------------------------*/
+    creation_type = ProUtilSelectCreationType();
+
+        if (creation_type == FROM_PARAMFILE_BY_COPY ||
+	creation_type == FROM_PARAMFILE_BY_REF||
+<a name="anchor-27"></a>	creation_type == FROM_SOLID_BY_COPY ||
+	creation_type == FROM_SOLID_BY_REF)
+    {
+
+	 status = ProToolAttributesGet (&amp;tool, &amp;attrs);
+<a name="anchor-28"></a>        TEST_CALL_REPORT(&quot;ProToolAttributesGet()&quot;,
+                        &quot;ProTestToolRedefine()&quot;, status,
+                        (status != PRO_TK_NO_ERROR));
+	
+	switch (creation_type)
+<a name="anchor-29"></a>	{
+	    case FROM_PARAMFILE_BY_COPY:
+		PRO_TOOL_ATTRIBUTE_RMV (attrs, PRO_TOOL_BY_REFERENCE);
+		creation_type = FROM_PARAMFILE;
+		break;
+<a name="anchor-30"></a>	    case FROM_PARAMFILE_BY_REF:
+		PRO_TOOL_ATTRIBUTE_ADD (attrs, PRO_TOOL_BY_REFERENCE);
+		creation_type = FROM_PARAMFILE;
+		break;
+	    case FROM_SOLID_BY_COPY:
+<a name="anchor-31"></a>		PRO_TOOL_ATTRIBUTE_RMV (attrs, PRO_TOOL_BY_REFERENCE);
+		creation_type = FROM_SOLID;
+		break;
+	    case FROM_SOLID_BY_REF:
+		PRO_TOOL_ATTRIBUTE_ADD (attrs, PRO_TOOL_BY_REFERENCE);
+<a name="anchor-32"></a>		creation_type = FROM_SOLID;
+		break;
+	}
+	
+	status = ProElementAlloc(PRO_E_ATTRIBUTES, &amp;tool_elem);
+<a name="anchor-33"></a>	TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;,
+			 &quot;ProTestCreateTool()&quot;, status, (status != PRO_TK_NO_ERROR));
+	
+	status = ProToolElemAttrSet (tool_elem, attrs);
+	TEST_CALL_REPORT(&quot;ProToolElemAttrSet()&quot;,
+<a name="anchor-34"></a>	          &quot;ProTestCreateTool()&quot;, status, (status != PRO_TK_NO_ERROR));
+
+	status = ProToolinputElemAdd(tool_input,tool_elem);
+	TEST_CALL_REPORT(&quot;ProToolinputElemAdd()&quot;,
+		&quot;ProTestCreateTool()&quot;, status,
+<a name="anchor-35"></a>			 (status != PRO_TK_NO_ERROR));
+    }
+    
+
+    switch (creation_type)
+<a name="anchor-36"></a>    {
+    case FROM_PARAMFILE :
+	status = ProElementAlloc(PRO_E_PARAMS, &amp;tool_elem);
+        TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;,
+           &quot;ProTestToolRedefine()&quot;, status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-37"></a>        ProTKSprintf(str,(char*)&quot;USER Enter Parameters file name: &quot;);	
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,str);
+        if ( ProUtilStringGet(wstr, NULL,PRO_LINE_SIZE))
+            ProWstringToString(p_param_file, wstr);
+	status = ProUtilParamFileRead(p_param_file,TOOL,tool_elem);
+<a name="anchor-38"></a>	break;
+	
+    case FROM_SOLID: 
+	status = ProElementAlloc(PRO_E_TOOL_MODEL, &amp;tool_elem);
+        TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;,
+<a name="anchor-39"></a>          &quot;ProTestToolRedefine()&quot;, status, (status != PRO_TK_NO_ERROR));
+	status = ProUtilToolFromSolidAdd(tool_elem);
+        break;
+    }
+
+<a name="anchor-40"></a>    status = ProToolinputElemAdd(tool_input,tool_elem);
+    TEST_CALL_REPORT(&quot;ProToolinputElemAdd()&quot;,
+	&quot;ProTestToolRedefine()&quot;, status,
+	(status != PRO_TK_NO_ERROR));
+
+<a name="anchor-41"></a>    status = ProToolinputTypeSet(tool_input,tool_type);
+    TEST_CALL_REPORT(&quot;ProToolinputTypeSet()&quot;,
+        &quot;ProTestToolRedefine()&quot;, status,
+        (status != PRO_TK_NO_ERROR));
+
+<a name="anchor-42"></a>    status = ProToolRedefine(&amp;tool, tool_input, &amp;err_list);
+    TEST_CALL_REPORT(&quot;ProToolRedefine()&quot;,
+        &quot;ProTestToolRedefine()&quot;, status,
+	(status != PRO_TK_NO_ERROR));
+
+<a name="anchor-43"></a>    if (status != PRO_TK_NO_ERROR)
+    {
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Tool redefine failed&quot;);
+    }
+    else
+<a name="anchor-44"></a>    {
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Tool redefine successfully&quot;);
+    }
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-45"></a>    Free the input structure
+\*--------------------------------------------------------------------*/
+    ProToolinputFreeAllElems (tool_input);
+    status = ProToolinputFree(&amp;tool_input);
+    TEST_CALL_REPORT(&quot;ProToolinputFree()&quot;,
+<a name="anchor-46"></a>	&quot;ProTestToolRedefine()&quot;, status,
+	(status != PRO_TK_NO_ERROR));
+    if (status == PRO_TK_NO_ERROR)
+    {
+        TEST_CALL_REPORT(&quot;ProToolinputFreeAllElems()&quot;,
+<a name="anchor-47"></a>            &quot;ProTestToolRedefine()&quot;, PRO_TK_NO_ERROR, 0);
+    }
+	
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-48"></a>
+/*====================================================================*\
+FUNCTION : ProTestToolTypeGet
+PURPOSE  : Get Tool Type by index
+\*====================================================================*/
+<a name="anchor-49"></a>ProError ProTestToolTypeGet (
+    char **         cToolName,
+    ProToolType *   ToolType,
+    int             idx)
+{
+<a name="anchor-50"></a>    
+    if (idx >= sizeof (ProTestToolType) /sizeof (ProTestToolType[0]))
+    {
+	return PRO_TK_BAD_INPUTS;
+    }
+<a name="anchor-51"></a>   
+
+    (*cToolName) = ProTestToolType[idx].ToolTypeName;
+
+    *ToolType = ProTestToolType[idx].ToolType;
+<a name="anchor-52"></a>    return PRO_TK_NO_ERROR;
+}
+
+
+
+<a name="anchor-53"></a>/*====================================================================*\
+FUNCTION : ProTestCreateTool
+PURPOSE  : Create tool
+\*====================================================================*/
+ProError ProTestCreateTool(
+<a name="anchor-54"></a>    MfgMenuChoice *obj_action)
+{
+    ProLine tool_id;
+    ProToolType tool_type;
+    char p_param_file[PRO_LINE_SIZE];
+<a name="anchor-55"></a>    ProTool *p_tool;
+    ProToolinputPtr tool_input;
+    ProToolElem tool_elem;
+    ProErrorlist err_list;
+    ProMfg mfg_model;
+<a name="anchor-56"></a>    ProSolid mfg_solid;
+    ProAsmcomppath comp_path;
+    ToolCreationType creation_type;
+    char str[PRO_LINE_SIZE];
+    wchar_t wstr[PRO_LINE_SIZE];
+<a name="anchor-57"></a>    ProError status;
+    int	id, attrs = 0;
+    int i;
+    char * cTTypeName;
+    ProToolType ToolType;
+<a name="anchor-58"></a>    wchar_t ** ToolTypeNames;
+    int NumTT;
+
+/*--------------------------------------------------------------------*\
+    Get tool's name
+<a name="anchor-59"></a>\*--------------------------------------------------------------------*/
+    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Enter tool name: &quot;);
+    ProMessageStringRead(PRO_LINE_SIZE, tool_id);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-60"></a>    Get tool's type
+\*--------------------------------------------------------------------*/
+    NumTT = sizeof (ProTestToolType) /sizeof (ProTestToolType[0]);
+    
+    ToolTypeNames = (wchar_t **) calloc (NumTT+1, sizeof (wchar_t*));
+<a name="anchor-61"></a>    
+    for (i=0; i&lt;NumTT; i++)
+    {
+	 ToolTypeNames[i] = (wchar_t*) calloc (PRO_NAME_SIZE, sizeof(wchar_t));
+	 ProTestToolTypeGet (&amp;cTTypeName, &amp;ToolType, i);
+<a name="anchor-62"></a>	 ProStringToWstring(ToolTypeNames[i], cTTypeName );
+    }
+
+    ToolTypeNames[i] = (wchar_t*) calloc (PRO_NAME_SIZE, sizeof(wchar_t));
+
+<a name="anchor-63"></a>     ProStringToWstring(ToolTypeNames[i], (char*)&quot;&quot; );
+     status = ProMenuFromStringsRegister((char*)&quot;Tool Type&quot;, NULL, ToolTypeNames,
+					 NULL, NULL, &amp;id);
+     TEST_CALL_REPORT(&quot;ProMenuFromStringsRegister()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+	    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-64"></a>	 
+     for (i=0; i&lt;NumTT; i++)
+     {
+	 ProTestToolTypeGet (&amp;cTTypeName, &amp;ToolType, i);
+	 status = ProMenubuttonActionSet((char*)&quot;Tool Type&quot;,cTTypeName ,
+<a name="anchor-65"></a>              (ProMenubuttonAction)ProUtilAssign, &amp;tool_type, ToolType);
+	 
+	 TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestCreateTool&quot;,
+			   status, status != PRO_TK_NO_ERROR);
+     }
+<a name="anchor-66"></a>
+     status = ProMenubuttonActionSet((char*)&quot;Tool Type&quot;, (char*)&quot;&quot;,
+	  (ProMenubuttonAction)ProMenuDelete, &amp;tool_type, 0);
+
+     for (i=0; i&lt;NumTT; i++)
+<a name="anchor-67"></a>	 free (ToolTypeNames[i]);
+     free (ToolTypeNames);
+     
+    status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;Tool Type&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate&quot;, &quot;ProTestCreateTool&quot;,
+<a name="anchor-68"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess((char*)&quot;Tool Type&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProTestCreateTool&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-69"></a>/*--------------------------------------------------------------------*\
+    Allocate space for the tool
+\*--------------------------------------------------------------------*/
+    p_tool = (ProTool *) calloc (1, sizeof(ProTool));
+
+<a name="anchor-70"></a>/*--------------------------------------------------------------------*\
+    Get Manufacturing model and its associated solid part
+\*--------------------------------------------------------------------*/
+    status=ProTestGetModels(&amp;mfg_model, &amp;mfg_solid, &amp;comp_path);
+
+<a name="anchor-71"></a>    status = ProToolinputAlloc(&amp;tool_input);
+    TEST_CALL_REPORT(&quot;ProToolinputAlloc()&quot;,
+	    &quot;ProTestCreateTool()&quot;, status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-72"></a>    Set tool parameters and elements
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+    Query the user the type of creation: from param file or solid part 
+<a name="anchor-73"></a>\*--------------------------------------------------------------------*/
+    creation_type = ProUtilSelectCreationType();
+
+    if (creation_type == FROM_PARAMFILE_BY_COPY ||
+	creation_type == FROM_PARAMFILE_BY_REF||
+<a name="anchor-74"></a>	creation_type == FROM_SOLID_BY_COPY ||
+	creation_type == FROM_SOLID_BY_REF)
+    {
+	switch (creation_type)
+	{
+<a name="anchor-75"></a>	    case FROM_PARAMFILE_BY_COPY:
+		PRO_TOOL_ATTRIBUTE_RMV (attrs, PRO_TOOL_BY_REFERENCE);
+		creation_type = FROM_PARAMFILE;
+		break;
+	    case FROM_PARAMFILE_BY_REF:
+<a name="anchor-76"></a>		PRO_TOOL_ATTRIBUTE_ADD (attrs, PRO_TOOL_BY_REFERENCE);
+		creation_type = FROM_PARAMFILE;
+		break;
+	    case FROM_SOLID_BY_COPY:
+		PRO_TOOL_ATTRIBUTE_RMV (attrs, PRO_TOOL_BY_REFERENCE);
+<a name="anchor-77"></a>		creation_type = FROM_SOLID;
+		break;
+	    case FROM_SOLID_BY_REF:
+		PRO_TOOL_ATTRIBUTE_ADD (attrs, PRO_TOOL_BY_REFERENCE);
+		creation_type = FROM_SOLID;
+<a name="anchor-78"></a>		break;
+	}
+
+	status = ProElementAlloc(PRO_E_ATTRIBUTES, &amp;tool_elem);
+	TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;,
+<a name="anchor-79"></a>			 &quot;ProTestCreateTool()&quot;, status, (status != PRO_TK_NO_ERROR));
+	
+	status = ProToolElemAttrSet (tool_elem, attrs);
+	TEST_CALL_REPORT(&quot;ProToolElemAttrSet()&quot;,
+	          &quot;ProTestCreateTool()&quot;, status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-80"></a>
+	status = ProToolinputElemAdd(tool_input,tool_elem);
+	TEST_CALL_REPORT(&quot;ProToolinputElemAdd()&quot;,
+		&quot;ProTestCreateTool()&quot;, status,
+			 (status != PRO_TK_NO_ERROR));
+<a name="anchor-81"></a>    }
+    
+		
+		    
+
+<a name="anchor-82"></a>     switch (creation_type)
+	{		
+	    case FROM_PARAMFILE :
+		status = ProElementAlloc(PRO_E_PARAMS, &amp;tool_elem);
+	        TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;,
+<a name="anchor-83"></a>	          &quot;ProTestCreateTool()&quot;, status, (status != PRO_TK_NO_ERROR));
+
+		 ProTKSprintf(str,(char*)&quot;USER Enter Parameters file name: &quot;);	
+		 ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,str);
+		  if ( ProUtilStringGet(wstr, NULL,PRO_LINE_SIZE))
+<a name="anchor-84"></a>		     ProWstringToString(p_param_file, wstr);
+		 status = ProUtilParamFileRead(p_param_file,TOOL,tool_elem);
+		break;
+
+	    case FROM_SOLID: 
+<a name="anchor-85"></a>		status = ProElementAlloc(PRO_E_TOOL_MODEL, &amp;tool_elem);
+	        TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;,
+	          &quot;ProTestCreateTool()&quot;, status, (status != PRO_TK_NO_ERROR));
+		status = ProUtilToolFromSolidAdd(tool_elem);
+               break;
+<a name="anchor-86"></a>	}
+
+
+       status = ProToolinputElemAdd(tool_input,tool_elem);
+       TEST_CALL_REPORT(&quot;ProToolinputElemAdd()&quot;,
+<a name="anchor-87"></a>		&quot;ProTestCreateTool()&quot;, status,
+		(status != PRO_TK_NO_ERROR));
+
+       status = ProToolinputTypeSet(tool_input,tool_type);
+       TEST_CALL_REPORT(&quot;ProToolinputTypeSet()&quot;,
+<a name="anchor-88"></a>	    &quot;ProTestCreateTool()&quot;, status,
+	    (status != PRO_TK_NO_ERROR));
+	
+/*--------------------------------------------------------------------*\
+    Create the tool
+<a name="anchor-89"></a>\*--------------------------------------------------------------------*/
+       status = ProToolInit(tool_id, mfg_model, p_tool);
+       TEST_CALL_REPORT(&quot;ProToolInit()&quot;,
+		&quot;ProTestCreateTool()&quot;, status,
+		(status != PRO_TK_NO_ERROR));
+<a name="anchor-90"></a>
+       status = ProToolCreate(p_tool, tool_input, &amp;err_list);
+       TEST_CALL_REPORT(&quot;ProToolCreate()&quot;,
+		&quot;ProTestCreateTool()&quot;, status,
+		(status != PRO_TK_NO_ERROR));
+<a name="anchor-91"></a>
+       if (status != PRO_TK_NO_ERROR)
+         {
+           ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Tool creation failed&quot;);
+         }
+<a name="anchor-92"></a>       else
+         {
+           ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Tool created successfully&quot;);
+           status = ProMenubuttonUnhighlight((char*)&quot;TkMfgDQ&quot;,(char*)&quot;Done&quot;);
+           TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestCreateTool&quot;,
+<a name="anchor-93"></a>               status, status != PRO_TK_NO_ERROR);
+           status = ProMenubuttonActivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Route&quot;);
+           TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestCreateTool&quot;,
+               status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-94"></a>           /*---------------------------------------------*\
+             Update the object list
+           \*---------------------------------------------*/
+           status = ProTestMfgObjectsCollect(mfg_model,obj_action->mfgobj_list);
+         }
+<a name="anchor-95"></a>
+/*--------------------------------------------------------------------*\
+    Free the input structure
+\*--------------------------------------------------------------------*/
+        ProToolinputFreeAllElems (tool_input);
+<a name="anchor-96"></a>	status = ProToolinputFree(&amp;tool_input);
+	TEST_CALL_REPORT(&quot;ProToolinputFree()&quot;,
+		&quot;ProTestCreateTool()&quot;, status,
+		(status != PRO_TK_NO_ERROR));
+        if (status == PRO_TK_NO_ERROR)
+<a name="anchor-97"></a>        {
+            TEST_CALL_REPORT(&quot;ProToolinputFreeAllElems()&quot;,
+		&quot;ProTestCreateTool()&quot;, PRO_TK_NO_ERROR, 0);
+        }
+	
+<a name="anchor-98"></a>    return (PRO_TK_NO_ERROR);	
+}
+ /*====================================================================*\
+FUNCTION : ProUtilSelectToolatrr()
+PURPOSE  : Menu to select tool attr
+<a name="anchor-99"></a>\*====================================================================*/
+
+int ProUtilSelectToolatrr(void *app_data, int value)
+{
+    ProError	status;
+<a name="anchor-100"></a>    int 	id;
+    int         attr;
+    
+ status = ProMenuFileRegister((char*)&quot;TkToolAttr&quot;, (char*)&quot;tktoolattr.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProUtilSelectToolatrr&quot;,
+<a name="anchor-101"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkToolAttr&quot;,(char*)&quot;-By Refference&quot;, (ProMenubuttonAction)ProUtilAssign,
+                                        &amp;attr, (int)BY_REF);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProUtilSelectToolatrr&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-102"></a>
+    status = ProMenubuttonActionSet((char*)&quot;TkToolAttr&quot;,(char*)&quot;-By Copy&quot;, (ProMenubuttonAction)ProUtilAssign,
+                                            &amp;attr, (int)BY_COPY);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProUtilSelectToolatrr&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-103"></a>
+    status = ProMenubuttonActionSet((char*)&quot;TkToolAttr&quot;,(char*)&quot;TkToolType&quot;,
+        (ProMenubuttonAction)ProMenuHold,NULL,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProUtilSelectToolatrr&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-104"></a>
+    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*)&quot;TkToolAttr&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate&quot;, &quot;ProUtilSelectToolatrr&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess((char*)&quot;TkToolAttr&quot;, &amp;id);
+<a name="anchor-105"></a>    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProUtilSelectToolatrr&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    
+    *((int *)app_data) = attr;
+	
+<a name="anchor-106"></a>
+    return attr;
+}
+/*====================================================================*\
+FUNCTION : ProUtilSelectCreationType()
+<a name="anchor-107"></a>PURPOSE  : Menu to select method of tool creation
+\*====================================================================*/
+ToolCreationType ProUtilSelectCreationType()
+{
+    ToolCreationType value, val1 = FROM_PARAMFILE ;
+<a name="anchor-108"></a>    ProError	status;
+    int 	id;
+ 
+    status = ProMenuFileRegister((char*)&quot;TkToolType&quot;, (char*)&quot;tktooltype.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProUtilSelectCreationType&quot;,
+<a name="anchor-109"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TKToolType&quot;,(char*)&quot;-Param File&quot;, (ProMenubuttonAction)ProUtilAssign,
+                                        &amp;value, (int)FROM_PARAMFILE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProUtilSelectCreationType&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-110"></a>
+    status = ProMenubuttonActionSet((char*)&quot;TKToolType&quot;,(char*)&quot;-Solid&quot;, (ProMenubuttonAction)ProUtilAssign,
+                                            &amp;value, (int)FROM_SOLID);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProUtilSelectCreationType&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-111"></a>
+     status = ProMenubuttonActionSet((char*)&quot;TKToolType&quot;,(char*)&quot;-Select Attr&quot;, (ProMenubuttonAction)ProUtilSelectToolatrr,
+                                            &amp;val1, (int)FROM_SOLID);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProUtilSelectCreationType&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-112"></a>
+    status = ProMenubuttonActionSet((char*)&quot;TKToolType&quot;,(char*)&quot;TkToolType&quot;,
+        (ProMenubuttonAction)ProMenuHold,NULL,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProUtilSelectCreationType&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-113"></a>
+    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*)&quot;TKToolType&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate&quot;, &quot;ProUtilSelectCreationType&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess((char*)&quot;TkToolType&quot;, &amp;id);
+<a name="anchor-114"></a>    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProUtilSelectCreationType&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    if (val1 != FROM_PARAMFILE)
+    {
+<a name="anchor-115"></a>	switch (val1)
+	{
+	    
+	    case BY_COPY:
+		if (value == FROM_SOLID) value = FROM_SOLID_BY_COPY;
+<a name="anchor-116"></a>		else
+		    value = FROM_PARAMFILE_BY_COPY;
+		break;
+	    case BY_REF:
+		if (value == FROM_SOLID) value = FROM_SOLID_BY_REF;
+<a name="anchor-117"></a>		else
+		    value = FROM_PARAMFILE_BY_REF;
+		break;
+	}
+    }
+<a name="anchor-118"></a>
+    
+
+    return value;
+}
+<a name="anchor-119"></a>
+/*====================================================================*\
+FUNCTION : ProUtilToolFromSolidAdd()
+PURPOSE  : Create tool from named part file      
+\*====================================================================*/
+<a name="anchor-120"></a>ProError ProUtilToolFromSolidAdd(
+    ProToolElem tool_elem)
+{
+    ProMdl tool_part;
+    wchar_t part_name[PRO_FAMILY_MDLNAME_SIZE];
+<a name="anchor-121"></a>    ProError status;
+
+    /* Default tool model is &quot;tool.prt&quot; */
+    ProStringToWstring(part_name, (char*)&quot;tool&quot;);
+    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,(char*)&quot;Enter a model name(no type): &quot;);
+<a name="anchor-122"></a>    ProUtilStringGet(part_name, NULL,PRO_LINE_SIZE);
+
+    status = ProMdlnameRetrieve(part_name, (ProMdlfileType)PRO_PART, &amp;tool_part); 
+    TEST_CALL_REPORT(&quot;ProMdlnameRetrieve()&quot;,
+                &quot;ProUtilToolFromSolidAdd()&quot;, status,
+<a name="anchor-123"></a>                (status != PRO_TK_NO_ERROR));
+
+    status = ProToolElemModelSet(tool_elem, tool_part);
+    TEST_CALL_REPORT(&quot;ProToolElemModelSet()&quot;,
+                &quot;ProUtilToolFromSolidAdd()&quot;, status,
+<a name="anchor-124"></a>                (status != PRO_TK_NO_ERROR));
+    return status;
+}
+</pre>
+</body>
+</html>

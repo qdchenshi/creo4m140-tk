@@ -1,0 +1,1156 @@
+<html>
+<head>
+<title>TestDtlnote.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*--------------------------------------------------------------------*\
+    Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-2"></a>#include &lt;ProToolkit.h>
+#include &lt;ProArray.h>
+#include &lt;ProMdl.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProMenu.h>
+<a name="anchor-3"></a>#include &lt;ProUtil.h>
+#include &lt;ProDtlnote.h>
+#include &lt;ProNote.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-4"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &quot;UtilFiles.h&quot;
+<a name="anchor-5"></a>#include &lt;ProTKRunTime.h>
+#include &lt;ProMessage.h>
+
+#define NOTE_ATTR_MIRROR     0
+#define NOTE_ATTR_JUSTIF     1
+<a name="anchor-6"></a>#define NOTE_ATTR_READONLY   2
+
+#define NOTE_FONT            0
+#define NOTE_ULINE           1
+#define NOTE_THICKNESS       2
+<a name="anchor-7"></a>#define NOTE_SLANT           3
+#define NOTE_WIDTH           4
+#define NOTE_HEIGHT          5
+#define NOTE_STRING          6
+
+<a name="anchor-8"></a>#define NOTE_MOD_TEXT        0
+#define NOTE_MOD_ATTR        1
+#define NOTE_MOD_COLOR       2
+#define NOTE_MOD_LOCATION    3
+#define NOTE_MOD_ATTACH      4
+<a name="anchor-9"></a>#define NOTE_MOD_ANGLE       5
+#define NOTE_MOD_ELB         6
+#define NOTE_MOD_READONLY    7
+
+#define NOTE_REMOVE          0  
+<a name="anchor-10"></a>#define NOTE_ERASE           1
+#define NOTE_DELETE          2
+
+#define DTL_NOTE_FILE       &quot;.inf&quot;
+
+<a name="anchor-11"></a>/*---------------------------------------------------------------------*\
+    Functions declaration
+\*---------------------------------------------------------------------*/
+int ProTestDtlNoteCreateMenu (void*, int);
+int ProTestDtlNoteCreate (void*);
+<a name="anchor-12"></a>int ProTestDtlNoteModify (void*);
+int ProTestDtlNoteInfo (void*);
+int ProTestDtlNoteDisplay (void*);
+
+int ProTestLocationGet (ProDrawing, ProView, ProDtlattachType, ProDtlattach*);
+<a name="anchor-13"></a>int ProTestNoteTextGet (ProDtlnoteline**);
+
+int ProTestAssignAttr (ProAppData , int );
+
+ProError ProTestLeadersGet (ProDtlattach** );
+<a name="anchor-14"></a>ProError ProTestAttachTypeGet (ProDtlattachType*);
+
+/*---------------------------------------------------------------------*\
+    Function:    ProTestDtlNoteMenu()
+    Purpose:    On-button function. Set up the dtl note menu
+<a name="anchor-15"></a>    Returns:    0 - success; -1 - error.
+\*---------------------------------------------------------------------*/
+int ProTestDtlNoteMenu (void** app_data)
+{
+    ProError    status;
+<a name="anchor-16"></a>    int         menu_id;    /* The identifier of the created menu */
+    int         action;
+    ProDrawing  drawing = (ProDrawing)*app_data;
+    
+    /*--------------------------------------------------------------------*\
+<a name="anchor-17"></a>      Enables  the Pro/ENGINEER user to select drawing 
+      detail notes flagged as read-only. 
+    \*--------------------------------------------------------------------*/   
+    status = ProDrawingReadonlyselectionAllow (PRO_B_TRUE);
+    TEST_CALL_REPORT( &quot;ProDrawingReadonlyselectionAllow()&quot;, 
+<a name="anchor-18"></a>        &quot;ProTestDtlNoteMenu()&quot;, status, status != PRO_TK_NO_ERROR );
+    
+    /*---------------------------------*\
+    Create new menu Note
+    \*---------------------------------*/
+<a name="anchor-19"></a>    /* Load base menu from file */
+    status = ProMenuFileRegister( (char*)&quot;Note&quot;, (char*)&quot;tkdtlnote.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestDtlNoteMenu()&quot;, 
+        status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-20"></a>    /* Define menu buttons */
+    ProMenubuttonActionSet( (char*)&quot;Note&quot;, (char*)&quot;Create&quot;, 
+        (ProMenubuttonAction)ProTestDtlNoteCreate, drawing, 0);
+    ProMenubuttonActionSet( (char*)&quot;Note&quot;, (char*)&quot;Modify&quot;, 
+        (ProMenubuttonAction)ProTestDtlNoteModify, drawing, 0);
+<a name="anchor-21"></a>    ProMenubuttonActionSet( (char*)&quot;Note&quot;, (char*)&quot;Info&quot;, 
+        (ProMenubuttonAction)ProTestDtlNoteInfo, drawing, 0);
+    ProMenubuttonActionSet( (char*)&quot;Note&quot;, (char*)&quot;Display&quot;, 
+        (ProMenubuttonAction)ProTestDtlNoteDisplay, drawing, 0);
+    ProMenubuttonActionSet( (char*)&quot;Note&quot;, (char*)&quot;Note&quot;, 
+<a name="anchor-22"></a>        (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+    /*--------------------------*\
+    Run menu Disp List
+    \*--------------------------*/
+<a name="anchor-23"></a>    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;Note&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestDtlNoteMenu()&quot;, 
+        status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-24"></a>        status = ProMenuProcess( (char*)&quot;&quot;, &amp;action );
+        TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestDtlNoteMenu()&quot;, 
+            status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_FOUND);
+    }
+
+<a name="anchor-25"></a>    return 0;
+}
+
+/*---------------------------------------------------------------------*\
+    Function:   ProTestAttachTypeGet()
+<a name="anchor-26"></a>    Purpose:    Get attachment type
+\*---------------------------------------------------------------------*/
+ProError ProTestAttachTypeGet (ProDtlattachType *at_type)
+{
+    ProError err;
+<a name="anchor-27"></a>    static ProUtilMenuButtons attach_type[] = { 
+        {&quot;NoteAttach&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Free&quot;, PRO_DTLATTACHTYPE_FREE, 0},
+        {&quot;Parametric&quot;, PRO_DTLATTACHTYPE_PARAMETRIC, 0},
+        {&quot;&quot;,0,0}
+<a name="anchor-28"></a>    };
+    err = ProUtilMenuIntValueSelect(attach_type, (int*)at_type);
+    return (err);
+}
+/*---------------------------------------------------------------------*\
+<a name="anchor-29"></a>    Function:    ProTestDtlNoteCreate()
+    Purpose:    On-button function. Create a note.
+    Returns:    0 - success; -1 - error.
+\*---------------------------------------------------------------------*/
+int ProTestDtlNoteCreate (void* app_data)
+<a name="anchor-30"></a>{
+    ProDrawing drawing = (ProDrawing)app_data;
+    ProDtlnote  note;
+    ProDtlnoteline  *note_lines;
+    ProDtlnotedata  note_data;
+<a name="anchor-31"></a>    ProError    err;
+    ProDtlattach location, *leaders = NULL;
+    ProView view;
+    ProDtlattachType at_type;
+    int status = 0, i, sheet, n_leaders;
+<a name="anchor-32"></a>    
+    
+    err = ProTestAttachTypeGet (&amp;at_type);
+/*--------------------------------------------------------------------------*\  
+    Get view 
+<a name="anchor-33"></a>\*--------------------------------------------------------------------------*/
+    err = ProDrawingCurrentSheetGet (drawing, &amp;sheet);
+    TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;, 
+        &quot;ProTestDtlNoteCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+<a name="anchor-34"></a>    err = ProDrawingBackgroundViewGet (drawing, sheet, &amp;view);
+    TEST_CALL_REPORT (&quot;ProDrawingBackgroundViewGet()&quot;, 
+        &quot;ProTestDtlNoteCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+/*--------------------------------------------------------------------------*\
+<a name="anchor-35"></a>    Allocate memory for note data
+\*--------------------------------------------------------------------------*/
+    err = ProDtlnotedataAlloc (drawing, &amp;note_data);
+    TEST_CALL_REPORT (&quot;ProDtlnotedataAlloc()&quot;, &quot;ProTestDtlNoteCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-36"></a>        
+/*--------------------------------------------------------------------------*\  
+    Get LOCATION for note and set it to note data
+\*--------------------------------------------------------------------------*/
+    status = ProTestLocationGet (drawing, view, at_type, &amp;location);
+<a name="anchor-37"></a>    if (status != 0)
+        return -1;
+        
+    err = ProDtlnotedataAttachmentSet (note_data, location);
+    TEST_CALL_REPORT (&quot;ProDtlnotedataAttachmentSet()&quot;, 
+<a name="anchor-38"></a>        &quot;ProTestDtlNoteCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+    
+    err = ProDtlattachFree (location);
+    TEST_CALL_REPORT (&quot;ProDtlattachFree()&quot;, &quot;ProTestDtlNoteCreate()&quot;,
+<a name="anchor-39"></a>        err, err != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------------*\  
+    Get NOTE TEXT and set it to note data
+\*--------------------------------------------------------------------------*/
+<a name="anchor-40"></a>    status = ProTestNoteTextGet (&amp;note_lines);
+    
+    if (status != 0)
+        return -1;
+        
+<a name="anchor-41"></a>    err = ProDtlnoteldataLinesSet (note_data, note_lines);
+    TEST_CALL_REPORT (&quot;ProDtlnoteldataLinesSet()&quot;, &quot;ProTestDtlNoteCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);   
+        
+    err = ProArrayFree ((ProArray*)&amp;note_lines);
+<a name="anchor-42"></a>    TEST_CALL_REPORT (&quot;ProArrayFree()&quot;, &quot;ProTestDtlNoteCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);   
+    
+/*--------------------------------------------------------------------------*\  
+    Get LEADERS if attachment type is  PRO_DTLATTACHTYPE_FREE,
+<a name="anchor-43"></a>    and set them to note data
+\*--------------------------------------------------------------------------*/
+    if (at_type == PRO_DTLATTACHTYPE_FREE)
+    {
+        err = ProTestLeadersGet (&amp;leaders);
+<a name="anchor-44"></a>        if (leaders != NULL &amp;&amp; err == PRO_TK_NO_ERROR)
+        {
+            err = ProDtlnotedataLeadersSet (note_data, leaders);
+            TEST_CALL_REPORT(&quot;ProDtlnotedataLeadersSet()&quot;,
+                &quot;ProTestDtlNoteCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-45"></a>        
+            err = ProArraySizeGet ((ProArray)leaders, &amp;n_leaders);
+            for (i = 0; i &lt; n_leaders; i++)
+                err = ProDtlattachFree (leaders[i]);
+            err = ProArrayFree ((ProArray*)&amp;leaders);
+<a name="anchor-46"></a>        }
+    }
+/*--------------------------------------------------------------------------*\  
+    Create NOTE
+\*--------------------------------------------------------------------------*/
+<a name="anchor-47"></a>    err = ProDtlnoteCreate (drawing, NULL, note_data, &amp;note);
+    TEST_CALL_REPORT (&quot;ProDtlnoteCreate()&quot;, &quot;ProTestDtlNoteCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+        
+    err = ProDtlnoteShow (&amp;note);
+<a name="anchor-48"></a>    TEST_CALL_REPORT (&quot;ProDtlnoteShow()&quot;, &quot;ProTestDtlNoteCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+       
+/*--------------------------------------------------------------------------*\  
+    Release memory (function ProDtlnotedataFree free all leaders, lines and 
+<a name="anchor-49"></a>        texts in note data)
+\*--------------------------------------------------------------------------*/
+    err = ProDtlnotedataFree (note_data);
+    TEST_CALL_REPORT (&quot;ProDtlnotedataFree()&quot;, &quot;ProTestDtlNoteCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-50"></a>        
+    return 0;
+}
+
+        
+<a name="anchor-51"></a>/*---------------------------------------------------------------------*\
+    Function:   ProTestNoteTextGet ()
+    Purpose:    Creates text lines for note
+    Returns:    0 - success; -1 - error.
+\*---------------------------------------------------------------------*/
+<a name="anchor-52"></a>int ProTestNoteTextGet (ProDtlnoteline **p_lines)
+{
+    ProDtlnoteline *lines, note_line;
+    int status, line_count = 0, n_texts, i;
+    ProDtlnotetext *texts, note_text;
+<a name="anchor-53"></a>    ProError err;
+    ProLine text;
+/*--------------------------------------------------------------------------*\
+    Allocat ememory for lines
+\*--------------------------------------------------------------------------*/
+<a name="anchor-54"></a>    err = ProArrayAlloc (0, sizeof (ProDtlnoteline), 1, (ProArray*)&amp;lines);
+    TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;, &quot;ProTestNoteTextGet()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+            
+/*--------------------------------------------------------------------------*\
+<a name="anchor-55"></a>    Do while user doesn't cancel input
+\*--------------------------------------------------------------------------*/
+    do
+    {
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter NOTE:&quot; );
+<a name="anchor-56"></a>        status = ProUtilStringGet (text, NULL, PRO_LINE_SIZE);
+        if (status)
+        {
+            /* allocate memory for note_line*/
+            err = ProDtlnotelineAlloc (&amp;note_line);
+<a name="anchor-57"></a>            TEST_CALL_REPORT (&quot;ProDtlnotelineAlloc()&quot;, &quot;ProTestNoteTextGet()&quot;,
+                err, err != PRO_TK_NO_ERROR);
+                
+            /* allocate memory for note_text */
+            err = ProDtlnotetextAlloc (&amp;note_text);
+<a name="anchor-58"></a>            TEST_CALL_REPORT (&quot;ProDtlnotetextAlloc()&quot;, &quot;ProTestNoteTextGet()&quot;,
+                err, err != PRO_TK_NO_ERROR);
+                               
+            /* set string to note_text */
+            err = ProDtlnotetextStringSet (note_text, text);
+<a name="anchor-59"></a>            TEST_CALL_REPORT (&quot;ProDtlnotetextStringSet()&quot;, 
+                &quot;ProTestNoteTextGet()&quot;,
+                err, err != PRO_TK_NO_ERROR);
+        
+            /* set note_text to note line */
+<a name="anchor-60"></a>            err = ProDtlnotelineTextAdd (note_line, note_text);
+            TEST_CALL_REPORT (&quot;ProDtlnotelineTextAdd()&quot;, 
+                &quot;ProTestNoteTextGet()&quot;,
+                err, err != PRO_TK_NO_ERROR);
+            
+<a name="anchor-61"></a>            /* free note_text memory */
+            err = ProDtlnotetextFree (note_text);
+            TEST_CALL_REPORT (&quot;ProDtlnotetextFree()&quot;, &quot;ProTestNoteTextGet()&quot;,
+                err, err != PRO_TK_NO_ERROR);
+             
+<a name="anchor-62"></a>/*--------------------------------------------------------------------------*\
+            Copy note_line info to the array of lines
+\*--------------------------------------------------------------------------*/
+            err = ProArrayObjectAdd ((ProArray*)&amp;lines, PRO_VALUE_UNUSED,
+                1, &amp;note_line);
+<a name="anchor-63"></a>            /* Also must set copy of texts (because ProDtlnotelineFree      */
+            /*  will free texts)                                            */
+            err = ProDtlnotelineTextsCollect (note_line, &amp;texts);
+            TEST_CALL_REPORT (&quot;ProDtlnotelineTextsCollect()&quot;, 
+                &quot;ProTestNoteTextGet()&quot;,
+<a name="anchor-64"></a>                err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+            err = ProDtlnotelineTextsSet (lines[line_count], texts);
+            TEST_CALL_REPORT (&quot;ProDtlnotelineTextsSet()&quot;, 
+                &quot;ProTestNoteTextGet()&quot;,
+                err, err != PRO_TK_NO_ERROR);
+<a name="anchor-65"></a>            err = ProArraySizeGet ((ProArray)texts, &amp;n_texts);
+            for (i = 0; i &lt; n_texts; i++)
+                err = ProDtlnotetextFree (texts[i]);
+            err = ProArrayFree ((ProArray*)&amp;texts);
+            line_count++;
+<a name="anchor-66"></a>        }
+    }
+    while (status); /*while get input*/
+    
+    *p_lines = lines;
+<a name="anchor-67"></a>    
+    return 0;
+}
+        
+/*---------------------------------------------------------------------*\
+<a name="anchor-68"></a>    Function:   ProTestLocationGet ()
+    Purpose:    Get Note location
+    Returns:    0 - success; -1 - error.
+\*---------------------------------------------------------------------*/
+int ProTestLocationGet (
+<a name="anchor-69"></a>    ProDrawing drawing, 
+    ProView view, 
+    ProDtlattachType type,
+    ProDtlattach* p_attachment)
+{
+<a name="anchor-70"></a>    ProVector location;
+    ProError err;
+    ProMouseButton mouse_button;
+    ProSelection *p_sel;
+    int n_sel;
+<a name="anchor-71"></a>    
+    if (type == PRO_DTLATTACHTYPE_FREE)
+    {
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select location&quot;);
+        err = ProMousePickGet (PRO_LEFT_BUTTON, &amp;mouse_button,location /*free_point*/);
+<a name="anchor-72"></a>        TEST_CALL_REPORT(&quot;ProMousePickGet()&quot;, &quot;ProTestLocationGet()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+        if (err != PRO_TK_NO_ERROR)
+            return -1;
+        err = ProDtlattachAlloc (type, view, location, NULL, p_attachment);
+<a name="anchor-73"></a>        TEST_CALL_REPORT (&quot;ProDtlattachAlloc()&quot;, &quot;ProTestLocationGet()&quot;,
+            err, err != PRO_TK_NO_ERROR);  
+    }
+    else if (type == PRO_DTLATTACHTYPE_PARAMETRIC)
+    {
+<a name="anchor-74"></a>        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select item&quot;);
+        err = ProSelect ((char*)&quot;edge,curve,point&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel,
+            &amp;n_sel);
+        if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+            return -1;
+<a name="anchor-75"></a>        err = ProDtlattachAlloc (type, NULL, NULL, p_sel[0], p_attachment);
+        TEST_CALL_REPORT (&quot;ProDtlattachAlloc()&quot;, &quot;ProTestLocationGet()&quot;,
+            err, err != PRO_TK_NO_ERROR);  
+    }
+    else 
+<a name="anchor-76"></a>        return (PRO_TK_GENERAL_ERROR);
+    return 0;  
+}
+       
+
+<a name="anchor-77"></a>/*===========================================================================*\
+  Function : ProTestDtlNoteModify
+  Purpose  : 
+\*===========================================================================*/
+int ProTestDtlNoteModify (void* app_data)
+<a name="anchor-78"></a>{
+    ProDrawing drawing = (ProDrawing)app_data;
+    int opt, sheet, n_leaders, i;
+    ProDtlnotedata note_data;
+    ProDtlnote note;
+<a name="anchor-79"></a>    ProError err;
+    ProCharLine line;
+    static ProUtilMenuButtons mod_note[] = { 
+        {&quot;Edit&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Text&quot;, NOTE_MOD_TEXT, 0},
+<a name="anchor-80"></a>        {&quot;Attrbutes&quot;, NOTE_MOD_ATTR, 0},
+        {&quot;Color&quot;, NOTE_MOD_COLOR, 0},
+        {&quot;Location&quot;, NOTE_MOD_LOCATION, 0},
+        {&quot;leaders&quot;, NOTE_MOD_ATTACH, 0},
+        {&quot;Angle&quot;, NOTE_MOD_ANGLE, 0},
+<a name="anchor-81"></a>        {&quot;Elbowlength&quot;, NOTE_MOD_ELB, 0},
+        {&quot;&quot;,0,0}
+    };
+    ProColor color;
+    ProDtlattach location, *p_leaders = NULL;
+<a name="anchor-82"></a>    ProDtlattachType at_type;
+    ProView view;
+    ProBoolean flag;
+    double param = 0.0;
+    
+<a name="anchor-83"></a>    int ProTestDtlAttribModify (ProDtlnotedata note_data);
+    int ProTestSelectNote (ProDrawing drw, ProDtlnote *note);
+    ProError ProTestDtlNoteTextModify (ProDtlnotedata  note_data);
+    
+    err = ProUtilMenuIntValueSelect(mod_note, &amp;opt);
+<a name="anchor-84"></a>    if (!ProTestSelectNote (drawing, &amp;note))
+        return (PRO_TK_NO_ERROR);
+    err = ProDtlnoteDataGet (&amp;note, NULL, PRODISPMODE_NUMERIC, &amp;note_data);
+    TEST_CALL_REPORT(&quot;ProDtlnoteDataGet()&quot;,
+        &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-85"></a>    switch (opt)
+    {
+    case NOTE_MOD_TEXT :
+        err = ProTestDtlNoteTextModify (note_data);
+        if (err != PRO_TK_NO_ERROR)
+<a name="anchor-86"></a>            return (PRO_TK_GENERAL_ERROR);
+        
+        break;
+    case NOTE_MOD_ATTR :
+        ProTestDtlAttribModify (note_data);
+<a name="anchor-87"></a>        
+        break;
+    case NOTE_MOD_COLOR :
+        ProTestColorGet (&amp;color);
+        err = ProDtlnotedataColorSet (note_data, &amp;color);
+<a name="anchor-88"></a>        
+        break;
+    case NOTE_MOD_LOCATION :
+        err = ProTestAttachTypeGet (&amp;at_type);
+        err = ProDrawingCurrentSheetGet (drawing, &amp;sheet);
+<a name="anchor-89"></a>        TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;, 
+            &quot;ProTestDtlNoteCreate()&quot;,err, err != PRO_TK_NO_ERROR);
+        err = ProDrawingBackgroundViewGet (drawing, sheet, &amp;view);
+        TEST_CALL_REPORT (&quot;ProDrawingBackgroundViewGet()&quot;, 
+            &quot;ProTestDtlNoteCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-90"></a>        if (ProTestLocationGet (drawing, view, at_type, &amp;location) != 0)
+            return (PRO_TK_GENERAL_ERROR);
+        err = ProDtlnotedataAttachmentSet (note_data, location);            
+        TEST_CALL_REPORT (&quot;ProDtlnotedataAttachmentSet()&quot;, 
+            &quot;ProTestDtlNoteCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-91"></a>        err = ProDtlattachFree (location);
+        TEST_CALL_REPORT (&quot;ProDtlattachFree()&quot;, 
+            &quot;ProTestDtlNoteCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+        break;
+<a name="anchor-92"></a>    case NOTE_MOD_ATTACH :
+        if (ProDtlnotedataLeadersCollect (note_data, &amp;p_leaders)
+            != PRO_TK_NO_ERROR)
+        {
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Unable to modity leaders: &quot;);
+<a name="anchor-93"></a>                return (PRO_TK_NO_ERROR);
+        }
+        err = ProTestLeadersGet (&amp;p_leaders);
+        if (p_leaders != NULL &amp;&amp; err == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-94"></a>            err = ProDtlnotedataLeadersSet (note_data, p_leaders);
+            TEST_CALL_REPORT(&quot;ProDtlsyminstdataLeadersSet()&quot;,
+                &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+            err = ProArraySizeGet ((ProArray)p_leaders, &amp;n_leaders);
+            for (i = 0; i &lt; n_leaders; i++)
+<a name="anchor-95"></a>                err = ProDtlattachFree (p_leaders[i]);
+
+            err = ProArrayFree ((ProArray*)&amp;p_leaders);
+        }
+        
+<a name="anchor-96"></a>        break;
+    case NOTE_MOD_ANGLE:
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter angle: &quot;);
+        err = ProDtlnotedataAngleGet (note_data, &amp;param);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataAngleGet()&quot;,
+<a name="anchor-97"></a>            &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKSprintf (line, &quot;Enter angle [%6.2f]: &quot;, param);
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+        if (ProMessageDoubleRead (NULL, &amp;param) != PRO_TK_NO_ERROR)
+            return (PRO_TK_NO_ERROR);
+<a name="anchor-98"></a>        err = ProDtlnotedataAngleSet (note_data, param);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataAngleSet()&quot;,
+            &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+        break;
+<a name="anchor-99"></a>    case NOTE_MOD_ELB :
+        if (ProDtlnotedataLeadersCollect (note_data, &amp;p_leaders)
+            != PRO_TK_NO_ERROR)
+        {
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Unable to modity leaders: &quot;);
+<a name="anchor-100"></a>                return (PRO_TK_NO_ERROR);
+        }
+        err = ProDtlnotedataElbowlengthGet (note_data, &amp;flag, &amp;param);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataElbowlengthGet()&quot;,
+                &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-101"></a>        if (flag == PRO_B_FALSE)
+        {
+            ProTKSprintf (line, &quot;Enter elbow length [%6.2f]: &quot;, param);
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+        }
+<a name="anchor-102"></a>        else
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter elbow length: &quot;);
+        if (ProMessageDoubleRead (NULL, &amp;param) != PRO_TK_NO_ERROR)
+            return (PRO_TK_NO_ERROR);
+        err = ProDtlnotedataElbowlengthSet (note_data, PRO_B_FALSE,
+<a name="anchor-103"></a>            param);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataElbowlengthSet()&quot;,
+                &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+        break;
+<a name="anchor-104"></a>    }
+    err = ProDtlnoteErase (&amp;note);
+    TEST_CALL_REPORT(&quot;ProDtlnoteErase()&quot;,
+        &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProDtlnoteModify (&amp;note, NULL, note_data);
+<a name="anchor-105"></a>    TEST_CALL_REPORT(&quot;ProDtlnoteModify()&quot;,
+        &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProDtlnoteShow (&amp;note);
+    TEST_CALL_REPORT(&quot;ProDtlnoteShow()&quot;,
+        &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-106"></a>        
+    err = ProDtlnotedataFree (note_data);
+    TEST_CALL_REPORT (&quot;ProDtlnotedataFree()&quot;, &quot;ProTestDtlNoteCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);        
+ 
+<a name="anchor-107"></a>    return (PRO_TK_NO_ERROR);   
+}
+
+/*===========================================================================*\
+  Function : ProTestDtlNoteTextModify
+<a name="anchor-108"></a>  Purpose  : 
+\*===========================================================================*/
+ProError ProTestDtlNoteTextModify (ProDtlnotedata  note_data)
+{
+    ProError err;
+<a name="anchor-109"></a>    int opt;
+    ProName font;
+    ProLine string;
+    static ProUtilMenuButtons text_note_opt[] = { 
+        {&quot;NoteText&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+<a name="anchor-110"></a>        {&quot;Font&quot;, NOTE_FONT, 0},
+        {&quot;Uline&quot;, NOTE_ULINE, 0},
+        {&quot;Thickness&quot;, NOTE_THICKNESS,0},
+        {&quot;Slant&quot;, NOTE_SLANT,0},
+        {&quot;Width&quot;, NOTE_WIDTH,0},
+<a name="anchor-111"></a>        {&quot;Height&quot;, NOTE_HEIGHT,0},
+        {&quot;String&quot;, NOTE_STRING,0},
+        {&quot;&quot;,0,0}
+    };
+    ProDtlnoteline *p_lines;
+<a name="anchor-112"></a>    ProDtlnotetext *p_texts;
+    int n_lines = 0, i, j, n_texts = 0;
+    double param = 0.0;
+    ProBoolean underline = PRO_B_FALSE;
+    ProCharLine line, temp_str;
+<a name="anchor-113"></a>    
+    err = ProDtlnotedataLinesCollect (note_data, &amp;p_lines);
+    TEST_CALL_REPORT(&quot;ProDtlnotedataLinesCollect()&quot;,
+        &quot;ProTestDtlNoteTextModify()&quot;, err, err != PRO_TK_NO_ERROR
+        &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+<a name="anchor-114"></a>    if (err != PRO_TK_NO_ERROR)
+        return (err);
+    err = ProUtilMenuIntValueSelect(text_note_opt, &amp;opt);
+    ProTKSprintf (line, &quot;Enter %s: &quot;, text_note_opt[opt+1].button);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+<a name="anchor-115"></a>    if (opt == NOTE_FONT)
+    {
+         if (ProMessageStringRead (PRO_NAME_SIZE, font) != PRO_TK_NO_ERROR)
+            return (PRO_TK_GENERAL_ERROR);
+    }
+<a name="anchor-116"></a>    else if (opt == NOTE_ULINE)
+    {
+        if (ProUtilYesnoGet((char*)&quot;n&quot;))
+            underline = PRO_B_TRUE;
+    }
+<a name="anchor-117"></a>    else if (opt != NOTE_STRING)
+    {
+        if (ProMessageDoubleRead (NULL, &amp;param) != PRO_TK_NO_ERROR)
+            return (PRO_TK_GENERAL_ERROR);
+    }               
+<a name="anchor-118"></a>    err = ProArraySizeGet ((ProArray)p_lines, &amp;n_lines);
+    for (i = 0; i &lt; n_lines; i++)
+    {
+        err = ProDtlnotelineTextsCollect (p_lines[i], &amp;p_texts);
+        TEST_CALL_REPORT(&quot;ProDtlnotetextFontSet()&quot;,
+<a name="anchor-119"></a>            &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR
+             &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+        if (err != PRO_TK_NO_ERROR)
+            continue;
+        err = ProArraySizeGet ((ProArray)p_texts, &amp;n_texts);
+<a name="anchor-120"></a>        for (j = 0; j &lt; n_texts; j++)
+        {
+            switch (opt)
+            {
+            case NOTE_FONT :
+<a name="anchor-121"></a>                err = ProDtlnotetextFontSet (p_texts[j], font);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextFontSet()&quot;,
+                    &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+                break;
+<a name="anchor-122"></a>            case NOTE_ULINE :
+                err = ProDtlnotetextUlineSet (p_texts[j], underline);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextUlineSet()&quot;,
+                    &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+                
+<a name="anchor-123"></a>                break;
+            case NOTE_THICKNESS :
+                err = ProDtlnotetextThicknessSet (p_texts[j], param);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextThicknessSet()&quot;,
+                    &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-124"></a>                
+                break;
+            case NOTE_SLANT :
+                err = ProDtlnotetextSlantSet (p_texts[j], param);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextSlantSet()&quot;,
+<a name="anchor-125"></a>                    &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+                break;
+            case NOTE_WIDTH :
+                err = ProDtlnotetextWidthSet (p_texts[j], param);
+<a name="anchor-126"></a>                TEST_CALL_REPORT(&quot;ProDtlnotetextWidthSet()&quot;,
+                    &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+                break;
+            case NOTE_HEIGHT :
+<a name="anchor-127"></a>                err = ProDtlnotetextHeightSet (p_texts[j], param);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextHeightSet()&quot;,
+                    &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+                    
+                break;
+<a name="anchor-128"></a>            case NOTE_STRING :
+                ProDtlnotetextStringGet (p_texts[j], string);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextStringGet()&quot;,
+                    &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+                ProWstringToString (temp_str, string);
+<a name="anchor-129"></a>                ProTKSprintf (line, &quot;Enter text {%s}: &quot;, temp_str);
+                ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+                ProUtilStringGet (string, NULL, PRO_LINE_SIZE);
+                err = ProDtlnotetextStringSet (p_texts[j], string);
+                 TEST_CALL_REPORT(&quot;ProDtlnotetextStringSet()&quot;,
+<a name="anchor-130"></a>                    &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+                
+                break;
+            default : break;
+            }
+<a name="anchor-131"></a>        }
+        err = ProDtlnotelineTextsSet (p_lines[i], p_texts);
+        TEST_CALL_REPORT(&quot;ProDtlnotelineTextsSet()&quot;,
+            &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-132"></a>    }
+    err = ProDtlnoteldataLinesSet (note_data, p_lines);
+    TEST_CALL_REPORT(&quot;ProDtlnoteldataLinesSet()&quot;,
+        &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-133"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*===========================================================================*\
+  Function : ProTestDtlAttribModify
+<a name="anchor-134"></a>  Purpose  : 
+\*===========================================================================*/
+int ProTestDtlAttribModify (ProDtlnotedata note_data)
+{
+    ProError err;
+<a name="anchor-135"></a>    int menu_id;
+    ProHorizontalJustification hjust = PRO_HORZJUST_CENTER;
+    ProBoolean mirror, read;
+    ProVerticalJustification vjust = PRO_VERTJUST_TOP;
+    static char *menu[]={&quot;Attributes&quot;,&quot;VerJust&quot;,&quot;HorJust&quot;,&quot;AttrSet&quot;,&quot;&quot;};
+<a name="anchor-136"></a>    
+    int ProTestDtlAttribSet (ProBoolean *mirror, ProBoolean *read,
+    			ProHorizontalJustification *hjust,
+			ProVerticalJustification *vjust,
+    			ProDtlnotedata note_data);
+<a name="anchor-137"></a>    
+    mirror = read = PRO_B_FALSE;
+    err = ProMenuFileRegister((char*)&quot;Attributes&quot;, (char*)&quot;tkattribnote.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;Attributes&quot;, (char*)&quot;Attributes&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-138"></a>    err = ProMenubuttonActionSet((char*)&quot;Attributes&quot;, (char*)&quot;Mirror&quot;,
+        (ProMenubuttonAction)ProTestAssignAttr, &amp;mirror, PRO_B_TRUE);
+    err = ProMenubuttonActionSet((char*)&quot;Attributes&quot;, (char*)&quot;Readonly&quot;,
+        (ProMenubuttonAction)ProTestAssignAttr, &amp;read, PRO_B_TRUE);
+        
+<a name="anchor-139"></a>    err = ProMenuFileRegister((char*)&quot;HorJust&quot;, (char*)&quot;tkattribnoteh.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;HorJust&quot;, (char*)&quot;HorJust&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;HorJust&quot;, (char*)&quot;Left&quot;,
+        (ProMenubuttonAction)ProTestAssignAttr, &amp;hjust, PRO_HORZJUST_LEFT);
+<a name="anchor-140"></a>    err = ProMenubuttonActionSet((char*)&quot;HorJust&quot;, (char*)&quot;Center&quot;,
+        (ProMenubuttonAction)ProTestAssignAttr, &amp;hjust, PRO_HORZJUST_CENTER);
+    err = ProMenubuttonActionSet((char*)&quot;HorJust&quot;, (char*)&quot;Right&quot;,
+        (ProMenubuttonAction)ProTestAssignAttr, &amp;hjust, PRO_HORZJUST_RIGHT);
+        
+<a name="anchor-141"></a>    err = ProMenuFileRegister((char*)&quot;VerJust&quot;, (char*)&quot;tkattribnotev.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;VerJust&quot;, (char*)&quot;VerJust&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;VerJust&quot;, (char*)&quot;Top&quot;,
+        (ProMenubuttonAction)ProTestAssignAttr, &amp;vjust, PRO_VERTJUST_TOP);
+<a name="anchor-142"></a>    err = ProMenubuttonActionSet((char*)&quot;VerJust&quot;, (char*)&quot;Middle&quot;,
+        (ProMenubuttonAction)ProTestAssignAttr, &amp;vjust, PRO_VERTJUST_MIDDLE);
+    err = ProMenubuttonActionSet((char*)&quot;VerJust&quot;, (char*)&quot;Bottom&quot;,
+        (ProMenubuttonAction)ProTestAssignAttr, &amp;vjust, PRO_VERTJUST_BOTTOM);
+        
+<a name="anchor-143"></a>    err = ProMenuFileRegister((char*)&quot;AttrSet&quot;, (char*)&quot;tkattribnoteset.mnu&quot;, &amp;menu_id);    
+    err = ProMenubuttonActionSet((char*)&quot;AttrSet&quot;, (char*)&quot;AttrSet&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonGenactionSet((char*)&quot;AttrSet&quot;, (char*)&quot;Done&quot;,        
+        (ProMenubuttonGenaction)ProTestDtlAttribSet, &amp;mirror, &amp;read, &amp;vjust,
+<a name="anchor-144"></a>         &amp;hjust, note_data, NULL);
+    err = ProCompoundmenuCreate(menu, &amp;menu_id); 
+    err = ProMenuProcess(menu[0], &amp;menu_id);
+    
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-145"></a>}
+
+/*===========================================================================*\
+  Function : ProTestDtlAttribSet
+  Purpose  : 
+<a name="anchor-146"></a>\*===========================================================================*/
+int ProTestDtlAttribSet (
+    ProBoolean *mirror,
+    ProBoolean *read,
+    ProHorizontalJustification *hjust,
+<a name="anchor-147"></a>    ProVerticalJustification *vjust,
+    ProDtlnotedata note_data)
+{
+    ProError err;
+    
+<a name="anchor-148"></a>    ProMenuDelete();
+    ProMenuDelete();
+    ProMenuDelete();
+    ProMenuDelete();
+    
+<a name="anchor-149"></a>    err = ProDtlnotedataMirrorSet (note_data, *mirror);
+    TEST_CALL_REPORT(&quot;ProDtlnotedataMirrorSet()&quot;,
+            &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProDtlnotedataJustifSet (note_data, *hjust, *vjust);
+    TEST_CALL_REPORT(&quot;ProDtlnotedataJustifSet()&quot;,
+<a name="anchor-150"></a>            &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProDtlnotedataReadonlySet (note_data, *read);
+    TEST_CALL_REPORT(&quot;ProDtlnotedataReadonlySet()&quot;,
+            &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-151"></a>}
+
+/*===========================================================================*\
+  Function : ProTestSelectNote
+  Purpose  : 
+<a name="anchor-152"></a>\*===========================================================================*/
+int ProTestSelectNote (ProDrawing drw, ProDtlnote *note)
+{
+    ProSelection *p_sel;
+    int n_sel;
+<a name="anchor-153"></a>    ProError err;
+    
+    
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select a note&quot;);
+    err = ProSelect ((char*)&quot;any_note&quot;, 1 , NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+<a name="anchor-154"></a>    if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+        return (PRO_TK_NO_ERROR);
+        
+    err = ProSelectionModelitemGet (p_sel[0], note);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+<a name="anchor-155"></a>            &quot;ProTestEntEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    return (1);
+}
+
+<a name="anchor-156"></a>/*===========================================================================*\
+  Function : ProTestDtlNoteInfo
+  Purpose  : 
+\*===========================================================================*/
+int ProTestDtlNoteInfo (void* app_data)
+<a name="anchor-157"></a>{
+    ProDrawing drawing = (ProDrawing)app_data;
+    ProError err;
+    ProDtlnote *p_notes;
+    int n_notes = 0, i, n_leaders = 0, j, n_lines = 0, n_texts = 0, k, id;
+<a name="anchor-158"></a>    ProDtlnotedata note_data;
+    ProBoolean flag;
+    ProHorizontalJustification hjust;
+    ProVerticalJustification   vjust;
+    ProColor color;
+<a name="anchor-159"></a>    double param = 0.0;
+    ProDtlattach attach, *p_leaders;
+    ProDtlattachType type;
+    ProView    view;
+    ProVector   location;
+<a name="anchor-160"></a>    ProSelection   attach_point;
+    ProDtlnoteline *p_lines;
+    ProDtlnotetext *p_texts;
+    ProLine string;
+    FILE *fp;
+<a name="anchor-161"></a>    ProCharLine line, fname;
+    ProPath path;
+    ProName font;
+	ProMdlName mdl_ref_name;
+    ProMdl mdl_ref;
+<a name="anchor-162"></a>    
+    void ProTestColorPrint (FILE *, ProColor);
+    
+    fp = ProUtilGenFilePtr((ProMdl)drawing, (char*)DTL_NOTE_FILE, fname, (char*)&quot;w&quot;);
+    
+<a name="anchor-163"></a>    err = ProDrawingDtlnotesCollect (drawing, NULL, PRO_VALUE_UNUSED, &amp;p_notes);
+    TEST_CALL_REPORT(&quot;ProDrawingDtlnotesCollect()&quot;,
+        &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR
+        &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+    err = ProArraySizeGet ((ProArray)p_notes, &amp;n_notes);
+<a name="anchor-164"></a>    for (i = 0; i &lt; n_notes; i++)
+    {
+        err = ProDtlnoteDataGet (&amp;p_notes[i], NULL, PRODISPMODE_NUMERIC,
+            &amp;note_data);
+        TEST_CALL_REPORT(&quot;ProDtlnoteDataGet()&quot;,
+<a name="anchor-165"></a>            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProDtlnotedataIdGet (note_data, &amp;id);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataIdGet()&quot;,
+            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot;\nID: %d. &quot;, id);
+<a name="anchor-166"></a>        /* get attributes */
+        err = ProDtlnotedataIsMirrored (note_data, &amp;flag);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataIsMirrored()&quot;,
+            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot;Mirrored: %s. &quot;,  (flag == PRO_B_TRUE) ? &quot;Yes&quot; : &quot;No&quot;);   
+<a name="anchor-167"></a>        err = ProDtlnotedataReadonlyGet (note_data, &amp;flag);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataReadonlyGet()&quot;,
+            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot;Readonly: %s. \n&quot;, (flag == PRO_B_TRUE) ? &quot;Yes&quot; : &quot;No&quot;);
+        err = ProDtlnotedataJustifGet (note_data, &amp;hjust, &amp;vjust);
+<a name="anchor-168"></a>        TEST_CALL_REPORT(&quot;ProDtlnotedataJustifGet()&quot;,
+            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot;Justification : norisontal = %d, vertical = %d. \n&quot;, 
+           hjust, vjust); 
+        
+<a name="anchor-169"></a>        /* get color */
+        err = ProDtlnotedataColorGet (note_data, &amp;color);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataColorGet()&quot;,
+            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot;Color: &quot;);
+<a name="anchor-170"></a>        ProTestColorPrint (fp, color);
+        
+        /* get parameters */
+        err = ProDtlnotedataElbowlengthGet (note_data, &amp;flag, &amp;param);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataElbowlengthGet()&quot;,
+<a name="anchor-171"></a>            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        if (flag == PRO_B_FALSE)
+            ProTKFprintf (fp, &quot;Elbow leng = %6.3f.&quot;, param);
+        else
+            ProTKFprintf (fp, &quot;Elbow leng: No.&quot;);
+<a name="anchor-172"></a>        err = ProDtlnotedataAngleGet (note_data, &amp;param);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataAngleGet()&quot;,
+            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot; Angle = %6.3f. &quot;, param);
+        /* get attachment */
+<a name="anchor-173"></a>        err = ProDtlnotedataAttachmentGet (note_data, &amp;attach);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataAttachmentGet()&quot;,
+            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+        err = ProDtlattachGet (attach, &amp;type, &amp;view, location, &amp;attach_point);
+<a name="anchor-174"></a>        TEST_CALL_REPORT(&quot;ProDtlattachGet()&quot;,
+            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot;Attachment type: %d. &quot;, type); 
+        
+        /* free dtl attachment */
+<a name="anchor-175"></a>        err = ProDtlattachFree (attach);
+        TEST_CALL_REPORT(&quot;ProDtlattachFree()&quot;,
+            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+                    
+        /* get leaders */
+<a name="anchor-176"></a>        err = ProDtlnotedataLeadersCollect (note_data, &amp;p_leaders);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataLeadersCollect()&quot;,
+            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR
+            &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+        if (err == PRO_TK_NO_ERROR)
+<a name="anchor-177"></a>        {
+            err = ProArraySizeGet ((ProArray)p_leaders, &amp;n_leaders);
+            ProTKFprintf (fp, &quot;Number of leaders: %d.\n&quot;, n_leaders);
+        }
+        /* get texts */
+<a name="anchor-178"></a>        err = ProDtlnotedataLinesCollect (note_data, &amp;p_lines);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataLinesCollect()&quot;,
+            &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR
+            &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+        if (err != PRO_TK_NO_ERROR)
+<a name="anchor-179"></a>            continue;
+        
+        err = ProArraySizeGet ((ProArray)p_lines, &amp;n_lines);
+        for (j = 0; j &lt; n_lines; j++)
+        {
+<a name="anchor-180"></a>            err = ProDtlnotelineTextsCollect (p_lines[j], &amp;p_texts);
+            TEST_CALL_REPORT(&quot;ProDtlnotelineTextsCollect()&quot;,
+                &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR
+                &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+            if (err != PRO_TK_NO_ERROR)
+<a name="anchor-181"></a>                continue;
+            err = ProArraySizeGet ((ProArray)p_texts, &amp;n_texts);
+            for (k = 0; k &lt; n_texts; k++)
+            {
+                ProTKFprintf (fp, &quot;Note text param:\n&quot;);
+<a name="anchor-182"></a>                err = ProDtlnotetextHeightGet (p_texts[k], &amp;param);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextHeightGet()&quot;,
+                    &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+                ProTKFprintf (fp,&quot;Height = %6.3f. &quot;, param);
+                err = ProDtlnotetextWidthGet (p_texts[k], &amp;param);
+<a name="anchor-183"></a>                TEST_CALL_REPORT(&quot;ProDtlnotetextHeightGet()&quot;,
+                    &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+                ProTKFprintf (fp,&quot;Width = %6.3f. &quot;, param);
+                err = ProDtlnotetextSlantGet (p_texts[k], &amp;param);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextHeightGet()&quot;,
+<a name="anchor-184"></a>                    &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+                ProTKFprintf (fp,&quot;Slant = %6.3f. &quot;, param);    
+                err = ProDtlnotetextThicknessGet (p_texts[k], &amp;param);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextHeightGet()&quot;,
+                    &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-185"></a>                ProTKFprintf (fp,&quot;Thickness = %6.3f.\n&quot;, param);    
+                err = ProDtlnotetextFontGet (p_texts[k], font);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextHeightGet()&quot;,
+                    &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+                ProWstringToString (line, font);    
+<a name="anchor-186"></a>                ProTKFprintf (fp,&quot;Font: %s. &quot;, line);
+                err = ProDtlnotetextUlineGet (p_texts[k], &amp;flag);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextUlineGet()&quot;,
+                    &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+                ProTKFprintf (fp,&quot;Uline: %s.\n&quot;, (flag == PRO_B_TRUE) ? &quot;Yes&quot; : &quot;No&quot;);
+<a name="anchor-187"></a>                ProTKFprintf (fp, &quot;Note text:\n&quot;);
+                err = ProDtlnotetextStringGet (p_texts[k], string);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextStringGet()&quot;,
+                    &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+                ProWstringToString (line, string);
+<a name="anchor-188"></a>                ProTKFprintf (fp, &quot;%s&quot;, line);
+                err = ProDtlnoteModelrefGet (&amp;p_notes[i], NULL, j, k, &amp;mdl_ref);
+                TEST_CALL_REPORT(&quot;ProDtlnoteModelrefGet()&quot;,
+                    &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+                if (err == PRO_TK_NO_ERROR)
+<a name="anchor-189"></a>                {
+                    err = ProMdlMdlnameGet (mdl_ref, mdl_ref_name);
+                    TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;,
+                        &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+                    ProTKFprintf (fp, &quot;    (Ref model: %s)\n&quot;, 
+<a name="anchor-190"></a>                        ProWstringToString (line, mdl_ref_name));
+                
+                }
+            }
+            for (k = 0; k &lt; n_texts; k++)
+<a name="anchor-191"></a>            {
+                err = ProDtlnotetextFree (p_texts[k]);
+                TEST_CALL_REPORT(&quot;ProDtlnotetextFree()&quot;,
+                    &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+            }
+<a name="anchor-192"></a>            err = ProArrayFree ((ProArray*)&amp;p_texts);
+        }
+        for (j = 0; j &lt; n_lines; j++)
+        {
+            err = ProDtlnotelineFree (p_lines[j]);
+<a name="anchor-193"></a>            TEST_CALL_REPORT(&quot;ProDtlnotelineFree()&quot;,
+                &quot;ProTestDtlNoteInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        }
+        err = ProArrayFree ((ProArray*)&amp;p_lines);
+    }
+<a name="anchor-194"></a>    err = ProArrayFree ((ProArray*)&amp;p_notes);
+    err = ProDtlnotedataFree (note_data);
+    TEST_CALL_REPORT (&quot;ProDtlnotedataFree()&quot;, &quot;ProTestDtlNoteCreate()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+    fclose (fp);
+<a name="anchor-195"></a>    ProStringToWstring(path, fname);
+    err = ProInfoWindowDisplay(path, NULL, NULL);
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-196"></a>/*===========================================================================*\
+  Function : ProTestDtlNoteDisplay
+  Purpose  : 
+\*===========================================================================*/
+int ProTestDtlNoteDisplay (void* app_data)
+<a name="anchor-197"></a>{
+    ProError err;
+    ProDrawing drw = (ProDrawing)app_data;
+    int opt;
+    ProDtlnote note;
+<a name="anchor-198"></a>    static ProUtilMenuButtons disp_note[] = { 
+        {&quot;Display&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Remove&quot;, NOTE_REMOVE, 0},
+        {&quot;Erase&quot;, NOTE_ERASE, 0},
+        {&quot;Delete&quot;, NOTE_DELETE, 0},
+<a name="anchor-199"></a>        {&quot;&quot;,0,0}
+    };
+    err = ProUtilMenuIntValueSelect(disp_note, &amp;opt);
+    if (!ProTestSelectNote (drw, &amp;note))
+        return (PRO_TK_NO_ERROR);
+<a name="anchor-200"></a>    switch (opt)
+    {
+    case NOTE_REMOVE :
+        err = ProDtlnoteRemove (&amp;note);
+        TEST_CALL_REPORT(&quot;ProDtlnoteRemove()&quot;,
+<a name="anchor-201"></a>            &quot;ProTestDtlNoteDisplay()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+        break;
+    case NOTE_ERASE :
+        err = ProDtlnoteErase (&amp;note);
+<a name="anchor-202"></a>        TEST_CALL_REPORT(&quot;ProDtlnoteErase()&quot;,
+            &quot;ProTestDtlNoteDisplay()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+        break;
+    case NOTE_DELETE :
+<a name="anchor-203"></a>        err = ProDtlnoteErase (&amp;note);
+        TEST_CALL_REPORT(&quot;ProDtlnoteErase()&quot;,
+            &quot;ProTestDtlNoteDisplay()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProDtlnoteDelete (&amp;note, NULL);
+        TEST_CALL_REPORT(&quot;ProDtlnoteDelete()&quot;,
+<a name="anchor-204"></a>            &quot;ProTestDtlNoteDisplay()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+        break;
+    }
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-205"></a>}
+/*===========================================================================*\
+  Function : ProTestAssignAttr
+  Purpose  : 
+\*===========================================================================*/
+<a name="anchor-206"></a>int ProTestAssignAttr(ProAppData p_member, int option)
+{
+    *((int *)p_member) = option;
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-207"></a>/*===========================================================================*\
+  Function : ProTestLeadersGet
+  Purpose  : 
+\*===========================================================================*/
+
+<a name="anchor-208"></a>ProError ProTestLeadersGet (ProDtlattach** leaders_arr)
+{
+    ProError err;
+    int menu_id;
+    int n_leaders = 0;
+<a name="anchor-209"></a>    ProDtlattach *leaders;
+    
+    int ProTestLeadesAdd (ProDtlattach** leaders,
+                     ProDtlattachType type);
+    
+<a name="anchor-210"></a>    if (leaders_arr != NULL)
+	*leaders_arr = (ProDtlattach *)NULL;
+    else
+	return (PRO_TK_BAD_INPUTS);
+
+<a name="anchor-211"></a>    err = ProArrayAlloc (0, sizeof (ProDtlattach), 1, (ProArray*)&amp;leaders);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;,
+            &quot;ProTestLeadersGet()&quot;, err, err != PRO_TK_NO_ERROR);
+           
+    err = ProMenuFileRegister((char*)&quot;LeaderType&quot;,(char*)&quot;tkleadertype.mnu&quot;, &amp;menu_id);
+<a name="anchor-212"></a>    err = ProMenubuttonActionSet((char*)&quot;LeaderType&quot;,(char*)&quot;LeaderType&quot;, 
+		(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;LeaderType&quot;,(char*)&quot;Free&quot;, 
+		(ProMenubuttonAction)ProTestLeadesAdd, &amp;leaders,
+                PRO_DTLATTACHTYPE_FREE);
+<a name="anchor-213"></a>    err = ProMenubuttonActionSet((char*)&quot;LeaderType&quot;,(char*)&quot;Parametric&quot;, 
+		(ProMenubuttonAction)ProTestLeadesAdd, &amp;leaders, 
+                PRO_DTLATTACHTYPE_PARAMETRIC);
+    err = ProMenubuttonActionSet((char*)&quot;LeaderType&quot;,(char*)&quot;Done&quot;,  
+                (ProMenubuttonAction)ProMenuDelete, NULL, 0); 
+<a name="anchor-214"></a>    err = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;LeaderType&quot;,&amp;menu_id);
+    err = ProMenuProcess((char*)&quot;&quot;, &amp;menu_id);
+    
+    err = ProArraySizeGet ((ProArray)leaders, &amp;n_leaders);
+    if (err == PRO_TK_NO_ERROR &amp;&amp; n_leaders > 0)
+<a name="anchor-215"></a>        *leaders_arr = leaders;
+    else
+        err = ProArrayFree ((ProArray*)&amp;leaders);
+    
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-216"></a>}
+
+/*===========================================================================*\
+  Function : ProTestLeadesAdd
+  Purpose  : 
+<a name="anchor-217"></a>\*===========================================================================*/
+int ProTestLeadesAdd(ProDtlattach** leaders,
+                     ProDtlattachType type)
+{
+    ProError err;
+<a name="anchor-218"></a>    ProView view;
+    ProDrawing drawing;
+    ProDtlattach leader;
+    ProPoint3d point;
+    ProSelection *sel;
+<a name="anchor-219"></a>    int n_sel, sheet;
+    ProMouseButton btn;
+    
+    err = ProMdlCurrentGet ((ProMdl*)&amp;drawing);
+    err = ProDrawingCurrentSheetGet (drawing, &amp;sheet);
+<a name="anchor-220"></a>    TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;, 
+        &quot;ProTestLeadesAdd()&quot;,err, err != PRO_TK_NO_ERROR);
+    err = ProDrawingBackgroundViewGet (drawing, sheet, &amp;view);
+    TEST_CALL_REPORT (&quot;ProDrawingBackgroundViewGet()&quot;, &quot;ProTestLeadesAdd()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-221"></a>    
+    
+    switch (type)
+    {
+    case PRO_DTLATTACHTYPE_FREE :
+<a name="anchor-222"></a>        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,
+            &quot;Pick end points of leaders (middle button to quit)&quot;);
+        while (1)
+        {
+            err = ProMousePickGet(PRO_ANY_BUTTON, &amp;btn, point);
+<a name="anchor-223"></a>            if (btn != PRO_LEFT_BUTTON || err != PRO_TK_NO_ERROR)
+                break;
+            ProGraphicsCircleDraw (point, 0.5);
+            err = ProDtlattachAlloc (type, view, point, NULL, &amp;leader);
+            TEST_CALL_REPORT(&quot;ProDtlattachAlloc()&quot;,
+<a name="anchor-224"></a>                &quot;ProTestAttachGet()&quot;, err, err != PRO_TK_NO_ERROR);
+            err = ProArrayObjectAdd ((ProArray*)leaders, PRO_VALUE_UNUSED,
+                1, &amp;leader);
+        }
+        
+<a name="anchor-225"></a>        break;
+    case PRO_DTLATTACHTYPE_PARAMETRIC :
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,
+            &quot;Select attachment points for leaders&quot;);
+        while (1)
+<a name="anchor-226"></a>        {
+            err = ProSelect ((char*)&quot;edge,curve,point,axis&quot;, 1, NULL, NULL, NULL, 
+                NULL, &amp;sel, &amp;n_sel);
+            if (err != PRO_TK_NO_ERROR || n_sel != 1)
+                break;
+<a name="anchor-227"></a>            err = ProDtlattachAlloc (type, NULL, NULL, sel[0], &amp;leader);
+            TEST_CALL_REPORT(&quot;ProDtlattachAlloc()&quot;,
+                &quot;ProTestLeadersGet()&quot;, err, err != PRO_TK_NO_ERROR);
+            err = ProArrayObjectAdd ((ProArray*)leaders, PRO_VALUE_UNUSED,
+                1, &amp;leader);
+<a name="anchor-228"></a>        }
+        
+        break;
+    default : break;
+        
+<a name="anchor-229"></a>    }
+    return (PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

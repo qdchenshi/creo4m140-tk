@@ -1,0 +1,985 @@
+<HTML>
+<HEAD>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<TITLE>ProExtrude.h</TITLE>
+</HEAD>
+<BODY BGCOLOR="#ffffff">
+<PRE>#ifndef <A HREF="proextrude_h.html#PROEXTRUDEH">PROEXTRUDEH</A>
+<A name="PROEXTRUDEH"></A>#define PROEXTRUDEH
+
+
+
+#include &lt;<A HREF="protoolkit_h.html">ProToolkit.h</A>&gt;
+
+<A HREF="proansi_h.html#PRO_BEGIN_C_DECLS">PRO_BEGIN_C_DECLS</A>
+
+/*****************************************************************************\
+
+1  Summary of Element Tree Changes as compared to pre- Pro/E Wildfire releases :
+====================================================
+     The Element tree for Extrude has been updated to incorporate
+ the following feature creation using the same element tree.
+
+ 1]  Solid Protrusion
+ 2]  Thin Protrusion
+ 3]  Solid/SMT Cut
+ 4]  Thin Solid/Smt Cut
+ 5]  Surface
+ 6]  Surface Trim
+ 7]  Thin Surface Trim
+ 8]  Solid Protrusion as First feature 
+ 9]  Thin Protrusion as First feature 
+ 10] Smt unattached wall
+    
+\*****************************************************************************/
+/*****************************************************************************\
+
+2  Feature element tree:
+========================
+
+   <A HREF="proelemid_h.html#PRO_E_FEATURE_TREE">PRO_E_FEATURE_TREE</A>
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_STD_FEATURE_NAME">PRO_E_STD_FEATURE_NAME</A>
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_IS_SMT_CUT">PRO_E_IS_SMT_CUT</A>              ( applicable only in sheetmetal parts )
+     | 
+     |--<A HREF="proelemid_h.html#PRO_E_SMT_CUT_NORMAL_DIR">PRO_E_SMT_CUT_NORMAL_DIR</A>      ( applicable only in sheetmetal parts )
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_FEATURE_FORM">PRO_E_FEATURE_FORM</A>
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_STD_SECTION">PRO_E_STD_SECTION</A>             ( Section )
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>       ( Feature Form )
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>           ( Material Side )
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_THICKNESS">PRO_E_THICKNESS</A>               ( Thickness )
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_SRF_END_ATTRIBUTES">PRO_E_SRF_END_ATTRIBUTES</A>
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_TRIM_QLT_SIDE">PRO_E_TRIM_QLT_SIDE</A>
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_TRIM_QUILT">PRO_E_TRIM_QUILT</A>
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_STD_DIRECTION">PRO_E_STD_DIRECTION</A>
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_STD_EXT_DEPTH">PRO_E_STD_EXT_DEPTH</A>
+     |    | 
+     |    |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM">PRO_E_EXT_DEPTH_FROM</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF">PRO_E_EXT_DEPTH_FROM_REF</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF_TRF">PRO_E_EXT_DEPTH_FROM_REF_TRF</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF_TRF_VAL">PRO_E_EXT_DEPTH_FROM_REF_TRF_VAL</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_VALUE">PRO_E_EXT_DEPTH_FROM_VALUE</A>
+     |    |  
+     |    |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO">PRO_E_EXT_DEPTH_TO</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF">PRO_E_EXT_DEPTH_TO_REF</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF_TRF">PRO_E_EXT_DEPTH_TO_REF_TRF</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF_TRF_VAL">PRO_E_EXT_DEPTH_TO_REF_TRF_VAL</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_VALUE">PRO_E_EXT_DEPTH_TO_VALUE</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_STD_SMT_THICKNESS">PRO_E_STD_SMT_THICKNESS</A>  ( applicable only in sheetmetal parts )
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_STD_SMT_SWAP_DRV_SIDE">PRO_E_STD_SMT_SWAP_DRV_SIDE</A>  ( applicable only in sheetmetal parts )
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_SMT_WALL_SHARPS_TO_BENDS">PRO_E_SMT_WALL_SHARPS_TO_BENDS</A>  ( applicable only in sheetmetal parts )
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_AXIS_PNT">PRO_E_SMT_PUNCH_AXIS_PNT</A> ( applicable only in sheetmetal parts )
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_SMT_FILLETS">PRO_E_SMT_FILLETS</A>  ( applicable only in sheetmetal parts )
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_SMT_FILLETS_SIDE">PRO_E_SMT_FILLETS_SIDE</A>
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_SMT_FILLETS_VALUE">PRO_E_SMT_FILLETS_VALUE</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_CALCULATION">PRO_E_SMT_DEV_LEN_CALCULATION</A>  ( applicable only in sheetmetal parts )
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_SOURCE">PRO_E_SMT_DEV_LEN_SOURCE</A>
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_Y_FACTOR">PRO_E_SMT_DEV_LEN_Y_FACTOR</A>
+     |    |    |
+     |    |    |--<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_Y_FACTOR_TYPE">PRO_E_SMT_DEV_LEN_Y_FACTOR_TYPE</A>
+     |    |    |
+     |    |    |--<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_Y_FACTOR_VALUE">PRO_E_SMT_DEV_LEN_Y_FACTOR_VALUE</A>
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_BEND_TABLE">PRO_E_SMT_DEV_LEN_BEND_TABLE</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_TOOL_DATA">PRO_E_SMT_PUNCH_TOOL_DATA</A> ( applicable only in sheetmetal parts )
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_TOOL_ATTR">PRO_E_SMT_PUNCH_TOOL_ATTR</A>
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_TOOL_NAME">PRO_E_SMT_PUNCH_TOOL_NAME</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_SMT_MERGE_DATA">PRO_E_SMT_MERGE_DATA</A> ( applicable only in sheetmetal parts )
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_SMT_MERGE_AUTO">PRO_E_SMT_MERGE_AUTO</A>
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_SMT_MERGE_KEEP_LINES">PRO_E_SMT_MERGE_KEEP_LINES</A>
+     |  
+     |--<A HREF="proelemid_h.html#PRO_E_EXT_COMP_DRFT_ANG">PRO_E_EXT_COMP_DRFT_ANG</A>
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_EXT_DRFT_ANG">PRO_E_EXT_DRFT_ANG</A>
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_EXT_DRFT_ANG_VAL">PRO_E_EXT_DRFT_ANG_VAL</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_FEAT_THIN">PRO_E_FEAT_THIN</A>
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_STRT">PRO_E_FEAT_THIN_STRT</A>
+     |    |   |
+     |    |   |--<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_STRT_OPT">PRO_E_FEAT_THIN_STRT_OPT</A>
+     |    |   |
+     |    |   |--<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_STRT_REF">PRO_E_FEAT_THIN_STRT_REF</A>
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_END">PRO_E_FEAT_THIN_END</A>
+     |    |   |
+     |    |   |--<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_END_OPT">PRO_E_FEAT_THIN_END_OPT</A>
+     |    |   |
+     |    |   |--<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_END_REF">PRO_E_FEAT_THIN_END_REF</A>
+
+
+\*****************************************************************************/
+/*****************************************************************************\
+
+3. Feature elements table and Mapping with Old Element Tree:
+============================================================
+
+------------------------------------------------------------------------------
+Element Id                       Element Name        Data Type             
+------------------------------------------------------------------------------
+<A HREF="proelemid_h.html#PRO_E_STD_FEATURE_NAME">PRO_E_STD_FEATURE_NAME</A>           Feature Name        <A HREF="provalue_h.html#PRO_VALUE_TYPE_WSTRING">PRO_VALUE_TYPE_WSTRING</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>    Feature Type        <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>   
+<A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>            Material            <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_IS_SMT_CUT">PRO_E_IS_SMT_CUT</A>                 Is Smt Cut          <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_SMT_CUT_NORMAL_DIR">PRO_E_SMT_CUT_NORMAL_DIR</A>         Normal Direction    <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_FEATURE_FORM">PRO_E_FEATURE_FORM</A>               Feature Form        <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>   
+<A HREF="proelemid_h.html#PRO_E_STD_SECTION">PRO_E_STD_SECTION</A>                Section             Compound             
+<A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>          Feature Form        <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>      
+<A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>              Material Side       <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A> 
+<A HREF="proelemid_h.html#PRO_E_THICKNESS">PRO_E_THICKNESS</A>                  Thin width          <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>
+<A HREF="proelemid_h.html#PRO_E_SRF_END_ATTRIBUTES">PRO_E_SRF_END_ATTRIBUTES</A>         End Cap             <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_TRIM_QLT_SIDE">PRO_E_TRIM_QLT_SIDE</A>              Quilt Side          <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_TRIM_QUILT">PRO_E_TRIM_QUILT</A>                 Trim Quilt          <A HREF="provalue_h.html#PRO_VALUE_TYPE_SELECTION">PRO_VALUE_TYPE_SELECTION</A> 
+<A HREF="proelemid_h.html#PRO_E_STD_DIRECTION">PRO_E_STD_DIRECTION</A>              Direction           <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_STD_EXT_DEPTH">PRO_E_STD_EXT_DEPTH</A>              Depth               Compound
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM">PRO_E_EXT_DEPTH_FROM</A>             Depth From          Compound
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>        Type                <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF">PRO_E_EXT_DEPTH_FROM_REF</A>         References          <A HREF="provalue_h.html#PRO_VALUE_TYPE_SELECTION">PRO_VALUE_TYPE_SELECTION</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_VALUE">PRO_E_EXT_DEPTH_FROM_VALUE</A>       Value               <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF_TRF">PRO_E_EXT_DEPTH_FROM_REF_TRF</A>     Transform           <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF_TRF_VAL">PRO_E_EXT_DEPTH_FROM_REF_TRF_VAL</A> Value               <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO">PRO_E_EXT_DEPTH_TO</A>               Depth To            Compound
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>          Type                <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF">PRO_E_EXT_DEPTH_TO_REF</A>           References          <A HREF="provalue_h.html#PRO_VALUE_TYPE_SELECTION">PRO_VALUE_TYPE_SELECTION</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_VALUE">PRO_E_EXT_DEPTH_TO_VALUE</A>         Value               <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF_TRF">PRO_E_EXT_DEPTH_TO_REF_TRF</A>       Transform           <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF_TRF_VAL">PRO_E_EXT_DEPTH_TO_REF_TRF_VAL</A>   Value               <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>
+<A HREF="proelemid_h.html#PRO_E_INT_PARTS">PRO_E_INT_PARTS</A>                  Intsct Parts        Compound
+<A HREF="proelemid_h.html#PRO_E_PATTERN">PRO_E_PATTERN</A>                    Pattern             Compound
+<A HREF="proelemid_h.html#PRO_E_STD_SMT_THICKNESS">PRO_E_STD_SMT_THICKNESS</A>          Smt Thickness       <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>
+<A HREF="proelemid_h.html#PRO_E_STD_SMT_SWAP_DRV_SIDE">PRO_E_STD_SMT_SWAP_DRV_SIDE</A>      Smt Swap Side       <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_SMT_WALL_SHARPS_TO_BENDS">PRO_E_SMT_WALL_SHARPS_TO_BENDS</A>   Edges to Bends      <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_AXIS_PNT">PRO_E_SMT_PUNCH_AXIS_PNT</A>         Punch Axis Point    <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_SMT_FILLETS">PRO_E_SMT_FILLETS</A>                Smt Fillets         Compound
+<A HREF="proelemid_h.html#PRO_E_SMT_FILLETS_SIDE">PRO_E_SMT_FILLETS_SIDE</A>           Smt Radius Side     <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_SMT_FILLETS_VALUE">PRO_E_SMT_FILLETS_VALUE</A>          Smt Radius Value    <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>
+<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_CALCULATION">PRO_E_SMT_DEV_LEN_CALCULATION</A>    Smt Develop Length  Compound
+<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_SOURCE">PRO_E_SMT_DEV_LEN_SOURCE</A>         Smt Dev Len Source  <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_Y_FACTOR">PRO_E_SMT_DEV_LEN_Y_FACTOR</A>       Smt Dev Len Y Fact  Compound
+<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_Y_FACTOR_VALUE">PRO_E_SMT_DEV_LEN_Y_FACTOR_VALUE</A> Y Factor Value      <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>
+<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_Y_FACTOR_TYPE">PRO_E_SMT_DEV_LEN_Y_FACTOR_TYPE</A>  Y Factor Type       <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_BEND_TABLE">PRO_E_SMT_DEV_LEN_BEND_TABLE</A>     Smt Dev Bend Table  <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_TOOL_DATA">PRO_E_SMT_PUNCH_TOOL_DATA</A>        Punch Tool Data     Compound
+<A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_TOOL_ATTR">PRO_E_SMT_PUNCH_TOOL_ATTR</A>        Punch Tool Attribs  PRO_VALUE_INT
+<A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_TOOL_NAME">PRO_E_SMT_PUNCH_TOOL_NAME</A>        Punch Tool Name     PRO_VALUE_WSTRING
+<A HREF="proelemid_h.html#PRO_E_SMT_MERGE_DATA">PRO_E_SMT_MERGE_DATA</A>             Smt Merge Wall Data Compound
+<A HREF="proelemid_h.html#PRO_E_SMT_MERGE_AUTO">PRO_E_SMT_MERGE_AUTO</A>             Auto Merge Flag     PRO_VALUE_INT
+<A HREF="proelemid_h.html#PRO_E_SMT_MERGE_KEEP_LINES">PRO_E_SMT_MERGE_KEEP_LINES</A>       Keep Merged Lines   PRO_VALUE_INT
+<A HREF="proelemid_h.html#PRO_E_EXT_COMP_DRFT_ANG">PRO_E_EXT_COMP_DRFT_ANG</A>          Draft               Compound
+<A HREF="proelemid_h.html#PRO_E_EXT_DRFT_ANG">PRO_E_EXT_DRFT_ANG</A>               Add Draft           <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DRFT_ANG_VAL">PRO_E_EXT_DRFT_ANG_VAL</A>           Draft Angle         <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>
+<A HREF="proelemid_h.html#PRO_E_FEAT_THIN">PRO_E_FEAT_THIN</A>                  Thin Def            Compound
+<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_STRT">PRO_E_FEAT_THIN_STRT</A>             Thin Start          Compound
+<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_STRT_OPT">PRO_E_FEAT_THIN_STRT_OPT</A>         Thin Option         <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_STRT_REF">PRO_E_FEAT_THIN_STRT_REF</A>         Reference           <A HREF="provalue_h.html#PRO_VALUE_TYPE_SELECTION">PRO_VALUE_TYPE_SELECTION</A>
+<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_END">PRO_E_FEAT_THIN_END</A>              Thin Start          Compound
+<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_END_OPT">PRO_E_FEAT_THIN_END_OPT</A>          Thin Option         <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>
+<A HREF="proelemid_h.html#PRO_E_FEAT_THIN_END_REF">PRO_E_FEAT_THIN_END_REF</A>          Reference           <A HREF="provalue_h.html#PRO_VALUE_TYPE_SELECTION">PRO_VALUE_TYPE_SELECTION</A>
+
+
+-----------------------------------------------------------------------------
+3.1 Mapping given only for changed Element Ids.
+------------------------------------------------------------------------------
+New Element Id                        Old Element ID 
+------------------------------------------------------------------------------
+<A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>         <A HREF="proelemid_h.html#PRO_E_FEATURE_TYPE">PRO_E_FEATURE_TYPE</A> 
+<A HREF="proelemid_h.html#PRO_E_SRF_END_ATTRIBUTES">PRO_E_SRF_END_ATTRIBUTES</A>              <A HREF="proelemid_h.html#PRO_E_ATTRIBUTES">PRO_E_ATTRIBUTES</A>-&gt;<A HREF="proelemid_h.html#PRO_E_ATTR_SRF_END_COND">PRO_E_ATTR_SRF_END_COND</A>
+-----------------------------------------------------------------------------
+-----------------------------------------------------------------------------
+3.2 New Element IDs in the element tree .
+------------------------------------------------------------------------------
+New Element Id                        
+------------------------------------------------------------------------------
+<A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>
+<A HREF="proelemid_h.html#PRO_E_SRF_END_ATTRIBUTES">PRO_E_SRF_END_ATTRIBUTES</A>
+<A HREF="proelemid_h.html#PRO_E_THICKNESS">PRO_E_THICKNESS</A>
+<A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>
+<A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>
+<A HREF="proelemid_h.html#PRO_E_STD_FEATURE_NAME">PRO_E_STD_FEATURE_NAME</A>
+<A HREF="proelemid_h.html#PRO_E_TRIM_QUILT">PRO_E_TRIM_QUILT</A>
+<A HREF="proelemid_h.html#PRO_E_TRIM_QLT_SIDE">PRO_E_TRIM_QLT_SIDE</A>
+<A HREF="proelemid_h.html#PRO_E_STD_DIRECTION">PRO_E_STD_DIRECTION</A>
+
+-----------------------------------------------------------------------------
+\*****************************************************************************/
+/*****************************************************************************\
+
+The Elements mentioned in the table below are for Solid Protrusion.
+For other features, additional elements required, are mentioned below in
+table 4.2.
+-----------------------------------------------------------------------------
+Table 4.1 : Common elements for all type of Extrusions and it's value
+-----------------------------------------------------------------------------
+| Element Id                  | Value                                  |
+---------------------------------------------------------------------
+|PRO_E_EXT_SURF_CUT_SOLID_TYPE| Mandatory                              |
+|                             | Of type <A HREF="proextrude_h.html#ProExtFeatType">ProExtFeatType</A>                 |
+|                             | = <A HREF="proextrude_h.html#PRO_EXT_FEAT_TYPE_SOLID">PRO_EXT_FEAT_TYPE_SOLID</A>              |
+|                             |        for Solid feat type             |
+|                             | = <A HREF="proextrude_h.html#PRO_EXT_FEAT_TYPE_SURFACE">PRO_EXT_FEAT_TYPE_SURFACE</A>            |
+|                             |        for Surface feat type           |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>       | Material Removal                       |
+|                             | Of type <A HREF="proextrude_h.html#ProExtRemMaterial">ProExtRemMaterial</A>              |
+|                             | = <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_ADD">PRO_EXT_MATERIAL_ADD</A>                 |
+|                             |        for Protruded feature           |
+|                             | = <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_REMOVE">PRO_EXT_MATERIAL_REMOVE</A>              |
+|                             |        for Cut feature                 |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_FEATURE_FORM">PRO_E_FEATURE_FORM</A>          | Feature Form                           |
+|                             | Valid Value : <A HREF="profeatform_h.html#PRO_EXTRUDE">PRO_EXTRUDE</A>              |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_STD_SECTION">PRO_E_STD_SECTION</A>           | For more details refer <A HREF="prostdsection_h.html">ProStdSection.h</A> |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_STD_DIRECTION">PRO_E_STD_DIRECTION</A>         | Direction of creation.                 |
+|                             | Depends on <A HREF="proelemid_h.html#PRO_E_STD_SECTION">PRO_E_STD_SECTION</A>           |
+|                             | See Note 3 for details.                |
+|                             | Of type <A HREF="proextrude_h.html#ProExtDirection">ProExtDirection</A>                |
+|                             | = <A HREF="proextrude_h.html#PRO_EXT_CR_IN_SIDE_ONE">PRO_EXT_CR_IN_SIDE_ONE</A>               |
+|                             |        for depth in side one           |
+|                             | = <A HREF="proextrude_h.html#PRO_EXT_CR_IN_SIDE_TWO">PRO_EXT_CR_IN_SIDE_TWO</A>               |
+|                             |        for depth in side two           |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>         | Required if open section and if        |
+|                             | <A HREF="proextrude_h.html#ProExtFeatType">ProExtFeatType</A>  is                     |
+|                             | <A HREF="proextrude_h.html#PRO_EXT_FEAT_TYPE_SOLID">PRO_EXT_FEAT_TYPE_SOLID</A>                |
+|                             | Depends on <A HREF="proelemid_h.html#PRO_E_STD_SECTION">PRO_E_STD_SECTION</A>           |
+|                             | See Note 3 for details.                |
+|                             | Of type <A HREF="proextrude_h.html#ProExtMatlSide">ProExtMatlSide.</A>                |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_STD_EXT_DEPTH">PRO_E_STD_EXT_DEPTH</A>         | Compound Element                       |
+|                             |                                        |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO">PRO_E_EXT_DEPTH_TO</A>          | Compound Element                       |
+|                             |                                        |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>     | Mandatory                              |
+|                             | Of type <A HREF="proextrude_h.html#ProExtDepthToType">ProExtDepthToType</A>              |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_VALUE">PRO_E_EXT_DEPTH_TO_VALUE</A>    | Depends on <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>     |
+|                             | Of type  <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>         |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF">PRO_E_EXT_DEPTH_TO_REF</A>      | Depends on <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>     |
+|                             | Of type  See Note 1.                   |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM">PRO_E_EXT_DEPTH_FROM</A>        | Compound Element                       |
+|                             |                                        |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>   | Mandatory                              |
+|                             | Of type <A HREF="proextrude_h.html#ProExtDepthFromType">ProExtDepthFromType</A>            |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_VALUE">PRO_E_EXT_DEPTH_FROM_VALUE</A>  | Depends on <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>   |
+|                             | Of type  <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>         |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF">PRO_E_EXT_DEPTH_FROM_REF</A>    | Depends on <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>   |
+|                             | Of type   See Note 1.                  |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_STD_FEATURE_NAME">PRO_E_STD_FEATURE_NAME</A>      | Default given by application depending |
+|                             | on feature type.Can be modified by user|
+|.............................|........................................|
+
+-----------------------------------------------------------------------------
+Table Extrude:4.2 : Elements required for each feature in addition to 
+                     those mentioned above. 
+-----------------------------------------------------------------------------
+|          | Element Id                     | Comment                         |
+------------------------------------------------------------------------------
+| Solid    :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_COMP_DRFT_ANG">PRO_E_EXT_COMP_DRFT_ANG</A>        : Compound Element                |                |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DRFT_ANG">PRO_E_EXT_DRFT_ANG</A>             : Of type <A HREF="proextrude_h.html#ProExtDrftAng">ProExtDrftAng</A>           |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_DRFT_ANG_NO_DRAFT">PRO_EXT_DRFT_ANG_NO_DRAFT</A>     |
+|          :                                : for feature not having Draft    |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_DRFT_ANG_DRAFT">PRO_EXT_DRFT_ANG_DRAFT</A>        |
+|          :                                : for Tapered feature             |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DRFT_ANG_VAL">PRO_E_EXT_DRFT_ANG_VAL</A>         : [-89.9,89.9]                    |
+|          :                                : Of type <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>   |
+|..........:................................:.................................|
+| Thin     :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>            : Mandatory                       |
+|          :                                : Of type <A HREF="proextrude_h.html#ProExtMatlSide">ProExtMatlSide</A>          |
+|          : <A HREF="proelemid_h.html#PRO_E_THICKNESS">PRO_E_THICKNESS</A>                : Mandatory   &gt;= 0.0              |
+|          :                                : Of type <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>   |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : Of type <A HREF="proextrude_h.html#ProExtFeatForm">ProExtFeatForm</A>          |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN</A>     |
+|          :                                : for feature not having Thin     |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_THIN">PRO_EXT_FEAT_FORM_THIN</A>        |
+|          :                                : for Thin feature                |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_THIN">PRO_E_FEAT_THIN</A>                : Compound Element                |
+|          :                                : Available only for open section |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_THIN_STRT">PRO_E_FEAT_THIN_STRT</A>           : Compound Element                |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_THIN_END">PRO_E_FEAT_THIN_END</A>            : Compound Element                |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_THIN_STRT_OPT">PRO_E_FEAT_THIN_STRT_OPT</A>       : Of type <A HREF="proextrude_h.html#ProFeatThinOpt">ProFeatThinOpt</A>          |
+|          :                                : = <A HREF="proextrude_h.html#PRO_FEAT_THIN_IGNORE">PRO_FEAT_THIN_IGNORE</A>          |
+|          :                                : for feature ignoring solution   |
+|          :                                : = <A HREF="proextrude_h.html#PRO_FEAT_THIN_DEFAULT">PRO_FEAT_THIN_DEFAULT</A>         |
+|          :                                : for feature using default       | 
+|          :                                : solution.                       |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_THIN_END_OPT">PRO_E_FEAT_THIN_END_OPT</A>        : Of type <A HREF="proextrude_h.html#ProFeatThinOpt">ProFeatThinOpt</A>          |
+|          :                                : = <A HREF="proextrude_h.html#PRO_FEAT_THIN_IGNORE">PRO_FEAT_THIN_IGNORE</A>          |
+|          :                                : for feature ignoring solution   |
+|          :                                : = <A HREF="proextrude_h.html#PRO_FEAT_THIN_DEFAULT">PRO_FEAT_THIN_DEFAULT</A>         |
+|          :                                : for feature using default       | 
+|          :                                : solution.                       |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_THIN_STRT_REF">PRO_E_FEAT_THIN_STRT_REF</A>       : Stores the reference found from |
+|          :                                : the start section point when    |
+|          :                                : <A HREF="proelemid_h.html#PRO_E_FEAT_THIN_STRT_OPT">PRO_E_FEAT_THIN_STRT_OPT</A> =      |
+|          :                                : <A HREF="proextrude_h.html#PRO_FEAT_THIN_DEFAULT">PRO_FEAT_THIN_DEFAULT</A>           |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_THIN_END_REF">PRO_E_FEAT_THIN_END_REF</A>        : Stores the reference found from |
+|          :                                : the end section point when      |
+|          :                                : <A HREF="proelemid_h.html#PRO_E_FEAT_THIN_END_OPT">PRO_E_FEAT_THIN_END_OPT</A> =       |
+|          :                                : <A HREF="proextrude_h.html#PRO_FEAT_THIN_DEFAULT">PRO_FEAT_THIN_DEFAULT</A>           |
+|..........:................................:.................................|
+| Solid Cut:                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>            : Mandatory                       |
+|          :                                : Of type <A HREF="proextrude_h.html#ProExtMatlSide">ProExtMatlSide</A>          |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : Of type <A HREF="proextrude_h.html#ProExtFeatForm">ProExtFeatForm</A>          |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN</A>     |
+|          :                                : for feature not having Thin     |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_THIN">PRO_EXT_FEAT_FORM_THIN</A>        |
+|          :                                : for Thin feature                |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_IS_SMT_CUT">PRO_E_IS_SMT_CUT</A>               : Controls cut type, SMT or SOLID |
+|          :                                : <A HREF="protoolkit_h.html#PRO_B_TRUE">PRO_B_TRUE</A> / <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE</A>        |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_CUT_NORMAL_DIR">PRO_E_SMT_CUT_NORMAL_DIR</A>       : SMT Cut geometry driving surface|
+|          :                                : See: <A HREF="proextrude_h.html#ProSmtCutNormDir">ProSmtCutNormDir</A>           |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_TOOL_ATTR">PRO_E_SMT_PUNCH_TOOL_ATTR</A>      : SMT Cut punch tool attributes   |
+|          :                                : See: <A HREF="proextrude_h.html#ProPunchToolAttr">ProPunchToolAttr</A>           |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_TOOL_NAME">PRO_E_SMT_PUNCH_TOOL_NAME</A>      : SMT Cut punch tool name         |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_AXIS_PNT">PRO_E_SMT_PUNCH_AXIS_PNT</A>       : SMT Cut punch axis point        |
+|          :                                : <A HREF="protoolkit_h.html#PRO_B_TRUE">PRO_B_TRUE</A> / <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE</A>        |
+|          :				                :	                              |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_COMP_DRFT_ANG">PRO_E_EXT_COMP_DRFT_ANG</A>        : Compound Element                |  
+|          :                                : for feature not having Thin     |
+|          :                                : See: Table Extrude:4.2, Solid   |
+|..........:................................:.................................|
+| Thin Cut :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>            : Mandatory                       |
+|          :                                : Of type <A HREF="proextrude_h.html#ProExtMatlSide">ProExtMatlSide</A>          |
+|          : <A HREF="proelemid_h.html#PRO_E_THICKNESS">PRO_E_THICKNESS</A>                : Mandatory  &gt;= 0.0               |
+|          :                                : Of type <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>   |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : Of type <A HREF="proextrude_h.html#ProExtFeatForm">ProExtFeatForm</A>          |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN</A>     |
+|          :                                : for feature not having Thin     |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_THIN">PRO_EXT_FEAT_FORM_THIN</A>        |
+|          :                                : for Thin feature                |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_IS_SMT_CUT">PRO_E_IS_SMT_CUT</A>               : Controls cut type, SMT or SOLID |
+|          :                                : <A HREF="protoolkit_h.html#PRO_B_TRUE">PRO_B_TRUE</A> / <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE</A>        |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_CUT_NORMAL_DIR">PRO_E_SMT_CUT_NORMAL_DIR</A>       : SMT Cut geometry driving surface|
+|          :                                : See: <A HREF="proextrude_h.html#ProSmtCutNormDir">ProSmtCutNormDir</A>           |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_TOOL_ATTR">PRO_E_SMT_PUNCH_TOOL_ATTR</A>      : SMT Cut punch tool attributes   |
+|          :                                : See: <A HREF="proextrude_h.html#ProPunchToolAttr">ProPunchToolAttr</A>           |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_TOOL_NAME">PRO_E_SMT_PUNCH_TOOL_NAME</A>      : SMT Cut punch tool name         |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_THIN">PRO_E_FEAT_THIN</A>                : Compound Element                |
+|          :                                : See: Table Extrude:4.2, Thin    |
+|..........:................................:.................................|
+| Surface  :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SRF_END_ATTRIBUTES">PRO_E_SRF_END_ATTRIBUTES</A>       :                                 |
+|          :                                : Of type <A HREF="proextrude_h.html#ProExtSurfEndAttr">ProExtSurfEndAttr</A>       |
+|          :                                : Depends on <A HREF="proelemid_h.html#PRO_E_STD_SECTION">PRO_E_STD_SECTION</A>    |
+|          :                                : See Note 3 for details.         |
+|          :                                : Required only for closed section|
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : Of type <A HREF="proextrude_h.html#ProExtFeatForm">ProExtFeatForm</A>          |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN</A>     |
+|          :                                : for feature not having Thin     |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_THIN">PRO_EXT_FEAT_FORM_THIN</A>        |
+|          :                                : for Thin feature                |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_COMP_DRFT_ANG">PRO_E_EXT_COMP_DRFT_ANG</A>        : Compound Element                |  
+|          :                                : for feature not having Thin     |
+|          :                                : See: Table Extrude:4.2, Solid   |
+|..........:................................:.................................|
+| Surface  :                                :                                 |
+| Trim     : <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>            : Mandatory                       |
+|          :                                : Of type <A HREF="proextrude_h.html#ProExtMatlSide">ProExtMatlSide</A>          |
+|          : <A HREF="proelemid_h.html#PRO_E_TRIM_QUILT">PRO_E_TRIM_QUILT</A>               : Mandatory                       |
+|          :                                : Of type Quilt.                  |
+|          : <A HREF="proelemid_h.html#PRO_E_TRIM_QLT_SIDE">PRO_E_TRIM_QLT_SIDE</A>            :                                 |
+|          :                                : Of type <A HREF="proextrude_h.html#ProExtTrimQltSide">ProExtTrimQltSide</A>       |
+|          :                                : Depends on <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>  |
+|          :                                : See Note 3 for details.         |
+|          :                                : Required only if <A HREF="proextrude_h.html#ProExtMatlSide">ProExtMatlSide</A> |
+|          :                                :  is <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_BOTH_SIDES">PRO_EXT_MATERIAL_BOTH_SIDES</A> |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : Of type <A HREF="proextrude_h.html#ProExtFeatForm">ProExtFeatForm</A>          |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN</A>     |
+|          :                                : for feature not having Thin     |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_THIN">PRO_EXT_FEAT_FORM_THIN</A>        |
+|          :                                : for Thin feature                |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_COMP_DRFT_ANG">PRO_E_EXT_COMP_DRFT_ANG</A>        : Compound Element                |  
+|          :                                : for feature not having Thin     |
+|          :                                : See: Table Extrude:4.2, Solid   |
+|..........:................................:.................................|
+| Thin     :                                :                                 |
+| Surface  : <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>            : Mandatory                       |
+| Trim     :                                : Of type <A HREF="proextrude_h.html#ProExtMatlSide">ProExtMatlSide</A>          |
+|          : <A HREF="proelemid_h.html#PRO_E_THICKNESS">PRO_E_THICKNESS</A>                : Mandatory    &gt;= 0.0             |
+|          :                                : Of type <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>   |
+|          : <A HREF="proelemid_h.html#PRO_E_TRIM_QUILT">PRO_E_TRIM_QUILT</A>               : Mandatory                       |
+|          :                                : Of type Quilt.                  |
+|          : <A HREF="proelemid_h.html#PRO_E_TRIM_QLT_SIDE">PRO_E_TRIM_QLT_SIDE</A>            :                                 |
+|          :                                : Of type <A HREF="proextrude_h.html#ProExtTrimQltSide">ProExtTrimQltSide</A>       |
+|          :                                : Depends on <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>  |
+|          :                                : See Note 3 for details.         |
+|          :                                : Required only if <A HREF="proextrude_h.html#ProExtMatlSide">ProExtMatlSide</A> |
+|          :                                :  is <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_BOTH_SIDES">PRO_EXT_MATERIAL_BOTH_SIDES</A> |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : Of type <A HREF="proextrude_h.html#ProExtFeatForm">ProExtFeatForm</A>          |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN</A>     |
+|          :                                : for feature not having Thin     |
+|          :                                : = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_THIN">PRO_EXT_FEAT_FORM_THIN</A>        |
+|          :                                : for Thin feature                |
+|..........:................................:.................................|
+| SMT      :                                :                                 |
+|Unattached: <A HREF="proelemid_h.html#PRO_E_STD_SMT_THICKNESS">PRO_E_STD_SMT_THICKNESS</A>        : Non-relevant for non first wall.|
+| Wall     :                                : DOUBLE  &gt;= 0.0                  |
+|          : <A HREF="proelemid_h.html#PRO_E_STD_SMT_SWAP_DRV_SIDE">PRO_E_STD_SMT_SWAP_DRV_SIDE</A>    : <A HREF="protoolkit_h.html#PRO_B_TRUE">PRO_B_TRUE</A>, <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE</A>         |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_WALL_SHARPS_TO_BENDS">PRO_E_SMT_WALL_SHARPS_TO_BENDS</A> : <A HREF="protoolkit_h.html#PRO_B_TRUE">PRO_B_TRUE</A>, <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE</A>         |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_FILLETS_SIDE">PRO_E_SMT_FILLETS_SIDE</A>         : <A HREF="prosmtflangewall_h.html#ProSmdRadType">ProSmdRadType</A>                   |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_FILLETS_VALUE">PRO_E_SMT_FILLETS_VALUE</A>        : DOUBLE                          |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_SOURCE">PRO_E_SMT_DEV_LEN_SOURCE</A>       : see :ProDvlLenSrcType           |
+|          :                                :                                 |
+|          : PRO_E_SMT_DEV_LEN_Y_FACTOR_TYPE: see :ProDvlLenFactor            |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_BEND_TABLE">PRO_E_SMT_DEV_LEN_BEND_TABLE</A>   : int (bend table ID)             |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_MERGE_AUTO">PRO_E_SMT_MERGE_AUTO</A>           : <A HREF="protoolkit_h.html#PRO_B_TRUE">PRO_B_TRUE</A>, <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE</A>         |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_SMT_MERGE_KEEP_LINES">PRO_E_SMT_MERGE_KEEP_LINES</A>     : <A HREF="protoolkit_h.html#PRO_B_TRUE">PRO_B_TRUE</A>, <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE</A>         |
+|..........:................................:.................................|
+
+
+-----------------------------------------------------------------------------------
+Table Extrude:4.3 : Which subelements of Depth compound element are valid
+                     and when? 
+-----------------------------------------------------------------------------------
+|          | Element Id                      | Comment                            |
+-----------------------------------------------------------------------------------
+| Depth    :                                 :                                    |
+| Elements :......................................................................|
+|          : <A HREF="proelemid_h.html#PRO_E_STD_EXT_DEPTH">PRO_E_STD_EXT_DEPTH</A>             : Depth compound Element             |
+|          :                                 :....................................|
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO">PRO_E_EXT_DEPTH_TO</A>              : Info of First Side depth in UI     |
+|          :                                 : ( compound element )               |
+|          :                                 :                                    |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>         : of type <A HREF="proextrude_h.html#ProExtDepthToType">ProExtDepthToType</A>          |
+|          :                                 :                                    |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_VALUE">PRO_E_EXT_DEPTH_TO_VALUE</A>        : Variable depth double value &gt;= 0.0 |
+|          :                                 : when <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>       |
+|          :                                 :      == <A HREF="proextrude_h.html#PRO_EXT_DEPTH_TO_BLIND">PRO_EXT_DEPTH_TO_BLIND</A>   OR|
+|          :                                 :      == <A HREF="proextrude_h.html#PRO_EXT_DEPTH_SYMMETRIC">PRO_EXT_DEPTH_SYMMETRIC</A>    |
+|          :                                 :                                    |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF">PRO_E_EXT_DEPTH_TO_REF</A>          : Stores the upto reference          |
+|          :                                 : when <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>       |
+|          :                                 :  == <A HREF="proextrude_h.html#PRO_EXT_DEPTH_TO_REF">PRO_EXT_DEPTH_TO_REF</A>       OR  |
+|          :                                 :  == <A HREF="proextrude_h.html#PRO_EXT_DEPTH_TO_UNTIL">PRO_EXT_DEPTH_TO_UNTIL</A>         |
+|          :                                 :                                    |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF_TRF">PRO_E_EXT_DEPTH_TO_REF_TRF</A>      : of type <A HREF="proextrude_h.html#ProExtDepthRefOpt">ProExtDepthRefOpt</A>          |
+|          :                                 : when <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>       |
+|          :                                 :  == <A HREF="proextrude_h.html#PRO_EXT_DEPTH_TO_REF">PRO_EXT_DEPTH_TO_REF</A>           |
+|          :                                 :                                    |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF_TRF_VAL">PRO_E_EXT_DEPTH_TO_REF_TRF_VAL</A>  : Offset/translation double value    |
+|          :                                 : when <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF_TRF">PRO_E_EXT_DEPTH_TO_REF_TRF</A>    |
+|          :                                 :  != <A HREF="proextrude_h.html#PRO_EXT_DEPTH_REF_NONE">PRO_EXT_DEPTH_REF_NONE</A>         |
+|          :                                 :                                    |
+|          :                                 :....................................|
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM">PRO_E_EXT_DEPTH_FROM</A>            : Info of Second Side depth in UI    |
+|          :                                 : ( Compound Element  )              |
+|          :                                 :                                    |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>       : of <A HREF="proextrude_h.html#ProExtDepthFromType">ProExtDepthFromType</A>             |
+|          :                                 :                                    |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_VALUE">PRO_E_EXT_DEPTH_FROM_VALUE</A>      : Variable depth double value &gt;= 0.0 |
+|          :                                 : when <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>     |
+|          :                                 :      == <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_BLIND">PRO_EXT_DEPTH_FROM_BLIND</A>   |
+|          :                                 :                                    |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF">PRO_E_EXT_DEPTH_FROM_REF</A>        : stores the upto reference          |
+|          :                                 : when <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>     |
+|          :                                 :  == <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_REF">PRO_EXT_DEPTH_FROM_REF</A>     OR  |
+|          :                                 :  == <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_UNTIL">PRO_EXT_DEPTH_FROM_UNTIL</A>       |
+|          :                                 :                                    |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF_TRF">PRO_E_EXT_DEPTH_FROM_REF_TRF</A>    : of type <A HREF="proextrude_h.html#ProExtDepthRefOpt">ProExtDepthRefOpt</A>          |
+|          :                                 : when <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>     |
+|          :                                 :  == <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_REF">PRO_EXT_DEPTH_FROM_REF</A>         |
+|          :                                 :                                    |
+|          : PRO_E_EXT_DEPTH_FROM_REF_TRF_VAL: Offset/translation double value    |
+|          :                                 : when <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF_TRF">PRO_E_EXT_DEPTH_FROM_REF_TRF</A>  |
+|          :                                 :  != <A HREF="proextrude_h.html#PRO_EXT_DEPTH_REF_NONE">PRO_EXT_DEPTH_REF_NONE</A>         |
+|          :                                 :                                    |
+|..........:.................................:....................................|
+
+-------------------------------------------------------------------------------
+Table Extrude:4.4 :  Values of Specific Elements for each feature
+-------------------------------------------------------------------------------
+|          | Element Id                     | Value                           |
+-------------------------------------------------------------------------------
+| Solid    :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>  : <A HREF="proextrude_h.html#PRO_EXT_FEAT_TYPE_SOLID">PRO_EXT_FEAT_TYPE_SOLID</A>         |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN</A>       |
+|          : <A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>          : <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_ADD">PRO_EXT_MATERIAL_ADD</A>            |
+|..........:................................:.................................|
+| Thin     :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>  : <A HREF="proextrude_h.html#PRO_EXT_FEAT_TYPE_SOLID">PRO_EXT_FEAT_TYPE_SOLID</A>         |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_THIN">PRO_EXT_FEAT_FORM_THIN</A>          |
+|          : <A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>          : <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_ADD">PRO_EXT_MATERIAL_ADD</A>            |
+|..........:................................:.................................|
+| Solid Cut:                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>  : <A HREF="proextrude_h.html#PRO_EXT_FEAT_TYPE_SOLID">PRO_EXT_FEAT_TYPE_SOLID</A>         |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN</A>       |
+|          : <A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>          : <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_REMOVE">PRO_EXT_MATERIAL_REMOVE</A>         |
+|..........:................................:.................................|
+| Thin Cut :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>  : <A HREF="proextrude_h.html#PRO_EXT_FEAT_TYPE_SOLID">PRO_EXT_FEAT_TYPE_SOLID</A>         |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_THIN">PRO_EXT_FEAT_FORM_THIN</A>          |
+|          : <A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>          : <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_REMOVE">PRO_EXT_MATERIAL_REMOVE</A>         |
+|..........:................................:.................................|
+| Surface  :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>  : <A HREF="proextrude_h.html#PRO_EXT_FEAT_TYPE_SURFACE">PRO_EXT_FEAT_TYPE_SURFACE</A>       |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN</A>       |
+|          : <A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>          : <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_ADD">PRO_EXT_MATERIAL_ADD</A>            |
+|..........:................................:.................................|
+| Surface  :                                :                                 |
+| Trim     : <A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>  : <A HREF="proextrude_h.html#PRO_EXT_FEAT_TYPE_SURFACE">PRO_EXT_FEAT_TYPE_SURFACE</A>       |
+|          : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN</A>       |
+|          : <A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>          : <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_REMOVE">PRO_EXT_MATERIAL_REMOVE</A>         |
+|..........:................................:.................................|
+| Thin     :                                :                                 |
+| Surface  : <A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>  : <A HREF="proextrude_h.html#PRO_EXT_FEAT_TYPE_SURFACE">PRO_EXT_FEAT_TYPE_SURFACE</A>       |
+| Trim     : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_THIN">PRO_EXT_FEAT_FORM_THIN</A>          |
+|          : <A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>          : <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_REMOVE">PRO_EXT_MATERIAL_REMOVE</A>         |
+|..........:................................:.................................|
+| SMT      :                                :                                 |
+|Unattached: <A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>  : <A HREF="proextrude_h.html#PRO_EXT_FEAT_TYPE_SOLID">PRO_EXT_FEAT_TYPE_SOLID</A>         |
+| Wall     : <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>        : Non-relevant                    |
+|          : <A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>          : <A HREF="proextrude_h.html#PRO_EXT_MATERIAL_ADD">PRO_EXT_MATERIAL_ADD</A>            |
+|..........:................................:.................................|
+
+
+-------------------------------------------------------------------------------
+Table Extrude:4.5 :  Non SMT Extrude Vs. Sheet Metal Extrude (Unattached Wall)|
+------------------------------------------------------------------------------
+| Elements that are common to both features                                   |
+|-----------------------------------------------------------------------------|
+| <A HREF="proelemid_h.html#PRO_E_STD_FEATURE_NAME">PRO_E_STD_FEATURE_NAME</A>                                                      |
+| <A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A>                                               |
+| <A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A>                                                       |
+| <A HREF="proelemid_h.html#PRO_E_FEATURE_FORM">PRO_E_FEATURE_FORM</A>                                                          |
+| <A HREF="proelemid_h.html#PRO_E_STD_SECTION">PRO_E_STD_SECTION</A>                                                           |
+| <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>                                                         |
+| <A HREF="proelemid_h.html#PRO_E_STD_DIRECTION">PRO_E_STD_DIRECTION</A>                                                         |
+| <A HREF="proelemid_h.html#PRO_E_STD_EXT_DEPTH">PRO_E_STD_EXT_DEPTH</A>                                                         |
+|.............................................................................|
+| Extrude specific                      | Wall specific                       |
+|-----------------------------------------------------------------------------|
+|.......................................:.....................................|
+| <A HREF="proelemid_h.html#PRO_E_IS_SMT_CUT">PRO_E_IS_SMT_CUT</A>                      :  <A HREF="proelemid_h.html#PRO_E_STD_SMT_THICKNESS">PRO_E_STD_SMT_THICKNESS</A>            |
+| <A HREF="proelemid_h.html#PRO_E_SMT_CUT_NORMAL_DIR">PRO_E_SMT_CUT_NORMAL_DIR</A>              :  <A HREF="proelemid_h.html#PRO_E_STD_SMT_SWAP_DRV_SIDE">PRO_E_STD_SMT_SWAP_DRV_SIDE</A>        |
+| <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>               :  <A HREF="proelemid_h.html#PRO_E_SMT_WALL_SHARPS_TO_BENDS">PRO_E_SMT_WALL_SHARPS_TO_BENDS</A>     |
+| <A HREF="proelemid_h.html#PRO_E_THICKNESS">PRO_E_THICKNESS</A>                       :  <A HREF="proelemid_h.html#PRO_E_SMT_FILLETS">PRO_E_SMT_FILLETS</A>                  |
+| <A HREF="proelemid_h.html#PRO_E_SRF_END_ATTRIBUTES">PRO_E_SRF_END_ATTRIBUTES</A>              :  <A HREF="proelemid_h.html#PRO_E_SMT_DEV_LEN_CALCULATION">PRO_E_SMT_DEV_LEN_CALCULATION</A>      |
+| <A HREF="proelemid_h.html#PRO_E_TRIM_QLT_SIDE">PRO_E_TRIM_QLT_SIDE</A>                   :  <A HREF="proelemid_h.html#PRO_E_SMT_MERGE_DATA">PRO_E_SMT_MERGE_DATA</A>               |
+| <A HREF="proelemid_h.html#PRO_E_TRIM_QUILT">PRO_E_TRIM_QUILT</A>                      :                                     |
+| <A HREF="proelemid_h.html#PRO_E_EXT_COMP_DRFT_ANG">PRO_E_EXT_COMP_DRFT_ANG</A>               :                                     |
+| <A HREF="proelemid_h.html#PRO_E_FEAT_THIN">PRO_E_FEAT_THIN</A>                       :                                     |
+|.......................................:.....................................|
+
+
+5  Feature element tree for first feat:
+=======================================
+ 
+   <A HREF="proelemid_h.html#PRO_E_FEATURE_TREE">PRO_E_FEATURE_TREE</A>
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_STD_FEATURE_NAME">PRO_E_STD_FEATURE_NAME</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_FEATURE_TYPE">PRO_E_FEATURE_TYPE</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_FEATURE_FORM">PRO_E_FEATURE_FORM</A>
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_SKETCHER">PRO_E_SKETCHER</A>                ( Section )
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>       ( Feature Form )
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>           ( Material Side )
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_THICKNESS">PRO_E_THICKNESS</A>               ( Thickness )
+     |   
+     |--<A HREF="proelemid_h.html#PRO_E_STD_EXT_DEPTH">PRO_E_STD_EXT_DEPTH</A>
+     |    |
+     |    |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM">PRO_E_EXT_DEPTH_FROM</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_VALUE">PRO_E_EXT_DEPTH_FROM_VALUE</A>
+   
+-----------------------------------------------------------------------------
+Table 5.1 : Common element for all First feat Extrusions and it's value
+-----------------------------------------------------------------------------
+| Element Id                  | Value                                  | 
+---------------------------------------------------------------------
+| <A HREF="proelemid_h.html#PRO_E_FEATURE_FORM">PRO_E_FEATURE_FORM</A>          | Feature Form                           | 
+|                             | Valid Value : <A HREF="profeatform_h.html#PRO_EXTRUDE">PRO_EXTRUDE</A>              | 
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_FEATURE_TYPE">PRO_E_FEATURE_TYPE</A>          | Feature type                           | 
+|                             | Valid Value : <A HREF="profeattype_h.html#PRO_FEAT_FIRST_FEAT">PRO_FEAT_FIRST_FEAT</A>      | 
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_SKETCHER">PRO_E_SKETCHER</A>              | 2D section.  Must be closed for solid  | 
+|                             | first features.i.e <A HREF="proextrude_h.html#ProExtFeatForm">ProExtFeatForm</A> ==   | 
+|                             | <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN.</A>             | 
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A>     | Feature Form                           | 
+|                             | Of type <A HREF="proextrude_h.html#ProExtFeatForm">ProExtFeatForm</A>                 | 
+|                             | = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_NO_THIN">PRO_EXT_FEAT_FORM_NO_THIN</A>            | 
+|                             |        for Solid feature               | 
+|                             | = <A HREF="proextrude_h.html#PRO_EXT_FEAT_FORM_THIN">PRO_EXT_FEAT_FORM_THIN</A>               | 
+|                             |        for Thin feature                | 
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_STD_EXT_DEPTH">PRO_E_STD_EXT_DEPTH</A>         | Compound Element                       | 
+|                             |                                        |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM">PRO_E_EXT_DEPTH_FROM</A>        | Compound Element                       | 
+|                             |                                        |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>   | Mandatory                              | 
+|                             | = <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_BLIND">PRO_EXT_DEPTH_FROM_BLIND</A>             | 
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_VALUE">PRO_E_EXT_DEPTH_FROM_VALUE</A>  | Of type  <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>         |
+|.............................|........................................|
+| <A HREF="proelemid_h.html#PRO_E_STD_FEATURE_NAME">PRO_E_STD_FEATURE_NAME</A>      | Default given by application depending |
+|                             | on feature type.Can be modified by user|
+|.............................|........................................|
+
+
+
+-----------------------------------------------------------------------------
+Table Extrude:5.2 : Elements required for each First feature in addition to
+                    those mentioned above.
+-----------------------------------------------------------------------------
+|          | Element Id                     | Comment                         |
+------------------------------------------------------------------------------
+| Solid    :                                : No Additional Elements Required |
+|..........:................................:.................................|
+| Thin     :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>            : Mandatory                       |
+|          :                                : Of type <A HREF="proextrude_h.html#ProExtMatlSide">ProExtMatlSide</A>          |
+|          :                                : Dependent on <A HREF="proelemid_h.html#PRO_E_SKETCHER">PRO_E_SKETCHER</A>     |
+|          :                                : See Note 6 for details.         |
+|          :                                :                                 |
+|          : <A HREF="proelemid_h.html#PRO_E_THICKNESS">PRO_E_THICKNESS</A>                : Mandatory   &gt;= 0.0              |
+|          :                                : Of type <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>   |
+|          :                                : Dependent on <A HREF="proelemid_h.html#PRO_E_SKETCHER">PRO_E_SKETCHER</A>     |
+|          :                                : See Note 6 for details.         |
+|..........:................................:.................................|
+
+\*****************************************************************************/
+/*****************************************************************************/
+
+
+/* 1. <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A> */ 
+
+<A name="ProExtDepthFromType"></A>typedef enum pro_ext_depth_from_type
+{
+<A name="PRO_EXT_DEPTH_FROM_BLIND"></A>   PRO_EXT_DEPTH_FROM_BLIND    = (1 &lt;&lt; 7),
+<A name="PRO_EXT_DEPTH_FROM_NEXT"></A>   PRO_EXT_DEPTH_FROM_NEXT     = (1 &lt;&lt; 8),
+<A name="PRO_EXT_DEPTH_FROM_ALL"></A>   PRO_EXT_DEPTH_FROM_ALL      = (1 &lt;&lt; 9),
+<A name="PRO_EXT_DEPTH_FROM_UNTIL"></A>   PRO_EXT_DEPTH_FROM_UNTIL    = (1 &lt;&lt; 10),
+<A name="PRO_EXT_DEPTH_FROM_REF"></A>   PRO_EXT_DEPTH_FROM_REF      = (1 &lt;&lt; 11),
+<A name="PRO_EXT_DEPTH_FROM_NONE"></A>   PRO_EXT_DEPTH_FROM_NONE     = (1 &lt;&lt; 12)
+} <A HREF="proextrude_h.html#ProExtDepthFromType">ProExtDepthFromType</A>;
+
+/* 2. <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A> */
+
+<A name="ProExtDepthToType"></A>typedef enum pro_depth_to_type
+{
+<A name="PRO_EXT_DEPTH_TO_BLIND"></A>   PRO_EXT_DEPTH_TO_BLIND    = (1 &lt;&lt; 18),
+<A name="PRO_EXT_DEPTH_TO_NEXT"></A>   PRO_EXT_DEPTH_TO_NEXT     = (1 &lt;&lt; 19),
+<A name="PRO_EXT_DEPTH_TO_ALL"></A>   PRO_EXT_DEPTH_TO_ALL      = (1 &lt;&lt; 20),
+<A name="PRO_EXT_DEPTH_TO_UNTIL"></A>   PRO_EXT_DEPTH_TO_UNTIL    = (1 &lt;&lt; 21),
+<A name="PRO_EXT_DEPTH_TO_REF"></A>   PRO_EXT_DEPTH_TO_REF      = (1 &lt;&lt; 22),
+<A name="PRO_EXT_DEPTH_TO_NONE"></A>   PRO_EXT_DEPTH_TO_NONE     = (1 &lt;&lt; 23), /* Obsoleted. See Note Below*/
+<A name="PRO_EXT_DEPTH_SYMMETRIC"></A>   PRO_EXT_DEPTH_SYMMETRIC   = (1 &lt;&lt; 28)
+} <A HREF="proextrude_h.html#ProExtDepthToType">ProExtDepthToType</A>;
+/* <A HREF="proextrude_h.html#PRO_EXT_DEPTH_TO_NONE">PRO_EXT_DEPTH_TO_NONE</A> should not be used as depth type. 
+   Instead use <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_NONE">PRO_EXT_DEPTH_FROM_NONE</A> and proper <A HREF="proelemid_h.html#PRO_E_STD_DIRECTION">PRO_E_STD_DIRECTION</A> */
+
+/* 3. <A HREF="proelemid_h.html#PRO_E_TRIM_QLT_SIDE">PRO_E_TRIM_QLT_SIDE</A> */
+
+<A name="ProExtTrimQltSide"></A> typedef enum pro_ext_trimqlt_side 
+ {
+<A name="PRO_EXT_TRIMQLT_SIDE_ONE"></A>   PRO_EXT_TRIMQLT_SIDE_ONE         = -1,  /* Side 1 */ 
+<A name="PRO_EXT_TRIMQLT_SIDE_TWO"></A>   PRO_EXT_TRIMQLT_SIDE_TWO         =  1   /* Side 2 */ 
+ } <A HREF="proextrude_h.html#ProExtTrimQltSide">ProExtTrimQltSide</A>;
+
+
+/* 4. <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A> */
+
+<A name="ProExtMatlSide"></A> typedef enum pro_ext_material_side
+ {
+<A name="PRO_EXT_MATERIAL_SIDE_ONE"></A>   PRO_EXT_MATERIAL_SIDE_ONE        =  1,  /* Side 1      */ 
+<A name="PRO_EXT_MATERIAL_SIDE_TWO"></A>   PRO_EXT_MATERIAL_SIDE_TWO        =  2,  /* Side 2      */ 
+<A name="PRO_EXT_MATERIAL_BOTH_SIDES"></A>   PRO_EXT_MATERIAL_BOTH_SIDES      =  3   /* Both sides  */ 
+ } <A HREF="proextrude_h.html#ProExtMatlSide">ProExtMatlSide</A>;
+
+/* Important : PRO_EXT_MATERIAL_BOTH_SIDES should be used with Thin and trim
+               features only. */
+
+/* 5. <A HREF="proelemid_h.html#PRO_E_EXT_SURF_CUT_SOLID_TYPE">PRO_E_EXT_SURF_CUT_SOLID_TYPE</A> */
+
+<A name="ProExtFeatType"></A> typedef enum pro_ext_feat_type 
+ {
+<A name="PRO_EXT_FEAT_TYPE_SOLID"></A>   PRO_EXT_FEAT_TYPE_SOLID          =  917, /* Solid Protrusion */
+<A name="PRO_EXT_FEAT_TYPE_SURFACE"></A>   PRO_EXT_FEAT_TYPE_SURFACE        =  942  /* Surface Protrusion */
+ } <A HREF="proextrude_h.html#ProExtFeatType">ProExtFeatType</A>;
+
+
+/* 6. <A HREF="proelemid_h.html#PRO_E_REMOVE_MATERIAL">PRO_E_REMOVE_MATERIAL</A> */
+
+<A name="ProExtRemMaterial"></A> typedef enum pro_ext_rem_material 
+ {
+<A name="PRO_EXT_MATERIAL_ADD"></A>   PRO_EXT_MATERIAL_ADD             = -1,   /* Solid protrusion */ 
+<A name="PRO_EXT_MATERIAL_REMOVE"></A>   PRO_EXT_MATERIAL_REMOVE          =  916  /* Solid Cut protrusion */ 
+ } <A HREF="proextrude_h.html#ProExtRemMaterial">ProExtRemMaterial</A>;
+
+
+/* 7. <A HREF="proelemid_h.html#PRO_E_STD_DIRECTION">PRO_E_STD_DIRECTION</A> */
+
+<A name="ProExtDirection"></A> typedef enum pro_ext_direction 
+ {
+<A name="PRO_EXT_CR_IN_SIDE_ONE"></A>   PRO_EXT_CR_IN_SIDE_ONE           = -1, /* Protrusion in Side 1 */ 
+<A name="PRO_EXT_CR_IN_SIDE_TWO"></A>   PRO_EXT_CR_IN_SIDE_TWO           =  1  /* Protrusion in Side 2 */ 
+ } <A HREF="proextrude_h.html#ProExtDirection">ProExtDirection</A>;
+
+
+/* 8. <A HREF="proelemid_h.html#PRO_E_FEAT_FORM_IS_THIN">PRO_E_FEAT_FORM_IS_THIN</A> */
+
+<A name="ProExtFeatForm"></A> typedef enum pro_ext_feat_form 
+ {
+<A name="PRO_EXT_FEAT_FORM_NO_THIN"></A>   PRO_EXT_FEAT_FORM_NO_THIN        =  0,  /* Solid protrusion */ 
+<A name="PRO_EXT_FEAT_FORM_THIN"></A>   PRO_EXT_FEAT_FORM_THIN           =  128 /* Thin protrusion */ 
+ } <A HREF="proextrude_h.html#ProExtFeatForm">ProExtFeatForm</A>;
+
+
+/* 9. <A HREF="proelemid_h.html#PRO_E_SRF_END_ATTRIBUTES">PRO_E_SRF_END_ATTRIBUTES</A> */
+
+<A name="ProExtSurfEndAttr"></A> typedef enum pro_ext_surf_end_attr 
+ {
+<A name="PRO_EXT_SURF_END_ATTR_OPEN"></A>   PRO_EXT_SURF_END_ATTR_OPEN       =  1, 
+<A name="PRO_EXT_SURF_END_ATTR_CAPPED"></A>   PRO_EXT_SURF_END_ATTR_CAPPED     =  14 
+ } <A HREF="proextrude_h.html#ProExtSurfEndAttr">ProExtSurfEndAttr</A>;
+
+/* 10. <A HREF="proelemid_h.html#PRO_E_SMT_CUT_NORMAL_DIR">PRO_E_SMT_CUT_NORMAL_DIR</A> */
+
+<A name="ProSmtCutNormDir"></A> typedef enum pro_smt_cut_norm_dir 
+ {
+<A name="PRO_SMT_CUT_DRVSIDE_GREEN"></A>   PRO_SMT_CUT_DRVSIDE_GREEN        = 2,
+<A name="PRO_SMT_CUT_DRVSIDE_WHITE"></A>   PRO_SMT_CUT_DRVSIDE_WHITE        = 3,
+<A name="PRO_SMT_CUT_DRVSIDE_BOTH"></A>   PRO_SMT_CUT_DRVSIDE_BOTH         = 4 
+ } <A HREF="proextrude_h.html#ProSmtCutNormDir">ProSmtCutNormDir</A>;
+
+
+/* 11. <A HREF="proelemid_h.html#PRO_E_SMT_PUNCH_TOOL_ATTR">PRO_E_SMT_PUNCH_TOOL_ATTR</A> */
+
+<A name="ProPunchToolAttr"></A> typedef enum pro_punch_tool_attr 
+ {
+<A name="PRO_PUNCH_TOOL_ATTR_SYM_NONE"></A>   PRO_PUNCH_TOOL_ATTR_SYM_NONE     = 0,  /* No symmetry                */
+<A name="PRO_PUNCH_TOOL_ATTR_SYM_X"></A>   PRO_PUNCH_TOOL_ATTR_SYM_X        = 1,  /* Symmetry around X axis     */
+<A name="PRO_PUNCH_TOOL_ATTR_SYM_Y"></A>   PRO_PUNCH_TOOL_ATTR_SYM_Y        = 2,  /* Symmetry around Y axis     */
+<A name="PRO_PUNCH_TOOL_ATTR_SYM_XY"></A>   PRO_PUNCH_TOOL_ATTR_SYM_XY       = 3   /* Symmetry around both X &amp; Y */
+ } <A HREF="proextrude_h.html#ProPunchToolAttr">ProPunchToolAttr</A>;
+
+/* 12. <A HREF="proelemid_h.html#PRO_E_EXT_DRFT_ANG">PRO_E_EXT_DRFT_ANG</A> */
+
+ 
+<A name="ProExtDrftAng"></A> typedef enum pro_ext_drft_ang
+ {
+<A name="PRO_EXT_DRFT_ANG_NO_DRAFT"></A>   PRO_EXT_DRFT_ANG_NO_DRAFT        = -1,
+<A name="PRO_EXT_DRFT_ANG_DRAFT"></A>   PRO_EXT_DRFT_ANG_DRAFT           = 80
+ } <A HREF="proextrude_h.html#ProExtDrftAng">ProExtDrftAng</A>; 
+
+/* 13. <A HREF="proelemid_h.html#PRO_E_FEAT_THIN">PRO_E_FEAT_THIN</A> */
+
+<A name="ProFeatThinOpt"></A>typedef enum pro_thin_opts
+{
+<A name="PRO_FEAT_THIN_IGNORE"></A>   PRO_FEAT_THIN_IGNORE           = -1, /* Ignore thin ending references */
+<A name="PRO_FEAT_THIN_DEFAULT"></A>   PRO_FEAT_THIN_DEFAULT          = 1  /* Use Default Algorithm */
+} <A HREF="proextrude_h.html#ProFeatThinOpt">ProFeatThinOpt</A>;
+
+/* 14. PRO_E_EXT_DEPTH_FROM/TO_REF_TRF */
+<A name="ProExtDepthRefOpt"></A>typedef enum pro_ext_depth_ref_opts
+{
+<A name="PRO_EXT_DEPTH_REF_NONE"></A>   PRO_EXT_DEPTH_REF_NONE      = -1, /* Use Depth Reference */
+<A name="PRO_EXT_DEPTH_REF_OFFS"></A>   PRO_EXT_DEPTH_REF_OFFS      = 90, /* Offset Depth Reference */
+<A name="PRO_EXT_DEPTH_REF_TRNSLT"></A>   PRO_EXT_DEPTH_REF_TRNSLT    = 95  /* Translate Depth Regerence */
+} <A HREF="proextrude_h.html#ProExtDepthRefOpt">ProExtDepthRefOpt</A>;
+
+
+/*****************************************************************************/
+/*****************************************************************************\
+ 
+   Note 1.   Depth reference types:
+ 
+   Depth Type              Valid Reference Types
+   ---------------------------------------------------------------------
+   <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_REF">PRO_EXT_DEPTH_FROM_REF</A>       <A HREF="proobjects_h.html#PRO_SURFACE">PRO_SURFACE</A>, <A HREF="proobjects_h.html#PRO_AXIS">PRO_AXIS</A>, <A HREF="proobjects_h.html#PRO_EDGE">PRO_EDGE</A>, <A HREF="proobjects_h.html#PRO_CURVE">PRO_CURVE</A>,
+                                <A HREF="proobjects_h.html#PRO_POINT">PRO_POINT</A>, <A HREF="proobjects_h.html#PRO_EDGE_START">PRO_EDGE_START</A>, <A HREF="proobjects_h.html#PRO_EDGE_END">PRO_EDGE_END</A>, 
+                                <A HREF="proobjects_h.html#PRO_CRV_START">PRO_CRV_START</A>, <A HREF="proobjects_h.html#PRO_CRV_END">PRO_CRV_END</A>
+
+   <A HREF="proextrude_h.html#PRO_EXT_DEPTH_TO_REF">PRO_EXT_DEPTH_TO_REF</A>         <A HREF="proobjects_h.html#PRO_SURFACE">PRO_SURFACE</A>, <A HREF="proobjects_h.html#PRO_AXIS">PRO_AXIS</A>, <A HREF="proobjects_h.html#PRO_EDGE">PRO_EDGE</A>, <A HREF="proobjects_h.html#PRO_CURVE">PRO_CURVE</A>,
+                                <A HREF="proobjects_h.html#PRO_POINT">PRO_POINT</A>, <A HREF="proobjects_h.html#PRO_EDGE_START">PRO_EDGE_START</A>, <A HREF="proobjects_h.html#PRO_EDGE_END">PRO_EDGE_END</A>, 
+                                <A HREF="proobjects_h.html#PRO_CRV_START">PRO_CRV_START</A>, <A HREF="proobjects_h.html#PRO_CRV_END">PRO_CRV_END</A>
+
+   Note 2.  Extrude  with symetric depth option
+
+            Following elements needs to be set:
+            <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>  -&gt; <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_NONE">PRO_EXT_DEPTH_FROM_NONE</A>
+            <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>    -&gt; <A HREF="proextrude_h.html#PRO_EXT_DEPTH_SYMMETRIC">PRO_EXT_DEPTH_SYMMETRIC</A>
+            <A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_VALUE">PRO_E_EXT_DEPTH_TO_VALUE</A>   -&gt; The symmetric depth double value.
+
+            Other depth related elements are ignored.
+
+   Note 3. Important: The elements <A HREF="proelemid_h.html#PRO_E_STD_DIRECTION">PRO_E_STD_DIRECTION</A>, <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>,
+           <A HREF="proelemid_h.html#PRO_E_TRIM_QLT_SIDE">PRO_E_TRIM_QLT_SIDE</A> and <A HREF="proelemid_h.html#PRO_E_SRF_END_ATTRIBUTES">PRO_E_SRF_END_ATTRIBUTES</A>, are  directly
+           dependent upon the presence of a fully defined <A HREF="proelemid_h.html#PRO_E_STD_SECTION">PRO_E_STD_SECTION</A>
+           element tree (including <A HREF="proelemid_h.html#PRO_E_SKETCHER">PRO_E_SKETCHER</A>).  
+           Values assigned to these elements before fully defining the 
+           <A HREF="proelemid_h.html#PRO_E_STD_SECTION">PRO_E_STD_SECTION</A> will be ignored.
+
+
+   Note 4. Depth Type values valid for Surface feature are as below.
+
+           ProExtDepthFromType:
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_BLIND">PRO_EXT_DEPTH_FROM_BLIND</A>  
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_REF">PRO_EXT_DEPTH_FROM_REF</A>   
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_NONE">PRO_EXT_DEPTH_FROM_NONE</A> 
+
+           ProExtDepthToType:
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_TO_BLIND">PRO_EXT_DEPTH_TO_BLIND</A> 
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_TO_REF">PRO_EXT_DEPTH_TO_REF</A>  
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_SYMMETRIC">PRO_EXT_DEPTH_SYMMETRIC</A>
+          
+   Note 5. Depth Type values valid for Surface Trim feature are as below.
+
+           ProExtDepthFromType:
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_BLIND">PRO_EXT_DEPTH_FROM_BLIND</A>  
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_REF">PRO_EXT_DEPTH_FROM_REF</A>   
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_NONE">PRO_EXT_DEPTH_FROM_NONE</A> 
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_FROM_ALL">PRO_EXT_DEPTH_FROM_ALL</A> 
+
+           ProExtDepthToType:
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_TO_BLIND">PRO_EXT_DEPTH_TO_BLIND</A> 
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_TO_REF">PRO_EXT_DEPTH_TO_REF</A>  
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_SYMMETRIC">PRO_EXT_DEPTH_SYMMETRIC</A>
+             <A HREF="proextrude_h.html#PRO_EXT_DEPTH_TO_ALL">PRO_EXT_DEPTH_TO_ALL</A>
+
+   Note 6. Important: In First feature, the elements <A HREF="proelemid_h.html#PRO_E_STD_MATRLSIDE">PRO_E_STD_MATRLSIDE</A>
+           and <A HREF="proelemid_h.html#PRO_E_THICKNESS">PRO_E_THICKNESS</A>, are  directly dependent upon the presence
+           of a defined <A HREF="proelemid_h.html#PRO_E_SKETCHER">PRO_E_SKETCHER</A> element.
+           Values assigned to these elements before fully defining the 
+           <A HREF="proelemid_h.html#PRO_E_SKETCHER">PRO_E_SKETCHER</A> will be ignored.
+
+\*****************************************************************************/
+/*========= OLD IMPLEMENTATION prior to Pro/E Wildfire 1.0 ==================*/
+/*****************************************************************************\
+
+Feature element tree
+ 
+   <A HREF="proelemid_h.html#PRO_E_FEATURE_TREE">PRO_E_FEATURE_TREE</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_FEATURE_TYPE">PRO_E_FEATURE_TYPE</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_FEATURE_FORM">PRO_E_FEATURE_FORM</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_ATTRIBUTES">PRO_E_ATTRIBUTES</A>
+     |    |--<A HREF="proelemid_h.html#PRO_E_ATTR_SRF_END_COND">PRO_E_ATTR_SRF_END_COND</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_STD_SECTION">PRO_E_STD_SECTION</A>
+     |
+     |--<A HREF="proelemid_h.html#PRO_E_STD_EXT_DEPTH">PRO_E_STD_EXT_DEPTH</A> 
+     |    |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM">PRO_E_EXT_DEPTH_FROM</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF">PRO_E_EXT_DEPTH_FROM_REF</A>   If Type = Reference
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_VALUE">PRO_E_EXT_DEPTH_FROM_VALUE</A> If Type = Blind
+     |
+     |    |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO">PRO_E_EXT_DEPTH_TO</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF">PRO_E_EXT_DEPTH_TO_REF</A>     If Type = Reference
+     |         |--<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_VALUE">PRO_E_EXT_DEPTH_TO_VALUE</A>    If Type = Blind
+     |
+
+3. Feature elements table
+ 
+--------------------------------------------------------------------------------------------
+Element Id                     Element Name   Data Type             Valid Values
+--------------------------------------------------------------------------------------------
+<A HREF="proelemid_h.html#PRO_E_FEATURE_TYPE">PRO_E_FEATURE_TYPE</A>             Feature Type   <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>       <A HREF="profeattype_h.html#PRO_FEAT_PROTRUSION">PRO_FEAT_PROTRUSION</A>
+                                                                       <A HREF="profeattype_h.html#PRO_FEAT_FIRST_FEAT">PRO_FEAT_FIRST_FEAT</A>,
+                                                                       <A HREF="profeattype_h.html#PRO_FEAT_CUT">PRO_FEAT_CUT</A>,
+                                                                       <A HREF="profeattype_h.html#PRO_FEAT_SLOT">PRO_FEAT_SLOT</A>
+<A HREF="proelemid_h.html#PRO_E_FEATURE_FORM">PRO_E_FEATURE_FORM</A>             Feature Form   <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>       <A HREF="profeatform_h.html#PRO_EXTRUDE">PRO_EXTRUDE</A>
+<A HREF="proelemid_h.html#PRO_E_ATTRIBUTES">PRO_E_ATTRIBUTES</A>               Attributes     Compound
+<A HREF="proelemid_h.html#PRO_E_ATTR_SRF_END_COND">PRO_E_ATTR_SRF_END_COND</A>        EndCond        <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>       <A HREF="promodfeat_h.html#ProSrfEndCond">ProSrfEndCond</A>
+<A HREF="proelemid_h.html#PRO_E_STD_SECTION">PRO_E_STD_SECTION</A>              Section        Compound
+<A HREF="proelemid_h.html#PRO_E_STD_EXT_DEPTH">PRO_E_STD_EXT_DEPTH</A>            Depth          Compound
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM">PRO_E_EXT_DEPTH_FROM</A>           Depth From     Compound
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_TYPE">PRO_E_EXT_DEPTH_FROM_TYPE</A>      Type           <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>       <A HREF="proextrude_h.html#ProExtDepthFromType">ProExtDepthFromType</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_REF">PRO_E_EXT_DEPTH_FROM_REF</A>       References     <A HREF="provalue_h.html#PRO_VALUE_TYPE_SELECTION">PRO_VALUE_TYPE_SELECTION</A> See Note 1
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_FROM_VALUE">PRO_E_EXT_DEPTH_FROM_VALUE</A>     Value          <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>    &gt;= 0.0
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO">PRO_E_EXT_DEPTH_TO</A>             Depth To       Compound
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_TYPE">PRO_E_EXT_DEPTH_TO_TYPE</A>        Type           <A HREF="provalue_h.html#PRO_VALUE_TYPE_INT">PRO_VALUE_TYPE_INT</A>       <A HREF="proextrude_h.html#ProExtDepthToType">ProExtDepthToType</A>
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_REF">PRO_E_EXT_DEPTH_TO_REF</A>         References     <A HREF="provalue_h.html#PRO_VALUE_TYPE_SELECTION">PRO_VALUE_TYPE_SELECTION</A> See Note 1
+<A HREF="proelemid_h.html#PRO_E_EXT_DEPTH_TO_VALUE">PRO_E_EXT_DEPTH_TO_VALUE</A>       Value          <A HREF="provalue_h.html#PRO_VALUE_TYPE_DOUBLE">PRO_VALUE_TYPE_DOUBLE</A>    &gt;= 0.0
+--------------------------------------------------------------------------------------------
+ 
+\*****************************************************************************/
+<A HREF="proansi_h.html#PRO_END_C_DECLS">PRO_END_C_DECLS</A>
+ 
+#endif
+
+</PRE>
+</BODY>
+</HTML>

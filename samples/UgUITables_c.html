@@ -1,0 +1,266 @@
+<html>
+<head>
+<title>UgUITables.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProUI.h>
+#include &lt;ProUIDialog.h>
+#include &lt;ProUIPushbutton.h>
+<a name="anchor-2"></a>#include &lt;ProUITable.h>
+#include &lt;ProUIOptionmenu.h>
+
+#define UGUITABLEDLG &quot;uguitableexample&quot;
+
+<a name="anchor-3"></a>/*====================================================================*\
+FUNCTION: UserTableDialogCloseAction
+PURPOSE:  Close action for &quot;Close&quot; button in table examples
+\*====================================================================*/
+static void UserTableDialogCloseAction (char* dialog, char* button, ProAppData data)
+<a name="anchor-4"></a>{
+	ProUIDialogExit (UGUITABLEDLG, PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-5"></a>FUNCTION: UserUITableRedesignExample 
+PURPOSE:  Change the table columns and rows before displaying the dialog
+\*====================================================================*/
+int UserUITableRedesignExample ()
+ {
+<a name="anchor-6"></a>     int status;
+	 int column_count;
+	 wchar_t** column_labels;
+	 char** column_names;
+
+<a name="anchor-7"></a>	 int new_column_count = 3;
+	 char* new_column_names [] = {&quot;Column A&quot;, &quot;Column B&quot;, &quot;Column C&quot;};
+	 wchar_t* new_column_labels [] = {L&quot;First&quot;, L&quot;Second&quot;, L&quot;Third&quot;};
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-8"></a>    Load the dialog from the resource file 
+\*--------------------------------------------------------------------*/ 
+    ProUIDialogCreate(UGUITABLEDLG, UGUITABLEDLG);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-9"></a>    Set the Close button actions 
+\*--------------------------------------------------------------------*/ 
+    ProUIPushbuttonActivateActionSet(UGUITABLEDLG,&quot;CloseButton&quot;,
+										UserTableDialogCloseAction, NULL);
+
+<a name="anchor-10"></a>/*--------------------------------------------------------------------*\
+	Get the list of column names and labels
+\*--------------------------------------------------------------------*/
+    ProUITableColumnnamesGet (UGUITABLEDLG, &quot;LargeTable&quot;, &amp;column_count, 
+								&amp;column_names);
+<a name="anchor-11"></a>	ProUITableColumnlabelsGet (UGUITABLEDLG, &quot;LargeTable&quot;, &amp;column_count,
+								&amp;column_labels);
+
+/*--------------------------------------------------------------------*\
+	Assign the column names to the rows
+<a name="anchor-12"></a>\*--------------------------------------------------------------------*/
+	ProUITableRownamesSet (UGUITABLEDLG, &quot;LargeTable&quot;, column_count,
+								column_names);
+	ProUITableRowlabelsSet (UGUITABLEDLG, &quot;LargeTable&quot;, column_count,
+								column_labels);
+<a name="anchor-13"></a>
+/*--------------------------------------------------------------------*\
+	Free the retrieved arrays
+\*--------------------------------------------------------------------*/
+	ProStringarrayFree (column_names, column_count);
+<a name="anchor-14"></a>	ProWstringarrayFree (column_labels, column_count);
+
+/*--------------------------------------------------------------------*\
+	Modify the column names and labels
+\*--------------------------------------------------------------------*/
+<a name="anchor-15"></a>	ProUITableColumnnamesSet (UGUITABLEDLG, &quot;LargeTable&quot;, new_column_count,
+								new_column_names);
+	ProUITableColumnlabelsSet (UGUITABLEDLG, &quot;LargeTable&quot;, new_column_count,
+								new_column_labels);
+
+<a name="anchor-16"></a>/*--------------------------------------------------------------------*\ 
+    Display and activate the dialog 
+\*--------------------------------------------------------------------*/ 
+    ProUIDialogActivate(UGUITABLEDLG, &amp;status);
+
+<a name="anchor-17"></a>/*--------------------------------------------------------------------*\ 
+    Remove the dialog from memory 
+\*--------------------------------------------------------------------*/ 
+    ProUIDialogDestroy(UGUITABLEDLG);
+
+<a name="anchor-18"></a>    return(1);
+ }
+
+/*====================================================================*\
+FUNCTION: UserTableDialogSelectionsToggle
+<a name="anchor-19"></a>PURPOSE:  UI callback function to toggle contents of table cells
+\*====================================================================*/
+static void UserTableDialogSelectionsToggle (char* dialog, char* button, ProAppData data)
+{
+	char** selections;
+<a name="anchor-20"></a>	int selection_count;
+	wchar_t* label;
+	int i;
+
+	ProUITableSelectednamesGet (UGUITABLEDLG, &quot;LargeTable&quot;, 
+<a name="anchor-21"></a>								&amp;selection_count, &amp;selections);
+
+/*--------------------------------------------------------------------*\
+	Selected names are arranged in sets of 2 (&quot;Row&quot;, &quot;Column&quot;)
+\*--------------------------------------------------------------------*/
+<a name="anchor-22"></a>	for (i = 0; i &lt; selection_count; i = i + 2)
+	{
+		ProUITableCellLabelGet (UGUITABLEDLG, &quot;LargeTable&quot;, 
+								selections [i], 
+								selections [i+1], &amp;label);
+<a name="anchor-23"></a>
+		if (label != NULL &amp;&amp; ProUtilWstrcmp (label, L&quot;ON&quot;) == 0)
+		{
+			ProUITableCellLabelSet (UGUITABLEDLG, &quot;LargeTable&quot;, 
+								selections [i], 
+<a name="anchor-24"></a>								selections [i+1], L&quot;OFF&quot;);
+		}
+		else
+		{
+			ProUITableCellLabelSet (UGUITABLEDLG, &quot;LargeTable&quot;, 
+<a name="anchor-25"></a>								selections [i], 
+								selections [i+1], L&quot;ON&quot;);
+		}
+		if (label != NULL)
+			ProWstringFree (label);
+<a name="anchor-26"></a>	}
+
+	ProStringarrayFree (selections, selection_count);
+
+}
+<a name="anchor-27"></a>
+/*====================================================================*\
+FUNCTION: UserUITableSelectionExample 
+PURPOSE:  Change the table columns and rows before displaying the dialog
+\*====================================================================*/
+<a name="anchor-28"></a>int UserUITableSelectionExample ()
+ {
+     int status;
+	
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-29"></a>    Load the dialog from the resource file 
+\*--------------------------------------------------------------------*/ 
+    ProUIDialogCreate(UGUITABLEDLG, UGUITABLEDLG);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-30"></a>    Set the Close button actions 
+\*--------------------------------------------------------------------*/ 
+    ProUIPushbuttonActivateActionSet(UGUITABLEDLG,&quot;CloseButton&quot;,
+										UserTableDialogCloseAction, 
+										NULL);
+<a name="anchor-31"></a>
+/*--------------------------------------------------------------------*\
+	Set up the Modify Select button
+\*--------------------------------------------------------------------*/
+	ProUIPushbuttonShow (UGUITABLEDLG, &quot;ModifySelectButton&quot;);
+<a name="anchor-32"></a>	ProUIPushbuttonActivateActionSet(UGUITABLEDLG,&quot;ModifySelectButton&quot;,
+										UserTableDialogSelectionsToggle, 
+										NULL);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-33"></a>	Set the selection policy to multiple
+\*--------------------------------------------------------------------*/
+    ProUITableSelectionpolicySet (UGUITABLEDLG, &quot;LargeTable&quot;, 
+									PROUISELPOLICY_MULTIPLE);
+
+<a name="anchor-34"></a>/*--------------------------------------------------------------------*\ 
+    Display and activate the dialog 
+\*--------------------------------------------------------------------*/ 
+    ProUIDialogActivate(UGUITABLEDLG, &amp;status);
+
+<a name="anchor-35"></a>/*--------------------------------------------------------------------*\ 
+    Remove the dialog from memory 
+\*--------------------------------------------------------------------*/ 
+    ProUIDialogDestroy(UGUITABLEDLG);
+
+<a name="anchor-36"></a>    return(1);
+ }
+
+/*====================================================================*\
+FUNCTION: UserUITableComponentExample 
+<a name="anchor-37"></a>PURPOSE:  Add components to the table cells
+\*====================================================================*/
+int UserUITableComponentExample ()
+ {
+     int status;
+<a name="anchor-38"></a>	
+/*--------------------------------------------------------------------*\ 
+    Load the dialog from the resource file 
+\*--------------------------------------------------------------------*/ 
+    ProUIDialogCreate(UGUITABLEDLG, UGUITABLEDLG);
+<a name="anchor-39"></a>
+/*--------------------------------------------------------------------*\ 
+    Set the Close button actions 
+\*--------------------------------------------------------------------*/ 
+    ProUIPushbuttonActivateActionSet(UGUITABLEDLG,&quot;CloseButton&quot;,
+<a name="anchor-40"></a>										UserTableDialogCloseAction, 
+										NULL);
+
+/*--------------------------------------------------------------------*\
+	Assign a predefined table components from the table layout
+<a name="anchor-41"></a>\*--------------------------------------------------------------------*/
+	ProUITableCellComponentNameSet (UGUITABLEDLG, &quot;LargeTable&quot;,
+									&quot;A&quot;, &quot;1&quot;,
+									&quot;BaseButton&quot;);
+
+<a name="anchor-42"></a>/*--------------------------------------------------------------------*\
+	Copy a table component into a table cell
+\*--------------------------------------------------------------------*/
+	ProUITableCellComponentCopy (UGUITABLEDLG, &quot;LargeTable&quot;, 
+									&quot;C&quot;, &quot;3&quot;,
+<a name="anchor-43"></a>									UGUITABLEDLG, &quot;BaseCheckButton&quot;,
+									&quot;CheckButtonC3&quot;);
+
+	ProUICheckbuttonSet (UGUITABLEDLG, &quot;CheckButtonC3&quot;);
+
+<a name="anchor-44"></a>/*--------------------------------------------------------------------*\
+	Copy a non-table component into a table &amp; assign it to a table cell
+\*--------------------------------------------------------------------*/
+	ProUITableComponentCopy (UGUITABLEDLG, &quot;LargeTable&quot;, UGUITABLEDLG, 
+									&quot;ToCopy&quot;,
+<a name="anchor-45"></a>									&quot;CopyOfOptionMenu&quot;);
+
+	ProUITableCellComponentNameSet (UGUITABLEDLG, &quot;LargeTable&quot;, 
+									&quot;B&quot;, &quot;2&quot;,
+									&quot;CopyOfOptionMenu&quot;);
+<a name="anchor-46"></a>
+	ProUIOptionmenuShow (UGUITABLEDLG, &quot;CopyOfOptionMenu&quot;);
+
+/*--------------------------------------------------------------------*\
+	Copy a component from another dialog and assign it to a table cell
+<a name="anchor-47"></a>\*--------------------------------------------------------------------*/
+	ProUIDialogCreate (&quot;uguitablecomponents&quot;, &quot;uguitablecomponents&quot;);
+
+	ProUITableCellComponentCopy (UGUITABLEDLG, &quot;LargeTable&quot;, 
+									&quot;D&quot;, &quot;4&quot;,
+<a name="anchor-48"></a>									&quot;uguitablecomponents&quot;, 
+									&quot;ExternalButtonToCopy&quot;,
+									&quot;CopyOfExternalButton&quot;);
+
+	ProUIDialogDestroy (&quot;uguitablecomponents&quot;);
+<a name="anchor-49"></a>
+/*--------------------------------------------------------------------*\ 
+    Display and activate the dialog 
+\*--------------------------------------------------------------------*/ 
+    ProUIDialogActivate(UGUITABLEDLG, &amp;status);
+<a name="anchor-50"></a>
+/*--------------------------------------------------------------------*\ 
+    Remove the dialog from memory 
+\*--------------------------------------------------------------------*/ 
+    ProUIDialogDestroy(UGUITABLEDLG);
+<a name="anchor-51"></a>
+    return(1);
+ }
+</pre>
+</body>
+</html>

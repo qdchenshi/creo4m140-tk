@@ -1,0 +1,155 @@
+<html>
+<head>
+<title>UgFundCsysTrf.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMessage.h>
+<a name="anchor-2"></a>#include &lt;ProGraphic.h>
+#include &lt;ProWchar.h>
+#include &lt;ProUtil.h>
+#include &lt;PTApplsUnicodeUtils.h>
+
+<a name="anchor-3"></a>/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+
+/*---------------------- Function Prototypes -------------------------*/
+ProError UserScreen2DrwExample();
+<a name="anchor-4"></a>ProError UserSolid2ScreenExample();
+
+/*------------------------- External Data ----------------------------*/
+extern void UserScreenToDwg();
+extern void UserSolidToScreen();
+<a name="anchor-5"></a>extern int UserMakeSelections();
+
+
+ProError UserSolid2ScreenExample()
+{
+<a name="anchor-6"></a>   ProError err;
+   ProMdl model;
+   ProMdlType type;
+   ProSurface surface;
+   ProModelitem p_mdl_item;
+<a name="anchor-7"></a>   ProPoint3d solid_point, screen_point;
+   ProSolid solid;
+   FILE *fp;
+   ProPath path;
+
+<a name="anchor-8"></a>/*---------------------------------------------------------------------*\
+  Get the current model and check if it is a solid 
+\*---------------------------------------------------------------------*/
+   err = ProMdlCurrentGet( &amp;model );
+   ERROR_CHECK( &quot;UserSolid2ScreenExample&quot;, &quot;ProMdlCurrentGet&quot;, err );
+<a name="anchor-9"></a>   if ( err != PRO_TK_NO_ERROR ) return ( err );
+   err = ProMdlTypeGet( model, &amp;type );
+   ERROR_CHECK( &quot;UserSolid2ScreenExample&quot;, &quot;ProMdlTypeGet&quot;, err );
+   if ( (type != PRO_MDL_PART) &amp;&amp; (type != PRO_MDL_ASSEMBLY) ) return ( err );
+   solid = (ProSolid)model;
+<a name="anchor-10"></a>
+/*---------------------------------------------------------------------*\
+   Let the user select a surface and extract the selected point 
+\*---------------------------------------------------------------------*/
+   UserMakeSelections( &amp;surface, &amp;p_mdl_item, solid_point );
+<a name="anchor-11"></a>
+/*---------------------------------------------------------------------*\
+   Transform from Solid to Screen Coordinates 
+\*---------------------------------------------------------------------*/
+   UserSolidToScreen( solid, solid_point, screen_point );
+<a name="anchor-12"></a>
+/*---------------------------------------------------------------------*\
+  Write the results to a file and display it 
+\*---------------------------------------------------------------------*/
+   fp = PTApplsUnicodeFopen( &quot;coord_trans.dat&quot;, &quot;w&quot; );
+<a name="anchor-13"></a>   if ( fp != NULL ) {
+      ProTKFprintf( fp, &quot;You picked a point with these coordinates:\n&quot;);
+      ProTKFprintf( fp, &quot;\tX: %f\n&quot;, solid_point[0]);
+      ProTKFprintf( fp, &quot;\tY: %f\n&quot;, solid_point[1]);
+      ProTKFprintf( fp, &quot;\tZ: %f\n&quot;, solid_point[2]);
+<a name="anchor-14"></a>      ProTKFprintf( fp, &quot;\n&quot; );
+      ProTKFprintf( fp, &quot;Transformed to screen coordinates:\n&quot;);
+      ProTKFprintf( fp, &quot;\tX: %f\n&quot;, screen_point[0]);
+      ProTKFprintf( fp, &quot;\tY: %f\n&quot;, screen_point[1]);
+      ProTKFprintf( fp, &quot;\tZ: %f\n&quot;, screen_point[2]);
+<a name="anchor-15"></a>      fclose (fp);
+
+      ProStringToWstring( path, &quot;coord_trans.dat&quot; );
+      err = ProInfoWindowDisplay( path, NULL, NULL );
+      ERROR_CHECK( &quot;UserScreen2DrwExample&quot;, &quot;ProInfoWindowDisplay&quot;, err );
+<a name="anchor-16"></a>   }
+
+   return( PRO_TK_NO_ERROR );
+}
+
+<a name="anchor-17"></a>ProError UserScreen2DrwExample() 
+{
+   ProError err;
+   ProMdl model;
+   ProMdlType type;
+<a name="anchor-18"></a>   ProDrawing drawing;
+   ProFileName msgfil;
+   ProPoint3d position, drw_point;
+   ProMouseButton button_pressed;
+   FILE *fp;
+<a name="anchor-19"></a>   ProPath path;
+
+/*---------------------------------------------------------------------*\
+  Get the current model and check if it is a drawing 
+\*---------------------------------------------------------------------*/
+<a name="anchor-20"></a>   err = ProMdlCurrentGet( &amp;model );
+   ERROR_CHECK( &quot;UserScreen2DrwExample&quot;, &quot;ProMdlCurrentGet&quot;, err );
+   if ( err != PRO_TK_NO_ERROR ) return ( err );
+   err = ProMdlTypeGet( model, &amp;type );
+   ERROR_CHECK( &quot;UserScreen2DrwExample&quot;, &quot;ProMdlTypeGet&quot;, err );
+<a name="anchor-21"></a>   if ( type != PRO_MDL_DRAWING ) return ( err );
+   drawing = (ProDrawing)model; 
+
+/*---------------------------------------------------------------------*\
+  Prompt the user for a menu pick and get coordinates 
+<a name="anchor-22"></a>\*---------------------------------------------------------------------*/
+   ProStringToWstring( msgfil, &quot;msg_ugfund.txt&quot; );
+
+   err = ProMessageDisplay( msgfil, &quot;USER Pick point on the screen&quot; );
+   ERROR_CHECK( &quot;UserScreen2DrwExample&quot;, &quot;ProMessageDisplay&quot;, err );
+<a name="anchor-23"></a>
+   err = ProMousePickGet( PRO_ANY_BUTTON, &amp;button_pressed, position );  
+   ERROR_CHECK( &quot;UserScreen2DrwExample&quot;, &quot;ProMousePickGet&quot;, err );
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-24"></a>  Transform the screen coordinates to drawing coordinates 
+\*---------------------------------------------------------------------*/
+   UserScreenToDwg( drawing, position, drw_point );
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-25"></a>  Write the results to a file and display it 
+\*---------------------------------------------------------------------*/
+   fp = PTApplsUnicodeFopen( &quot;coord_trans.dat&quot;, &quot;w&quot; );
+   if ( fp != NULL ) {
+      ProTKFprintf( fp, &quot;You picked a point with these coordinates:\n&quot;);
+<a name="anchor-26"></a>      ProTKFprintf( fp, &quot;\tX: %f\n&quot;, position[0]);
+      ProTKFprintf( fp, &quot;\tY: %f\n&quot;, position[1]);
+      ProTKFprintf( fp, &quot;\tZ: %f\n&quot;, position[2]);
+      ProTKFprintf( fp, &quot;\n&quot; );
+      ProTKFprintf( fp, &quot;Transformed to drawing coordinates:\n&quot;);
+<a name="anchor-27"></a>      ProTKFprintf( fp, &quot;\tX: %f\n&quot;, drw_point[0]);
+      ProTKFprintf( fp, &quot;\tY: %f\n&quot;, drw_point[1]);
+      ProTKFprintf( fp, &quot;\tZ: %f\n&quot;, drw_point[2]);
+      fclose (fp);
+
+<a name="anchor-28"></a>      ProStringToWstring( path, &quot;coord_trans.dat&quot; );
+      err = ProInfoWindowDisplay( path, NULL, NULL );
+      ERROR_CHECK( &quot;UserScreen2DrwExample&quot;, &quot;ProInfoWindowDisplay&quot;, err );
+   }
+   
+<a name="anchor-29"></a>   return ( PRO_TK_NO_ERROR );
+}
+</pre>
+</body>
+</html>

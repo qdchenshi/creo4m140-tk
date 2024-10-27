@@ -1,0 +1,454 @@
+<html>
+<head>
+<title>Ug3DSectSplineDim.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProSection.h>
+#include &lt;ProSecdim.h>
+<a name="anchor-2"></a>#include &lt;ProSecerror.h>
+#include &lt;Pro2dEntdef.h>
+#include &lt;ProSecdimType.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMenu.h>
+<a name="anchor-3"></a>#include &lt;ProUtil.h>
+#include &lt;ProMessage.h>
+#include &lt;ProArray.h>
+#include &lt;ProElement.h>
+#include &lt;ProFeature.h>
+<a name="anchor-4"></a>#include &lt;TestError.h>
+#include &lt;ProSolid.h>
+
+
+#define MSGFILE L##&quot;msg_ug3dsketch.txt&quot;
+<a name="anchor-5"></a>
+ProError UserAddSplineDimension();
+ProError UserGetFeatureSection(ProFeature* feat, ProSection *section);
+ProError UserCreatePoint (double x, double y, ProSection* section);
+ProError UserSetFeatureSection(ProFeature* feat, ProSection *section);
+<a name="anchor-6"></a>
+
+/*================================================================*\
+  FUNCTION  : UserAddSplineDimension()
+  PURPOSE   : Adds a sectiond dimension to spline entity
+<a name="anchor-7"></a>\*================================================================*/
+
+
+ProError UserAddSplineDimension()
+{
+<a name="anchor-8"></a>  
+  ProError status;
+  wchar_t w_pane_name[PRO_LINE_SIZE];
+  ProCharName pane_name;
+  ProMdl model;
+<a name="anchor-9"></a>  ProSelection *sel;
+  int num_sel;
+  ProFeature sk_feat;
+  ProSection feat_section;
+  int *int_ids, no_of_ids, i;
+<a name="anchor-10"></a>  int no_of_points, irange[2];
+  int usr_pnt1, usr_pnt2;
+  Pro2dEntdef *entity_def;
+  Pro2dSplinedef *spline_def;
+  Pro2dPointdef *point_def;
+<a name="anchor-11"></a>  ProBoolean spline_found = PRO_B_FALSE;
+  Pro2dPnt pnt1, pnt2, pnt3;
+  ProSelection spline_sel, spline_sel2, point_sels[2], point1_sel, point2_sel;
+  int ent_ids[2], count = 0;
+  ProSelection* sel_array = NULL, *sel_array2 = NULL;  
+<a name="anchor-12"></a>  int constr_id;
+  ProWSecerror  sec_error;
+  ProSectionPointType point_types[2];
+  Pro2dPnt place_point;
+  int sec_dim_id;
+<a name="anchor-13"></a>    
+  status = ProMdlCurrentGet(&amp;model);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProMdlCurrentGet&quot;,status);
+  
+  if (status != PRO_TK_NO_ERROR)
+<a name="anchor-14"></a>    {      
+      ProMessageDisplay (MSGFILE, &quot;USER Model does not exist or bad context&quot;);
+      
+      return status;      
+    }  
+<a name="anchor-15"></a>  
+  status = ProSelect(&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;num_sel);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSelect&quot;,status);
+  
+  status = ProSelectionModelitemGet(sel[0], (ProModelitem*)&amp;sk_feat);
+<a name="anchor-16"></a>  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSelectionModelitemGet&quot;,status);
+  
+  /*================================================================*\
+    Access the feature's section pointer from its element tree.
+  \*================================================================*/  
+<a name="anchor-17"></a>    
+  status = UserGetFeatureSection(&amp;sk_feat, &amp;feat_section);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;UserGetFeatureSection&quot;,status);
+    
+  if (status != PRO_TK_NO_ERROR)
+<a name="anchor-18"></a>    return status;
+  
+  status = ProSectionEntityIdsGet(feat_section, &amp;int_ids, &amp;no_of_ids);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSectionEntityIdsGet&quot;,status);
+  
+<a name="anchor-19"></a>  if (status != PRO_TK_NO_ERROR)
+    return status;  
+  
+  /*================================================================*\
+     Get the number of interpolation points of the spline entity.
+<a name="anchor-20"></a>  \*================================================================*/    
+    
+  for (i=0 ; i&lt;no_of_ids ; i++)
+    {
+      status = ProSectionEntityGet (feat_section, int_ids[i], &amp;entity_def);
+<a name="anchor-21"></a>      ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSectionEntityGet&quot;,status);      
+      
+      if (status != PRO_TK_NO_ERROR)
+    	return status;      
+      
+<a name="anchor-22"></a>      if(entity_def->type == PRO_2D_SPLINE)
+        {
+	  spline_found = PRO_B_TRUE;
+	  
+	  spline_def = (Pro2dSplinedef *)entity_def;
+<a name="anchor-23"></a>	  no_of_points = spline_def->n_points;
+          
+          break;
+	  
+        }
+<a name="anchor-24"></a>      
+      
+    }
+  
+  if (!spline_found)
+<a name="anchor-25"></a>    {
+      status = ProMessageDisplay (MSGFILE, 
+      		&quot;USER Feature section does not contain spline&quot;); 
+      ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProMessageDisplay&quot;,status);       
+      
+<a name="anchor-26"></a>      return PRO_TK_E_NOT_FOUND;	
+    }
+  
+  
+  status = ProMessageDisplay (MSGFILE, 
+<a name="anchor-27"></a>		&quot;USER Spline has %0d interpolation points&quot;, &amp;no_of_points);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProMessageDisplay&quot;,status);
+  
+  /*================================================================*\
+     Create a point entity on the first and last interpolation point
+<a name="anchor-28"></a>     of the spline entity.
+  \*================================================================*/    
+  
+  status = UserCreatePoint (
+			    spline_def->point_arr[0][0], 
+<a name="anchor-29"></a>			    spline_def->point_arr[0][1], 
+			    &amp;feat_section);  /* Spline start point */
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProMdlCurrentGet&quot;,status);   
+  
+  status = UserCreatePoint (
+<a name="anchor-30"></a>			    spline_def->point_arr[no_of_points-1][0], 
+			    spline_def->point_arr[no_of_points-1][1], 
+			    &amp;feat_section);  /* Spline end point */  
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;UserCreatePoint&quot;,status);  
+  
+<a name="anchor-31"></a>  status = ProSectionEntityIdsGet(feat_section, &amp;int_ids, &amp;no_of_ids);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSectionEntityIdsGet&quot;,status);  
+  
+  for (i=0 ; i&lt;no_of_ids ; i++)
+    {
+<a name="anchor-32"></a>      status = ProSectionEntityGet (feat_section, int_ids[i], &amp;entity_def);
+      ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSectionEntityGet&quot;,status);      
+      
+      if (status != PRO_TK_NO_ERROR)
+        return status;
+<a name="anchor-33"></a>      
+      if(entity_def->type == PRO_2D_SPLINE)
+        {        
+          spline_def = (Pro2dSplinedef *)entity_def;
+          
+<a name="anchor-34"></a>	  pnt1[0] = spline_def->point_arr[0][0];
+	  pnt1[1] = spline_def->point_arr[0][1];
+	  
+	  pnt2[0] = spline_def->point_arr[no_of_points-1][0];
+	  pnt2[1] = spline_def->point_arr[no_of_points-1][1];
+<a name="anchor-35"></a>	  
+	  status = ProSectionEntityGetSelected(feat_section, int_ids[i],
+          		 PRO_ENT_START, pnt1, PRO_VALUE_UNUSED, &amp;spline_sel);
+          ERROR_CHECK(&quot;UserAddSplineDimension&quot;,
+          	&quot;ProSectionEntityGetSelected&quot;,status);   
+<a name="anchor-36"></a>          
+          if (status != PRO_TK_NO_ERROR)
+           return status;      
+	  
+	  status = ProSectionEntityGetSelected(feat_section, int_ids[i],
+<a name="anchor-37"></a>          		 PRO_ENT_END, pnt2, PRO_VALUE_UNUSED, &amp;spline_sel2);
+          ERROR_CHECK(&quot;UserAddSplineDimension&quot;,
+          	&quot;ProSectionEntityGetSelected&quot;,status);  
+                
+          if (status != PRO_TK_NO_ERROR)
+<a name="anchor-38"></a>           return status;      
+	  
+        }
+      
+      if (entity_def->type == PRO_2D_POINT)
+<a name="anchor-39"></a>        {	                      
+	  point_def = (Pro2dPointdef*)entity_def;
+	  
+	  pnt3[0] = point_def->pnt[0];
+	  pnt3[1] = point_def->pnt[1];
+<a name="anchor-40"></a>	  
+	  ent_ids[count] = int_ids[i];
+	  
+	  status = ProSectionEntityGetSelected(feat_section, int_ids[i],
+          		 PRO_ENT_WHOLE, pnt3, PRO_VALUE_UNUSED,
+<a name="anchor-41"></a>                       	 &amp;(point_sels[count++]));
+          ERROR_CHECK(&quot;UserAddSplineDimension&quot;,
+          	&quot;ProSectionEntityGetSelected&quot;,status);                         
+                
+	  if (status != PRO_TK_NO_ERROR)
+<a name="anchor-42"></a>           return status;                
+	  
+        }            
+      
+    }
+<a name="anchor-43"></a>    
+  /*================================================================*\
+    Create &quot;Same point&quot; constraint between the point and spline 
+    entity at the two locations.
+  \*================================================================*/      
+<a name="anchor-44"></a>  
+  status = ProArrayAlloc(0, sizeof(ProSelection), 1, (ProArray*)&amp;sel_array);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProArrayAlloc&quot;,status);  
+  
+  status = ProArrayObjectAdd((ProArray*)&amp;sel_array, PRO_VALUE_UNUSED, 1,
+<a name="anchor-45"></a>  				 &amp;spline_sel);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProArrayObjectAdd&quot;,status);                                 
+  
+  status = ProArrayObjectAdd((ProArray*)&amp;sel_array, PRO_VALUE_UNUSED, 1,
+  				 &amp;(point_sels[1]));
+<a name="anchor-46"></a>  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProArrayObjectAdd&quot;,status);                                 
+  
+  status = ProSectionConstraintCreate(feat_section, sel_array, 2,
+  				 PRO_CONSTRAINT_SAME_POINT, &amp;constr_id);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSectionConstraintCreate&quot;,status);   
+<a name="anchor-47"></a>  
+  if (status != PRO_TK_NO_ERROR)
+    return status;                              
+  
+  status = ProArrayFree((ProArray*)&amp;sel_array);
+<a name="anchor-48"></a>  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProArrayFree&quot;,status);  
+  
+  status = ProArrayAlloc(0, sizeof(ProSelection), 1, (ProArray*)&amp;sel_array2);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProArrayAlloc&quot;,status);  
+  
+<a name="anchor-49"></a>  status = ProArrayObjectAdd((ProArray*)&amp;sel_array2, PRO_VALUE_UNUSED, 1,
+  				 &amp;spline_sel2);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProArrayObjectAdd&quot;,status);                                 
+  
+  status = ProArrayObjectAdd((ProArray*)&amp;sel_array2, PRO_VALUE_UNUSED, 1,
+<a name="anchor-50"></a>  				 &amp;(point_sels[0]));
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProArrayObjectAdd&quot;,status);                                 
+  
+  status = ProSectionConstraintCreate(feat_section, sel_array2, 2,
+  			 PRO_CONSTRAINT_SAME_POINT, &amp;constr_id);
+<a name="anchor-51"></a>  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSectionConstraintCreate&quot;,status);
+  
+  if (status != PRO_TK_NO_ERROR)
+    return status;
+  
+<a name="anchor-52"></a>  status = ProArrayFree((ProArray*)&amp;sel_array2);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProArrayFree&quot;,status);  
+  
+  status = ProSecerrorAlloc(&amp;sec_error);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSecerrorAlloc&quot;,status);  
+<a name="anchor-53"></a>  
+  status = ProSectionSolve(feat_section, &amp;sec_error);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSectionSolve&quot;,status);  
+  
+  status = ProSecerrorFree(&amp;sec_error);      
+<a name="anchor-54"></a>  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSecerrorFree&quot;,status);  
+  
+  /*================================================================*\
+    Create the section dimension 
+  \*================================================================*/    
+<a name="anchor-55"></a>  
+  point_types[0] = PRO_ENT_START;
+  point_types[1] = PRO_ENT_END;
+  
+  /*================================================================*\
+<a name="anchor-56"></a>    Create the place point with spline's interpolation point
+    coordinates to maintain scale for dimension placement.
+  \*================================================================*/      
+    
+  place_point[0] = pnt1[0];
+<a name="anchor-57"></a>  place_point[1] = pnt2[1];
+
+  status = ProSecdimCreate(feat_section, ent_ids, point_types, 2,
+  			 PRO_TK_DIM_PNT_PNT_HORIZ, place_point, &amp;sec_dim_id);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSecdimCreate&quot;,status);                         
+<a name="anchor-58"></a>  
+  if (status != PRO_TK_NO_ERROR)
+    return status;
+  
+  status = ProSecerrorAlloc(&amp;sec_error);
+<a name="anchor-59"></a>  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSecerrorAlloc&quot;,status);  
+  
+  status = ProSectionSolve(feat_section, &amp;sec_error);    
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSectionSolve&quot;,status);  
+    
+<a name="anchor-60"></a>  status = ProSecerrorFree(&amp;sec_error);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSecerrorFree&quot;,status);  
+  
+  status = ProSecerrorAlloc(&amp;sec_error);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSecerrorAlloc&quot;,status);  
+<a name="anchor-61"></a>  
+  status = ProSectionRegenerate(feat_section, &amp;sec_error);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSectionRegenerate&quot;,status);  
+  
+  status = ProSecerrorFree(&amp;sec_error);  
+<a name="anchor-62"></a>  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProSecerrorFree&quot;,status);  
+  
+  /*================================================================*\
+    Set the modified section pointer back to feature and redefine it.
+  \*================================================================*/    
+<a name="anchor-63"></a>  
+  status = UserSetFeatureSection(&amp;sk_feat, &amp;feat_section);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;UserSetFeatureSection&quot;,status);  
+  
+  if (status != PRO_TK_NO_ERROR)
+<a name="anchor-64"></a>    return status;
+  
+  status = ProMessageDisplay (MSGFILE, 
+      &quot;USER Spline dimension between interpolation points 1 and %0d has been created.&quot;, &amp;no_of_points);
+  ERROR_CHECK(&quot;UserAddSplineDimension&quot;,&quot;ProMessageDisplay&quot;,status);      
+<a name="anchor-65"></a>  
+  
+  return status;
+}
+
+<a name="anchor-66"></a>/*================================================================*\
+  FUNCTION  : UserGetFeatureSection()
+  PURPOSE   : Retrieve's the feature's section pointer.
+\*================================================================*/
+
+<a name="anchor-67"></a>ProError UserGetFeatureSection(ProFeature* feat, ProSection *section)
+{
+  
+  ProError status;
+  ProElement elem_tree, elem;
+<a name="anchor-68"></a>  ProElempath elem_path;
+  ProValue val;
+  ProValueData val_data;
+  
+  ProElempathItem sketch_path_item[] = {
+<a name="anchor-69"></a>    {PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SECTION},
+    {PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_SKETCHER}
+  };
+  
+  status = ProFeatureElemtreeExtract (feat, NULL,
+<a name="anchor-70"></a>				      PRO_FEAT_EXTRACT_NO_OPTS, &amp;elem_tree );
+  ERROR_CHECK(&quot;UserGetFeatureSection&quot;,&quot;ProFeatureElemtreeExtract&quot;,status);                                      
+  
+  status = ProElempathAlloc(&amp;elem_path);
+  ERROR_CHECK(&quot;UserGetFeatureSection&quot;,&quot;ProElempathAlloc&quot;,status);  
+<a name="anchor-71"></a>  
+  status = ProElempathDataSet(elem_path, sketch_path_item, 2);
+  ERROR_CHECK(&quot;UserGetFeatureSection&quot;,&quot;ProElempathDataSet&quot;,status);  
+  
+  status = ProElemtreeElementGet(elem_tree, elem_path, &amp;elem);
+<a name="anchor-72"></a>  ERROR_CHECK(&quot;UserGetFeatureSection&quot;,&quot;ProElemtreeElementGet&quot;,status);  
+  
+  status= ProElementSpecialvalueGet(elem, NULL, (ProAppData *) section);
+  ERROR_CHECK(&quot;UserGetFeatureSection&quot;,&quot; ProElementSpecialvalueGet &quot;,status);
+ 
+<a name="anchor-73"></a>  return status;
+  
+}
+
+/*================================================================*\
+<a name="anchor-74"></a>  FUNCTION  : UserCreatePoint()
+  PURPOSE   : Creates a section point entity at given coordinates
+              in provided section.
+\*================================================================*/
+
+<a name="anchor-75"></a>ProError UserCreatePoint (double x, double y, ProSection* section)
+{
+  ProError status;
+  Pro2dPointdef point;
+  ProWSecerror  sec_error;
+<a name="anchor-76"></a>  int ent_id = 1;
+  
+  point.type = PRO_2D_POINT;
+  point.pnt[0] = x;
+  point.pnt[1] = y;
+<a name="anchor-77"></a>  
+  status = ProSectionEntityAdd(*section,(Pro2dEntdef *)&amp;point, &amp;ent_id);      
+  ERROR_CHECK(&quot;UserCreatePoint&quot;,&quot;ProSectionEntityAdd&quot;,status);  
+  
+  return status;
+<a name="anchor-78"></a>}
+
+/*================================================================*\
+  FUNCTION  : UserSetFeatureSection()
+  PURPOSE   : Sets the section pointer to given feature and 
+<a name="anchor-79"></a>              redefine it.
+\*================================================================*/
+
+ProError UserSetFeatureSection(ProFeature* feat, ProSection *section)
+{
+<a name="anchor-80"></a>  
+  ProError status;
+  ProElement elem_tree, elem;
+  ProElempath elem_path;
+  ProFeatureCreateOptions *opts = 0;
+<a name="anchor-81"></a>  ProErrorlist err_list;
+  
+  
+  ProElempathItem sketch_path_item[] = {
+    {PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SECTION},
+<a name="anchor-82"></a>    {PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_SKETCHER}
+  };
+  
+  status = ProFeatureElemtreeExtract (feat, NULL,
+				      PRO_FEAT_EXTRACT_NO_OPTS, &amp;elem_tree );
+<a name="anchor-83"></a>  ERROR_CHECK(&quot;UserSetFeatureSection&quot;,&quot;ProFeatureElemtreeExtract&quot;,status);                                      
+  
+  status = ProElempathAlloc(&amp;elem_path);
+  ERROR_CHECK(&quot;UserSetFeatureSection&quot;,&quot;ProElempathAlloc&quot;,status);  
+  
+<a name="anchor-84"></a>  status = ProElempathDataSet(elem_path, sketch_path_item, 2);
+  ERROR_CHECK(&quot;UserSetFeatureSection&quot;,&quot;ProElempathDataSet&quot;,status);  
+  
+  status = ProElemtreeElementGet(elem_tree, elem_path, &amp;elem);
+  ERROR_CHECK(&quot;UserSetFeatureSection&quot;,&quot;ProElemtreeElementGet&quot;,status);  
+<a name="anchor-85"></a>  
+  status = ProElementSpecialvalueSet(elem, (ProAppData)*section);
+  ERROR_CHECK(&quot;UserSetFeatureSection&quot;,&quot;ProElementSpecialvalueSet&quot;,status);  
+  
+  status = ProElemtreeElementAdd(elem_tree, elem_path, elem);
+<a name="anchor-86"></a>  ERROR_CHECK(&quot;UserSetFeatureSection&quot;,&quot;ProElemtreeElementAdd&quot;,status);  
+  
+  status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+    1, (ProArray*)&amp;opts);
+
+<a name="anchor-87"></a>  opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+  status = ProFeatureWithoptionsRedefine(NULL, feat, elem_tree,
+    opts, PRO_REGEN_NO_FLAGS, &amp;err_list);  
+  ERROR_CHECK(&quot;UserSetFeatureSection&quot;,&quot;ProFeatureRedefine&quot;,status);  
+<a name="anchor-88"></a>
+  status = ProArrayFree((ProArray*)&amp;opts);
+  
+  return status;
+  
+<a name="anchor-89"></a>}
+</pre>
+</body>
+</html>

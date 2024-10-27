@@ -1,0 +1,228 @@
+<html>
+<head>
+<title>TestRoute.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProModelitem.h>
+<a name="anchor-2"></a>#include &lt;ProNcseq.h>
+#include &lt;ProMfgoper.h>
+#include &lt;ProWcell.h>
+#include &lt;ProTool.h>
+#include &lt;UtilFiles.h>
+<a name="anchor-3"></a>#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProUtil.h>
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-4"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestMfgNew.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilGeom.h&quot;
+#include &quot;TestError.h&quot;
+<a name="anchor-5"></a>#include &quot;UtilMessage.h&quot;
+
+/*--------------------------------------------------------------------*\
+Function prototypes
+\*--------------------------------------------------------------------*/
+<a name="anchor-6"></a>ProError ProUtilToolChoose(ProMfg *p_mfg, ProTool *p_sel_tool);
+
+
+/*====================================================================*\
+FUNCTION : ProTestRouteTool()
+<a name="anchor-7"></a>PURPOSE  : Create info for Tool
+\*====================================================================*/
+ProError ProTestRouteTool()
+{
+    ProMfg mfg_model;
+<a name="anchor-8"></a>    ProAsmcomppath comp_path;
+    ProSolid mfg_solid;
+    ProError status;
+    ProTool sel_tool;
+ 
+<a name="anchor-9"></a>     status = ProTestGetModels( &amp;mfg_model, &amp;mfg_solid, &amp;comp_path);
+
+     status = ProUtilToolChoose(&amp;mfg_model, &amp;sel_tool);
+
+      if (status != PRO_TK_E_NOT_FOUND)
+<a name="anchor-10"></a>       {
+         ProTestGetToolInfo(&amp;sel_tool);
+       }
+      else
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,(char*)&quot;No Tools available&quot;);
+<a name="anchor-11"></a>
+    return ((ProError)0);
+}
+
+/*====================================================================*\
+<a name="anchor-12"></a>FUNCTION : ProTestToolParamGet()
+PURPOSE  : Read tool parameter (only double) and write to file.
+\*====================================================================*/
+ProError ProTestToolParamGet (
+    FILE *fp,
+<a name="anchor-13"></a>    ProTool *p_tool,
+    ProCharName tl_param_name)
+{
+    ProParamvalue param_val;
+    ProError status;
+<a name="anchor-14"></a>    double param_value;
+    
+    
+    status = ProToolParamGet(p_tool, tl_param_name, &amp;param_val);
+    TEST_CALL_REPORT(&quot;ProToolParamGet()&quot;,
+<a name="anchor-15"></a>	&quot;ProTestGetToolInfo()&quot;, status, status != PRO_TK_NO_ERROR &amp;&amp;
+	status != PRO_TK_E_NOT_FOUND);
+    if (status != PRO_TK_NO_ERROR)
+	return status;
+    
+<a name="anchor-16"></a>     status = ProParamvalueValueGet (&amp;param_val, PRO_PARAM_DOUBLE,
+         &amp;param_value);
+     TEST_CALL_REPORT(&quot;ProParamvalueValueGet()&quot;,
+                        &quot;ProTestGetToolInfo()&quot;, status,
+                        (status != PRO_TK_NO_ERROR));
+<a name="anchor-17"></a>    if (status != PRO_TK_NO_ERROR)
+	return status;
+    
+    ProTKFprintf(fp, (char*)&quot;\n%s parameter's value is %f&quot;, tl_param_name, param_value);
+    return status;
+<a name="anchor-18"></a>}
+
+
+/*====================================================================*\
+FUNCTION : ProTestGetToolInfo()
+<a name="anchor-19"></a>PURPOSE  : Get Information about Nc sequence
+\*====================================================================*/
+ProError ProTestGetToolInfo(ProTool *p_tool)
+{
+    FILE *fp;
+<a name="anchor-20"></a>    char tool_name[PRO_LINE_SIZE];
+    char tool_name_u[PRO_LINE_SIZE];
+    ProToolType r_tool_type;
+    wchar_t w_filename[PRO_LINE_SIZE];
+    ProCharName tool_cutter_diam = &quot;CUTTER_DIAM&quot;;
+<a name="anchor-21"></a>    ProCharName tool_length = &quot;LENGTH&quot;;
+    ProError status;
+   
+/*--------------------------------------------------------------------*\
+    Open info file
+<a name="anchor-22"></a>\*--------------------------------------------------------------------*/
+     ProWstringToString (tool_name_u, (wchar_t*) p_tool->tool_id);
+     ProUtilStringLower( tool_name_u, tool_name);
+     ProUtilstrcat(tool_name, &quot;.inf&quot;); 
+     fp = PTApplsUnicodeFopen(tool_name,&quot;w&quot;);
+<a name="anchor-23"></a>
+     ProTKFprintf(fp, (char*)&quot;\tInformation about \&quot;%s\&quot; tool&quot;, tool_name_u); 
+
+/*--------------------------------------------------------------------*\    
+    Get the tool type
+<a name="anchor-24"></a>\*--------------------------------------------------------------------*/
+     status = ProToolTypeGet (p_tool, &amp;r_tool_type);
+     TEST_CALL_REPORT(&quot;ProToolTypeGet()&quot;,
+                        &quot;ProTestGetToolInfo()&quot;, status,
+                        (status != PRO_TK_NO_ERROR));
+<a name="anchor-25"></a>
+      switch (r_tool_type)
+       {
+         case PRO_TOOL_NONE:
+           ProTKFprintf(fp, (char*)&quot;\nTool type:  not defined&quot;);
+<a name="anchor-26"></a>           break;
+	   
+	 case PRO_TOOL_TURN:
+	   ProTKFprintf(fp, (char*)&quot;\nTool type:  Turning&quot;);
+           break; 
+<a name="anchor-27"></a>
+         case PRO_TOOL_DRILL:
+           ProTKFprintf(fp, (char*)&quot;\nTool type:  Drilling&quot;);
+           break;
+
+<a name="anchor-28"></a>         case PRO_TOOL_MILL:
+           ProTKFprintf(fp, (char*)&quot;\nTool type:  Milling&quot;);
+           break;
+
+         case PRO_TOOL_SIDE_MILL:
+<a name="anchor-29"></a>           ProTKFprintf(fp, (char*)&quot;\nTool type:  Side Milling&quot;);
+           break;
+
+	 case PRO_TOOL_SAW:
+	   ProTKFprintf(fp, (char*)&quot;\nTool type:  Saw&quot;);
+<a name="anchor-30"></a>           break; 
+
+         case PRO_TOOL_GROOVE:
+           ProTKFprintf(fp, (char*)&quot;\nTool type:  Groove&quot;);
+           break;
+<a name="anchor-31"></a>
+         case PRO_TOOL_BORE:
+           ProTKFprintf(fp, (char*)&quot;\nTool type:  Bore&quot;);
+           break;
+
+<a name="anchor-32"></a>         case PRO_TOOL_TAP:
+           ProTKFprintf(fp, (char*)&quot;\nTool type:  Tap&quot;);
+           break;
+
+	 case PRO_TOOL_CSINK:
+<a name="anchor-33"></a>           ProTKFprintf(fp, (char*)&quot;\nTool type:  Counter sink&quot;);
+           break;
+
+         case PRO_TOOL_REAM:
+           ProTKFprintf(fp, (char*)&quot;\nTool type:  Ream&quot;);
+<a name="anchor-34"></a>           break;
+
+	 case PRO_TOOL_CENTER_DRL:
+	   ProTKFprintf(fp, (char*)&quot;\nTool type:  Center drilling&quot;);
+           break; 
+<a name="anchor-35"></a>
+         case PRO_TOOL_TURN_GRV:
+           ProTKFprintf(fp, (char*)&quot;\nTool type:  Turn groove&quot;);
+           break;
+
+<a name="anchor-36"></a>         case PRO_TOOL_MILL_THREAD:
+           ProTKFprintf(fp, (char*)&quot;\nTool type:  Mill thread&quot;);
+           break;
+
+         case PRO_TOOL_TURN_THREAD:
+<a name="anchor-37"></a>           ProTKFprintf(fp, (char*)&quot;\nTool type:  Turn thread&quot;);
+           break;
+	   
+       } 
+
+<a name="anchor-38"></a>/*--------------------------------------------------------------------*\
+    Get the tool parameters
+\*--------------------------------------------------------------------*/
+     ProTestToolParamGet(fp, p_tool, tool_cutter_diam);
+     ProTestToolParamGet(fp, p_tool, tool_length);
+<a name="anchor-39"></a>     ProTestToolParamGet(fp, p_tool, (char*)&quot;NOSE_RADIUS&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;SIDE_ANGLE&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;END_ANGLE&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;TOOL_WIDTH&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;CORNER_RADIUS&quot;);
+<a name="anchor-40"></a>     ProTestToolParamGet(fp, p_tool, (char*)&quot;CUTTER_WIDTH&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;POINT_ANGLE&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;CHAMFER_LENGTH&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;DRILL_DIAMETER&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;DRILL_LENGTH&quot;);
+<a name="anchor-41"></a>     ProTestToolParamGet(fp, p_tool, (char*)&quot;CUTTING_OFFSET&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;BODY_DIAMETER&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;INSERT_LENGTH&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;SIDE_WIDTH&quot;);
+     ProTestToolParamGet(fp, p_tool, (char*)&quot;SHANK_DIAM&quot;);
+<a name="anchor-42"></a>
+     fclose(fp);
+     status = ProInfoWindowDisplay(ProStringToWstring(w_filename, tool_name),
+         NULL,NULL);      
+     TEST_CALL_REPORT (&quot;ProInfoWindowDisplay&quot;, &quot;ProTestGetToolInfo&quot;,
+<a name="anchor-43"></a>         status, status != PRO_TK_NO_ERROR);
+    
+     return PRO_TK_NO_ERROR;
+}
+
+</pre>
+</body>
+</html>

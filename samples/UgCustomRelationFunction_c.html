@@ -1,0 +1,130 @@
+<html>
+<head>
+<title>UgCustomRelationFunction.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*
+This example creates three externally defined functions to be available in 
+the relations dialog:
+	ptk_set_a &amp; ptk_set_b are used from the left-hand side of relations 
+<a name="anchor-2"></a>                to initialize double values to stored &quot;A&quot; and &quot;B&quot; variables.
+	ptk_eval_ax_plus_b returns the computation of Ax+B, where x is an 
+                input to the function.
+
+These functions are available only while the Pro/TK application is running.  
+<a name="anchor-3"></a>Models can be saved with relations referencing these functions, but these 
+models will have relation errors if retrieved while the application is not 
+running.
+*/
+
+<a name="anchor-4"></a>#include &lt;ProToolkit.h>
+#include &lt;ProRelSet.h>
+#include &lt;ProParamval.h>
+
+#define PTK_SET_A &quot;ptk_set_a&quot;
+<a name="anchor-5"></a>#define PTK_SET_B &quot;ptk_set_b&quot;
+
+static double stored_a;
+static double stored_b;
+
+<a name="anchor-6"></a>/*==========================================================================*\
+FUNCTION: UserRelFPropertySet
+PURPOSE:  &quot;Write&quot; function for the assignment of the parameters used for 
+           calculation.
+\*==========================================================================*/
+<a name="anchor-7"></a>ProError UserRelFPropertySet (ProRelset* relset, ProMdl mdl,
+			      char* ext_func_name,  ProParamvalue* args,
+			      ProParamvalue* input, ProAppData data)
+{
+  if (input->type != PRO_PARAM_DOUBLE)
+<a name="anchor-8"></a>    return (PRO_TK_GENERAL_ERROR);
+  
+  if (strcmp (ext_func_name, PTK_SET_A) == 0)
+    {
+      stored_a = input->value.d_val;
+<a name="anchor-9"></a>      return (PRO_TK_NO_ERROR);
+    }
+  
+  if (strcmp (ext_func_name, PTK_SET_B) == 0)
+    {
+<a name="anchor-10"></a>      stored_b = input->value.d_val;
+      return (PRO_TK_NO_ERROR);
+    }
+  
+  return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-11"></a>}
+
+/*==========================================================================*\
+FUNCTION: UserRelFGetAxPlusB
+PURPOSE:  &quot;Read&quot; function for the calculation of the values.
+<a name="anchor-12"></a>\*==========================================================================*/
+ProError UserRelFGetAxPlusB (ProRelset* relset, ProMdl mdl,
+			     char* ext_func_name,  ProParamvalue* args,
+			     ProAppData data, ProParamvalue* result)
+{
+<a name="anchor-13"></a>  
+  double x = args [0].value.d_val;
+  
+  result->type = PRO_PARAM_DOUBLE;
+  result->value.d_val = stored_a * x + stored_b;
+<a name="anchor-14"></a>  
+  return (PRO_TK_NO_ERROR);
+}
+
+/*==========================================================================*\
+<a name="anchor-15"></a>FUNCTION: UserCustomRelFunctionsDefine
+PURPOSE:  Define the functions that can be used by Pro/E users in relations.
+\*==========================================================================*/
+int UserCustomRelFunctionsDefine ()
+{
+<a name="anchor-16"></a>  ProRelfuncArg* args_array;
+  
+  stored_a = 5.5;
+  stored_b = 13.1;
+  
+<a name="anchor-17"></a>/*--------------------------------------------------------------------------*\
+  Allocate the array of expected arguments and types for the get function.
+\*--------------------------------------------------------------------------*/
+  ProArrayAlloc (1, sizeof (ProRelfuncArg), 1, (ProArray*)&amp;args_array);
+  args_array [0].type = PRO_PARAM_DOUBLE;
+<a name="anchor-18"></a>  args_array [0].attributes = PRO_RELF_ATTR_NONE;
+  
+  
+/*--------------------------------------------------------------------------*\
+  Register the set functions.  These functions should be used only on the
+<a name="anchor-19"></a>  LHS of relations, and they do not require or use any arguments.
+\*--------------------------------------------------------------------------*/
+  ProRelationFunctionRegister (&quot;ptk_set_a&quot;, NULL,
+			       NULL, UserRelFPropertySet, NULL,
+			       PRO_B_TRUE, NULL);
+<a name="anchor-20"></a>  
+  
+  ProRelationFunctionRegister (&quot;ptk_set_b&quot;, NULL,
+			       NULL, UserRelFPropertySet, NULL,
+			       PRO_B_TRUE, NULL);
+<a name="anchor-21"></a>
+/*--------------------------------------------------------------------------*\
+  Register the computation function.  This function should be used only on the
+  RHS of relations.  Type-checking is used to ensure that exactly one double
+  argument was passed.
+<a name="anchor-22"></a>\*--------------------------------------------------------------------------*/
+  ProRelationFunctionRegister (&quot;ptk_eval_ax_plus_b&quot;, args_array,
+			       UserRelFGetAxPlusB, NULL, NULL,
+			       PRO_B_FALSE, NULL);
+
+<a name="anchor-23"></a>  
+  return (PRO_TK_NO_ERROR);
+}
+
+#undef PTK_SET_A
+<a name="anchor-24"></a>#undef PTK_SET_B
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,1615 @@
+<html>
+<head>
+<title>TestDimension.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProDimension.h>
+#include &lt;ProMenu.h>
+#include &lt;ProArray.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProGraphic.h>
+<a name="anchor-3"></a>#include &lt;ProModelitem.h>
+#include &lt;ProPoint.h>
+#include &lt;ProAnnotation.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-4"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;UtilMenu.h&quot;
+#include &quot;UtilFiles.h&quot;
+#include &lt;UtilMessage.h>
+<a name="anchor-5"></a>#include &lt;ProMessage.h>
+#include &lt;UtilTypes.h>
+#include &lt;UtilCollect.h>
+#include &lt;TestDimension.h>
+
+<a name="anchor-6"></a>/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+
+#define LINEAR_TO_ORDINATE 0
+<a name="anchor-7"></a>#define ORDINATE_TO_LINEAR 1
+
+#define DIM_MOD_TEXT        0
+#define DIM_MOD_SYMBOL      1
+#define DIM_MOD_VALUE       2
+<a name="anchor-8"></a>#define DIM_MOD_TOL         3
+#define DIM_MOD_TOL_TYPE    4
+#define DIM_MOD_DECIMALS    5
+#define DIM_MOD_DENOM       6
+
+<a name="anchor-9"></a>#define DIM_FEATURE         0  
+#define DIM_PART            1
+#define DIM_FEATURE_VIEW    2
+#define DIM_PART_VIEW       3
+#define DIM_VIEW            4
+<a name="anchor-10"></a>#define DIM_SELECTED        5
+
+/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+<a name="anchor-11"></a>
+typedef struct user_dim_data {
+    ProMdl parent;
+    ProBoolean    flag;
+}UserDimData;
+<a name="anchor-12"></a>
+int    ProTestDimType (ProDrawing *);
+int    ProTestDimOrdinateCreate (ProDrawing *);
+int    ProTestOrdinateToLinear (ProDrawing *);
+int    ProTestDimMove (ProDrawing *);
+<a name="anchor-13"></a>int    ProTestDimensionModify (ProMdl *, int );
+int    ProTestDimensionEdit (ProDimension* dim, int );
+int    ProTestDimensionInfo (ProMdl *, int );
+int    ProTestToleranceSet (ProMdl *, int );
+int    ProTestDimSwitch ();
+<a name="anchor-14"></a>int    ProTestDimensionReset (ProDimension*);
+int    ProTestDimStandardCreate(ProDrawing *);
+int    ProTestDimDisplayMenu (ProMdl*, int);
+int    ProTestDimDisplayAct (UserDimData *, int );
+
+<a name="anchor-15"></a>void   ProTestSenseSet (ProDimSense *);
+void   ProTestDimensionAttachPrint (ProDimAttachment *, ProDimSense *, FILE *);
+void   ProTestDimensionParamPrint (ProDimension , FILE *);
+void   ProTestDimensionInfoPrint (ProMdl , ProDimension , ProMode , ProView, FILE *);
+
+<a name="anchor-16"></a>char*  ProDimOrientToStr (ProDimOrient );
+char*  ProDimAocToStr (ProDimLinAocTgtSense );
+char*  ProDimPointToStr (ProPointType );
+char*  ProDimTypeToStr(ProDimensiontype );
+
+<a name="anchor-17"></a>ProError ProTestSolidDimensionsCollect (ProSolid, ProBoolean, ProDimension  **);
+
+
+/*============================================================================*\
+ Function:	ProTestDimensionMenu
+<a name="anchor-18"></a> Purpose:       Shows main level dimension related menu
+\*============================================================================*/
+int ProTestDimensionMenu(ProMdl *p_mdl)
+{
+    int menu_id;
+<a name="anchor-19"></a>    ProError err;
+    ProMode mode;
+
+    err = ProModeCurrentGet (&amp;mode);
+
+<a name="anchor-20"></a>    err = ProMenuFileRegister((char*)&quot;TkDimension&quot;, (char*)&quot;tkdimension.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;TkDimension&quot;, (char*)&quot;TkDimension&quot;,
+                           (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkDimension&quot;, (char*)&quot;Create&quot;,
+                (ProMenubuttonAction)ProTestDimType, p_mdl, 0);
+<a name="anchor-21"></a>    err = ProMenubuttonActionSet((char*)&quot;TkDimension&quot;, (char*)&quot;Move&quot;,
+                (ProMenubuttonAction)ProTestDimMove, p_mdl, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkDimension&quot;, (char*)&quot;OrdinateToLinear&quot;,
+                (ProMenubuttonAction)ProTestOrdinateToLinear, p_mdl, 0);
+    err = ProMenubuttonActionSet((char*)&quot;TkDimension&quot;, (char*)&quot;Info&quot;,
+<a name="anchor-22"></a>                (ProMenubuttonAction)ProTestDimensionInfo, p_mdl, (int)mode);
+    err = ProMenubuttonActionSet((char*)&quot;TkDimension&quot;, (char*)&quot;Modify&quot;,
+                (ProMenubuttonAction)ProTestDimensionModify, p_mdl, (int)mode);
+    err = ProMenubuttonActionSet((char*)&quot;TkDimension&quot;, (char*)&quot;Switch&quot;,
+                (ProMenubuttonAction)ProTestDimSwitch, p_mdl, 0);
+<a name="anchor-23"></a>     err = ProMenubuttonActionSet((char*)&quot;TkDimension&quot;, (char*)&quot;Show&quot;,
+                (ProMenubuttonAction)ProTestDimDisplayMenu, p_mdl, (int)PRO_B_TRUE);
+    err = ProMenubuttonActionSet((char*)&quot;TkDimension&quot;, (char*)&quot;Erase&quot;,
+                (ProMenubuttonAction)ProTestDimDisplayMenu, p_mdl, (int)PRO_B_FALSE);
+	err = ProMenubuttonActionSet((char*)&quot;TkDimension&quot;, (char*)&quot;ModifyTolerance&quot;,
+<a name="anchor-24"></a>                (ProMenubuttonAction)ProTestToleranceSet, p_mdl, (int)PRO_B_FALSE);
+   
+    
+    if (mode == PRO_MODE_ASSEMBLY || mode == PRO_MODE_PART)
+    {
+<a name="anchor-25"></a>        err = ProMenubuttonVisibilitySet((char*)&quot;TkDimension&quot;, (char*)&quot;Create&quot;, PRO_B_FALSE);
+        err = ProMenubuttonVisibilitySet((char*)&quot;TkDimension&quot;, (char*)&quot;OrdinateToLinear&quot;,
+            PRO_B_FALSE);
+        err = ProMenubuttonVisibilitySet((char*)&quot;TkDimension&quot;, (char*)&quot;Move&quot;, PRO_B_FALSE);
+    }
+<a name="anchor-26"></a>    
+    err = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkDimension&quot;, &amp;menu_id);
+    err = ProMenuProcess((char*)&quot;TkDimension&quot;, &amp;menu_id);
+    
+    return (0);
+<a name="anchor-27"></a>}
+
+/*============================================================================*\
+ Function:	ProTestDimType
+ Purpose:       Choise dimension type for creating
+<a name="anchor-28"></a>\*============================================================================*/
+int  ProTestDimType (ProDrawing *p_drw)
+{
+    int menu_id;
+
+<a name="anchor-29"></a>    ProMenuFileRegister((char*)&quot;TkDrawdimtype&quot;, (char*)&quot;tkdrawdimtype.mnu&quot;, &amp;menu_id);
+    ProMenubuttonActionSet((char*)&quot;TkDrawdimtype&quot;, (char*)&quot;Standard&quot;,
+            (ProMenubuttonAction)ProTestDimStandardCreate, p_drw, 0);
+    ProMenubuttonActionSet((char*)&quot;TkDrawdimtype&quot;, (char*)&quot;Ordinate&quot;,
+            (ProMenubuttonAction)ProTestDimOrdinateCreate, p_drw, 0);
+<a name="anchor-30"></a>    ProMenubuttonActionSet((char*)&quot;TkDrawdimtype&quot;, (char*)&quot;TkDrawdimtype&quot;,
+            (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkDrawdimtype&quot;, &amp;menu_id);
+    ProMenuProcess((char*)&quot;TkDrawdimtype&quot;, &amp;menu_id);
+    
+<a name="anchor-31"></a>    return (0);
+}
+
+/*============================================================================*\
+ Function:	ProTestDimensionModify
+<a name="anchor-32"></a> Purpose:       Setup menu for testing modify dimension functionality
+\*============================================================================*/
+int ProTestDimensionModify (ProMdl *p_mdl, int mode)
+{
+    ProError err;
+<a name="anchor-33"></a>    int menu_id, n_sel;
+    ProSelection *sel;
+    ProDimension dim;
+    ProBoolean flag;
+    
+<a name="anchor-34"></a>    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select dimension: &quot;);    
+    err = ProSelect((char*)&quot;dimension,ref_dim&quot;, 1, NULL, NULL, NULL, NULL,
+        &amp;sel, &amp;n_sel);
+    if( (err != PRO_TK_NO_ERROR) || (n_sel &lt; 1) )
+        return -1;
+<a name="anchor-35"></a>        
+    err = ProSelectionModelitemGet (sel[0], &amp;dim);
+
+	err = ProAnnotationUndisplay((ProAnnotation*)&amp;dim,NULL,NULL);
+
+<a name="anchor-36"></a>    err = ProDimensionIsFractional (&amp;dim, &amp;flag);    
+    TEST_CALL_REPORT(&quot;ProDimensionIsFractional()&quot;,
+            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    ProMenuFileRegister((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;tkdimesionmodif.mnu&quot;, &amp;menu_id);
+<a name="anchor-37"></a>    ProMenubuttonActionSet((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;TkDimesionmodif&quot;,
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    ProMenubuttonActionSet((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Text&quot;,
+	(ProMenubuttonAction)ProTestDimensionEdit, &amp;dim, DIM_MOD_TEXT);
+    ProMenubuttonActionSet((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Symbol&quot;,
+<a name="anchor-38"></a>	(ProMenubuttonAction)ProTestDimensionEdit, &amp;dim, DIM_MOD_SYMBOL);
+    ProMenubuttonActionSet((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Value&quot;,
+	(ProMenubuttonAction)ProTestDimensionEdit, &amp;dim, DIM_MOD_VALUE);
+    ProMenubuttonActionSet((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Tolerance&quot;,
+	(ProMenubuttonAction)ProTestDimensionEdit, &amp;dim, DIM_MOD_TOL);
+<a name="anchor-39"></a>    ProMenubuttonActionSet((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Tolerance type&quot;,
+	(ProMenubuttonAction)ProTestDimensionEdit, &amp;dim, DIM_MOD_TOL_TYPE);
+    ProMenubuttonActionSet((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Decimals&quot;,
+	(ProMenubuttonAction)ProTestDimensionEdit, &amp;dim, DIM_MOD_DECIMALS);
+    ProMenubuttonActionSet((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Denominator&quot;,
+<a name="anchor-40"></a>	(ProMenubuttonAction)ProTestDimensionEdit, &amp;dim, DIM_MOD_DENOM);
+    ProMenubuttonActionSet((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Commit&quot;,
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    ProMenubuttonActionSet((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Cancel&quot;,
+	(ProMenubuttonAction)ProTestDimensionReset, &amp;dim, 0);
+<a name="anchor-41"></a>        
+    if (mode == (int)PRO_MODE_DRAWING)
+    {
+        ProMenubuttonVisibilitySet((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Value&quot;, PRO_B_FALSE);
+    }    
+<a name="anchor-42"></a>    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkDimesionmodif&quot;, &amp;menu_id);
+    
+    if (flag)
+        err = ProMenubuttonDeactivate ((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Decimals&quot;);
+    else
+<a name="anchor-43"></a>        err = ProMenubuttonDeactivate ((char*)&quot;TkDimesionmodif&quot;, (char*)&quot;Denominator&quot;);
+    ProMenuProcess((char*)&quot;TkDimesionmodif&quot;, &amp;menu_id);
+    
+  err = ProAnnotationDisplay((ProAnnotation*)&amp;dim,NULL,NULL,NULL);
+    
+<a name="anchor-44"></a>    return (0);
+}
+
+/*============================================================================*\
+ Function:	ProTestDimensionReset
+<a name="anchor-45"></a> Purpose:       Resets the dimensions of the object
+\*============================================================================*/
+int ProTestDimensionReset (ProDimension * dim)
+{
+    ProError err;
+<a name="anchor-46"></a>    
+    err = ProDimensionDimensionReset (dim);
+    TEST_CALL_REPORT(&quot;ProDimensionDimensionReset()&quot;,
+            &quot;ProTestDimensionReset()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProMenuDelete ();
+<a name="anchor-47"></a>    
+    return (0);
+}
+
+
+<a name="anchor-48"></a>
+/*============================================================================*\
+ Function:	ProTestDimensionEdit
+ Purpose:       Modify the dimension parameters
+\*============================================================================*/
+<a name="anchor-49"></a>int ProTestDimensionEdit (ProDimension* dim, int action)
+{
+    ProError err;
+    wchar_t **p_texts = NULL;	
+	wchar_t buffer[127];
+<a name="anchor-50"></a>    ProName symbol;
+    ProCharLine string, temp;
+    double value = 0.0, low_limit, up_limit, val_range[2] = {1e-9, 1e+5};
+	int decimals = 1;	
+	int arrIndex = 0 , wstrLen = 0, ii=0;	
+<a name="anchor-51"></a>	static ProUtilMenuButtons tol_type[] = { 
+	  {&quot;Tolerance Type&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+	  {&quot;Nominal&quot;, PRO_TOL_DEFAULT, 0},
+	  {&quot;Limits&quot;, PRO_TOL_LIMITS, 0},
+	  {&quot;Symmetric&quot;, PRO_TOL_PLUS_MINUS_SYM, 0}, 
+<a name="anchor-52"></a>	  {&quot;Plus/Minus&quot;, PRO_TOL_PLUS_MINUS, 0},
+	  {&quot;PM_Sym_Superscript&quot;, PRO_DIM_TOL_SYM_SUPERSCRIPT, 0},
+	  {&quot;&quot;,0,0}
+    };
+	ProDimToleranceType type;
+<a name="anchor-53"></a>
+    
+    switch (action)
+    {
+    case DIM_MOD_TEXT :
+<a name="anchor-54"></a>        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the dimension text: &quot;);
+        err = ProArrayAlloc (0, sizeof(wchar_t*), 1, (ProArray*)&amp;p_texts);		
+        while(1)
+        {           
+            err = ProMessageStringRead (127, buffer);
+<a name="anchor-55"></a>			if(err != PRO_TK_NO_ERROR)
+				break;
+			
+			err = ProArrayObjectAdd ((ProArray*)&amp;p_texts, PRO_VALUE_UNUSED, 1,&amp;buffer);      
+			err = ProWstringLengthGet(buffer,&amp;wstrLen);
+<a name="anchor-56"></a>			err = ProArrayAlloc (wstrLen+1, sizeof(wchar_t), 1, (ProArray*)&amp;p_texts[arrIndex]);		
+			ProWstringCopy(buffer,p_texts[arrIndex],PRO_VALUE_UNUSED);
+			arrIndex++;	
+        } 
+        err = ProDimensionTextWstringsSet (dim, p_texts);
+<a name="anchor-57"></a>        TEST_CALL_REPORT(&quot;ProDimensionTextWstringsSet()&quot;,
+            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+
+		for(ii=0;ii&lt;arrIndex;ii++)
+			err = ProArrayFree ((ProArray*)&amp;p_texts[ii]);
+<a name="anchor-58"></a>
+        err = ProArrayFree ((ProArray*)&amp;p_texts);
+        
+        break;
+    case DIM_MOD_SYMBOL:
+<a name="anchor-59"></a>        err = ProDimensionSymbolGet (dim, symbol);
+        TEST_CALL_REPORT(&quot;ProDimensionSymbolGet()&quot;,
+            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+        sprintf (string, &quot;Enter the dimension symbol [%s]: &quot;, 
+             ProWstringToString (temp, symbol));
+<a name="anchor-60"></a>        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, string);
+        ProUtilStringGet (symbol, symbol, PRO_LINE_SIZE);
+        err = ProDimensionSymbolSet (dim, symbol);
+        TEST_CALL_REPORT(&quot;ProDimensionSymbolSet()&quot;,
+            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-61"></a>        
+        break;    
+    case DIM_MOD_TOL :
+        err = ProDimensionToleranceGet (dim, &amp;up_limit, &amp;low_limit);
+        TEST_CALL_REPORT(&quot;ProDimensionToleranceGet()&quot;,
+<a name="anchor-62"></a>            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+        sprintf (string, &quot;Enter upper limit [%6.3f]: &quot;,up_limit);
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, string);
+        ProUtilDoubleGet (val_range, &amp;up_limit, &amp;up_limit);
+        sprintf (string, &quot;Enter lower limit [%6.3f]: &quot;, low_limit);
+<a name="anchor-63"></a>        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, string);
+        ProUtilDoubleGet (val_range, &amp;low_limit, &amp;low_limit);
+        err = ProDimensionToleranceSet (dim, up_limit, low_limit);
+        TEST_CALL_REPORT(&quot;ProDimensionToleranceSet()&quot;,
+            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-64"></a>        
+        break;
+    case DIM_MOD_VALUE :
+        err = ProDimensionValueGet (dim, &amp;value);
+        TEST_CALL_REPORT(&quot;ProDimensionValueGet()&quot;,
+<a name="anchor-65"></a>            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+        sprintf (string, &quot;Enter the dimension value [%6.3f]: &quot;, value);
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, string);
+        ProUtilDoubleGet (NULL, &amp;value, &amp;value);
+        err = ProDimensionValueSet (dim, value);
+<a name="anchor-66"></a>        TEST_CALL_REPORT(&quot;ProDimensionValueSet()&quot;,
+            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+        break;
+    case DIM_MOD_TOL_TYPE :
+<a name="anchor-67"></a>	    err = ProUtilMenuIntValueSelect(tol_type, (int*)&amp;type);
+    
+        err = ProDimensionToltypeSet (dim, type);
+        TEST_CALL_REPORT(&quot;ProDimensionToltypeSet()&quot;,
+                &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-68"></a>            
+        break;
+    case DIM_MOD_DECIMALS :
+        err = ProDimensionDecimalsGet (dim, &amp;decimals);
+        TEST_CALL_REPORT(&quot;ProDimensionDecimalsGet()&quot;,
+<a name="anchor-69"></a>            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+        sprintf (string, &quot;Enter the dimension decimals [%d:] &quot;, decimals);
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, string);
+        ProUtilIntGet (NULL, &amp;decimals, &amp;decimals);
+        err = ProDimensionDecimalsSet (dim, decimals);
+<a name="anchor-70"></a>        TEST_CALL_REPORT(&quot;ProDimensionDecimalsSet()&quot;,
+            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+        break;
+    case DIM_MOD_DENOM :
+<a name="anchor-71"></a>        err = ProDimensionDenominatorGet (dim, &amp;decimals);
+        TEST_CALL_REPORT(&quot;ProDimensionDenominatorGet()&quot;,
+            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+        sprintf (string, &quot;Enter the dimension denominator [%d:] &quot;, decimals);
+        ProUtilIntGet (NULL, &amp;decimals, &amp;decimals);
+<a name="anchor-72"></a>        err = ProDimensionDenominatorSet (dim, decimals);
+        TEST_CALL_REPORT(&quot;ProDimensionDenominatorSet()&quot;,
+            &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+                
+        break;
+<a name="anchor-73"></a>    default :
+        break;
+    }
+    
+    return (0);
+<a name="anchor-74"></a>}
+
+/*============================================================================*\
+  Function : ProTestDimSwitch()
+  Purpose  : Switch display mode
+<a name="anchor-75"></a>\*============================================================================*/
+int ProTestDimSwitch ()
+{
+    ProError err;
+    ProDisplayMode mode;
+<a name="anchor-76"></a>    
+    err = ProDisplaymodeGet (&amp;mode);
+    TEST_CALL_REPORT(&quot;ProDisplaymodeGet()&quot;,
+        &quot;ProTestDimSwitch()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (mode == PRODISPMODE_NUMERIC)
+<a name="anchor-77"></a>        mode = PRODISPMODE_SYMBOLIC;
+    else
+        mode = PRODISPMODE_NUMERIC;
+    err = ProDisplaymodeSet (mode);
+    TEST_CALL_REPORT(&quot;ProDisplaymodeSet()&quot;,
+<a name="anchor-78"></a>        &quot;ProTestDimSwitch()&quot;, err, err != PRO_TK_NO_ERROR);
+    return (0);
+}
+
+/*============================================================================*\
+<a name="anchor-79"></a> Function: ProTestSenseSet
+ Purpose:  Coise dimension sense     
+\*============================================================================*/
+void ProTestSenseSet (ProDimSense *p_sense)
+{
+<a name="anchor-80"></a>    static ProUtilMenuButtons sense_type[] = {
+        {&quot;SenseType&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Point&quot;, PRO_DIM_SNS_TYP_PNT, 0},
+        {&quot;SplinePnt&quot;, PRO_DIM_SNS_TYP_SPLN_PNT, 0},
+        {&quot;TgtIdx&quot;, PRO_DIM_SNS_TYP_TGT_IDX, 0},
+<a name="anchor-81"></a>        {&quot;AocTgt&quot;, PRO_DIM_SNS_TYP_LIN_AOC_TGT, 0},
+        {&quot;Angle&quot;, PRO_DIM_SNS_TYP_ANGLE, 0},
+        {&quot;PntAngle&quot;, PRO_DIM_SNS_TYP_PNT_ANGLE, 0},
+        {&quot;None&quot;, PRO_DIM_SNS_TYP_NONE, 0},
+        {&quot;&quot;,0,0}
+<a name="anchor-82"></a>    };
+    static ProUtilMenuButtons point_type[] = {
+        {&quot;PointType&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;End1&quot;, PRO_POINT_TYP_END1, 0},
+        {&quot;End2&quot;, PRO_POINT_TYP_END2, 0},
+<a name="anchor-83"></a>        {&quot;Center&quot;, PRO_POINT_TYP_CENTER, 0},
+        {&quot;MidPnt&quot;, PRO_POINT_TYP_MIDPT, 0},
+        {&quot;None&quot;, PRO_POINT_TYP_NONE, 0},
+        {&quot;&quot;,0,0}
+    };
+<a name="anchor-84"></a>    static ProUtilMenuButtons aoc_tgt[] = {
+        {&quot;AocTgtSense&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Left0&quot;, PRO_DIM_LIN_AOC_TGT_LEFT0, 0},
+        {&quot;Right0&quot;, PRO_DIM_LIN_AOC_TGT_RIGHT0, 0},
+        {&quot;Left1&quot;, PRO_DIM_LIN_AOC_TGT_LEFT1, 0},
+<a name="anchor-85"></a>        {&quot;Right1&quot;, PRO_DIM_LIN_AOC_TGT_RIGHT1, 0},
+        {&quot;&quot;,0,0}
+    };
+    static ProUtilMenuButtons dim_orient[] = {
+        {&quot;DimOrient&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+<a name="anchor-86"></a>        {&quot;Horiz&quot;, PRO_DIM_ORNT_HORIZ, 0},
+        {&quot;Vert&quot;, PRO_DIM_ORNT_VERT, 0},
+        {&quot;Slanted&quot;, PRO_DIM_ORNT_SLANTED, 0},
+        {&quot;ElpsRad1&quot;, PRO_DIM_ORNT_ELPS_RAD1, 0},
+        {&quot;ElpsRad2&quot;, PRO_DIM_ORNT_ELPS_RAD2, 0},
+<a name="anchor-87"></a>        {&quot;ArcAng&quot;, PRO_DIM_ORNT_ARC_ANG, 0},
+        {&quot;Length&quot;, PRO_DIM_ORNT_ARC_LENGTH, 0},
+        {&quot;TancrvAng&quot;, PRO_DIM_ORNT_LIN_TANCRV_ANG, 0},
+        {&quot;None&quot;, PRO_DIM_ORNT_NONE, 0},
+        {&quot;&quot;,0,0}
+<a name="anchor-88"></a>    };
+
+    ProUtilMenuIntValueSelect (sense_type, (int*)&amp;p_sense->type);
+    switch (p_sense->type)
+    {
+<a name="anchor-89"></a>    case PRO_DIM_SNS_TYP_PNT:
+        ProUtilMenuIntValueSelect (point_type, (int*)&amp;p_sense->sense);
+
+        break;
+    case PRO_DIM_SNS_TYP_TGT_IDX:
+<a name="anchor-90"></a>    case PRO_DIM_SNS_TYP_SPLN_PNT:
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter index: &quot; );
+        ProUtilIntGet (NULL, NULL, &amp;p_sense->sense);
+
+        break;
+<a name="anchor-91"></a>    case PRO_DIM_SNS_TYP_LIN_AOC_TGT:
+        ProUtilMenuIntValueSelect (aoc_tgt, (int*)&amp;p_sense->sense);
+
+        break;
+    case PRO_DIM_SNS_TYP_ANGLE:
+<a name="anchor-92"></a>        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Measured starting&quot;
+                         &quot; from this entity&quot;);
+        p_sense->angle_sense.is_first = (ProBoolean)ProUtilYesnoGet ((char *)&quot;No&quot;);
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Flip entity direction&quot;);
+        p_sense->angle_sense.should_flip = (ProBoolean)ProUtilYesnoGet ((char *)&quot;No&quot;);
+<a name="anchor-93"></a>
+        break;
+    case PRO_DIM_SNS_TYP_PNT_ANGLE:
+        ProUtilMenuIntValueSelect (point_type, (int*)&amp;p_sense->sense);
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Measured starting&quot;
+<a name="anchor-94"></a>                         &quot; from this entity&quot;);
+        p_sense->angle_sense.is_first = (ProBoolean)ProUtilYesnoGet ((char *)&quot;No&quot;);
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Flip entity direction&quot;);
+        p_sense->angle_sense.should_flip = (ProBoolean)ProUtilYesnoGet ((char *)&quot;No&quot;);
+
+<a name="anchor-95"></a>        break;
+    default:
+        break;
+    }
+    ProUtilMenuIntValueSelect (dim_orient, (int*)&amp;p_sense->orient_hint);
+<a name="anchor-96"></a>}
+
+
+
+/*============================================================================*\
+<a name="anchor-97"></a> Function:	ProTestDimensionCreate
+ Purpose:       Create standard dimension
+\*============================================================================*/
+int ProTestDimStandardCreate(
+    ProDrawing *p_mdl)
+<a name="anchor-98"></a>{
+    ProError err;
+    ProVector loc;
+    int n_sel, i;
+    ProDimension dim;
+<a name="anchor-99"></a>    ProMouseButton btn;
+    ProDimSense *sense_arr;
+    ProSelection  *p_sel, *sel_arr;
+    ProView view;
+    ProBoolean dim_type = PRO_B_FALSE, is_sense;
+<a name="anchor-100"></a>    static ProUtilMenuButtons dim_opt[] = {
+        {&quot;DimType&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Dimension&quot;, PRO_B_FALSE, 0},
+        {&quot;Ref Dim&quot;, PRO_B_TRUE, 0},
+        {&quot;&quot;,0,0}
+<a name="anchor-101"></a>    };
+    static ProUtilMenuButtons sense_act[] = {
+        {&quot;SenseAct&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Default&quot;, PRO_B_FALSE, 0},
+        {&quot;Sense&quot;, PRO_B_TRUE, 0},
+<a name="anchor-102"></a>        {&quot;&quot;,0,0}
+    };
+    err = ProUtilMenuIntValueSelect (dim_opt, (int*)&amp;dim_type);
+    err = ProUtilMenuIntValueSelect (sense_act, (int*)&amp;is_sense);
+
+<a name="anchor-103"></a>    ProArrayAlloc(2, sizeof(ProDimSense), 1, (ProArray*)&amp;sense_arr);
+    ProArrayAlloc(2, sizeof(ProSelection), 1, (ProArray*)&amp;sel_arr);
+
+    for (i = 0; i &lt; 2; i++)
+    {
+<a name="anchor-104"></a>        if (is_sense)
+            ProTestSenseSet (&amp;sense_arr[i]);
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select geometry entityes: &quot;);
+        err = ProSelect ((char*)&quot;point,dtl_axis,datum,csys,edge,curve,surface&quot;, 1, NULL,
+                         NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+<a name="anchor-105"></a>        if (n_sel &lt; 1 &amp;&amp; i &lt; 1)
+            return (-1);
+        else if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+            break;
+        err = ProSelectionCopy (p_sel[0], &amp;sel_arr[i]);
+<a name="anchor-106"></a>    }
+
+    err = ProSelectionViewGet (sel_arr[0], &amp;view);
+    TEST_CALL_REPORT(&quot;ProSelectionViewGet()&quot;,
+                     &quot;ProTestDimensionCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-107"></a>
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select dimension location&quot;);
+    if (ProMousePickGet (PRO_ANY_BUTTON, &amp;btn, loc) != PRO_TK_NO_ERROR)
+        return (-1);
+
+<a name="anchor-108"></a>    err = ProDrawingDimCreate (*p_mdl, sel_arr, sense_arr,
+                               loc, dim_type, &amp;dim);
+    TEST_CALL_REPORT(&quot;ProDrawingDimCreate()&quot;,
+                     &quot;ProTestDimensionCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err == PRO_TK_NO_ERROR)
+<a name="anchor-109"></a>    {  
+        err = ProAnnotationShow ((ProAnnotation*)&amp;dim, NULL, view);
+        TEST_CALL_REPORT(&quot;ProAnnotationShow()&quot;,
+                     &quot;ProTestDimOrdinateCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+      
+<a name="anchor-110"></a>    }
+    ProArrayFree ((ProArray*)&amp;sense_arr);
+    ProArrayFree ((ProArray*)&amp;sel_arr);
+    
+    return (0);
+<a name="anchor-111"></a>}
+
+/*============================================================================*\
+ Function:	ProTestToleranceSet
+ Purpose:       Modify tolerance decimals of model dimensions
+<a name="anchor-112"></a>\*============================================================================*/
+int ProTestToleranceSet (ProMdl *p_mdl, int mode)
+{
+  ProCharLine string;
+  ProError err;
+<a name="anchor-113"></a>  ProToleranceType type;  
+  int  decimals = 1, dec_range[2] = {1, 3};
+  static ProUtilMenuButtons tol_type[] = { 
+	{&quot;Tolerance Type&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+	{&quot;Linear&quot;, PROTOLERANCE_LINEAR, 0},
+<a name="anchor-114"></a>	{&quot;Angular&quot;, PROTOLERANCE_ANGULAR, 0},
+	{&quot;&quot;,0,0}
+  };
+  double value, val_range[2] = {1e-9, 1e+5};
+  
+<a name="anchor-115"></a>  err = ProUtilMenuIntValueSelect(tol_type, (int*)&amp;type);
+  if (type != PROTOLERANCE_ANGULAR)
+	{
+	  ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;Enter number of decimals place[1-3]:&quot;);
+	  ProUtilIntGet (dec_range, &amp;decimals, &amp;decimals);
+<a name="anchor-116"></a>	}
+  else
+	decimals = 1;
+  err = ProToleranceDefaultGet (type, decimals, &amp;value);
+  TEST_CALL_REPORT(&quot;ProToleranceDefaultGet()&quot;,
+<a name="anchor-117"></a>				   &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+  sprintf (string, &quot;Enter default tolerance [%6.3f]: &quot;, value);
+  ProUtilDoubleGet (val_range, &amp;value, &amp;value);
+  err = ProSolidToleranceSet ((ProSolid)*p_mdl, type, decimals, value);
+  TEST_CALL_REPORT(&quot;ProSolidToleranceSet()&quot;,
+<a name="anchor-118"></a>				   &quot;ProTestDimensionEdit()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-119"></a>/*============================================================================*\
+ Function:  ProTestDimensionInfo
+ Purpose:   Get dimension info   
+\*============================================================================*/
+int ProTestDimensionInfo (ProMdl *p_mdl, int mode)
+<a name="anchor-120"></a>{
+    ProError err;
+    ProSelection *p_sel;
+    int n_sel, i, j, n_decimals, n_dims;
+    ProModelitem sel_item;
+<a name="anchor-121"></a>    char fname[PRO_PATH_SIZE];
+    ProPath name;
+    FILE *fp;
+    double solid_tol, default_tol;
+    ProDimension *p_dims = NULL;
+<a name="anchor-122"></a>    ProView view;
+    
+        
+    ProTestQcrName ((ProMdl*)p_mdl, (char*)&quot;.inf&quot;, fname);
+    fp = fopen (fname, &quot;w&quot;);
+<a name="anchor-123"></a>    if (fp == NULL)
+        return (-1);
+            
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select feature or part&quot;);
+    err = ProSelect ((char*)&quot;feature,part&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+<a name="anchor-124"></a>    if( (err != PRO_TK_NO_ERROR) || (n_sel &lt; 1) )
+        return (-1);
+        
+    err = ProSelectionViewGet (p_sel[0], &amp;view);
+    TEST_CALL_REPORT(&quot;ProSelectionViewGet()&quot;,
+<a name="anchor-125"></a>                     &quot;ProTestDimensionInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+                             
+    err = ProSelectionModelitemGet (p_sel[0], &amp;sel_item);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+                     &quot;ProTestDimensionInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-126"></a>
+    if (sel_item.type == PRO_FEATURE)
+    {
+        fprintf(fp,&quot;Feature dimensions:\n&quot;);
+        err = ProTestFeatureDimensionsCollect (&amp;sel_item, &amp;p_dims);
+<a name="anchor-127"></a>        if (err == PRO_TK_NO_ERROR)
+        {
+            err = ProArraySizeGet ((ProArray)p_dims, &amp;n_dims);
+            for (i = 0; i &lt; n_dims; i++)
+            {
+<a name="anchor-128"></a>                ProTestDimensionInfoPrint (*p_mdl, p_dims[i], (ProMode)mode, view, fp);
+            }
+            err = ProArrayFree ((ProArray*)&amp;p_dims);
+        }
+    }
+<a name="anchor-129"></a>    else if (sel_item.type == PRO_PART)
+    {
+        fprintf(fp,&quot;Solid dimensions:\n&quot;);
+        
+        for (i = 0; i &lt; 2; i++)
+<a name="anchor-130"></a>        {
+            err = ProTestSolidDimensionsCollect ((ProSolid)sel_item.owner, (ProBoolean)i, &amp;p_dims);
+            if (err == PRO_TK_NO_ERROR)
+            {
+                err = ProArraySizeGet ((ProArray)p_dims, &amp;n_dims);
+<a name="anchor-131"></a>                for (j = 0; j &lt; n_dims; j++)
+                {
+                    ProTestDimensionInfoPrint (*p_mdl, p_dims[j], (ProMode)mode, view, fp);
+                }
+                err = ProArrayFree ((ProArray*)&amp;p_dims);
+<a name="anchor-132"></a>            }
+         }
+    }
+    else 
+        return (0);
+<a name="anchor-133"></a>    fprintf(fp,&quot;        Default Tolerance:\n&quot;); 
+    for (n_decimals = 1; n_decimals &lt; 4; n_decimals++)
+    {
+        err = ProToleranceDefaultGet (PROTOLERANCE_LINEAR, n_decimals, 
+            &amp;default_tol);
+<a name="anchor-134"></a>        TEST_CALL_REPORT(&quot;ProToleranceDefaultGet()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+        if (err == PRO_TK_NO_ERROR)
+        {
+            fprintf(fp,&quot;    x.&quot;);
+<a name="anchor-135"></a>            for(j = 0; j &lt; n_decimals; j++)
+            {
+                fprintf(fp,&quot;x&quot;);
+            }
+            fprintf(fp,&quot;    +- %6.3f\n&quot;, default_tol);
+<a name="anchor-136"></a>        }
+    }
+    err = ProToleranceDefaultGet (PROTOLERANCE_ANGULAR, 1, &amp;default_tol);
+    TEST_CALL_REPORT(&quot;ProToleranceDefaultGet()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-137"></a>    fprintf(fp,&quot;    ANG    +- %6.3f\n&quot;, default_tol);
+    
+    fprintf(fp,&quot;        Solid Tolerance:\n&quot;); 
+    for (n_decimals = 1; n_decimals &lt; 4; n_decimals++)
+    {
+<a name="anchor-138"></a>        err = ProSolidToleranceGet ((ProSolid)*p_mdl, PROTOLERANCE_LINEAR, 
+            n_decimals, &amp;solid_tol);
+        TEST_CALL_REPORT(&quot;ProSolidToleranceGet()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+        if (err == PRO_TK_NO_ERROR)
+<a name="anchor-139"></a>        {
+            fprintf(fp,&quot;    x.&quot;);
+            for(j = 0; j &lt; n_decimals; j++)
+            {
+                fprintf(fp,&quot;x&quot;);
+<a name="anchor-140"></a>            }
+            fprintf(fp,&quot;    +- %6.3f\n&quot;, solid_tol);
+        }
+    }
+    err = ProSolidToleranceGet ((ProSolid)*p_mdl, PROTOLERANCE_ANGULAR, 1, 
+<a name="anchor-141"></a>        &amp;solid_tol);
+    TEST_CALL_REPORT(&quot;ProSolidToleranceGet()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+    fprintf(fp,&quot;    ANG    +- %6.3f\n&quot;, solid_tol);
+    
+<a name="anchor-142"></a>    fclose (fp);
+    
+    ProStringToWstring (name, fname);
+    ProInfoWindowDisplay (name, NULL, NULL);
+    
+<a name="anchor-143"></a>    return (0);
+
+}
+
+/*============================================================================*\
+<a name="anchor-144"></a> Function:	ProTestDimensionInfoPrint
+ Purpose:       Print the dimension info
+\*============================================================================*/
+void ProTestDimensionInfoPrint (
+    ProMdl p_mdl,
+<a name="anchor-145"></a>    ProDimension dim, 
+    ProMode mode,
+    ProView view,
+    FILE *fp
+)
+<a name="anchor-146"></a>{
+    ProError err;
+    ProMdlName mdl_name;
+    ProCharLine line;
+    ProPoint3d pos;
+<a name="anchor-147"></a>    ProDimSense *sense_arr;
+    ProDimAttachment *sel_arr;
+    int n_attach;
+    ProMdlType type;
+
+<a name="anchor-148"></a>    fprintf (fp, &quot;%s dimension  id = %d \n&quot;,
+        dim.type == PRO_DIMENSION ? &quot;Regular&quot; : &quot;Reference&quot;, dim.id);
+    if (mode == PRO_MODE_DRAWING)
+    {
+        err = ProMdlTypeGet(dim.owner, &amp;type);
+<a name="anchor-149"></a>        TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestDimensionMenu()&quot;, 
+                         err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_BAD_INPUTS);
+        
+        err = ProDrawingDimensionPosGet((ProDrawing)p_mdl, &amp;dim, pos);
+        TEST_CALL_REPORT(&quot;ProDrawingDimensionPosGet()&quot;, &quot;ProTestDimensionMenu()&quot;, 
+<a name="anchor-150"></a>                         err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_BAD_INPUTS);
+        /*
+        if(type == PRO_MDL_DRAWING)
+            err = ProDimensionLocationGet(&amp;dim, NULL, (ProDrawing)p_mdl, &amp;data );
+        else
+<a name="anchor-151"></a>            err = ProDimensionLocationGet(&amp;dim, view, NULL, &amp;data );
+                        
+        TEST_CALL_REPORT(&quot;ProDimensionLocationGet()&quot;, &quot;ProTestDimensionMenu()&quot;, 
+                         err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_BAD_INPUTS);
+
+<a name="anchor-152"></a>	    err = ProDimlocationTextGet(data, &amp;has_elbow, pos, &amp;elbow_length);
+	    TEST_CALL_REPORT(&quot;ProDimlocationTextGet()&quot;, &quot;ProTestDimensionMenu()&quot;, 
+                         err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_BAD_INPUTS);
+        */
+        
+<a name="anchor-153"></a>        if (err == PRO_TK_NO_ERROR)
+            fprintf (fp, &quot;        position: pos[0] = %6.3f, pos[1] = %6.3f, &quot;
+                &quot;pos[2] = %6.3f\n&quot;, pos[0], pos[1], pos[2]);
+        /* If function will be implemeted, uncomment this code */
+#if 0
+<a name="anchor-154"></a>        err = ProDrawingDimensionViewGet ((ProDrawing)p_mdl, &amp;dim, &amp;view);
+        TEST_CALL_REPORT(&quot;ProDrawingDimensionViewGet()&quot;,
+                 &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);*/
+        err = ProDrawingViewSolidGet ((ProDrawing)p_mdl, view, &amp;solid);
+        TEST_CALL_REPORT(&quot;ProDrawingViewSolidGet()&quot;,
+<a name="anchor-155"></a>                 &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+#endif   
+        err = ProMdlMdlnameGet ((ProMdl)dim.owner, mdl_name);
+        TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;,
+                 &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-156"></a>        fprintf (fp, &quot;        Associated model:%s\n&quot;, 
+            ProWstringToString (line, mdl_name));
+    
+        err = ProDrawingDimAttachpointsGet ((ProDrawing)p_mdl, &amp;dim, &amp;sel_arr, 
+            &amp;sense_arr);
+<a name="anchor-157"></a>        TEST_CALL_REPORT(&quot;ProDrawingDimAttachpointsGet()&quot;,
+                 &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR &amp;&amp;
+                 err != PRO_TK_INVALID_ITEM);
+        if (err == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-158"></a>           /* Bug in the func ProDrawingDimAttachpointsGet (pipe mode) */
+           err = ProArraySizeGet ((ProArray)sel_arr, &amp;n_attach);
+           if (err == PRO_TK_NO_ERROR &amp;&amp; n_attach > 1)
+              ProTestDimensionAttachPrint (sel_arr, sense_arr, fp);
+
+<a name="anchor-159"></a>           ProArrayFree ((ProArray*)&amp;sense_arr);
+           ProDimattachmentarrayFree(sel_arr);
+        }
+    }
+    ProTestDimensionParamPrint (dim, fp); 
+<a name="anchor-160"></a>}
+
+/*============================================================================*\
+ Function:	ProTestDimensionAttachPrint
+ Purpose:       Print the dimension attachments data info
+<a name="anchor-161"></a>\*============================================================================*/
+void ProTestDimensionAttachPrint (
+    ProDimAttachment *p_dimattach, 
+    ProDimSense *p_sense,
+    FILE *fp
+<a name="anchor-162"></a>)
+{
+    ProError err;
+    int i,j, n_attachs;
+    ProModelitem  item;
+<a name="anchor-163"></a>    ProCharName c_name;
+    ProSelection *p_attach;
+
+    err = ProArraySizeGet ((ProArray)p_dimattach, &amp;n_attachs);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+<a name="anchor-164"></a>           &quot;ProTestDimensionAttachPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err == PRO_TK_NO_ERROR &amp;&amp; n_attachs > 1)
+    
+    for(j=0; j&lt;n_attachs; j++)
+    {
+<a name="anchor-165"></a>      fprintf (fp, &quot;        %d)Dimension attachment\n&quot;, (j+1)); 
+      p_attach = p_dimattach[j];
+      
+      for (i = 0; i &lt; 2; i++)
+      {
+<a name="anchor-166"></a>        if(p_attach[i] != NULL)
+        {
+          err = ProSelectionModelitemGet (p_attach[i], &amp;item);
+          TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+              &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-167"></a>
+          ProUtilObjtypeStr (item.type, c_name);
+              fprintf (fp, &quot;        attachment %d Selection %d: %s\n&quot;, (j+1), (i + 1), c_name); 
+
+          switch(p_sense[j + i].type)
+<a name="anchor-168"></a>          {
+            case PRO_DIM_SNS_TYP_NONE :
+              fprintf(fp,&quot;        Type = NONE\n&quot;);
+
+              break;
+<a name="anchor-169"></a>            case PRO_DIM_SNS_TYP_PNT :
+              fprintf(fp,&quot;        Type = POINT\n&quot;);
+              fprintf(fp,&quot;        Point type = %s\n&quot;,
+                      ProDimPointToStr ((ProPointType)p_sense[j + i].sense));
+              fprintf(fp,&quot;        Orient type = %s\n&quot;,
+<a name="anchor-170"></a>                      ProDimOrientToStr (p_sense[j + i].orient_hint));
+              break;
+            case PRO_DIM_SNS_TYP_SPLN_PNT :
+              fprintf(fp,&quot;        Type = SPLINE POINT\n&quot;);
+              fprintf(fp,&quot;        Index = %x\n&quot;, p_sense[j + i].sense);
+<a name="anchor-171"></a>              fprintf(fp,&quot;        Orient type = %s\n&quot;,
+                      ProDimOrientToStr (p_sense[j + i].orient_hint));
+
+              break;
+            case PRO_DIM_SNS_TYP_TGT_IDX :
+<a name="anchor-172"></a>              fprintf(fp,&quot;        Type = TANGENT INDEX\n&quot;);
+              fprintf(fp,&quot;        Index = %d\n&quot;, p_sense[j + i].sense);
+              fprintf(fp,&quot;        Orient type = %s\n&quot;,
+                      ProDimOrientToStr (p_sense[j + i].orient_hint));
+
+<a name="anchor-173"></a>              break;
+            case PRO_DIM_SNS_TYP_LIN_AOC_TGT :
+              fprintf(fp,&quot;        Type = LINE_AOC_TANGENT\n&quot;);
+              fprintf(fp,&quot;        AOC type = %s\n&quot;,
+                      ProDimAocToStr ((ProDimLinAocTgtSense)p_sense[j + i].sense));
+<a name="anchor-174"></a>              fprintf(fp,&quot;        Orient type = %s\n&quot;,
+                     ProDimOrientToStr (p_sense[j + i].orient_hint));
+
+              break;
+            case PRO_DIM_SNS_TYP_ANGLE :
+<a name="anchor-175"></a>              fprintf(fp,&quot;        Type = ANGLE\n&quot;);
+              fprintf(fp,&quot;        is_first    = %s\n&quot;,
+                      p_sense[j + i].angle_sense.is_first == PRO_B_FALSE ? 
+                      &quot;FALSE&quot; : &quot;TRUE&quot;);
+              fprintf(fp,&quot;        should_flip = %s\n&quot;,
+<a name="anchor-176"></a>                      p_sense[i].angle_sense.should_flip == PRO_B_FALSE ? 
+                      &quot;FALSE&quot; : &quot;TRUE&quot;);
+              fprintf(fp,&quot;        Orient type = %s\n&quot;,
+                      ProDimOrientToStr (p_sense[j + i].orient_hint));
+
+<a name="anchor-177"></a>              break;
+            case PRO_DIM_SNS_TYP_PNT_ANGLE :
+              fprintf(fp,&quot;        Type = POINT ANGLE\n&quot;);
+              fprintf(fp,&quot;        Point type = %s\n&quot;,
+                      ProDimPointToStr ((ProPointType)p_sense[j + i].sense));
+<a name="anchor-178"></a>              fprintf(fp,&quot;        is_first    = %s\n&quot;,
+                      p_sense[j + i].angle_sense.is_first == PRO_B_FALSE ?
+                         &quot;FALSE&quot; : &quot;TRUE&quot;);
+              fprintf(fp,&quot;        should_flip = %s\n&quot;,
+                      p_sense[j + i].angle_sense.should_flip == PRO_B_FALSE ?
+<a name="anchor-179"></a>                          &quot;FALSE&quot; : &quot;TRUE&quot;);
+              fprintf(fp,&quot;        Orient type = %s\n&quot;,
+                      ProDimOrientToStr (p_sense[j + i].orient_hint));
+
+              break;
+<a name="anchor-180"></a>         }
+       }
+     }
+   }
+}
+<a name="anchor-181"></a>
+/*============================================================================*\
+ Function:	ProTestDimensionParamPrint
+ Purpose:       Print the dimension parameter info
+\*============================================================================*/
+<a name="anchor-182"></a>void ProTestDimensionParamPrint (
+    ProDimension dim, 
+    FILE *fp
+)
+{
+<a name="anchor-183"></a>    ProName      symbol;
+	ProDimToleranceType tol_type;
+	char* tol_string;
+    double       value, upper_limit, lower_limit;
+    ProDimensiontype type;
+<a name="anchor-184"></a>    ProBoolean fractional, rel_driven, regened_negative, can_regen;
+    ProBoolean tolerance_displayed;
+    int decimals, denominator;    
+    ProDisplayMode disp_mode;
+    ProLine *p_text = NULL;
+<a name="anchor-185"></a>    ProError err;
+    ProCharLine line;
+    
+    err = ProDimensionSymbolGet (&amp;dim, symbol);
+    TEST_CALL_REPORT(&quot;ProDimensionSymbolGet()&quot;,
+<a name="anchor-186"></a>                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+    fprintf(fp,(char*)&quot;        Symbol: %s\n&quot;, ProWstringToString (line, symbol));
+        
+    err = ProDimensionValueGet (&amp;dim, &amp;value);
+    TEST_CALL_REPORT(&quot;ProDimensionValueGet()&quot;,
+<a name="anchor-187"></a>                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+    fprintf(fp,&quot;        Value: %6.3f\n&quot;, value);
+     
+    err = ProDimensionToltypeGet (&amp;dim, &amp;tol_type);
+    TEST_CALL_REPORT(&quot;ProDimensionToltypeGet()&quot;,
+<a name="anchor-188"></a>                     &quot;ProTestDimensionMenu()&quot;, err, (err != PRO_TK_NO_ERROR) &amp;&amp; (err != PRO_TK_BAD_CONTEXT) );
+	switch (tol_type)
+	  {
+	  case PRO_TOL_DEFAULT:
+		tol_string = (char *)&quot;default&quot;;
+<a name="anchor-189"></a>		break;
+	  case PRO_TOL_LIMITS:
+		tol_string = (char *)&quot;limits&quot;;
+		break;
+	  case PRO_TOL_PLUS_MINUS:
+<a name="anchor-190"></a>		tol_string = (char *)&quot;plus/minus&quot;;
+		break;
+	  case PRO_TOL_PLUS_MINUS_SYM:
+		tol_string = (char *)&quot;symmetric&quot;;
+		break;
+<a name="anchor-191"></a>          case PRO_DIM_TOL_SYM_SUPERSCRIPT:
+	        tol_string = (char *)&quot;pm_sym_superscript&quot;;
+		break;
+	  default:
+		tol_string = (char *)&quot;error&quot;;
+<a name="anchor-192"></a>		break;
+	  }
+    fprintf(fp,&quot;        Tolerance type:  %s\n&quot;, tol_string);
+
+    if(dim.type !=PRO_REF_DIMENSION) 
+<a name="anchor-193"></a>    {
+
+    err = ProDimensionToleranceGet (&amp;dim, &amp;upper_limit, &amp;lower_limit);
+    TEST_CALL_REPORT(&quot;ProDimensionToleranceGet()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-194"></a>    fprintf(fp,&quot;        Tolerance:   upper limit: %6.3f, lower limit: %6.3f\n&quot;,
+        upper_limit, lower_limit);
+    }
+    
+    err = ProDimensionTypeGet (&amp;dim, &amp;type);
+<a name="anchor-195"></a>    TEST_CALL_REPORT(&quot;ProDimensionTypeGet()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+    fprintf(fp,(char*)&quot;        Type: %s\n&quot;, ProDimTypeToStr (type));                 
+    
+    err = ProDimensionIsFractional (&amp;dim, &amp;fractional);
+<a name="anchor-196"></a>    TEST_CALL_REPORT(&quot;ProDimensionIsFractional()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+    fprintf(fp,&quot;        Fractional: %s\n&quot;, (fractional ? &quot;Yes&quot; : &quot;No&quot;));
+    
+    
+<a name="anchor-197"></a>    if (fractional)
+    {
+        err = ProDimensionDenominatorGet (&amp;dim, &amp;denominator);
+        TEST_CALL_REPORT(&quot;ProDimensionDenominatorGet()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-198"></a>        fprintf(fp,&quot;        Denominator: %d\n&quot;, denominator);
+    }
+    else 
+    {
+        err = ProDimensionDecimalsGet (&amp;dim, &amp;decimals);
+<a name="anchor-199"></a>        TEST_CALL_REPORT(&quot;ProDimensionDecimalsGet()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+        fprintf(fp,&quot;        Decimals: %d\n&quot;, decimals);                
+        
+    }
+<a name="anchor-200"></a>    err = ProDimensionIsReldriven (&amp;dim, &amp;rel_driven);
+    TEST_CALL_REPORT(&quot;ProDimensionIsReldriven()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+    fprintf(fp,&quot;        Reldriven: %s\n&quot;, (rel_driven ? &quot;Yes&quot; : &quot;No&quot;));
+    
+<a name="anchor-201"></a>    err = ProDimensionIsRegenednegative (&amp;dim, &amp;regened_negative);
+    TEST_CALL_REPORT(&quot;ProDimensionIsRegenednegative()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+    fprintf(fp,&quot;        Regenednegative: %s\n&quot;, (regened_negative ? &quot;Yes&quot; : &quot;No&quot;));
+    
+<a name="anchor-202"></a>    err = ProDisplaymodeGet (&amp;disp_mode);
+    TEST_CALL_REPORT(&quot;ProDisplaymodeGet()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+    fprintf(fp,&quot;        Displaymode: %s\n&quot;, 
+        (disp_mode ? &quot;SYMBOLIC&quot; : &quot;NUMERIC&quot;));
+<a name="anchor-203"></a>    
+    err = ProDimensionCanRegen (&amp;dim, &amp;can_regen);
+    TEST_CALL_REPORT(&quot;ProDimensionCanRegen()&quot;,
+            &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR &amp;&amp; 
+            err != PRO_TK_BAD_CONTEXT);
+<a name="anchor-204"></a>    fprintf(fp,&quot;        CanRegen: %s\n&quot;, (can_regen ? &quot;Yes&quot; : &quot;No&quot;));
+    
+    err = ProDimensionIsToleranceDisplayed (&amp;dim, &amp;tolerance_displayed);
+    TEST_CALL_REPORT(&quot;ProDimensionIsToleranceDisplayed()&quot;,
+                     &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-205"></a>    fprintf(fp,&quot;        ToleranceDisplayed: %s\n&quot;, 
+        (tolerance_displayed ? &quot;Yes&quot; : &quot;No&quot;));
+    /*        
+    err = ProDimensionTextGet (&amp;dim, &amp;p_text);
+    TEST_CALL_REPORT(&quot;ProDimensionTextGet()&quot;,
+<a name="anchor-206"></a>                         &quot;ProTestDimensionMenu()&quot;, err, err != PRO_TK_NO_ERROR
+                         &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+    
+    if (err == PRO_TK_NO_ERROR &amp;&amp; p_text != NULL)
+    {
+<a name="anchor-207"></a>        err = ProArraySizeGet ((ProArray)p_text, &amp;n_text);
+        if (err == PRO_TK_NO_ERROR &amp;&amp; n_text)
+        {
+            fprintf(fp, &quot;        Dimension text:\n&quot;);        
+            for (i = 0; i &lt; n_text; i++)
+<a name="anchor-208"></a>                fprintf (fp, (char*)&quot;       %s&quot;, ProWstringToString (line, p_text[i]));
+        }
+    }
+    */
+}
+<a name="anchor-209"></a>
+/*============================================================================*\
+ Function:	ProTestSelectionDimFilter
+ Purpose:       Filter function for dimension select
+\*============================================================================*/
+<a name="anchor-210"></a>ProError ProTestSelectionDimFilter (
+    ProSelection sel,
+    ProAppData data)
+{
+    ProError err;
+<a name="anchor-211"></a>    ProDimension dim, base_dim;
+    UserDimData  *sel_data = (UserDimData*)data;
+    ProBoolean is_ordinate, type = sel_data->flag ;
+    ProDrawing drw = (ProDrawing)sel_data->parent;
+
+<a name="anchor-212"></a>    err = ProSelectionModelitemGet (sel, &amp;dim);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+                     &quot;ProTestSelectionDimFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProDrawingDimIsOrdinate (drw, &amp;dim, &amp;is_ordinate, &amp;base_dim);
+<a name="anchor-213"></a>    TEST_CALL_REPORT(&quot;ProDrawingDimIsOrdinate()&quot;,
+                     &quot;ProTestSelectionDimFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return (is_ordinate == type ? PRO_TK_NO_ERROR : PRO_TK_CONTINUE);
+}
+<a name="anchor-214"></a>
+/*============================================================================*\
+ Function:	ProTestDimType
+ Purpose:       Create ordinate dimension
+\*============================================================================*/
+<a name="anchor-215"></a>int ProTestDimOrdinateCreate (ProDrawing *p_drw)
+{
+    ProError err;
+    int n_sel;
+    ProSelection *p_sel;
+<a name="anchor-216"></a>    ProDimension dim, base_dim;
+    ProVector loc, loc_out;
+    ProMouseButton btn;
+    UserDimData sel_data;
+    ProSelFunctions filter;
+<a name="anchor-217"></a>    ProView        view;
+    ProMatrix  transform_from_draw_to_model;
+
+    sel_data.parent = (ProMdl)*p_drw;
+    sel_data.flag = PRO_B_FALSE;
+<a name="anchor-218"></a>
+    memset (&amp;filter, '\0', sizeof (ProSelFunctions));
+    filter.post_filter = (ProSelectionPostFilter)ProTestSelectionDimFilter;
+    filter.app_data = (ProAppData)&amp;sel_data;
+
+<a name="anchor-219"></a>    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select linear dimension&quot;);
+    err = ProSelect ((char*)&quot;dimension&quot;, 1, NULL, &amp;filter, NULL, NULL,
+                     &amp;p_sel, &amp;n_sel);
+    if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+        return 0;
+<a name="anchor-220"></a>
+    err = ProSelectionModelitemGet (p_sel[0], &amp;dim);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+                     &quot;ProTestDimOrdinateCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-221"></a>	err = ProDrawingDimensionViewGet(*p_drw, &amp;dim, &amp;view);
+    TEST_CALL_REPORT(&quot;ProDrawingDimensionViewGet()&quot;,
+                     &quot;ProTestDimOrdinateCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProDrawingViewTransformGet (*p_drw, view, PRO_B_FALSE, transform_from_draw_to_model);
+<a name="anchor-222"></a>    TEST_CALL_REPORT(&quot;ProDrawingViewTransformGet()&quot;,
+                     &quot;ProTestDimOrdinateCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select a location&quot;);
+    if (ProMousePickGet (PRO_ANY_BUTTON, &amp;btn, loc) != PRO_TK_NO_ERROR)
+<a name="anchor-223"></a>        return (-1);
+
+	err = ProPntTrfEval  (loc, transform_from_draw_to_model, loc_out);
+    TEST_CALL_REPORT(&quot;ProPntTrfEval()&quot;,
+                     &quot;ProTestDimOrdinateCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-224"></a>
+    err = ProDrawingOrdbaselineCreate (*p_drw, &amp;dim, loc_out, &amp;base_dim);
+    TEST_CALL_REPORT(&quot;ProDrawingOrdbaselineCreate()&quot;,
+                     &quot;ProTestDimOrdinateCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+	
+<a name="anchor-225"></a>	if (err == PRO_TK_NO_ERROR)
+	{
+		err = ProAnnotationShow ((ProAnnotation*)&amp;dim, NULL, view);
+		TEST_CALL_REPORT(&quot;ProAnnotationShow()&quot;,
+			&quot;ProTestDimOrdinateCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-226"></a>	}
+
+    return(0);
+
+}
+<a name="anchor-227"></a>
+/*============================================================================*\
+ Function:	ProTestDimType
+ Purpose:       Move drawing dimension
+\*============================================================================*/
+<a name="anchor-228"></a>int ProTestDimMove (ProDrawing *p_drw)
+{
+    ProError err;
+    ProSelection *p_sel;
+    int n_sel;
+<a name="anchor-229"></a>    ProVector loc;
+    ProView view;
+    ProDimension dim;
+    ProMouseButton btn;
+	ProAsmcomppath comp_path;
+<a name="anchor-230"></a>	ProAsmcomppath *compathPtr = NULL;
+
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select linear dimension&quot;);
+    err = ProSelect ((char*)&quot;dimension,ref_dim&quot;, 1, NULL, NULL, NULL, NULL,
+                     &amp;p_sel, &amp;n_sel);
+<a name="anchor-231"></a>    if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+        return 0;
+        
+    err = ProSelectionViewGet (p_sel[0], &amp;view);
+
+<a name="anchor-232"></a>    err = ProSelectionModelitemGet (p_sel[0], &amp;dim);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+                     &quot;ProTestDimMove()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select new position&quot;);
+<a name="anchor-233"></a>    if (ProMousePickGet (PRO_ANY_BUTTON, &amp;btn, loc) != PRO_TK_NO_ERROR)
+        return (-1);
+
+	err = ProSelectionAsmcomppathGet(p_sel[0], &amp;comp_path);
+	
+<a name="anchor-234"></a>	if(err == PRO_TK_NO_ERROR)
+		compathPtr = &amp;comp_path;
+	
+	err = ProAnnotationUndisplay ((ProAnnotation*)&amp;dim, compathPtr, *p_drw);
+	TEST_CALL_REPORT(&quot;ProAnnotationUndisplay()&quot;, &quot;ProTestDimMove()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-235"></a>    
+    err = ProDrawingDimensionMove (*p_drw, &amp;dim, loc);
+    TEST_CALL_REPORT(&quot;ProDrawingDimensionMove()&quot;,
+                     &quot;ProTestDimOrdinateCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+                     
+<a name="anchor-236"></a>	ProAnnotationDisplay ((ProAnnotation*)&amp;dim, compathPtr, *p_drw, view);
+	TEST_CALL_REPORT(&quot;ProAnnotationDisplay()&quot;,&quot;ProTestDimMove()&quot;, err, err != PRO_TK_NO_ERROR);
+                     
+    return (0);
+
+<a name="anchor-237"></a>}
+
+/*============================================================================*\
+ Function:	ProTestDimType
+ Purpose:       Convert ordinate dimension to linear
+<a name="anchor-238"></a>\*============================================================================*/
+int ProTestOrdinateToLinear (ProDrawing *p_drw)
+{
+    ProSelection *p_sel;
+    int n_sel;
+<a name="anchor-239"></a>    UserDimData sel_data;
+    ProSelFunctions filter;
+    ProDimension dim;
+    ProError err;
+
+<a name="anchor-240"></a>    sel_data.flag = PRO_B_TRUE;
+    sel_data.parent = *p_drw;
+
+    memset (&amp;filter, '\0', sizeof (ProSelFunctions));
+    filter.post_filter = (ProSelectionPostFilter)ProTestSelectionDimFilter;
+<a name="anchor-241"></a>    filter.app_data = (ProAppData)&amp;sel_data;
+
+    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Ordinate dimension: &quot;);
+    err = ProSelect ((char*)&quot;dimension&quot;, 1, NULL, &amp;filter, NULL, NULL,
+                     &amp;p_sel, &amp;n_sel);
+<a name="anchor-242"></a>    if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+        return 0;
+
+    err = ProSelectionModelitemGet (p_sel[0], &amp;dim);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+<a name="anchor-243"></a>                     &quot;ProTestOrdinateToLinear()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProDrawingDimToLinear (*p_drw, &amp;dim);
+    TEST_CALL_REPORT(&quot;ProDrawingDimToLinear()&quot;,
+                     &quot;ProTestOrdinateToLinear()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-244"></a>
+    return (0);
+
+}
+
+<a name="anchor-245"></a>/*============================================================================*\
+ Function:	ProTestDimDisplayAct
+ Purpose:       
+\*============================================================================*/
+int ProTestDimDisplayAct (
+<a name="anchor-246"></a>    UserDimData *data,
+    int opt)
+{
+    ProError err;
+    ProSelection *p_sel;
+<a name="anchor-247"></a>    int n_sel, n_dims, i,n_ref_dims;
+    ProView view = NULL;
+    ProAsmcomppath *p_path = NULL, path;
+    ProFeature feature;
+    ProModelitem sel_item;
+<a name="anchor-248"></a>    ProSolid solid;
+    ProDimension *p_dims = NULL, dim, *p_ref_dims = NULL;
+    ProMdlType type, drw_type;
+    ProDrawing drawing = NULL;
+    
+<a name="anchor-249"></a>    err = ProMdlTypeGet (data->parent, &amp;type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+                         
+    if (opt == DIM_FEATURE || opt == DIM_FEATURE_VIEW)
+<a name="anchor-250"></a>    {
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select feature: &quot;);
+        err = ProSelect ((char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+        TEST_CALL_REPORT(&quot;ProSelect()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-251"></a>        if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+            return (0);
+        err = ProSelectionModelitemGet (p_sel[0], &amp;feature);
+        TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-252"></a>        err = ProTestFeatureDimensionsCollect (&amp;feature, &amp;p_dims);
+        if (err != PRO_TK_NO_ERROR)
+            return (0);
+
+    }
+<a name="anchor-253"></a>    else if (opt == DIM_PART || opt == DIM_PART_VIEW)
+    {
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select part: &quot;);
+        err = ProSelect ((char*)&quot;part&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+        TEST_CALL_REPORT(&quot;ProSelect()&quot;,
+<a name="anchor-254"></a>                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+        if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+            return (0);
+        err = ProSelectionModelitemGet (p_sel[0], &amp;sel_item);
+        TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+<a name="anchor-255"></a>                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProModelitemMdlGet (&amp;sel_item, (ProMdl*)&amp;solid);
+        TEST_CALL_REPORT(&quot;ProModelitemMdlGet()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProTestSolidDimensionsCollect (solid, PRO_B_FALSE, &amp;p_dims);
+<a name="anchor-256"></a>        err = ProTestSolidDimensionsCollect (solid, PRO_B_TRUE, &amp;p_ref_dims);
+        if (p_dims == NULL &amp;&amp; p_ref_dims == NULL)
+            return (0);
+        if (p_ref_dims != NULL)
+        {
+<a name="anchor-257"></a>            err = ProArraySizeGet ((ProArray)p_ref_dims, &amp;n_ref_dims);
+            err = ProArrayObjectAdd ((ProArray*)&amp;p_dims, PRO_VALUE_UNUSED, n_ref_dims,
+                p_ref_dims);
+            TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-258"></a>        }        
+    }
+    else if (opt == DIM_VIEW)
+    {
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select view: &quot;);
+<a name="anchor-259"></a>        err = ProSelect ((char*)&quot;dwg_view&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+        TEST_CALL_REPORT(&quot;ProSelect()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+        if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+            return (0);
+<a name="anchor-260"></a>        err = ProSelectionViewGet (p_sel[0], &amp;view);
+        TEST_CALL_REPORT(&quot;ProSelectionViewGet()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProDrawingViewSolidGet ((ProDrawing)data->parent, view, &amp;solid);
+        TEST_CALL_REPORT(&quot;ProDrawingViewSolidGet()&quot;,
+<a name="anchor-261"></a>                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProTestSolidDimensionsCollect (solid, PRO_B_FALSE, &amp;p_dims);
+        err = ProTestSolidDimensionsCollect (solid, PRO_B_TRUE, &amp;p_ref_dims);
+        if (p_dims == NULL &amp;&amp; p_ref_dims == NULL)
+            return (0);
+<a name="anchor-262"></a>        if (p_ref_dims != NULL)
+        {
+            err = ProArraySizeGet ((ProArray)p_ref_dims, &amp;n_ref_dims);
+            err = ProArrayObjectAdd ((ProArray*)&amp;p_dims, PRO_VALUE_UNUSED, n_ref_dims,
+                p_ref_dims);
+<a name="anchor-263"></a>            TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+        }        
+    }
+    else if (opt == DIM_SELECTED)
+<a name="anchor-264"></a>    {
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select dimensions: &quot;);
+        err = ProSelect ((char*)&quot;dimension,ref_dim&quot;, -1, NULL, NULL, NULL, NULL, &amp;p_sel, 
+            &amp;n_sel);
+        TEST_CALL_REPORT(&quot;ProSelect()&quot;,
+<a name="anchor-265"></a>                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+        if (n_sel &lt; 1)
+            return (0);
+        err = ProArrayAlloc (n_sel, sizeof(ProDimension), 1, (ProArray*)&amp;p_dims);
+        for (i = 0; i &lt; n_sel; i++)
+<a name="anchor-266"></a>        {
+            err = ProSelectionModelitemGet (p_sel[i], &amp;dim);
+            TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+            p_dims[i] = dim;
+<a name="anchor-267"></a>        }
+    }
+    else
+        return (0);
+    
+<a name="anchor-268"></a>    if (type == PRO_MDL_ASSEMBLY)
+    {
+        err = ProSelectionAsmcomppathGet (p_sel[0], &amp;path);
+        TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-269"></a>        if (path.table_num == 0)
+            p_path = NULL;
+        else
+            p_path = &amp;path;
+    }
+<a name="anchor-270"></a>    else if (type == PRO_MDL_DRAWING)
+    {
+        drawing = (ProDrawing)data->parent;
+        err = ProSelectionViewGet (p_sel[0], &amp;view);
+        TEST_CALL_REPORT(&quot;ProSelectionViewGet()&quot;,
+<a name="anchor-271"></a>                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        err = ProDrawingViewSolidGet (drawing, view, &amp;solid);
+        TEST_CALL_REPORT(&quot;ProDrawingViewSolidGet()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-272"></a>
+        err = ProMdlTypeGet (solid, &amp;drw_type);
+        TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-273"></a>        if (PRO_MDL_ASSEMBLY == drw_type)
+        {
+            err = ProSelectionAsmcomppathGet (p_sel[0], &amp;path);
+            TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-274"></a>            if (path.table_num == 0)
+                p_path = NULL;
+            else
+                p_path = &amp;path;
+        }
+<a name="anchor-275"></a>    }
+    
+    err = ProArraySizeGet ((ProArray)p_dims, &amp;n_dims);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+                     &quot;ProTestDimDisplayAct()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-276"></a>
+    for (i = 0; i &lt; n_dims; i++)
+    {
+        if (data->flag)
+        {
+<a name="anchor-277"></a>			/*
+			If component path is non-null then we are trying to display the annotations
+			of some part in the assembly and we cannot permanently display part's annotation 
+			in assembly context so temporary display it and modify
+			*/
+<a name="anchor-278"></a>			if(p_path != NULL)			
+				err =  ProAnnotationDisplay((ProAnnotation *)&amp;p_dims[i], p_path,NULL,view);			
+			/*
+			Permanent display of annotation belongs to top solid which is current object too.
+			Component path must be NULL for NULL view
+<a name="anchor-279"></a>			*/
+			else
+				err =  ProAnnotationShow((ProAnnotation *)&amp;p_dims[i], p_path, view);
+		}
+        else        
+<a name="anchor-280"></a>	      err = ProAnnotationErase ((ProAnnotation *)&amp;p_dims[i], drawing);          
+    }
+    if (p_dims != NULL)   
+        err = ProArrayFree ((ProArray*)&amp;p_dims);
+    if (p_ref_dims != NULL)
+<a name="anchor-281"></a>        err = ProArrayFree ((ProArray*)&amp;p_ref_dims);
+            
+    return (0);
+}
+
+<a name="anchor-282"></a>/*============================================================================*\
+ Function:	ProTestDimDisplayMenu
+ Purpose:       
+\*============================================================================*/
+int ProTestDimDisplayMenu (ProMdl *p_mdl, int disp_opt)
+<a name="anchor-283"></a>{
+    ProError err;
+    int menu_id;
+    ProMode mode;
+    UserDimData disp_data;
+<a name="anchor-284"></a>    
+    disp_data.parent = *p_mdl;
+    disp_data.flag = (ProBoolean)disp_opt;
+       
+    err = ProModeCurrentGet (&amp;mode);
+<a name="anchor-285"></a>    
+    
+    ProMenuFileRegister((char*)&quot;TkDimDisp&quot;, (char*)&quot;tkdimdisp.mnu&quot;, &amp;menu_id);
+    ProMenubuttonActionSet((char*)&quot;TkDimDisp&quot;, (char*)&quot;TkDimDisp&quot;,
+            (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-286"></a>    
+    ProMenubuttonActionSet((char*)&quot;TkDimDisp&quot;, (char*)&quot;Feature&quot;,
+            (ProMenubuttonAction)ProTestDimDisplayAct, &amp;disp_data, DIM_FEATURE);
+    ProMenubuttonActionSet((char*)&quot;TkDimDisp&quot;, (char*)&quot;Part&quot;,
+            (ProMenubuttonAction)ProTestDimDisplayAct, &amp;disp_data, DIM_PART);
+<a name="anchor-287"></a>    ProMenubuttonActionSet((char*)&quot;TkDimDisp&quot;, (char*)&quot;Feature&amp;View&quot;,
+            (ProMenubuttonAction)ProTestDimDisplayAct, &amp;disp_data, DIM_FEATURE_VIEW);
+    ProMenubuttonActionSet((char*)&quot;TkDimDisp&quot;, (char*)&quot;Part&amp;View&quot;,
+            (ProMenubuttonAction)ProTestDimDisplayAct, &amp;disp_data, DIM_PART_VIEW);
+    ProMenubuttonActionSet((char*)&quot;TkDimDisp&quot;, (char*)&quot;View&quot;,
+<a name="anchor-288"></a>            (ProMenubuttonAction)ProTestDimDisplayAct, &amp;disp_data, DIM_VIEW);
+    ProMenubuttonActionSet((char*)&quot;TkDimDisp&quot;, (char*)&quot;Selected items&quot;,
+            (ProMenubuttonAction)ProTestDimDisplayAct, &amp;disp_data, DIM_SELECTED);
+            
+    ProMenubuttonActionSet((char*)&quot;TkDimDisp&quot;, (char*)&quot;Done&quot;,
+<a name="anchor-289"></a>            (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    if (disp_opt)
+       err = ProMenubuttonVisibilitySet((char*)&quot;TkDimDisp&quot;, (char*)&quot;Selected items&quot;, PRO_B_FALSE); 
+           
+    if (mode == PRO_MODE_ASSEMBLY || mode == PRO_MODE_PART)
+<a name="anchor-290"></a>    {
+        err = ProMenubuttonVisibilitySet((char*)&quot;TkDimDisp&quot;, (char*)&quot;Feature&amp;View&quot;, PRO_B_FALSE);
+        err = ProMenubuttonVisibilitySet((char*)&quot;TkDimDisp&quot;, (char*)&quot;Part&amp;View&quot;, PRO_B_FALSE);
+        err = ProMenubuttonVisibilitySet((char*)&quot;TkDimDisp&quot;, (char*)&quot;View&quot;, PRO_B_FALSE);
+    }
+<a name="anchor-291"></a>    else
+    {
+        err = ProMenubuttonVisibilitySet((char*)&quot;TkDimDisp&quot;, (char*)&quot;Feature&quot;, PRO_B_FALSE);
+        err = ProMenubuttonVisibilitySet((char*)&quot;TkDimDisp&quot;, (char*)&quot;Part&quot;, PRO_B_FALSE);
+    }    
+<a name="anchor-292"></a>    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkDimDisp&quot;, &amp;menu_id);
+    ProMenuProcess((char*)&quot;TkDimDisp&quot;, &amp;menu_id);
+    
+    return (0);
+}
+<a name="anchor-293"></a>
+/*============================================================================*\
+ Function:	ProDimPointToStr
+ Purpose:       
+\*============================================================================*/
+<a name="anchor-294"></a>char* ProDimPointToStr(
+    ProPointType type
+)
+{
+    switch(type)
+<a name="anchor-295"></a>    {
+    case PRO_POINT_TYP_END1   : return (char *)&quot;END1&quot;;
+    case PRO_POINT_TYP_END2   : return (char *)&quot;END2&quot;;
+    case PRO_POINT_TYP_CENTER : return (char *)&quot;CENTER&quot;;
+    case PRO_POINT_TYP_NONE   : return (char *)&quot;NONE&quot; ;
+<a name="anchor-296"></a>    case PRO_POINT_TYP_MIDPT  : return (char *)&quot;MIDPNT&quot;;
+    default : return (char *)&quot;INVALID&quot; ;
+    }
+}
+
+<a name="anchor-297"></a>/*============================================================================*\
+ Function:	ProDimAocToStr
+ Purpose:       
+\*============================================================================*/
+char* ProDimAocToStr(
+<a name="anchor-298"></a>    ProDimLinAocTgtSense sense
+)
+{
+    switch(sense)
+    {
+<a name="anchor-299"></a>    case PRO_DIM_LIN_AOC_TGT_LEFT0  : return (char *)&quot;LEFT0&quot;;
+    case PRO_DIM_LIN_AOC_TGT_RIGHT0 : return (char *)&quot;RIGHT0&quot;;
+    case PRO_DIM_LIN_AOC_TGT_LEFT1  : return (char *)&quot;LEFT1&quot;;
+    case PRO_DIM_LIN_AOC_TGT_RIGHT1 : return (char *)&quot;RIGHT1&quot;;
+    default : return (char *)&quot;INVALID&quot; ;
+<a name="anchor-300"></a>    }
+}
+
+/*============================================================================*\
+ Function:	ProDimOrientToStr
+<a name="anchor-301"></a> Purpose:       
+\*============================================================================*/
+char* ProDimOrientToStr(
+    ProDimOrient orient
+)
+<a name="anchor-302"></a>{
+    switch(orient)
+    {
+    case PRO_DIM_ORNT_NONE           : return (char *)&quot;NONE&quot;;
+    case PRO_DIM_ORNT_HORIZ          : return (char *)&quot;HORIZ&quot;;
+<a name="anchor-303"></a>    case PRO_DIM_ORNT_VERT           : return (char *)&quot;VERT&quot;;
+    case PRO_DIM_ORNT_SLANTED        : return (char *)&quot;SLANTED&quot;;
+    case PRO_DIM_ORNT_ELPS_RAD1      : return (char *)&quot;ELPS_RAD1&quot;;
+    case PRO_DIM_ORNT_ELPS_RAD2      : return (char *)&quot;ELPS_RAD2&quot;;
+    case PRO_DIM_ORNT_ARC_ANG        : return (char *)&quot;ARC_ANG&quot;;
+<a name="anchor-304"></a>    case PRO_DIM_ORNT_ARC_LENGTH     : return (char *)&quot;ARC_LENGTH&quot;;
+    case PRO_DIM_ORNT_LIN_TANCRV_ANG : return (char *)&quot;LIN_TANCRV_ANG&quot;;
+    default : return (char *)&quot;INVALID&quot;;
+    }
+}
+<a name="anchor-305"></a>
+/*============================================================================*\
+ Function:	ProDimOrientToStr
+ Purpose:       
+\*============================================================================*/
+<a name="anchor-306"></a>char* ProDimTypeToStr(
+    ProDimensiontype type
+)
+{
+    switch (type)
+<a name="anchor-307"></a>    {
+    case PRODIMTYPE_UNKNOWN : return (char *)&quot;UNKNOWN&quot;;
+    case PRODIMTYPE_LINEAR  : return (char *)&quot;LINEAR&quot;;
+    case PRODIMTYPE_RADIUS  : return (char *)&quot;RADIUS&quot;;
+    case PRODIMTYPE_DIAMETER: return (char *)&quot;DIAMETER&quot;;
+<a name="anchor-308"></a>    case PRODIMTYPE_ANGLE   : return (char *)&quot;ANGLE&quot;;
+    default : return (char *)&quot;INVALID&quot;;
+    }
+}
+/*============================================================================*\
+<a name="anchor-309"></a> Function:	ProTestSolidDimensionsCollect ()
+ Purpose:       Tis function temporary used, while ProSolidDimension visit 
+                not implemented.
+\*============================================================================*/
+ProError ProTestSolidDimensionsCollect (
+<a name="anchor-310"></a>    ProSolid        solid,              /* In */
+    ProBoolean      is_refdim,          /* In */
+    ProDimension  **pp_dims             /* Out (ProArray)*/
+    )
+{
+<a name="anchor-311"></a>    ProError err;
+    int n_dims;
+    int *dim_array = NULL, i;
+    
+    if (pp_dims != NULL &amp;&amp; solid != NULL)
+<a name="anchor-312"></a>	*pp_dims = (ProDimension *)NULL;
+    else
+	return (PRO_TK_BAD_INPUTS);
+
+    err = ProUtilCollectDimension((ProMdl)solid, is_refdim, pp_dims);
+<a name="anchor-313"></a>
+    err = ProArraySizeGet( *pp_dims, &amp;n_dims );
+    
+    if (n_dims == -1)
+        return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-314"></a>    if (n_dims == 0)
+        return (PRO_TK_E_NOT_FOUND);
+
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-315"></a>/*============================================================================*\
+ Function:	ProTestFeatureDimensionsCollect ()
+ Purpose:       Collects all dimensions in the feature.
+\*============================================================================*/
+ProError ProTestFeatureDimensionsCollect (
+<a name="anchor-316"></a>    ProFeature               *feature,
+    ProDimension  **pp_dims
+    )
+{
+    ProError err;
+<a name="anchor-317"></a>    ProDimension *p_dims;
+    int n_dims;
+    int *dim_array = NULL, i;
+    
+    if (pp_dims != NULL &amp;&amp; feature != NULL)
+<a name="anchor-318"></a>	*pp_dims = (ProDimension *)NULL;
+    else
+	return (PRO_TK_BAD_INPUTS);
+
+
+<a name="anchor-319"></a>    err = ProArrayAlloc( 0, sizeof(ProDimension), 1, (ProArray*)pp_dims);
+    err = ProFeatureDimensionVisit(feature, (ProDimensionVisitAction)ProUtilCollectDimVisitAction, 
+                                   (ProDimensionFilterAction)NULL, (ProAppData)pp_dims);
+
+    ProArraySizeGet((ProArray*)*pp_dims, &amp;n_dims);
+<a name="anchor-320"></a>
+    if (n_dims == -1)
+        return (PRO_TK_GENERAL_ERROR);
+    if (n_dims == 0)
+        return (PRO_TK_E_NOT_FOUND);
+<a name="anchor-321"></a>    return (PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

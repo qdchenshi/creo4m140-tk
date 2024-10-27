@@ -1,0 +1,570 @@
+<html>
+<head>
+<title>TestMenubar.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*----------------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*----------------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMenu.h>
+#include &lt;ProMenuBar.h>
+#include &lt;ProMessage.h>
+#include &lt;ProUICmd.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+/*----------------------------------------------------------------------------*\
+Application includes
+\*----------------------------------------------------------------------------*/
+<a name="anchor-4"></a>#include &quot;TestError.h&quot;
+#include &quot;TestMenu.h&quot;
+#include &quot;UtilMessage.h&quot;
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-5"></a>Application data types
+\*----------------------------------------------------------------------------*/
+typedef struct user_command
+{
+    char *name;
+<a name="anchor-6"></a>    uiCmdCmdId id;
+} UserCommand;
+
+typedef struct user_check_but
+{
+<a name="anchor-7"></a>    uiCmdCmdId command;
+    ProBoolean state;
+} UserCheckBut;
+
+typedef struct user_push_but
+<a name="anchor-8"></a>{
+    char *action_name;
+    uiCmdCmdActFn action_cb;
+
+    char *button_name;
+<a name="anchor-9"></a>    char *button_label;
+    char *button_help;
+} UserPushButton;
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-10"></a>Application global/external data
+\*----------------------------------------------------------------------------*/
+static wchar_t msgfil[] = 
+
+    { 'm','e','n','u','b','a','r','_','m','s','g','.','t','x','t','\0'};
+<a name="anchor-11"></a>
+static UserCheckBut check_but[2];
+static uiCmdAccessState access_state = ACCESS_AVAILABLE;
+static FILE *log_file = NULL;
+
+<a name="anchor-12"></a>static UserCommand user_actions[] = {
+  {(char*)&quot;TestPushButtonAct1&quot;, (uiCmdCmdId)NULL},
+	{(char*)&quot;TestPushButtonAct2&quot;, (uiCmdCmdId)NULL},
+	{(char*)&quot;TestCheckButtonOpt1&quot;, (uiCmdCmdId)NULL},
+	{(char*)&quot;TestCheckButtonOpt2&quot;, (uiCmdCmdId)NULL},
+<a name="anchor-13"></a>	{(char*)&quot;TestRadioGroupOpt&quot;,  (uiCmdCmdId)NULL}};
+
+/*====================================================================*\
+    FUNCTION :	ProUtilLogFileWrite()
+    PURPOSE  :  Write message to the log file
+<a name="anchor-14"></a>\*====================================================================*/
+static void ProUtilLogFileWrite(
+    char *func_type,
+    uiCmdCmdId command)
+{
+<a name="anchor-15"></a>    int i;
+    
+    if (log_file == NULL)
+	return;
+
+<a name="anchor-16"></a>    if (command == NULL)
+    {
+        ProTKFprintf(log_file, &quot;%s function is called.\n&quot;, func_type);
+	ProTKPrintf( &quot;%s function is called.\n&quot;, func_type);
+	return;
+<a name="anchor-17"></a>    }
+
+    for (i=0; i&lt;sizeof(user_actions)/sizeof(user_actions[0]); i++)
+    {
+	if (user_actions[i].id == command)
+<a name="anchor-18"></a>	{
+	    ProTKFprintf(log_file, &quot;%s function is called for action %s.\n&quot;,
+		func_type, user_actions[i].name);
+	    ProTKPrintf(&quot;%s function is called for action %s.\n&quot;,
+		func_type, user_actions[i].name);
+<a name="anchor-19"></a>	    break;
+	}
+    }
+}
+
+<a name="anchor-20"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestAccessFunction()
+    PURPOSE  :   Enable access
+\*====================================================================*/
+<a name="anchor-21"></a>static uiCmdAccessState ProTestAccessFunction(uiCmdAccessMode access_mode)
+{
+    TEST_CALL_REPORT(&quot;uiCmdAccessFn()&quot;, &quot;ProTestAccessFunction()&quot;, PRO_TK_NO_ERROR, 0);
+    
+    ProUtilLogFileWrite( (char*)&quot;!Access&quot;, NULL);
+<a name="anchor-22"></a>    return (ACCESS_AVAILABLE);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestAccessFunction()
+<a name="anchor-23"></a>    PURPOSE  :  Disable access
+\*====================================================================*/
+static uiCmdAccessState ProTestAccess(uiCmdAccessMode access_mode)
+{
+    TEST_CALL_REPORT(&quot;uiCmdAccessFn()&quot;, &quot;ProTestAccessFunction()&quot;, PRO_TK_NO_ERROR, 0);
+<a name="anchor-24"></a>    
+    ProUtilLogFileWrite( (char*)&quot;!Access&quot;, NULL);
+    return (access_state);
+}
+
+<a name="anchor-25"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestRadioButtonValue()
+    PURPOSE  :  Set value for radio group
+\*====================================================================*/
+<a name="anchor-26"></a>int ProTestRadioButtonValue(
+    uiCmdCmdId command,
+    uiCmdValue *p_value)
+{
+    ProError err;
+<a name="anchor-27"></a>    ProMenuItemName  name;
+
+    ProUtilLogFileWrite((char*)&quot;Set_value callback&quot;, command);    
+    TEST_CALL_REPORT(&quot;uiCmdCmdValFn()&quot;, &quot;ProTestRadioButtonValue()&quot;, PRO_TK_NO_ERROR, 0);
+
+<a name="anchor-28"></a>#if 0
+    err = ProMenubarMenuRadiogrpValueGet (p_value, name);
+    TEST_CALL_REPORT(&quot;ProMenubarMenuRadiogrpValueGet()&quot;, 
+		    &quot;ProTestRadioButtonValue()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-29"></a>    err = ProMenubarMenuRadiogrpValueSet(p_value, name);
+    TEST_CALL_REPORT(&quot;ProMenubarMenuRadiogrpValueSet()&quot;, 
+		    &quot;ProTestRadioButtonValue()&quot;, err, err != PRO_TK_NO_ERROR);
+#endif 
+    return (0);
+<a name="anchor-30"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestRadioButton()
+    PURPOSE  :  Callback functions for radio group options
+<a name="anchor-31"></a>\*====================================================================*/
+int ProTestRadioButton(
+    uiCmdCmdId command,
+    uiCmdValue *p_value)
+{
+<a name="anchor-32"></a>    ProError err;
+    ProMenuItemName  name;    
+
+    ProUtilLogFileWrite((char*)&quot;Callback&quot;, command);
+    TEST_CALL_REPORT(&quot;uiCmdCmdActFn()&quot;, &quot;ProTestRadioButton()&quot;, PRO_TK_NO_ERROR, 0);
+<a name="anchor-33"></a>    ProMessageDisplay(msgfil, (char*)&quot;TEST Radio Group pressed.&quot;);
+    
+    err = ProMenubarMenuRadiogrpValueGet (p_value, name);
+    TEST_CALL_REPORT(&quot;ProMenubarMenuRadiogrpValueGet()&quot;, 
+		    &quot;ProTestRadioButtonValue()&quot;, err, err != PRO_TK_NO_ERROR);  
+<a name="anchor-34"></a>    return(0);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestCheckButtonValue()
+<a name="anchor-35"></a>    PURPOSE  :  Set new value for check buttons
+\*====================================================================*/
+int ProTestCheckButtonValue(
+    uiCmdCmdId command,
+    uiCmdValue *p_value)
+<a name="anchor-36"></a>{
+    ProError err;
+    ProBoolean value;
+    int i;
+
+<a name="anchor-37"></a>    TEST_CALL_REPORT(&quot;uiCmdCmdValFn()&quot;, &quot;ProTestCheckButtonValue()&quot;, PRO_TK_NO_ERROR, 0);
+
+    for (i=0; i&lt;sizeof(check_but)/sizeof(check_but[0]); i++)
+
+	if (check_but[i].command == command)
+<a name="anchor-38"></a>	{
+    	    err = ProMenubarmenuChkbuttonValueGet (p_value, &amp;value);
+	    TEST_CALL_REPORT(&quot;ProMenubarmenuChkbuttonValueGet()&quot;, 
+		&quot;ProTestCheckButtonValue()&quot;, err, err != PRO_TK_NO_ERROR);
+	
+<a name="anchor-39"></a>	    if (value == check_but[i].state)
+		continue;
+	    
+
+	    ProUtilLogFileWrite((char*)&quot;Set_value callback&quot;, command);    
+<a name="anchor-40"></a>    
+	    err = ProMenubarmenuChkbuttonValueSet(p_value, check_but[i].state);
+	    TEST_CALL_REPORT(&quot;ProMenubarmenuChkbuttonValueSet()&quot;, 
+		&quot;ProTestCheckButtonValue()&quot;, err, err != PRO_TK_NO_ERROR);
+	    break;
+<a name="anchor-41"></a>	}
+
+    return(0);
+}
+
+<a name="anchor-42"></a>/*====================================================================*\
+    FUNCTION :	ProTestCheckButton()
+    PURPOSE  :  Callback function for check button options
+\*====================================================================*/
+int ProTestCheckButton(    
+<a name="anchor-43"></a>    uiCmdCmdId command,
+    uiCmdValue *p_value,
+    void *p_push_command_data)
+{
+    int i;
+<a name="anchor-44"></a>
+    ProUtilLogFileWrite((char*)&quot;Callback&quot;, command);    
+    TEST_CALL_REPORT(&quot;uiCmdCmdActFn()&quot;, &quot;ProTestCheckButton()&quot;, PRO_TK_NO_ERROR, 0);
+    ProMessageDisplay(msgfil, (char*)&quot;TEST Check Button pressed.&quot;);
+
+<a name="anchor-45"></a>    for (i=0; i&lt;sizeof(check_but)/sizeof(check_but[0]); i++)
+	if (check_but[i].command == command)
+	{
+	  /*  Change state of pressed button */
+
+<a name="anchor-46"></a>            if (check_but[i].state == PRO_B_FALSE)
+            	 check_but[i].state = PRO_B_TRUE;
+            else 
+             	 check_but[i].state = PRO_B_FALSE;
+            
+<a name="anchor-47"></a>          break;
+	}
+
+    return(0);
+}
+<a name="anchor-48"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestPushButton()
+    PURPOSE  :  Callback function for push button actions
+\*====================================================================*/
+<a name="anchor-49"></a>int ProTestPushButton(uiCmdCmdId command)
+{
+    ProUtilLogFileWrite((char*)&quot;Callback&quot;, command);
+    TEST_CALL_REPORT(&quot;uiCmdCmdActFn()&quot;, &quot;ProTestPushButton()&quot;, PRO_TK_NO_ERROR, 0);
+    ProMessageDisplay(msgfil, (char*)&quot;TEST Push Button pressed.&quot;);
+<a name="anchor-50"></a>
+    return(0);
+}
+
+
+<a name="anchor-51"></a>/*====================================================================*\
+    FUNCTION :	ProTestBracketFunc()
+    PURPOSE  :  Bracket function, called before and after actions
+\*====================================================================*/
+int ProTestBracketFunc(
+<a name="anchor-52"></a>    uiCmdCmdId command,
+    uiCmdValue *p_new_value,
+    int entering_command,
+    void **data)
+{
+<a name="anchor-53"></a>    ProUtilLogFileWrite(entering_command ? (char*)&quot;Pre-action&quot; : (char*)&quot;Post-action&quot;, 
+	command);    
+    TEST_CALL_REPORT(&quot;uiCmdCmdBktFn()&quot;, &quot;ProTestBracketFunc()&quot;, PRO_TK_NO_ERROR, 0);
+
+    return (entering_command);
+<a name="anchor-54"></a>}
+
+
+/*====================================================================*\
+    FUNCTION :	ProUtilAccessSet()
+<a name="anchor-55"></a>    PURPOSE  :  change access to the user actions. Add/remove access function
+\*====================================================================*/
+ProError ProUtilAccessSet(uiCmdAccessState state)
+{
+    ProError	err;
+<a name="anchor-56"></a>    static uiCmdAccessId 
+	access_id[sizeof(user_actions)/sizeof(user_actions[0])];
+    int i;
+
+    TEST_CALL_REPORT(&quot;uiCmdCmdActFn()&quot;, &quot;ProUtilAccessSet()&quot;, PRO_TK_NO_ERROR, 0);
+<a name="anchor-57"></a>
+    for (i=0; i&lt;sizeof(user_actions)/sizeof(user_actions[0]); i++)
+    {
+	if (user_actions[i].id == (uiCmdCmdId)NULL)
+	    continue;
+<a name="anchor-58"></a>
+	if (access_id[i] != (uiCmdAccessId)NULL)
+	{
+	    err = ProCmdAccessFuncRemove(user_actions[i].id, access_id[i]);
+	    TEST_CALL_REPORT(&quot;ProCmdAccessFuncRemove()&quot;, 
+<a name="anchor-59"></a>			    &quot;ProUtilAccessSet()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    access_id[i] = (uiCmdAccessId)NULL;
+	}
+
+<a name="anchor-60"></a>	access_state = state;
+	if (state != ACCESS_AVAILABLE)
+	{
+	    err = ProCmdAccessFuncAdd(user_actions[i].id, 
+		(uiCmdAccessFn)ProTestAccess, &amp;access_id[i]);
+<a name="anchor-61"></a>	    TEST_CALL_REPORT(&quot;ProCmdAccessFuncAdd()&quot;, 
+			    &quot;ProUtilAccessSet()&quot;, err, err != PRO_TK_NO_ERROR);
+	}
+    }
+    return (err);
+<a name="anchor-62"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestPushButtonAccessAvailable()
+    PURPOSE  :  Callback function. Set access to user actions available
+<a name="anchor-63"></a>\*====================================================================*/
+int ProTestPushButtonAccessAvailable()
+{
+    ProUtilAccessSet(ACCESS_AVAILABLE);
+    return(0);
+<a name="anchor-64"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestPushButtonAccessDisallow()
+    PURPOSE  :  Callback function. Set access to user actions disallow
+<a name="anchor-65"></a>\*====================================================================*/
+int ProTestPushButtonAccessDisallow()
+{
+    ProUtilAccessSet(ACCESS_DISALLOW);
+    return(0);
+<a name="anchor-66"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestPushButtonAccessInvisible()
+    PURPOSE  :  Callback function. Set access to user actions invisible
+<a name="anchor-67"></a>\*====================================================================*/
+int ProTestPushButtonAccessInvisible()
+{
+    ProUtilAccessSet(ACCESS_INVISIBLE);
+    return(0);
+<a name="anchor-68"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestPushButtonAccessUnavailable()
+    PURPOSE  :  Callback function. Set access to user actions unavailable
+<a name="anchor-69"></a>\*====================================================================*/
+int ProTestPushButtonAccessUnavailable()
+{
+    ProUtilAccessSet(ACCESS_UNAVAILABLE);
+    return(0);
+<a name="anchor-70"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestPushButtonLogStart()
+    PURPOSE  :  Callback function. Open log file for output
+<a name="anchor-71"></a>\*====================================================================*/
+int ProTestPushButtonLogStart()
+{
+    if (log_file == NULL)
+    {
+<a name="anchor-72"></a>	log_file = (FILE *)PTApplsUnicodeFopen(&quot;menubar.log&quot;, &quot;w&quot;);
+    }
+    return (0);
+}
+
+<a name="anchor-73"></a>/*====================================================================*\
+    FUNCTION :	ProTestPushButtonLogStop()
+    PURPOSE  :  Callback function. Close log file
+\*====================================================================*/
+int ProTestPushButtonLogStop()
+<a name="anchor-74"></a>{
+    if (log_file != NULL)
+    {
+	fclose(log_file);
+	log_file = NULL;
+<a name="anchor-75"></a>    }
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-76"></a>    FUNCTION :	ProUtilActionsIdsGet()
+    PURPOSE  :  Get Ids for user actions added to menu bar
+\*====================================================================*/
+ProError ProUtilActionsIdsGet()
+{
+<a name="anchor-77"></a>    ProError err;
+    int i;
+
+    for (i=0; i&lt;sizeof(user_actions)/sizeof(user_actions[0]); i++)
+    {
+<a name="anchor-78"></a>	err = ProCmdCmdIdFind(user_actions[i].name, &amp;user_actions[i].id);
+	if (err != PRO_TK_NO_ERROR)
+	    user_actions[i].id = (uiCmdCmdId)NULL;
+	TEST_CALL_REPORT(&quot;ProCmdCmdIdFind()&quot;, 
+			&quot;ProUtilActionsIdsGet()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-79"></a>    }
+    return (err);
+}
+
+/*====================================================================*\
+<a name="anchor-80"></a>    FUNCTION :	ProTestAddBrackets()
+    PURPOSE  :  Add ids for user actions added to menu bar
+\*====================================================================*/
+ProError ProTestAddBrackets()
+{
+<a name="anchor-81"></a>    ProError err;
+    int i;
+
+    for (i=0; i&lt;sizeof(user_actions)/sizeof(user_actions[0]); i++)
+    {
+<a name="anchor-82"></a>	if (user_actions[i].id == NULL)
+	    continue;
+
+	err = ProCmdBracketFuncAdd(user_actions[i].id, 
+	     (uiCmdCmdBktFn)ProTestBracketFunc,
+<a name="anchor-83"></a>	     (char*)&quot;ProTestBracketFunc&quot;, (void**)NULL);
+	TEST_CALL_REPORT(&quot;ProCmdBracketFuncAdd()&quot;, 
+			&quot;ProUtilActionsIdsGet()&quot;, err, err != PRO_TK_NO_ERROR);
+
+
+<a name="anchor-84"></a>    }
+    return (err);
+}
+
+/*============================================================================*\
+<a name="anchor-85"></a>  Function : ProTestMenuBar
+  Purpose  : Create a menu to test Menu Bar functions
+\*============================================================================*/
+int ProTestMenuBar()
+{
+<a name="anchor-86"></a>    static UserPushButton push_buts[] =
+    {
+	{(char*)&quot;TestAccessInvisible&quot;, 
+	 (uiCmdCmdActFn)ProTestPushButtonAccessInvisible,
+	 (char*)&quot;TestInvisible&quot;,(char*) &quot;Invisible&quot;, (char*)&quot;Test change access&quot;},
+<a name="anchor-87"></a>	{(char*)&quot;TestAccessUnavailable&quot;, 
+	 (uiCmdCmdActFn)ProTestPushButtonAccessUnavailable,
+	 (char*)&quot;TestUnavailable&quot;, (char*)&quot;Unavailable&quot;, (char*)&quot;Test change access&quot;},
+	{(char*)&quot;TestAccessDisallow&quot;, 
+	 (uiCmdCmdActFn)ProTestPushButtonAccessDisallow,
+<a name="anchor-88"></a>	 (char*)&quot;TestDisallow&quot;, (char*)&quot;Disallow&quot;, (char*)&quot;Test change access&quot;},
+	{(char*)&quot;TestAccessAvailable&quot;, 
+	 (uiCmdCmdActFn)ProTestPushButtonAccessAvailable,
+	 (char*)&quot;TestAvailable&quot;, (char*)&quot;Available&quot;, (char*)&quot;Test change access&quot;},
+	{(char*)&quot;TestLogStart&quot;, 
+<a name="anchor-89"></a>	 (uiCmdCmdActFn)ProTestPushButtonLogStart,
+	 (char*)&quot;TestStart&quot;, (char*)&quot;Log start&quot;, (char*)&quot;Start log&quot;},
+	{(char*)&quot;TestLogStop&quot;, 
+	 (uiCmdCmdActFn)ProTestPushButtonLogStop,
+	 (char*)&quot;TestStop&quot;, (char*)&quot;Log stop&quot;, (char*)&quot;Stop log&quot;}
+<a name="anchor-90"></a>    };
+
+    ProError err;
+    uiCmdCmdId   push_act, push_act2, action; 
+    uiCmdCmdId   radio_act;
+<a name="anchor-91"></a>    int i;
+
+    static ProMenuItemName radio_group_items[]=
+	{&quot;TestRadio1&quot;, &quot;TestRadio2&quot;, &quot;TestRadio3&quot;, &quot;&quot;};
+    static ProMenuItemLabel radio_group_labels[]=
+<a name="anchor-92"></a>	{&quot;Radio button 1&quot;, &quot;Radio button 2&quot;, &quot;Radio button 3&quot;, &quot;&quot;};
+    static ProMenuLineHelp radio_group_help[]=
+	{&quot;Test radio button&quot;, &quot;Test radio button&quot;, &quot;Test radio button&quot;, &quot;&quot;};
+/*---------------------------------------------------------------------*\
+    Add new button to the menu bar
+<a name="anchor-93"></a>\*---------------------------------------------------------------------*/
+    err = ProMenubarMenuAdd((char*)&quot;TestMenuBar&quot;, (char*)&quot;-MenuBar&quot;, (char*)&quot;Help&quot;, PRO_B_FALSE,
+	msgfil);
+    TEST_CALL_REPORT(&quot;ProMenubarMenuAdd()&quot;, 
+			    &quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-94"></a>
+    err = ProCmdActionAdd((char*)&quot;TestPushButtonAct1&quot;, 
+	(uiCmdCmdActFn)ProTestPushButton, uiCmdPrioDefault, 
+	ProTestAccessFunction, PRO_B_TRUE, PRO_B_TRUE, &amp;push_act);
+    TEST_CALL_REPORT(&quot;ProCmdActionAdd()&quot;, 
+<a name="anchor-95"></a>			&quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProCmdActionAdd((char*)&quot;TestPushButtonAct2&quot;, 
+	(uiCmdCmdActFn)ProTestPushButton, uiCmdPrioDefault, 
+	ProTestAccessFunction, PRO_B_TRUE, PRO_B_TRUE, &amp;push_act2);
+<a name="anchor-96"></a>    TEST_CALL_REPORT(&quot;ProCmdActionAdd()&quot;, 
+			&quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProCmdOptionAdd((char*)&quot;TestCheckButtonOpt1&quot;, 
+	(uiCmdCmdActFn)ProTestCheckButton, PRO_B_TRUE, 
+<a name="anchor-97"></a>	(uiCmdCmdValFn)ProTestCheckButtonValue, 
+	ProTestAccessFunction, PRO_B_TRUE, PRO_B_TRUE, &amp;check_but[0].command);
+    TEST_CALL_REPORT(&quot;ProCmdOptionAdd()&quot;, 
+			&quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-98"></a>    err = ProCmdOptionAdd((char*)&quot;TestCheckButtonOpt2&quot;, 
+	(uiCmdCmdActFn)ProTestCheckButton, PRO_B_TRUE, 
+	(uiCmdCmdValFn)ProTestCheckButtonValue, 
+	ProTestAccessFunction, PRO_B_TRUE, PRO_B_TRUE, &amp;check_but[1].command);
+    TEST_CALL_REPORT(&quot;ProCmdOptionAdd()&quot;, 
+<a name="anchor-99"></a>			&quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProCmdOptionAdd((char*)&quot;TestRadioGroupOpt&quot;, 
+	(uiCmdCmdActFn)ProTestRadioButton, PRO_B_FALSE, 
+	(uiCmdCmdValFn)ProTestRadioButtonValue, 
+<a name="anchor-100"></a>	ProTestAccessFunction, PRO_B_TRUE, PRO_B_TRUE, &amp;radio_act);
+    TEST_CALL_REPORT(&quot;ProCmdActionAdd()&quot;, 
+			&quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProMenubarmenuPushbuttonAdd((char*)&quot;TestMenuBar&quot;, (char*)&quot;TestPushBut1&quot;, (char*)&quot;Push button 1&quot;, 
+<a name="anchor-101"></a>	(char*)&quot;Test push button&quot;, (char*)&quot;&quot;, PRO_B_FALSE, push_act, msgfil);
+    TEST_CALL_REPORT(&quot;ProMenubarmenuPushbuttonAdd()&quot;, 
+			&quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProMenubarmenuMenuAdd((char*)&quot;TestMenuBar&quot;, (char*)&quot;TestMenuBarMenu&quot;, (char*)&quot;Submenu&quot;, 
+<a name="anchor-102"></a>	(char*)&quot;TestPushBut1&quot;, PRO_B_FALSE, msgfil);
+    TEST_CALL_REPORT(&quot;ProMenubarmenuMenuAdd()&quot;, 
+			&quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProMenubarmenuPushbuttonAdd((char*)&quot;TestMenuBarMenu&quot;, (char*)&quot;TestPushBut2&quot;, 
+<a name="anchor-103"></a>	(char*)&quot;Push button 2&quot;,
+				      (char*)&quot;Test push button&quot;, (char*)&quot;&quot;, PRO_B_FALSE, push_act2, msgfil);
+    TEST_CALL_REPORT(&quot;ProMenubarmenuPushbuttonAdd()&quot;, 
+			&quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-104"></a>    err = ProMenubarmenuChkbuttonAdd((char*)&quot;TestMenuBarMenu&quot;, (char*)&quot;TestChkBut2&quot;, 
+	(char*)&quot;Check button 2&quot;, 
+	(char*)&quot;Test check button&quot;, (char*)&quot;TestPushBut2&quot;, PRO_B_TRUE, check_but[1].command, 
+	msgfil);
+    TEST_CALL_REPORT(&quot;ProMenubarmenuChkbuttonAdd()&quot;, 
+<a name="anchor-105"></a>			&quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProMenubarmenuChkbuttonAdd((char*)&quot;TestMenuBar&quot;, (char*)&quot;TestChkBut1&quot;, (char*)&quot;Check button 1&quot;, 
+	(char*)&quot;Test check button&quot;, (char*)&quot;TestPushBut1&quot;, PRO_B_TRUE, check_but[0].command, 
+	msgfil);
+<a name="anchor-106"></a>    TEST_CALL_REPORT(&quot;ProMenubarmenuChkbuttonAdd()&quot;, 
+			&quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    for (i=0; i&lt;sizeof(push_buts)/sizeof(push_buts[0]); i++)
+    {
+<a name="anchor-107"></a>	err = ProCmdActionAdd(push_buts[i].action_name, 
+	    push_buts[i].action_cb, uiCmdPrioDefault, 
+	    ProTestAccessFunction, PRO_B_TRUE, PRO_B_TRUE, &amp;action);
+	TEST_CALL_REPORT(&quot;ProCmdActionAdd()&quot;, 
+		    &quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-108"></a>
+	err = ProMenubarmenuPushbuttonAdd((char*)&quot;TestMenuBar&quot;, push_buts[i].button_name,
+	    push_buts[i].button_label, push_buts[i].button_help, 
+					  i == 0 ? (char*)&quot;TestChkBut1&quot; : push_buts[i-1].button_name, PRO_B_TRUE,
+	    action, msgfil);
+<a name="anchor-109"></a>	TEST_CALL_REPORT(&quot;ProMenubarmenuPushbuttonAdd()&quot;, 
+		    &quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+
+
+<a name="anchor-110"></a>    err = ProMenubarmenuRadiogrpAdd((char*)&quot;TestMenuBarMenu&quot;, (char*)&quot;TestRadioGrp1&quot;,
+	3, radio_group_items, radio_group_labels, radio_group_help, 
+	(char*)&quot;TestChkBut2&quot;, PRO_B_TRUE, radio_act, msgfil);
+    TEST_CALL_REPORT(&quot;ProMenubarmenuRadiogrpAdd()&quot;, 
+			&quot;ProTestMenuBar()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-111"></a>
+    err = ProUtilActionsIdsGet();
+    err = ProTestAddBrackets();
+
+    return(0);
+<a name="anchor-112"></a>}
+
+</pre>
+</body>
+</html>

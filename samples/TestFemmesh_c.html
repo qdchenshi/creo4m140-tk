@@ -1,0 +1,221 @@
+<html>
+<head>
+<title>TestFemmesh.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*----------------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*----------------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProFemMesh.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMessage.h>
+#include &lt;ProMdl.h>
+
+<a name="anchor-3"></a>/*----------------------------------------------------------------------------*\
+    Application includes
+\*----------------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;UtilMenu.h&quot;
+<a name="anchor-4"></a>#include &lt;ProUtil.h>
+/*============================================================================*\
+    FUNCTION : ProTestInitMesh()	
+    PURPOSE  : Default initialize mesh data structure  
+\*============================================================================*/
+<a name="anchor-5"></a>int ProTestInitMesh(ProFemmeshData *mesh)
+{
+    mesh->mesh_type = PRO_FEM_SOLID_MESH;
+    mesh->shell_type = PRO_FEM_SHELL_MESH_TRIANGLE;
+    mesh->num_quilts = 0;
+<a name="anchor-6"></a>    mesh->analysis = PRO_FEM_ANALYSIS_STRUCTURAL;
+    mesh->elem_shape = PRO_FEM_MIDPNT_LINEAR;
+    mesh->solver = PRO_FEM_FEAS_COSMOS;
+    mesh->num_aux_csys = 0;
+    mesh->pro_quilt_ref_arr = NULL;
+<a name="anchor-7"></a>    mesh->aux_csys_ref_arr = NULL;
+    mesh->csys_ref.id = PRO_VALUE_UNUSED;
+    
+    return(0);
+}
+<a name="anchor-8"></a>
+/*============================================================================*\
+    FUNCTION : ProTestFemMeshMenu()	
+    PURPOSE  : Create menu for test options for mesh functionality
+\*============================================================================*/
+<a name="anchor-9"></a>ProError ProTestFemMeshMenu()
+{
+    ProError status;
+    int menu_id;
+    ProFemmeshData mesh;
+<a name="anchor-10"></a>    ProSolid solid;
+    
+static char
+    *menu[]={&quot;TkMeshOpt&quot;,&quot;ShellType&quot;,&quot;Analisis&quot;,&quot;Shape&quot;,&quot;Solver&quot;,&quot;OutFile&quot;,&quot;&quot;};
+    
+<a name="anchor-11"></a>    ProError ProTestExportFemMesh();                     
+    int ProUtilAssignMesh();
+    
+    status = ProMdlCurrentGet((ProMdl*)&amp;solid);
+    ProTestInitMesh(&amp;mesh);
+<a name="anchor-12"></a>    
+    /* Setup menu for chose fem mesh options */  
+    status = ProMenuFileRegister((char*)&quot;TkMeshOpt&quot;, (char*)&quot;tk_mesh_opt.mnu&quot;, &amp;menu_id);
+    status = ProMenubuttonActionSet((char*)&quot;TkMeshOpt&quot;, (char*)&quot;TkMeshOpt&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-13"></a>    status = ProMenubuttonActionSet((char*)&quot;TkMeshOpt&quot;, (char*)&quot;Solid&quot;,
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.mesh_type),
+         PRO_FEM_SOLID_MESH );
+    status = ProMenubuttonActionSet((char*)&quot;TkMeshOpt&quot;, (char*)&quot;Shell&quot;,
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.mesh_type), 
+<a name="anchor-14"></a>        PRO_FEM_SHELL_MESH ); 
+    status = ProMenubuttonActionSet((char*)&quot;TkMeshOpt&quot;, (char*)&quot;Mixed&quot;,
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.mesh_type), 
+        PRO_FEM_MIXED_MESH );
+    status = ProMenubuttonActionSet((char*)&quot;TkMeshOpt&quot;, (char*)&quot;Quilt&quot;,
+<a name="anchor-15"></a>        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.mesh_type), 
+        PRO_FEM_QUILT_MESH );
+    status = ProMenubuttonActionSet((char*)&quot;TkMeshOpt&quot;, (char*)&quot;Boundary&quot;,
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.mesh_type), 
+        PRO_FEM_BOUNDARY_MESH ); 
+<a name="anchor-16"></a>    status = ProMenubuttonActionSet((char*)&quot;TkMeshOpt&quot;, (char*)&quot;Bar&quot;,
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.mesh_type), 
+        PRO_FEM_BAR_MESH );
+    
+    status = ProMenuFileRegister((char*)&quot;ShellType&quot;, (char*)&quot;tk_shell.mnu&quot;, &amp;menu_id);
+<a name="anchor-17"></a>    status = ProMenubuttonActionSet((char*)&quot;ShellType&quot;, (char*)&quot;ShellType&quot;, 
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    status = ProMenubuttonActionSet((char*)&quot;ShellType&quot;, (char*)&quot;Triangle&quot;, 
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.shell_type),
+         PRO_FEM_SHELL_MESH_TRIANGLE);
+<a name="anchor-18"></a>    status = ProMenubuttonActionSet((char*)&quot;ShellType&quot;, (char*)&quot;Qadrangle&quot;,
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.shell_type),
+         PRO_FEM_SHELL_MESH_QUADRANGLE ); 
+    
+    status = ProMenuFileRegister((char*)&quot;Analisis&quot;, (char*)&quot;tk_analisis.mnu&quot;, &amp;menu_id);
+<a name="anchor-19"></a>    status = ProMenubuttonActionSet((char*)&quot;Analisis&quot;, (char*)&quot;Analisis&quot;,
+        (ProMenubuttonAction) ProMenuDelete, NULL, 0);
+    status = ProMenubuttonActionSet((char*)&quot;Analisis&quot;, (char*)&quot;Structural&quot;,
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.analysis), 
+        PRO_FEM_ANALYSIS_STRUCTURAL );
+<a name="anchor-20"></a>    status = ProMenubuttonActionSet((char*)&quot;Analisis&quot;, (char*)&quot;Modal&quot;, 
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.analysis), 
+        PRO_FEM_ANALYSIS_MODAL);
+    status = ProMenubuttonActionSet((char*)&quot;Analisis&quot;, (char*)&quot;Termal&quot;,
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.analysis),  
+<a name="anchor-21"></a>        PRO_FEM_ANALYSIS_THERMAL); 
+    status = ProMenubuttonActionSet((char*)&quot;Analisis&quot;, (char*)&quot;Flow&quot;,
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.analysis), 
+        PRO_FEM_ANALYSIS_FLOW );
+    
+<a name="anchor-22"></a>    status = ProMenuFileRegister((char*)&quot;Shape&quot;, (char*)&quot;tk_shape.mnu&quot;, &amp;menu_id);
+    status = ProMenubuttonActionSet((char*)&quot;Shape&quot;, (char*)&quot;Shape&quot;, 
+        (ProMenubuttonAction)ProMenuDelete,NULL, 0);
+    status = ProMenubuttonActionSet((char*)&quot;Shape&quot;, (char*)&quot;Linear&quot;, 
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.elem_shape),
+<a name="anchor-23"></a>         PRO_FEM_MIDPNT_LINEAR );
+    status = ProMenubuttonActionSet((char*)&quot;Shape&quot;, (char*)&quot;Parabolic&quot;, 
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.elem_shape),
+         PRO_FEM_MIDPNT_PARABOLIC ); 
+    status = ProMenubuttonActionSet((char*)&quot;Shape&quot;, (char*)&quot;ParabolicFix&quot;,
+<a name="anchor-24"></a>        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.elem_shape),
+         PRO_FEM_MIDPNT_PARABOLIC_FIXED ); 
+    
+    status = ProMenuFileRegister((char*)&quot;Solver&quot;, (char*)&quot;tk_solver.mnu&quot;, &amp;menu_id);
+    status = ProMenubuttonActionSet((char*)&quot;Solver&quot;, (char*)&quot;Solver&quot;, 
+<a name="anchor-25"></a>        (ProMenubuttonAction)ProMenuDelete,NULL, 0);
+    status = ProMenubuttonActionSet((char*)&quot;Solver&quot;, (char*)&quot;None&quot;, 
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.solver),
+         PRO_FEM_FEAS_NONE );
+    status = ProMenubuttonActionSet((char*)&quot;Solver&quot;, (char*)&quot;Neutral&quot;, 
+<a name="anchor-26"></a>        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.solver), 
+         PRO_FEM_FEAS_NEUTRAL );
+    status = ProMenubuttonActionSet((char*)&quot;Solver&quot;, (char*)&quot;Ansys&quot;, 
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.solver), 
+         PRO_FEM_FEAS_ANSYS ); 
+<a name="anchor-27"></a>    status = ProMenubuttonActionSet((char*)&quot;Solver&quot;, (char*)&quot;Nastran&quot;,
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.solver), 
+         PRO_FEM_FEAS_NASTRAN);
+    status = ProMenubuttonActionSet((char*)&quot;Solver&quot;, (char*)&quot;Mold&quot;, 
+        (ProMenubuttonAction)ProUtilAssignMesh, &amp;(mesh.solver), 
+<a name="anchor-28"></a>         PRO_FEM_FEAS_C_MOLD );
+    
+    status = ProMenuFileRegister((char*)&quot;OutFile&quot;, (char*)&quot;tk_out_file.mnu&quot;, &amp;menu_id);
+    status = ProMenubuttonActionSet((char*)&quot;OutFile&quot;, (char*)&quot;OutFile&quot;, 
+        (ProMenubuttonAction)ProMenuDelete,NULL, 0);
+<a name="anchor-29"></a>    status = ProMenubuttonGenactionSet((char*)&quot;OutFile&quot;, (char*)&quot;OutMesh&quot;,   
+        (ProMenubuttonGenaction)ProTestExportFemMesh, solid, &amp;mesh, NULL, NULL,
+        NULL, NULL);
+        
+    status = ProCompoundmenuCreate(menu, &amp;menu_id);
+<a name="anchor-30"></a>    /* Highlight default settings */
+    status = ProMenubuttonHighlight((char*)&quot;TkMeshOpt&quot;, (char*)&quot;Solid&quot;);
+    status = ProMenubuttonHighlight((char*)&quot;ShellType&quot;, (char*)&quot;Triangle&quot;);
+    status = ProMenubuttonHighlight((char*)&quot;Analisis&quot;, (char*)&quot;Structural&quot;);
+    status = ProMenubuttonHighlight((char*)&quot;Shape&quot;, (char*)&quot;Linear&quot;);
+<a name="anchor-31"></a>    status = ProMenubuttonHighlight((char*)&quot;Solver&quot;, (char*)&quot;Cosmos&quot;);
+    status = ProMenuProcess(menu[0], &amp;menu_id);
+        return(status);    
+
+}
+<a name="anchor-32"></a>
+/*============================================================================*\
+    FUNCTION : ProTestExportFemMesh	
+    PURPOSE  : export fem mesh 
+\*============================================================================*/
+<a name="anchor-33"></a>int ProUtilAssignMesh(ProAppData p_member, int option)
+{
+    *((int *)p_member) = option;
+    return (0);
+}
+<a name="anchor-34"></a>
+/*============================================================================*\
+    FUNCTION : ProTestExportFemMesh	
+    PURPOSE  : export fem mesh 
+\*============================================================================*/
+<a name="anchor-35"></a>ProError ProTestExportFemMesh(ProSolid solid ,
+                          ProFemmeshData *mesh)
+{
+
+    ProError status;
+<a name="anchor-36"></a>    ProName name;
+    ProName MSGFIL;
+    
+    status = ProMenuDelete();
+    status = ProMenuDelete();
+<a name="anchor-37"></a>    status = ProMenuDelete();
+    status = ProMenuDelete();
+    status = ProMenuDelete();
+    status = ProMenuDelete();
+    
+<a name="anchor-38"></a>    ProStringToWstring( MSGFIL, (char*)&quot;usermsg.txt&quot;);
+    
+    if ( solid == NULL )
+    {
+        status = ProMessageDisplay(MSGFIL, (char*)&quot;USER %0s&quot;, (char*)&quot;No object found&quot;);
+<a name="anchor-39"></a>        return(PRO_TK_BAD_INPUTS);
+    }
+    /* Write output file */
+    else
+    {
+<a name="anchor-40"></a>        status = ProMessageDisplay (MSGFIL, (char*)&quot;USER %0s&quot;,
+            &quot;Enter output file name :&quot;);
+        status = ProMessageStringRead (PRO_NAME_SIZE, name);
+        if(status != PRO_TK_NO_ERROR)
+            return(PRO_TK_NO_ERROR);
+<a name="anchor-41"></a>        status = ProFemmeshExport(solid, mesh, name);
+        TEST_CALL_REPORT(&quot;ProFemmeshExport()&quot;, &quot;ProTestExportFemMesh()&quot;, 
+                                    status, status != PRO_TK_NO_ERROR);
+    }
+    return(status);
+<a name="anchor-42"></a>}
+
+
+</pre>
+</body>
+</html>

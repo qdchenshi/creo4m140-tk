@@ -1,0 +1,435 @@
+<html>
+<head>
+<title>UgSktExtrusionCut.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProFeature.h&quot;
+<a name="anchor-2"></a>#include &quot;ProElemId.h&quot;
+#include &quot;ProExtrude.h&quot;
+#include &quot;ProModFeat.h&quot;
+#include &quot;ProStdSection.h&quot;
+#include &quot;ProElement.h&quot;
+<a name="anchor-3"></a>#include &quot;ProElempath.h&quot;
+#include &quot;ProFeatType.h&quot;
+#include &quot;ProFeatForm.h&quot;
+#include &quot;ProSelection.h&quot;
+#include &quot;ProSection.h&quot;
+<a name="anchor-4"></a>
+#include &quot;ProExtrude.h&quot;
+
+static ProFileName message_file; 
+
+<a name="anchor-5"></a>#define C_LOG(a) ProTKPrintf (&quot;Status for %s is = %d\n&quot;, a, status ); \
+	ERROR_CHECK( a, &quot;UgSktExtrusionCut.c&quot;, status );
+
+#define C_PRINT(a) ProTKPrintf ( &quot;%s\n&quot;, a);
+
+<a name="anchor-6"></a>/*---------------------- Function Prototypes -------------------------*/
+ProError ProDemoExtrudeProtrConvCreate();
+
+/*------------------------- External Data ----------------------------*/
+ProError ProDemoSectCreate();
+<a name="anchor-7"></a>
+/*------------------------- Global Data -----------------------------*/
+
+/*===============================================================*\
+FUNCTION : UserSktExtrustionCut()
+<a name="anchor-8"></a>PURPOSE  : Demonstrates the creation of the extruded cut (thru-all, two sides)
+\*===============================================================*/
+ProError UserSktExtrusionCut()
+{
+  ProReference REPDEP_ref2;
+<a name="anchor-9"></a>  ProReference REPDEP_ref1;
+  ProErrorlist            errors;
+  ProMdl                  model;
+  ProModelitem            model_item;
+  ProSelection            model_sel;
+<a name="anchor-10"></a>  ProFeature              feature;
+  ProFeatureCreateOptions *opts = 0;
+  ProElempath             path;
+  ProElempathItem         path_items[2];
+  ProSection              section;
+<a name="anchor-11"></a>  ProAsmcomppath          comp_path;
+  ProAsmcomppath          *p_comp_path = NULL;
+  ProValue                value;
+ 
+  ProElement sketch_element; 
+<a name="anchor-12"></a>  ProElement created_elemtree; 
+  
+  ProElement pro_e_feature_tree;
+  ProElement pro_e_feature_form;
+  ProElement pro_e_ext_surf_cut_solid_type;
+<a name="anchor-13"></a>  ProElement pro_e_remove_material;
+  ProElement pro_e_feat_form_is_thin;
+  ProElement pro_e_std_matrlside;
+  ProElement pro_e_std_direction;
+
+<a name="anchor-14"></a>  
+  ProElement pro_e_std_ext_depth;
+  ProElement pro_e_ext_depth_from;
+  ProElement pro_e_ext_depth_from_type;
+  ProElement pro_e_ext_depth_to;
+<a name="anchor-15"></a>  ProElement pro_e_ext_depth_to_type;
+ 
+  
+  ProElement pro_e_std_section;
+  ProElement pro_e_std_sec_method;
+<a name="anchor-16"></a>  ProElement pro_e_std_sec_setup_plane;
+  ProElement pro_e_std_sec_plane;
+  ProElement pro_e_std_sec_plane_view_dir;
+  ProElement pro_e_std_sec_plane_orient_dir;
+  ProElement pro_e_std_sec_plane_orient_ref;
+<a name="anchor-17"></a> 
+  ProSelection *sketch_refs;
+  ProError 	status;
+  ProValueData 	value_data;
+  ProSelection * p_select;
+<a name="anchor-18"></a>  int 		n_select;
+  ProBoolean 	is_interactive = PRO_B_TRUE;
+  
+  ProStringToWstring ( message_file, &quot;utilities.txt&quot; ); 
+
+<a name="anchor-19"></a>  log_file = PTApplsUnicodeFopen ( &quot;ug_sketched_curve.log&quot;, &quot;w&quot; ); 
+
+  status = ProMdlCurrentGet (&amp;model);
+  if ( status != PRO_TK_NO_ERROR ) return ( status );
+  
+<a name="anchor-20"></a>  /*---------------------------------------------------------------*\
+    Populating root element PRO_E_FEATURE_TREE 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_FEATURE_TREE *** &quot; );
+  status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;pro_e_feature_tree ); 
+<a name="anchor-21"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+  
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_FEATURE_FORM
+  \*---------------------------------------------------------------*/
+<a name="anchor-22"></a>
+  C_PRINT( &quot; *** Processing Element PRO_E_FEATURE_FORM *** &quot; );
+  status = ProElementAlloc ( PRO_E_FEATURE_FORM, &amp;pro_e_feature_form );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_feature_form,PRO_EXTRUDE);
+<a name="anchor-23"></a>  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_feature_form );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+
+<a name="anchor-24"></a>  /*---------------------------------------------------------------*\
+    Populating element PRO_E_EXT_SURF_CUT_SOLID_TYPE
+  \*---------------------------------------------------------------*/
+  
+  C_PRINT( &quot; *** Processing Element PRO_E_EXT_SURF_CUT_SOLID_TYPE *** &quot; );
+<a name="anchor-25"></a>  status = ProElementAlloc ( PRO_E_EXT_SURF_CUT_SOLID_TYPE, &amp;pro_e_ext_surf_cut_solid_type );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_ext_surf_cut_solid_type,PRO_EXT_FEAT_TYPE_SOLID);
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_ext_surf_cut_solid_type );
+<a name="anchor-26"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+ 
+  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_REMOVE_MATERIAL
+  \*---------------------------------------------------------------*/
+<a name="anchor-27"></a>
+  C_PRINT( &quot; *** Processing Element PRO_E_REMOVE_MATERIAL *** &quot; );
+  status = ProElementAlloc ( PRO_E_REMOVE_MATERIAL, &amp;pro_e_remove_material );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_remove_material,PRO_EXT_MATERIAL_REMOVE);
+<a name="anchor-28"></a>  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_remove_material );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  /*---------------------------------------------------------------*\
+<a name="anchor-29"></a>    Populating  element PRO_E_FEAT_FORM_IS_THIN
+  \*---------------------------------------------------------------*/
+
+  C_PRINT( &quot; *** Processing Element PRO_E_FEAT_FORM_IS_THIN *** &quot; );
+  status = ProElementAlloc ( PRO_E_FEAT_FORM_IS_THIN, &amp;pro_e_feat_form_is_thin );
+<a name="anchor-30"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_feat_form_is_thin,PRO_EXT_FEAT_FORM_NO_THIN);
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_feat_form_is_thin );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-31"></a>
+  /*---------------------------------------------------------------*\
+    Populating  compound element PRO_E_STD_EXT_DEPTH
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_STD_EXT_DEPTH *** &quot; );
+<a name="anchor-32"></a>  status = ProElementAlloc ( PRO_E_STD_EXT_DEPTH, &amp;pro_e_std_ext_depth );
+  C_LOG( &quot; ProElementAlloc&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_std_ext_depth  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+<a name="anchor-33"></a>  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_STD_EXT_DEPTH
+			-> PRO_E_EXT_DEPTH_FROM
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_EXT_DEPTH_FROM *** &quot; );
+<a name="anchor-34"></a>  status = ProElementAlloc ( PRO_E_EXT_DEPTH_FROM, &amp;pro_e_ext_depth_from );
+  C_LOG( &quot; ProElementAlloc&quot; );
+  status = ProElemtreeElementAdd ( pro_e_std_ext_depth, NULL, pro_e_ext_depth_from  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+<a name="anchor-35"></a>  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_STD_EXT_DEPTH
+			-> PRO_E_EXT_DEPTH_FROM
+			   -> PRO_E_EXT_DEPTH_FROM_TYPE
+  \*---------------------------------------------------------------*/
+<a name="anchor-36"></a>  C_PRINT( &quot; *** Processing Element PRO_E_EXT_DEPTH_FROM_TYPE *** &quot; );
+  status = ProElementAlloc ( PRO_E_EXT_DEPTH_FROM_TYPE, &amp;pro_e_ext_depth_from_type );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_ext_depth_from_type,PRO_EXT_DEPTH_FROM_ALL);
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+<a name="anchor-37"></a>  status = ProElemtreeElementAdd ( pro_e_ext_depth_from, NULL, pro_e_ext_depth_from_type );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_STD_EXT_DEPTH
+<a name="anchor-38"></a>			-> PRO_E_EXT_DEPTH_TO
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_EXT_DEPTH_TO *** &quot; );
+  status = ProElementAlloc ( PRO_E_EXT_DEPTH_TO, &amp;pro_e_ext_depth_to );
+  C_LOG( &quot; ProElementAlloc&quot; );
+<a name="anchor-39"></a>  status = ProElemtreeElementAdd ( pro_e_std_ext_depth, NULL, pro_e_ext_depth_to  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_STD_EXT_DEPTH
+<a name="anchor-40"></a>			-> PRO_E_EXT_DEPTH_TO
+			   -> PRO_E_EXT_DEPTH_TO_TYPE
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_EXT_DEPTH_TO_TYPE *** &quot; );
+  status = ProElementAlloc ( PRO_E_EXT_DEPTH_TO_TYPE, &amp;pro_e_ext_depth_to_type );
+<a name="anchor-41"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_ext_depth_to_type,PRO_EXT_DEPTH_TO_ALL);
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_ext_depth_to, NULL, pro_e_ext_depth_to_type );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-42"></a>
+  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_STD_SECTION
+  \*---------------------------------------------------------------*/
+
+<a name="anchor-43"></a>  C_PRINT( &quot; *** Processing Element PRO_E_STD_SECTION *** &quot; );
+  status = ProElementAlloc ( PRO_E_STD_SECTION, &amp;pro_e_std_section );
+  C_LOG( &quot; ProElementAlloc&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+		pro_e_std_section  );
+<a name="anchor-44"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_STD_SECTION 
+			-> PRO_E_STD_SEC_SETUP_PLANE
+<a name="anchor-45"></a>  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_STD_SEC_SETUP_PLANE *** &quot; );
+  status = ProElementAlloc ( PRO_E_STD_SEC_SETUP_PLANE, 
+		&amp;pro_e_std_sec_setup_plane );
+  C_LOG( &quot; ProElementAlloc&quot; );
+<a name="anchor-46"></a>  status = ProElemtreeElementAdd ( pro_e_std_section, NULL, 
+		pro_e_std_sec_setup_plane  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  sketch_refs = ( ProSelection *) calloc ( 2, sizeof ( ProSelection ));
+<a name="anchor-47"></a>
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_STD_SECTION 
+			-> PRO_E_STD_SEC_SETUP_PLANE
+			   -> PRO_E_STD_SEC_PLANE
+<a name="anchor-48"></a>  \*---------------------------------------------------------------*/
+  
+  C_PRINT( &quot; *** Processing Element PRO_E_STD_SEC_PLANE *** &quot; );
+  status = ProMessageDisplay ( message_file, &quot;Select Surface for sketch placement&quot;);
+  C_LOG( &quot; ProMessageDisplay&quot;  );
+<a name="anchor-49"></a>  ProTKPrintf ( &quot;Please select datum,surface,sldface,qltface_ID_5 type of Modelitem\n&quot;);
+  status = ProSelect ( &quot;datum,surface,sldface,qltface&quot;, 1, NULL, NULL, 
+		NULL, NULL, &amp;p_select, &amp;n_select );
+  C_LOG( &quot; ProSelect&quot; );
+  if ( n_select &lt;= 0 ) return -1; 
+<a name="anchor-50"></a>  else
+    {
+      status = ProSelectionCopy( p_select[0], &amp;sketch_refs[0]);
+      C_LOG (&quot; ProSelectionCopy &quot;);
+    }
+<a name="anchor-51"></a>  status = ProElementAlloc ( PRO_E_STD_SEC_PLANE, &amp;pro_e_std_sec_plane );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProSelectionToReference( p_select[0],&amp;REPDEP_ref1 );
+  status = ProElementReferenceSet(pro_e_std_sec_plane,REPDEP_ref1);
+  C_LOG( &quot; ProElementReferenceSet&quot; );
+<a name="anchor-52"></a>  status = ProElemtreeElementAdd ( pro_e_std_sec_setup_plane, NULL, 
+		pro_e_std_sec_plane );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  /*---------------------------------------------------------------*\
+<a name="anchor-53"></a>    Populating element PRO_E_STD_SECTION 
+			-> PRO_E_STD_SEC_SETUP_PLANE
+			   -> PRO_E_STD_SEC_PLANE_VIEW_DIR
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_STD_SEC_PLANE_VIEW_DIR *** &quot; );
+<a name="anchor-54"></a>  status = ProElementAlloc ( PRO_E_STD_SEC_PLANE_VIEW_DIR, 
+		&amp;pro_e_std_sec_plane_view_dir );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet(pro_e_std_sec_plane_view_dir,PRO_SEC_VIEW_DIR_SIDE_ONE);
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+<a name="anchor-55"></a>  status = ProElemtreeElementAdd ( pro_e_std_sec_setup_plane, NULL, 
+		pro_e_std_sec_plane_view_dir );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+  
+  /*---------------------------------------------------------------*\
+<a name="anchor-56"></a>    Populating element PRO_E_STD_SECTION 
+			-> PRO_E_STD_SEC_SETUP_PLANE
+			   -> PRO_E_STD_SEC_PLANE_ORIENT_DIR
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_STD_SEC_PLANE_ORIENT_DIR *** &quot; );
+<a name="anchor-57"></a>  status = ProElementAlloc ( PRO_E_STD_SEC_PLANE_ORIENT_DIR, 
+		&amp;pro_e_std_sec_plane_orient_dir );
+  C_LOG( &quot; ProElementAlloc &quot; );
+
+  status = ProElementIntegerSet ( pro_e_std_sec_plane_orient_dir, PRO_SEC_ORIENT_DIR_UP );
+<a name="anchor-58"></a>  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_std_sec_setup_plane, NULL, 
+		pro_e_std_sec_plane_orient_dir );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+<a name="anchor-59"></a>  /*---------------------------------------------------------------*\
+    Populating element PRO_E_STD_SECTION 
+			-> PRO_E_STD_SEC_SETUP_PLANE
+			   -> PRO_E_STD_SEC_PLANE_ORIENT_REF
+  \*---------------------------------------------------------------*/
+<a name="anchor-60"></a>  C_PRINT( &quot; *** Processing Element PRO_E_STD_SEC_PLANE_ORIENT_REF *** &quot; );
+  status = ProMessageDisplay ( message_file, 
+		&quot;Select Surface for sketch orientation&quot;);
+  C_LOG( &quot; ProMessageDisplay&quot;  );
+  ProTKPrintf ( &quot;Select datum,surface,sldface,qltface_ID_5 type of Modelitem\n&quot;);
+<a name="anchor-61"></a>  status = ProSelect ( &quot;datum,surface,sldface,qltface&quot;, 1, NULL, 
+		NULL, NULL, NULL, &amp;p_select, &amp;n_select );
+  C_LOG( &quot; ProSelect&quot; );
+  if ( n_select &lt;= 0 ) return -1; 
+  else
+<a name="anchor-62"></a>    {
+      status = ProSelectionCopy( p_select[0], &amp;sketch_refs[1]);
+      C_LOG (&quot; ProSelectionCopy &quot;);
+    }
+  
+<a name="anchor-63"></a>  status = ProElementAlloc ( PRO_E_STD_SEC_PLANE_ORIENT_REF, 
+		&amp;pro_e_std_sec_plane_orient_ref );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProSelectionToReference( p_select[0],&amp;REPDEP_ref2 );
+  status = ProElementReferenceSet(pro_e_std_sec_plane_orient_ref,REPDEP_ref2);
+<a name="anchor-64"></a>  C_LOG( &quot; ProElementReferenceSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_std_sec_setup_plane, NULL, 
+		pro_e_std_sec_plane_orient_ref );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+<a name="anchor-65"></a>  /*---------------------------------------------------------------*\
+    Creating incomplete feature in the current model.
+  \*---------------------------------------------------------------*/
+  status = ProMdlToModelitem( model, &amp;model_item ); 
+  status = ProSelectionAlloc (p_comp_path, &amp;model_item,
+<a name="anchor-66"></a>			   &amp;model_sel);
+  
+
+  status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+    1, (ProArray*)&amp;opts);
+<a name="anchor-67"></a>
+  opts[0]= PRO_FEAT_CR_INCOMPLETE_FEAT;
+
+  status = ProFeatureWithoptionsCreate (model_sel, pro_e_feature_tree,
+    opts, PRO_REGEN_NO_FLAGS, &amp;feature, &amp;errors);
+<a name="anchor-68"></a>  C_LOG (&quot; ProFeatureWithoptionsCreate&quot;); 
+
+  status = ProArrayFree((ProArray*)&amp;opts);
+  
+  /* Using the element tree from created feature */ 
+<a name="anchor-69"></a>  status = ProFeatureElemtreeExtract (&amp;feature, NULL, PRO_FEAT_EXTRACT_NO_OPTS, &amp;created_elemtree);
+  C_LOG (&quot;ProFeatureElemtreeExtract()&quot;);
+
+  /*---------------------------------------------------------------*\
+    Getting the initialized section element from the database.
+<a name="anchor-70"></a>  \*---------------------------------------------------------------*/
+  /* path to PRO_E_SKETCHER element */ 
+  path_items[0].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+  path_items[0].path_item.elem_id = PRO_E_STD_SECTION;
+  path_items[1].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+<a name="anchor-71"></a>  path_items[1].path_item.elem_id = PRO_E_SKETCHER;
+  status = ProElempathAlloc (&amp;path);
+  status = ProElempathDataSet (path, path_items, 2);
+  
+  status = ProElemtreeElementGet ( created_elemtree, path, &amp;sketch_element);
+<a name="anchor-72"></a>  C_LOG (&quot; ProElemtreeElementGet PRO_E_SKETCHER &quot;); 
+ 
+  status = ProElementSpecialvalueGet(sketch_element, NULL, (ProAppData *) &amp;section);
+  C_LOG (&quot; ProElementSpecialvalueGet PRO_E_SKETCHER &quot;);
+
+<a name="anchor-73"></a>/*---------------------------------------------------------------*\
+   Creating a 3-D section 
+\*---------------------------------------------------------------*/
+  
+  status = UserSectionBuild ( ( ProSection )(section), 
+<a name="anchor-74"></a>			   sketch_refs ); 
+  C_LOG (&quot;UserSectionBuild&quot;); 
+
+  ProElempathFree (&amp;path);
+
+<a name="anchor-75"></a>  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_STD_MATRLSIDE (must be done once section is set)
+  \*---------------------------------------------------------------*/
+  
+  C_PRINT( &quot; *** Processing Element PRO_E_STD_MATRLSIDE *** &quot; );
+<a name="anchor-76"></a>  path_items[0].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+  path_items[0].path_item.elem_id = PRO_E_STD_MATRLSIDE;
+  
+  status = ProElempathAlloc (&amp;path);
+  status = ProElempathDataSet (path, path_items, 1);
+<a name="anchor-77"></a>  
+  status = ProElemtreeElementGet ( created_elemtree, path, &amp;pro_e_std_matrlside);
+  C_LOG (&quot; ProElemtreeElementGet PRO_E_SKETCHER &quot;); 
+  
+  status = ProElementIntegerSet ( pro_e_std_matrlside, PRO_EXT_MATERIAL_SIDE_TWO );
+<a name="anchor-78"></a>  C_LOG( &quot; ProElementIntegerSet&quot; );
+  ProElempathFree (&amp;path);
+  
+/*---------------------------------------------------------------*\
+   Redefining the feature to make it complete.
+<a name="anchor-79"></a>\*---------------------------------------------------------------*/
+
+  status = ProSelectionAsmcomppathGet (model_sel, &amp;comp_path);
+  C_LOG (&quot; ProSelectionAsmcomppathGet&quot;); 
+  
+<a name="anchor-80"></a>  status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+    1, (ProArray*)&amp;opts);
+
+  opts[0]= PRO_FEAT_CR_DEFINE_MISS_ELEMS;
+
+<a name="anchor-81"></a>  status = ProFeatureWithoptionsRedefine (&amp;comp_path, &amp;feature, created_elemtree,
+    opts, PRO_REGEN_NO_FLAGS, &amp;errors);
+  C_LOG (&quot; ProFeatureWithoptionsRedefine&quot;); 
+
+  status = ProArrayFree((ProArray*)&amp;opts);
+<a name="anchor-82"></a>
+/*---------------------------------------------------------------*\
+    Free up the allocated memory.
+\*---------------------------------------------------------------*/
+  status = ProFeatureElemtreeFree (&amp;feature, created_elemtree ); 
+<a name="anchor-83"></a>  C_LOG (&quot; ProFeatureElemtreeFree&quot;); 
+  
+  status = ProElementFree (&amp;pro_e_feature_tree ); 
+  C_LOG (&quot; ProElementFree&quot;); 
+  
+<a name="anchor-84"></a>  free(sketch_refs);
+
+  return (status);
+}
+
+<a name="anchor-85"></a>#undef C_LOG
+#undef C_PRINT
+</pre>
+</body>
+</html>

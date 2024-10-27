@@ -1,0 +1,888 @@
+<html>
+<head>
+<title>TestCavityLayout.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*----------------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*----------------------------------------------------------------------------*/
+<a name="anchor-2"></a>#include &lt;ProToolkit.h>
+#include &lt;ProSelection.h>
+#include &lt;ProCavitylayout.h>
+#include &lt;ProMenu.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>#include &lt;ProArray.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProMfg.h>
+#include &lt;ProCsys.h>
+#include &lt;ProModelitem.h>
+<a name="anchor-4"></a>#include &lt;ProMessage.h>
+#include &lt;ProFamtable.h>
+#include &lt;ProFaminstance.h>
+/*----------------------------------------------------------------------------*\
+C System includes
+<a name="anchor-5"></a>\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+Application includes
+\*----------------------------------------------------------------------------*/
+<a name="anchor-6"></a>#include &quot;TestError.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &quot;UtilFiles.h&quot;
+<a name="anchor-7"></a>#include &quot;UtilCollect.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+/*----------------------------------------------------------------------------*\
+Application macros
+\*----------------------------------------------------------------------------*/
+<a name="anchor-8"></a>#define RULE_FILE_READ 5
+
+/*----------------------------------------------------------------------------*\
+Application prototypes
+\*----------------------------------------------------------------------------*/
+<a name="anchor-9"></a>ProError ProTestCavityLayoutModelNamesSet (ProCavityLayout *cvlayout_ptr);
+char* ProTestCavityLayoutTypeToStr (ProCvLayoutType type);
+ProError ProTestCavityLayoutSetup(ProCavityLayout *cvlayout);
+ProError ProTestCavlayruleSet(ProCvLayoutRule *rule);
+ProError ProUtilSelectCsys(ProCsys *csys, ProAsmcomppath *comppath);
+<a name="anchor-10"></a>ProError ProTestCavlayruleOrientSet(ProCvLayoutOrient *orient);
+/*----------------------------------------------------------------------------*\
+Application global/external data
+\*----------------------------------------------------------------------------*/
+
+<a name="anchor-11"></a>/*============================================================================*\
+    FUNCTION : ProTestCavityLayoutMenu	
+    PURPOSE  : Setup menu for testing
+\*============================================================================*/
+ProError ProTestCavityLayoutMenu()
+<a name="anchor-12"></a>{
+    ProError status;
+    ProMdl mdl;
+    int menu_id, action;
+    ProMdlType type;
+<a name="anchor-13"></a>    ProAssembly assy_obj;
+    ProError  ProTestCavityLayoutInfo();
+    ProError  ProTestCavityLayoutRedefine();
+    ProError  ProTestCavityLayoutCreate();
+    
+<a name="anchor-14"></a>    status = ProMdlCurrentGet(&amp;mdl);
+    if (status != PRO_TK_NO_ERROR)
+    {
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;NO current object&quot;);
+        return(PRO_TK_NO_ERROR);
+<a name="anchor-15"></a>    }
+    status = ProMdlTypeGet(mdl, &amp;type);
+    if(type == PRO_MDL_MFG)
+    {
+        status = ProMfgAssemGet((ProMfg)mdl, &amp;assy_obj);
+<a name="anchor-16"></a>        mdl = assy_obj;   
+    }
+    
+    status = ProMenuFileRegister((char*)&quot;TkCavityLayout&quot;,(char*)&quot;tkcavitylayout.mnu&quot;, &amp;menu_id);
+    status = ProMenubuttonActionSet((char*)&quot;TkCavityLayout&quot;, (char*)&quot;TkCavityLayout&quot;,
+<a name="anchor-17"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    status = ProMenubuttonActionSet((char*)&quot;TkCavityLayout&quot;, (char*)&quot;Info&quot;,
+	(ProMenubuttonAction)ProTestCavityLayoutInfo, &amp;mdl, 0);
+    status = ProMenubuttonActionSet((char*)&quot;TkCavityLayout&quot;, (char*)&quot;Create&quot;,
+	(ProMenubuttonAction)ProTestCavityLayoutCreate, &amp;mdl, 0);
+<a name="anchor-18"></a>    status = ProMenubuttonActionSet((char*)&quot;TkCavityLayout&quot;, (char*)&quot;Redefine&quot;,
+	(ProMenubuttonAction)ProTestCavityLayoutRedefine, &amp;mdl, 0);
+    status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkCavityLayout&quot;, NULL);
+    status= ProMenuProcess((char*)&quot;&quot;, &amp;action);
+    
+<a name="anchor-19"></a>    return ((ProError)0);
+}
+
+/*============================================================================*\
+    FUNCTION : ProTestCavityLayoutInfo	
+<a name="anchor-20"></a>    PURPOSE  : Test Cavity Layout info functions 
+\*============================================================================*/
+ProError ProTestCavityLayoutInfo(ProMdl *mdl)
+{
+    ProError status;
+<a name="anchor-21"></a>    ProCavityLayout cvlayout;
+    ProAsmcomppath csys_comp_path, leader_comp;
+    ProCsys         csys;
+    int count, i, j, csys_id;
+    double min_x, min_y, min_z, max_x, max_y, max_z;
+<a name="anchor-22"></a>    ProMdl mdl_leader;
+    ProModelitem item_lider;
+    ProPath w_path;
+    ProSelection sel;
+    char fname[PRO_FILE_NAME_SIZE] = &quot;cavity_layout.inf&quot;;
+<a name="anchor-23"></a>    char leader_name[PRO_MDLNAME_SIZE];
+    FILE *fp;
+    ProCvLayoutRule rule;
+    ProCvLayoutType type, basic_type;
+    int cavity_num, cavity_num_x, cavity_num_y;
+<a name="anchor-24"></a>    double *increment1_arr, *increment2_arr, *increment3_arr;
+    ProCvLayoutOrient orient;
+    ProMdlName *model_names;
+	ProMdlName mdl_name;
+
+<a name="anchor-25"></a>    fp = PTApplsUnicodeFopen(fname, &quot;w&quot;);
+    if(fp == NULL)
+        return(PRO_TK_GENERAL_ERROR);
+                      
+    status = ProCavitylayoutCountGet(*mdl, &amp;count);
+<a name="anchor-26"></a>    TEST_CALL_REPORT(&quot;ProCavitylayoutCountGet()&quot;,
+        &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+    if(count == 0)
+    {
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Cavity Layout not found&quot;);
+<a name="anchor-27"></a>        return(PRO_TK_E_NOT_FOUND);
+    }
+    for (i = 0; i&lt;count;i++)
+    {
+        status = ProCavitylayoutGetByNumber(*mdl, i, &amp;cvlayout);
+<a name="anchor-28"></a>        TEST_CALL_REPORT(&quot;ProCavitylayoutGetByNumber()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+                    
+        status = ProCavitylayoutLeaderGet(cvlayout, &amp;mdl_leader);
+        TEST_CALL_REPORT(&quot;ProCavitylayoutLeaderGet()&quot;,
+<a name="anchor-29"></a>	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+                    
+        status = ProMdlToModelitem(mdl_leader, &amp;item_lider);
+        TEST_CALL_REPORT(&quot;ProMdlToModelitem()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-30"></a>        status = ProMdlMdlnameGet(*mdl, mdl_name);
+        TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+             
+        ProWstringToString(leader_name, mdl_name);
+<a name="anchor-31"></a>        ProTKFprintf(fp, (char*)&quot;\n Cavity Layout nuber %d&quot;,i+1);
+        ProTKFprintf(fp,(char*)&quot;\n Leader name : %s&quot;, leader_name);
+        
+        status = ProCavitylayoutOutlineGet(cvlayout, &amp;min_x, &amp;min_y, &amp;min_z,
+            &amp;max_x, &amp;max_y, &amp;max_z);
+<a name="anchor-32"></a>        TEST_CALL_REPORT(&quot;ProCavitylayoutOutlineGet()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+        ProTKFprintf(fp, (char*)&quot;\n Outline:&quot;); 
+        ProTKFprintf(fp, (char*)&quot;\n min_x = %.2f\t min_y = %.2f\t min_z = %.2f\n&quot;
+                &quot; max_x = %.2f\t max_y = %.2f\t max_z = %.2f&quot;,
+<a name="anchor-33"></a>                min_x, min_y, min_z, max_x, max_y, max_z);
+                
+        status = ProCavitylayoutLeaderCompGet (cvlayout, &amp;leader_comp);
+        TEST_CALL_REPORT(&quot;ProCavitylayoutLeaderCompGet()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-34"></a>                    
+        status = ProSelectionAlloc(&amp;leader_comp, &amp;item_lider, &amp;sel);
+        TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+                    
+<a name="anchor-35"></a>        status = ProSelectionHighlight(sel, PRO_COLOR_HIGHLITE);
+        TEST_CALL_REPORT(&quot;ProSelectionHighlight()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+    
+        status = ProCavitylayoutLeaderCsysGet (cvlayout, &amp;csys_comp_path,
+<a name="anchor-36"></a>            &amp;csys);
+        TEST_CALL_REPORT(&quot;ProCavitylayoutLeaderCsysGet()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+                    
+        status = ProCsysIdGet(csys, &amp;csys_id);
+<a name="anchor-37"></a>        TEST_CALL_REPORT(&quot;ProCsysIdGet()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+        ProTKFprintf(fp, (char*)&quot;\n csys_leader_id = %d&quot;, csys_id);
+        
+        status = ProCavitylayoutOriginGet(cvlayout, &amp;csys_comp_path, &amp;csys);
+<a name="anchor-38"></a>        TEST_CALL_REPORT(&quot;ProCavitylayoutOriginGet()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+        
+        status = ProCsysIdGet(csys, &amp;csys_id);
+        TEST_CALL_REPORT(&quot;ProCsysIdGet()&quot;,
+<a name="anchor-39"></a>	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+        ProTKFprintf(fp, (char*)&quot;\n csys_origin_id = %d&quot;, csys_id); 
+           
+        status = ProCavitylayoutRuleGet(cvlayout, &amp;rule);
+        TEST_CALL_REPORT(&quot;ProCavitylayoutRuleGet()&quot;,
+<a name="anchor-40"></a>		    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+                    
+        status = ProCavlayruleTypeGet(rule, &amp;type, &amp;basic_type);
+        TEST_CALL_REPORT(&quot;ProCavlayruleTypeGet()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-41"></a>        ProTKFprintf(fp,(char*)&quot;\n type : %s \t basic_type : %s \n&quot;,
+            ProTestCavityLayoutTypeToStr(type), 
+            ProTestCavityLayoutTypeToStr(basic_type));
+             
+        switch (type)
+<a name="anchor-42"></a>        {
+        case PRO_CVLAYOUT_CIRCULAR :
+            status = ProCavlayruleCircDataGet(rule, &amp;orient, &amp;cavity_num, 
+                &amp;min_x,  &amp;min_y, &amp;min_z);
+            TEST_CALL_REPORT(&quot;ProCavlayruleCircDataGet()&quot;,
+<a name="anchor-43"></a>	        &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+            ProTKFprintf(fp,(char*)&quot; Orientation type : %d \n number of Components : %d \n&quot;
+                &quot; Angular displacement : %.2f \n Angle for the first component : &quot;
+                &quot;%.2f \n Raduis of the layout : %.2f&quot;, orient, cavity_num, min_x, 
+                 min_y, min_z);  
+<a name="anchor-44"></a>                
+            break;
+        case  PRO_CVLAYOUT_RECTANG :
+            status = ProCavlayruleRectDataGet(rule, &amp;orient, &amp;cavity_num_x, 
+                &amp;cavity_num_y, &amp;min_x, &amp;min_y);
+<a name="anchor-45"></a>            TEST_CALL_REPORT(&quot;ProCavlayruleRectDataGet()&quot;,
+	        &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+            ProTKFprintf(fp,(char*)&quot; Orientation type : %d \n Number of columns : %d \n&quot;
+            &quot; Number of rows : %d \n Displacement step in x direction : %.2f \n&quot;
+            &quot; Displacement step in y direction : %.2f \n&quot;, orient, cavity_num_x,
+<a name="anchor-46"></a>            cavity_num_y, min_x, min_y);
+            
+            break;
+        case PRO_CVLAYOUT_VARIABLE :
+            status = ProArrayAlloc(0, sizeof(double), 1, 
+<a name="anchor-47"></a>                (ProArray*)&amp;increment1_arr);
+            status = ProArrayAlloc(0, sizeof(double), 1, 
+                (ProArray*)&amp;increment2_arr);
+            status = ProArrayAlloc(0, sizeof(double), 1, 
+                (ProArray*)&amp;increment3_arr);
+<a name="anchor-48"></a>            status = ProCavlayruleVarDataGet(rule, &amp;cavity_num, &amp;increment1_arr, 
+                &amp;increment2_arr, &amp;increment3_arr);
+            TEST_CALL_REPORT(&quot;ProCavlayruleVarDataGet()&quot;,
+	            &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+            ProTKFprintf(fp,(char*)&quot; Number of rows : %d \n&quot;, cavity_num);    
+<a name="anchor-49"></a>            ProTKFprintf(fp,(char*)&quot; Table dimension :\n first   second   third\n&quot;);
+            for (j = 0; j &lt;  cavity_num; j++)
+            {
+                ProTKFprintf(fp,(char*)&quot; %.2f    %.2f     %.2f \n&quot;, increment1_arr[j], 
+                    increment2_arr[j], increment3_arr[j]);
+<a name="anchor-50"></a>            }
+            ProArrayFree((ProArray*)&amp;increment1_arr);
+            ProArrayFree((ProArray*)&amp;increment2_arr);
+            ProArrayFree((ProArray*)&amp;increment3_arr);
+            
+<a name="anchor-51"></a>            status = ProCavitylayoutModelMdlnamesGet (cvlayout, &amp;model_names);
+            TEST_CALL_REPORT(&quot;ProCavitylayoutModelMdlnamesGet()&quot;,
+    	        &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+            ProTKFprintf(fp,(char*)&quot; Model names:\n&quot;);
+            for (j = 0; j &lt; cavity_num; j++)
+<a name="anchor-52"></a>            {
+                ProTKFprintf(fp,(char*)&quot; Name[%d]: %s\n&quot;, j, 
+                    ProWstringToString (leader_name, model_names[j]));
+            } 
+            ProArrayFree((ProArray*)&amp;model_names);
+<a name="anchor-53"></a>            
+            break;
+        default :;
+        }
+        
+<a name="anchor-54"></a>        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Enter name of file to store rule&quot;);
+        status = ProMessageStringRead (PRO_NAME_SIZE, w_path);
+        status = ProCavlayruleFileWrite(rule, w_path); 
+        TEST_CALL_REPORT(&quot;ProCavlayruleFileWrite()&quot;,
+	    &quot;ProTestCavityLayoutInfo()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-55"></a>    }
+    fclose(fp);
+    ProStringToWstring(w_path, fname);
+    ProInfoWindowDisplay(w_path, NULL, NULL);     
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-56"></a>
+}
+
+/*============================================================================*\
+    FUNCTION : ProTestCavityLayoutRedefine	
+<a name="anchor-57"></a>    PURPOSE  : Recreates an existing Cavity Layout 
+\*============================================================================*/
+ProError ProTestCavityLayoutRedefine( ProMdl *mdl)
+{
+    ProError status;
+<a name="anchor-58"></a>    ProCavityLayout cvlayout;
+     
+    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Select cavity layout.&quot;);
+    status = ProCavitylayoutSelect(*mdl, &amp;cvlayout);
+    TEST_CALL_REPORT(&quot;ProCavitylayoutSelect()&quot;,
+<a name="anchor-59"></a>	&quot;ProTestCavityLayoutRedefine()&quot;, status, status != PRO_TK_NO_ERROR);
+        
+    status = ProTestCavityLayoutSetup(&amp;cvlayout);
+    if(status != PRO_TK_NO_ERROR)
+        return(status);    
+<a name="anchor-60"></a>    status = ProCavitylayoutRedefine(cvlayout);
+    TEST_CALL_REPORT(&quot;ProCavitylayoutRedefine()&quot;,
+	&quot;ProTestCavityLayoutRedefine()&quot;, status, status != PRO_TK_NO_ERROR);
+                    
+    return(status); 
+<a name="anchor-61"></a>    
+}
+
+/*============================================================================*\
+    FUNCTION : ProTestCavityLayoutCreate
+<a name="anchor-62"></a>    PURPOSE  : Create new Cavity Layout 
+\*============================================================================*/
+ProError ProTestCavityLayoutCreate( ProMdl *mdl)
+{
+    ProError status;
+<a name="anchor-63"></a>    ProCavityLayout cvlayout;
+    int opt = 0, n_sel = 0;
+    ProMdlName name_leader;
+    ProMdl out_leader;
+    ProModelitem item_leader;
+<a name="anchor-64"></a>    ProSelection *p_sel;
+    
+    static ProUtilMenuButtons create_opt[] = { 
+        {&quot;TkCLCreate&quot;,  0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;New&quot;,         0, 0},
+<a name="anchor-65"></a>        {&quot;AddComp&quot;,     1, 0},
+        {&quot;SetMdlNames&quot;, 2, 0},
+        {&quot;&quot;,            0, 0}
+    };
+    
+<a name="anchor-66"></a>    status = ProUtilMenuIntValueSelect(create_opt, &amp;opt);
+    switch(opt)
+    {
+    case 0:       
+        status = ProCavitylayoutAlloc(*mdl, &amp;cvlayout);
+<a name="anchor-67"></a>        TEST_CALL_REPORT(&quot;ProCavitylayoutAlloc()&quot;,
+	        &quot;ProTestCavityLayoutCreate()&quot;, status, status != PRO_TK_NO_ERROR);
+        
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Select leader model&quot;);
+        status = ProSelect((char*)&quot;prt_or_asm&quot;, 1, NULL, NULL, NULL, NULL, 
+<a name="anchor-68"></a>            &amp;p_sel, &amp;n_sel);
+        TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestCavityLayoutCreate()&quot;,
+	    status, status != PRO_TK_NO_ERROR );
+        
+        if (status != PRO_TK_NO_ERROR)
+<a name="anchor-69"></a>	        return (status);
+        
+        ProUtilMsgPrint ((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+            &quot;Enter name for the reference model&quot;);
+        status = ProMessageStringRead (PRO_NAME_SIZE, name_leader);
+<a name="anchor-70"></a>        status = ProSelectionModelitemGet(p_sel[0], &amp;item_leader);
+        TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+            &quot;ProTestCavityLayoutCreate()&quot;,status, status != PRO_TK_NO_ERROR );
+        
+        status = ProCavitylayoutLeaderMdlnameSet(cvlayout, item_leader.owner, 
+<a name="anchor-71"></a>            name_leader, &amp;out_leader);
+        TEST_CALL_REPORT(&quot;ProCavitylayoutLeaderMdlnameSet()&quot;,
+	        &quot;ProTestCavityLayoutCreate()&quot;, status, status != PRO_TK_NO_ERROR);
+        
+        status = ProTestCavityLayoutSetup(&amp;cvlayout);
+<a name="anchor-72"></a>        if(status != PRO_TK_NO_ERROR)
+            break;
+        
+        status = ProCavitylayoutCreate(cvlayout);
+        TEST_CALL_REPORT(&quot;ProCavitylayoutCreate()&quot;,
+<a name="anchor-73"></a>        	&quot;ProTestCavityLayoutCreate()&quot;, status, status != PRO_TK_NO_ERROR);
+        break;
+    case 1:
+        status = ProCavitylayoutSelect (*mdl, &amp;cvlayout);
+        TEST_CALL_REPORT(&quot;ProCavitylayoutSelect()&quot;,
+<a name="anchor-74"></a>	        &quot;ProTestCavityLayoutCreate()&quot;, status, status != PRO_TK_NO_ERROR);
+        
+        status = ProTestCavityLayoutSetup(&amp;cvlayout);
+        if(status != PRO_TK_NO_ERROR)
+            break;
+<a name="anchor-75"></a>        
+        status = ProCavitylayoutCreate(cvlayout);
+        TEST_CALL_REPORT(&quot;ProCavitylayoutCreate()&quot;,
+	        &quot;ProTestCavityLayoutCreate()&quot;, status, status != PRO_TK_NO_ERROR);
+        break;
+<a name="anchor-76"></a>    case 2:
+        status = ProCavitylayoutSelect (*mdl, &amp;cvlayout);
+        TEST_CALL_REPORT(&quot;ProCavitylayoutSelect()&quot;,
+	        &quot;ProTestCavityLayoutCreate()&quot;, status, status != PRO_TK_NO_ERROR);
+        status = ProTestCavityLayoutModelNamesSet (&amp;cvlayout);
+<a name="anchor-77"></a>
+        status = ProCavitylayoutCreate(cvlayout);
+        TEST_CALL_REPORT(&quot;ProCavitylayoutCreate()&quot;,
+        	&quot;ProTestCavityLayoutCreate()&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-78"></a>        break;
+    } 
+
+    status = ProCavitylayoutFree ((ProCavityLayout*)cvlayout);
+    TEST_CALL_REPORT(&quot;ProCavitylayoutFree()&quot;,
+<a name="anchor-79"></a>        &quot;ProTestCavityLayoutCreate()&quot;, status, status != PRO_TK_NO_ERROR);
+                     
+    return(status); 
+}
+
+<a name="anchor-80"></a>/*============================================================================*\
+    FUNCTION : ProTestCavityLayoutSetup	
+    PURPOSE  : Initialize Cavity Layout handle
+\*============================================================================*/
+ProError ProTestCavityLayoutSetup(ProCavityLayout *cvlayout)
+<a name="anchor-81"></a>{
+    ProError status; 
+    ProAsmcomppath leader_abs_path, leader_path, origin_path;
+    ProCvLayoutRule rule;
+    ProCsys leader_csys, origin_csys;
+<a name="anchor-82"></a>      
+    /* Set leader csys */ 
+    ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Select leader csys:&quot;);
+    status = ProUtilSelectCsys(&amp;leader_csys, &amp;leader_abs_path);
+    if(status != PRO_TK_NO_ERROR)
+<a name="anchor-83"></a>        return(status);
+
+    /* The function ProCavitylayoutLeaderCsysSet takes leader_path
+        with respect to leader model. So it is necessary to
+        shorten leader_path */
+<a name="anchor-84"></a>    status = ProAsmcomppathInit( leader_abs_path.owner,
+        &amp;(leader_abs_path.comp_id_table[1]),
+        leader_abs_path.table_num-1, &amp;leader_path );
+    TEST_CALL_REPORT( &quot;ProAsmcomppathInit&quot;, &quot;ProTestCavityLayoutSetup()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-85"></a>    if( status != PRO_TK_NO_ERROR )
+        return (status);
+
+    status = ProCavitylayoutLeaderCsysSet(*cvlayout, &amp;leader_path, 
+        leader_csys);
+<a name="anchor-86"></a>     TEST_CALL_REPORT(&quot;ProCavitylayoutLeaderCsysSet()&quot;,
+	&quot;ProCavitylayoutLeaderCsysSet()&quot;, status, status != PRO_TK_NO_ERROR);
+    if(status != PRO_TK_NO_ERROR)
+        return(status);
+
+<a name="anchor-87"></a>    /* Set origin */    
+    ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Select origin csys;&quot;);    
+    status = ProUtilSelectCsys(&amp;origin_csys, &amp;origin_path);
+    if(status != PRO_TK_NO_ERROR)
+        return(status);
+<a name="anchor-88"></a>
+    status = ProCavitylayoutOriginSet(*cvlayout, &amp;origin_path, 
+        origin_csys); 
+    TEST_CALL_REPORT(&quot;ProCavitylayoutOriginSet()&quot;,
+	&quot;ProTestCavityLayoutSetup()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-89"></a>
+    /* Set rule */
+    status = ProCavlayruleAlloc(&amp;rule);
+    TEST_CALL_REPORT(&quot;ProCavlayruleAlloc()&quot;,
+	&quot;ProTestCavityLayoutSetup()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-90"></a>   
+    status = ProTestCavlayruleSet(&amp;rule);
+    
+    status = ProCavitylayoutRuleSet(*cvlayout, rule);
+    TEST_CALL_REPORT(&quot;ProCavitylayoutRuleSet()&quot;,
+<a name="anchor-91"></a>	&quot;ProTestCavityLayoutSetup()&quot;, status, status != PRO_TK_NO_ERROR);
+    
+    status = ProCavlayruleFree (rule); 
+    TEST_CALL_REPORT(&quot;ProCavlayruleFree()&quot;,
+	&quot;ProTestCavityLayoutSetup()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-92"></a>       
+    return(status);
+}
+
+/*============================================================================*\
+<a name="anchor-93"></a>    FUNCTION : ProTestCavlayruleSet	
+    PURPOSE  : Setup  Cuvity Layout rule
+\*============================================================================*/
+ProError ProTestCavlayruleSet(ProCvLayoutRule *rule)
+{
+<a name="anchor-94"></a>    char                sel_path[PRO_PATH_SIZE];    
+    int                 i, type;
+    int                 cavity_num_x = 2, cavity_num_y = 2, cavity_num;
+    int                 range_int[2] = {0, 200}, def_int = 1;
+    double              range[2] = {0, 200}, def = 1;
+<a name="anchor-95"></a>    double              cavity_step_x = 1, cavity_step_y = 1;
+    double              cavity_step, start_angle, radius;
+    double              param;
+    double              *increment1_arr, *increment2_arr, *increment3_arr;
+    ProError            status;
+<a name="anchor-96"></a>    ProPath	            w_curr_path, w_new_path, w_file_name, w_sel_path;
+    ProMdlName          w_mdlname;
+	ProMdlExtension     w_file_ext;
+    ProCvLayoutOrient   orient;
+static ProUtilMenuButtons rule_type[] = { 
+<a name="anchor-97"></a>                            {&quot;TkRuleSet&quot;,   0, TEST_CALL_PRO_MENU_DELETE},
+                            {&quot;Single&quot;,      PRO_CVLAYOUT_SINGLE,    0},
+                            {&quot;Rectang&quot;,     PRO_CVLAYOUT_RECTANG,   0},
+                            {&quot;Circular&quot;,    PRO_CVLAYOUT_CIRCULAR,  0},
+                            {&quot;Variable&quot;,    PRO_CVLAYOUT_VARIABLE,  0},
+<a name="anchor-98"></a>                            {&quot;ReadFile&quot;,    RULE_FILE_READ,         0},
+                            {&quot;&quot;,            0,                      0}};
+
+    status = ProUtilMenuIntValueSelect(rule_type, &amp;type);
+    switch(type)
+<a name="anchor-99"></a>    {
+    case PRO_CVLAYOUT_SINGLE:
+        status = ProCavlayruleSingleSet(*rule);
+        TEST_CALL_REPORT(&quot;ProCavlayruleSingleSet()&quot;, &quot;ProTestCavlayruleSet()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-100"></a>        break;
+    case PRO_CVLAYOUT_RECTANG :
+        status = ProTestCavlayruleOrientSet (&amp;orient);
+        if (status != PRO_TK_NO_ERROR)
+            return(status);
+<a name="anchor-101"></a>        ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+            &quot;Enter number of columns in the layout&quot;);
+        ProUtilIntGet(range_int, &amp;def_int, &amp;cavity_num_x);
+        ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+            &quot;Enter number of rows in the layout&quot;);
+<a name="anchor-102"></a>        ProUtilIntGet(range_int, &amp;def_int, &amp;cavity_num_y);
+        ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+            &quot;Enter displacement step in x direction&quot;);
+        ProUtilDoubleGet(range, &amp;def, &amp;cavity_step_x);
+        ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+<a name="anchor-103"></a>            &quot;Enter displacement step in y direction&quot;);
+        ProUtilDoubleGet(range, &amp;def, &amp;cavity_step_y);
+        status = ProCavlayruleRectSet(*rule, orient, cavity_num_x, 
+            cavity_num_y, cavity_step_x, cavity_step_y);
+        TEST_CALL_REPORT(&quot;ProCavlayruleRectSet()&quot;, &quot;ProTestCavlayruleSet()&quot;,
+<a name="anchor-104"></a>					    status, status != PRO_TK_NO_ERROR);
+
+        break;
+    case PRO_CVLAYOUT_CIRCULAR :
+        status = ProTestCavlayruleOrientSet(&amp;orient);
+<a name="anchor-105"></a>        if (status != PRO_TK_NO_ERROR)
+            return(status);
+        ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+            &quot;Enter number of components in the layout&quot;);
+        ProUtilIntGet(range_int, &amp;def_int, &amp;cavity_num);
+<a name="anchor-106"></a>        ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+            &quot;Enter angular displacement&quot;);
+        ProUtilDoubleGet(range, &amp;def, &amp;cavity_step);
+        ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+            &quot;Enter angle for the first component&quot;);
+<a name="anchor-107"></a>        ProUtilDoubleGet(range, &amp;def, &amp;start_angle);
+        ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+            &quot;Enter raduis of the layout&quot;);
+        ProUtilDoubleGet(range, &amp;def, &amp;radius);
+        status = ProCavlayruleCircSet(*rule, orient, cavity_num, cavity_step, 
+<a name="anchor-108"></a>            start_angle, radius);
+        TEST_CALL_REPORT(&quot;ProCavlayruleCircSet()&quot;, &quot;ProTestCavlayruleSet()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+        break;
+    case PRO_CVLAYOUT_VARIABLE :
+<a name="anchor-109"></a>        status = ProArrayAlloc(0, sizeof(double), 1, 
+            (ProArray*)&amp;increment1_arr);
+        status = ProArrayAlloc(0, sizeof(double), 1, 
+            (ProArray*)&amp;increment2_arr);
+        status = ProArrayAlloc(0, sizeof(double), 1, 
+<a name="anchor-110"></a>            (ProArray*)&amp;increment3_arr);
+            
+        ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+            &quot;Enter number of rows in Variable Layout Table&quot;);
+        ProUtilIntGet(range_int, &amp;def_int, &amp;cavity_num);   
+<a name="anchor-111"></a>         
+        for(i=0; i &lt; cavity_num; i++)
+        {
+            ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+                &quot;Enter increments for the first table dimension&quot;);
+<a name="anchor-112"></a>            status = (ProError)ProUtilDoubleGet(range, &amp;def, &amp;param);    
+            status = ProArrayObjectAdd((ProArray*)&amp;increment1_arr,
+             PRO_VALUE_UNUSED, 1, &amp;param);
+           
+            ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+<a name="anchor-113"></a>                &quot;Enter increments for the second table dimension&quot;);
+            status = (ProError)ProUtilDoubleGet(range, &amp;def, &amp;param);
+            status = ProArrayObjectAdd((ProArray*)&amp;increment2_arr, 
+                PRO_VALUE_UNUSED, 1, &amp;param);
+            
+<a name="anchor-114"></a>            ProUtilMsgPrint( (char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+                &quot;Enter increments for the third table dimension&quot;);
+            status = (ProError)ProUtilDoubleGet(range, &amp;def, &amp;param);
+            status = ProArrayObjectAdd((ProArray*)&amp;increment3_arr, 
+                PRO_VALUE_UNUSED, 1, &amp;param);
+<a name="anchor-115"></a>        }
+        status = ProCavlayruleVarSet(*rule, cavity_num, increment1_arr, 
+            increment2_arr, increment3_arr);
+        TEST_CALL_REPORT(&quot;ProCavlayruleVarSet()&quot;, &quot;ProTestCavlayruleSet()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-116"></a>        
+        ProArrayFree((ProArray*)&amp;increment1_arr);
+        ProArrayFree((ProArray*)&amp;increment2_arr);
+        ProArrayFree((ProArray*)&amp;increment3_arr);
+        break;
+<a name="anchor-117"></a>    case RULE_FILE_READ:
+        status = ProDirectoryCurrentGet (w_curr_path);
+	    /* Bring up the file selecton dialog */
+	    status = ProUtilFileOpen( (char*)&quot;*.*&quot;, sel_path );
+	    if( status != PRO_TK_NO_ERROR )
+<a name="anchor-118"></a>	        return status;
+
+        ProStringToWstring (w_sel_path, sel_path);
+        status = ProFileMdlnameParse (w_sel_path, w_new_path,
+                                   w_mdlname, w_file_ext, NULL);
+<a name="anchor-119"></a>
+        ProUtilWstrcpy (w_file_name, w_mdlname);
+        ProUtilWstrStrcatToWstr (w_file_name, (char*)&quot;.&quot;);
+        ProUtilWstrcat (w_file_name, w_file_ext);
+
+<a name="anchor-120"></a>        /* Read the selected file */
+        status = ProDirectoryChange (w_new_path);
+	    status = ProCavlayruleFileRead( *rule, w_file_name);
+	    TEST_CALL_REPORT( &quot;ProCavlayruleFileRead()&quot;,  &quot;ProTestCavlayruleSet()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-121"></a>        ProDirectoryChange (w_curr_path);
+        break;
+    default:
+        break;
+    }
+<a name="anchor-122"></a>    return (status);
+}
+
+/*============================================================================*\
+    FUNCTION : ProTestCavlayruleOrientSet	
+<a name="anchor-123"></a>    PURPOSE  : Get orient type 
+\*============================================================================*/
+ProError ProTestCavlayruleOrientSet(ProCvLayoutOrient *orient)
+{
+    ProError status;
+<a name="anchor-124"></a>    int type;
+    static ProUtilMenuButtons orient_type[] = { 
+        {&quot;OrientSet&quot;,  0,                       TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Constant&quot;,   PRO_CVLAYOUT_CONSTANT,   0},
+        {&quot;Xsymmetric&quot;, PRO_CVLAYOUT_XSYMMETRIC, 0},
+<a name="anchor-125"></a>        {&quot;Ysymmetric&quot;, PRO_CVLAYOUT_YSYMMETRIC, 0},
+        {&quot;Radial&quot;,     PRO_CVLAYOUT_RADIAL,     0},
+        {&quot;&quot;,           0,                       0}
+    };
+   status = ProUtilMenuIntValueSelect(orient_type, &amp;type);
+<a name="anchor-126"></a>   *orient =  (ProCvLayoutOrient)type;
+   return(status);
+}
+
+/*============================================================================*\
+<a name="anchor-127"></a>    FUNCTION : ProUtilSelectCsys	
+    PURPOSE  : Select Csys and get path
+\*============================================================================*/
+ProError ProUtilSelectCsys(ProCsys *csys, 
+                           ProAsmcomppath *comppath)
+<a name="anchor-128"></a>{
+    ProError status;
+    ProSelection *p_sel;
+    int n_sel;
+    ProAsmcomppath comp_path;
+<a name="anchor-129"></a>    ProModelitem item_csys;
+    
+    status = ProSelect((char*)&quot;csys&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProUtilSelectCsys()&quot;,
+	    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-130"></a>    if (status != PRO_TK_NO_ERROR)
+	return (status);
+        
+    status = ProSelectionModelitemGet(p_sel[0], &amp;item_csys);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProUtilSelectCsys()&quot;,
+<a name="anchor-131"></a>					    status, status != PRO_TK_NO_ERROR);
+        
+    status = ProSelectionAsmcomppathGet(p_sel[0], &amp;comp_path);
+    TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProUtilSelectCsys()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-132"></a>    status = ProAsmcomppathInit(comp_path.owner, comp_path.comp_id_table, 
+				comp_path.table_num, comppath);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathInit()&quot;, &quot;ProUtilSelectCsys()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+    status = ProCsysInit((ProSolid)item_csys.owner, item_csys.id, csys);
+<a name="anchor-133"></a>    TEST_CALL_REPORT(&quot;ProCsysInit()&quot;, &quot;ProUtilSelectCsys()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+    return(status);
+}
+
+<a name="anchor-134"></a>/*============================================================================*\
+    FUNCTION : 	ProTestCavityLayoutTypeToStr
+    PURPOSE  :	Retrieve name of layout's type.
+\*============================================================================*/
+char* ProTestCavityLayoutTypeToStr (ProCvLayoutType type)
+<a name="anchor-135"></a>{
+    switch (type)
+    {
+    case PRO_CVLAYOUT_VARIABLE:
+        return ((char*)&quot;VARIABLE&quot;);
+<a name="anchor-136"></a>    case PRO_CVLAYOUT_CIRCULAR:
+        return ((char*)&quot;CIRCULAR&quot;);
+    case PRO_CVLAYOUT_RECTANG:
+        return ((char*)&quot;RECTANG&quot;);
+    case PRO_CVLAYOUT_SINGLE:
+<a name="anchor-137"></a>        return ((char*)&quot;SINGLE&quot;);
+    }
+    return ((char*)&quot;&quot;);
+}
+
+<a name="anchor-138"></a>ProError ProTestCavityLayoutModelNamesSet (
+    ProCavityLayout *cvlayout_ptr)
+{
+    int                 i, cavity_num, opt, butn_num = 0;
+    double              *increment1_arr = NULL, *increment2_arr = NULL,
+<a name="anchor-139"></a>                        *increment3_arr = NULL;
+    char                c_line[PRO_PATH_SIZE], c_name[PRO_MDLNAME_SIZE];
+    ProError            status;
+    ProCvLayoutRule     rule;
+    ProCvLayoutType     type, basic_type;
+<a name="anchor-140"></a>    ProMdlName          *old_model_names = NULL;
+    ProMdlName          *new_model_names = NULL;
+    ProFamtable         famtable;
+    ProFaminstance      *famtable_items = NULL;
+    ProMdl              mdl;
+<a name="anchor-141"></a>    ProMdlName          w_name;
+    ProUtilMenuButtons  *itm_btns = NULL;
+    ProSolid            solid;
+    
+    status = ProCavitylayoutLeaderGet (*cvlayout_ptr, &amp;mdl);
+<a name="anchor-142"></a>    TEST_CALL_REPORT(&quot;ProCavitylayoutLeaderGet()&quot;,
+		&quot;ProTestCavityLayoutModelNamesSet()&quot;, status, 
+        status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+    
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-143"></a>    {
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+            &quot;The cavity layout corresponding to the handle does not exists.&quot;);
+        return status;
+    }
+<a name="anchor-144"></a>
+    status = ProFaminstanceGenericGet (mdl, PRO_B_TRUE, (ProMdl*)&amp;solid);
+    TEST_CALL_REPORT(&quot;ProFaminstanceGenericGet()&quot;,
+		&quot;ProTestCavityLayoutModelNamesSet()&quot;, status, 
+        status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+<a name="anchor-145"></a>
+    if (status != PRO_TK_NO_ERROR)
+    {
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;,
+           &quot;The specified model is not an instance - it has no generic model.&quot;);
+<a name="anchor-146"></a>        
+        return status;
+    }
+    
+    status = ProFamtableInit ((ProMdl)solid, &amp;famtable);
+<a name="anchor-147"></a>    TEST_CALL_REPORT(&quot;ProFamtableInit()&quot;,
+		&quot;ProTestCavityLayoutModelNamesSet()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProUtilCollectFamtableInstance(&amp;famtable, &amp;famtable_items);
+<a name="anchor-148"></a>
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)famtable_items, &amp;cavity_num);        
+        
+<a name="anchor-149"></a>        status = ProArrayAlloc (cavity_num+2, sizeof(ProUtilMenuButtons), 1, 
+            (ProArray*)&amp;itm_btns);
+        strcpy (itm_btns[butn_num].button, &quot;TkClSetNames&quot;);
+        itm_btns[butn_num].value        = 0;
+        itm_btns[butn_num].special_flag = TEST_CALL_PRO_MENU_DELETE;
+<a name="anchor-150"></a>        butn_num = 1;
+        for (i=0; i&lt;cavity_num; i++)
+        {
+            status = ProFaminstanceMdlGet (&amp;famtable_items[i], &amp;mdl);
+            TEST_CALL_REPORT(&quot;ProFaminstanceMdlGet()&quot;,
+<a name="anchor-151"></a>		        &quot;ProTestCavityLayoutModelNamesSet()&quot;, status,
+                status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+
+            if (status != PRO_TK_NO_ERROR)
+            {
+<a name="anchor-152"></a>                status = ProFaminstanceRetrieve (famtable_items+i, &amp;mdl);
+                TEST_CALL_REPORT(&quot;ProFaminstanceRetrieve()&quot;,
+		            &quot;ProTestCavityLayoutModelNamesSet()&quot;, status,
+                    status!=PRO_TK_NO_ERROR &amp;&amp; status!=PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-153"></a>                if (status != PRO_TK_NO_ERROR)
+                    continue;
+            }
+
+            status = ProMdlMdlnameGet (mdl, w_name);
+<a name="anchor-154"></a>            TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;,
+                &quot;ProTestCavityLayoutModelNamesSet()&quot;, status,
+                status!=PRO_TK_NO_ERROR &amp;&amp; status!=PRO_TK_E_NOT_FOUND);
+
+            ProWstringToString (itm_btns[butn_num].button, w_name);
+<a name="anchor-155"></a>            itm_btns[butn_num].value       = butn_num;
+            itm_btns[butn_num].special_flag= 0;
+            butn_num++;
+        }
+        
+<a name="anchor-156"></a>        strcpy (itm_btns[butn_num].button, &quot;&quot;);
+        itm_btns[butn_num].value        = 0;
+        itm_btns[butn_num].special_flag = 0;
+        butn_num++;
+    }
+<a name="anchor-157"></a>    ProArrayFree ((ProArray*)&amp;famtable_items);
+    
+    status = ProCavitylayoutRuleGet (*cvlayout_ptr, &amp;rule);
+    TEST_CALL_REPORT(&quot;ProCavitylayoutRuleGet()&quot;,
+		&quot;ProTestCavityLayoutModelNamesSet()&quot;,
+<a name="anchor-158"></a>        status, status != PRO_TK_NO_ERROR);
+
+    status = ProCavlayruleTypeGet (rule, &amp;type, &amp;basic_type);
+    TEST_CALL_REPORT(&quot;ProCavlayruleTypeGet()&quot;,
+	    &quot;ProTestCavityLayoutModelNamesSet()&quot;,
+<a name="anchor-159"></a>        status, status != PRO_TK_NO_ERROR);
+
+    ProTKPrintf((char*)&quot;Rule type : %s \t basic_type : %s \n&quot;,
+        ProTestCavityLayoutTypeToStr(type), 
+        ProTestCavityLayoutTypeToStr(basic_type));
+<a name="anchor-160"></a>
+    if (type != PRO_CVLAYOUT_VARIABLE)
+    {
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Its not variable cavity layout.&quot;);
+        return PRO_TK_E_NOT_FOUND;
+<a name="anchor-161"></a>    }
+
+    status = ProArrayAlloc(0, sizeof(double), 1, 
+            (ProArray*)&amp;increment1_arr);
+    status = ProArrayAlloc(0, sizeof(double), 1, 
+<a name="anchor-162"></a>            (ProArray*)&amp;increment2_arr);
+    status = ProArrayAlloc(0, sizeof(double), 1, 
+            (ProArray*)&amp;increment3_arr);
+
+    status = ProCavlayruleVarDataGet (rule, &amp;cavity_num, &amp;increment1_arr, 
+<a name="anchor-163"></a>            &amp;increment2_arr, &amp;increment3_arr);
+    TEST_CALL_REPORT(&quot;ProCavlayruleVarDataGet()&quot;,
+        &quot;ProTestCavityLayoutModelNamesSet()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-164"></a>    ProArrayFree((ProArray*)&amp;increment1_arr);
+    ProArrayFree((ProArray*)&amp;increment2_arr);
+    ProArrayFree((ProArray*)&amp;increment3_arr);
+
+    ProTKSprintf (c_line, (char*)&quot; Number of rows: %d&quot;, cavity_num);
+<a name="anchor-165"></a>    ProUtilMsgPrint ((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, c_line);
+
+    status = ProCavitylayoutModelMdlnamesGet (*cvlayout_ptr, &amp;old_model_names);
+    TEST_CALL_REPORT(&quot;ProCavitylayoutModelMdlnamesGet()&quot;,
+        &quot;ProTestCavityLayoutModelNamesSet()&quot;,
+<a name="anchor-166"></a>        status, status != PRO_TK_NO_ERROR);
+
+    ProTKPrintf ((char*)&quot;Old names:\n&quot;);
+    for (i=0; i&lt;cavity_num; i++)
+    {
+<a name="anchor-167"></a>        ProTKPrintf ((char*)&quot;\t%s.\n&quot;,
+            ProWstringToString (c_name, old_model_names[i]));
+    }
+    
+    ProTKPrintf ((char*)&quot;We can set %d ProMdlName types in ProArray.\n&quot;, i);
+<a name="anchor-168"></a>
+    status = ProArrayAlloc (cavity_num, sizeof(ProMdlName), 1, 
+            (ProArray*)&amp;new_model_names);
+
+    for (i=0; i&lt;cavity_num; i++)
+<a name="anchor-169"></a>    {
+        ProTKSprintf (c_line, (char*)&quot;Select name of pattern model %s [%d].&quot;,
+            ProWstringToString (c_name, old_model_names[i]), i);
+        ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, c_line);
+
+<a name="anchor-170"></a>        status = ProUtilMenuIntValueSelect (itm_btns, &amp;opt);
+        
+         ProStringToWstring (new_model_names[i], itm_btns[opt].button);
+    }
+    
+<a name="anchor-171"></a>    ProArrayFree((ProArray*)&amp;itm_btns);
+
+    status = ProCavitylayoutModelMdlnamesSet (*cvlayout_ptr, new_model_names);
+    TEST_CALL_REPORT(&quot;ProCavitylayoutModelMdlnamesSet()&quot;,
+        &quot;ProTestCavityLayoutModelNamesSet()&quot;,
+<a name="anchor-172"></a>        status, status != PRO_TK_NO_ERROR);
+
+    ProArrayFree((ProArray*)&amp;old_model_names);
+    
+    status = ProCavitylayoutModelMdlnamesGet (*cvlayout_ptr, &amp;old_model_names);
+<a name="anchor-173"></a>    TEST_CALL_REPORT(&quot;ProCavitylayoutModelMdlnamesGet()&quot;,
+        &quot;ProTestCavityLayoutModelNamesSet()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    ProTKPrintf ((char*)&quot;New names:\n&quot;);
+    for (i=0; i&lt;cavity_num; i++)
+<a name="anchor-174"></a>    {
+        ProTKPrintf ((char*)&quot;\t%s.\n&quot;,
+            ProWstringToString (c_name, old_model_names[i]));
+    }
+    ProArrayFree((ProArray*)&amp;old_model_names);
+<a name="anchor-175"></a>    
+    ProArrayFree((ProArray*)&amp;new_model_names);
+    
+    return PRO_TK_NO_ERROR;
+}
+</pre>
+</body>
+</html>

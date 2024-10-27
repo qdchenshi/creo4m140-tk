@@ -1,0 +1,643 @@
+<html>
+<head>
+<title>UgSmtFlatWallCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProFeature.h>
+#include &lt;ProSelbuffer.h>
+#include &lt;ProReference.h>
+#include &lt;ProUtil.h>
+<a name="anchor-2"></a>#include &lt;ProSmtFlatWall.h>
+#include &lt;ProSheetmetal.h>
+#include &lt;ProMenuBar.h>
+#include &lt;ProPopupmenu.h>
+#include &lt;ProMdl.h>
+<a name="anchor-3"></a>#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProEdge.h>
+#include &lt;ProFeatType.h>
+
+
+<a name="anchor-4"></a>ProError status;
+  
+/*=====================================================================*\
+FUNCTION: UserSmtFlatWallCreate
+PURPOSE:  Create sheetmetal flat wall features.
+<a name="anchor-5"></a>\*=====================================================================*/
+int UserSmtFlatWallCreate (ProReference edge_ref,
+			    double bend_radius,
+			    ProSection section) 
+{ 
+<a name="anchor-6"></a>  ProElement pro_e_feature_tree;
+  ProElement pro_e_feature_type;
+  ProElement pro_e_smt_wall_type;
+  ProElement pro_e_std_feature_name;
+  ProElement pro_e_smt_flat_wall_att_edge;
+<a name="anchor-7"></a>  ProElement pro_e_smt_flat_wall_angle;
+  ProElement pro_e_smt_flat_wall_angle_type;
+  ProElement pro_e_smt_flat_wall_angle_val;
+  ProElement pro_e_smt_flat_wall_angle_flip;
+  ProElement pro_e_std_section;
+<a name="anchor-8"></a>  ProElement pro_e_sketcher;
+  ProElement pro_e_smt_fillets;
+  ProElement pro_e_smt_fillets_use_rad;
+  ProElement pro_e_smt_fillets_side;
+  ProElement pro_e_smt_fillets_value;
+<a name="anchor-9"></a>  ProElement pro_e_smt_wall_height;
+  ProElement pro_e_smt_wall_height_type;
+  ProElement pro_e_smt_wall_height_value;
+  ProElement pro_e_smt_bend_relief;
+  ProElement pro_e_smt_bend_relief_side1;
+<a name="anchor-10"></a>  ProElement pro_e_bend_relief_type;
+  ProElement pro_e_bend_relief_width;
+  ProElement pro_e_bend_relief_depth;
+  ProElement pro_e_bend_relief_angle;
+  ProElement pro_e_smt_bend_relief_side2;
+<a name="anchor-11"></a>  ProElement pro_e_smt_wall_thickness_flip;
+  ProElement pro_e_smt_dev_len_calculation;
+  ProElement pro_e_smt_dev_len_source;
+  ProElement pro_e_smt_dev_len_y_factor;
+  ProElement pro_e_smt_dev_len_y_factor_value;
+<a name="anchor-12"></a>  ProElement pro_e_smt_dev_len_y_factor_type;
+  ProElement pro_e_smt_dev_len_bend_table;
+  ProMdl model;
+  ProModelitem model_item;
+  ProFeatureCreateOptions *opts = 0;
+<a name="anchor-13"></a>  ProSelection model_sel;
+  ProFeature feature;
+  ProErrorlist errors;
+  ProSelection feat_sel;
+
+<a name="anchor-14"></a>
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_FEATURE_TREE
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;pro_e_feature_tree ); 
+<a name="anchor-15"></a>
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_FEATURE_TYPE
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_FEATURE_TYPE, &amp;pro_e_feature_type );
+<a name="anchor-16"></a>  status = ProElementIntegerSet ( pro_e_feature_type, PRO_FEAT_WALL );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				   pro_e_feature_type );
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-17"></a>Processing Element PRO_E_SMT_WALL_TYPE
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_WALL_TYPE, &amp;pro_e_smt_wall_type );
+  status = ProElementIntegerSet ( pro_e_smt_wall_type, 
+				  PRO_SMT_WALL_TYPE_FLAT );
+<a name="anchor-18"></a>  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				   pro_e_smt_wall_type );
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_FLAT_WALL_ATT_EDGE
+<a name="anchor-19"></a>\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_FLAT_WALL_ATT_EDGE, 
+			     &amp;pro_e_smt_flat_wall_att_edge );
+  status = ProElementReferenceSet( pro_e_smt_flat_wall_att_edge, edge_ref );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+<a name="anchor-20"></a>				   pro_e_smt_flat_wall_att_edge );
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_FLAT_WALL_ANGLE
+\*-----------------------------------------------------------------*/
+<a name="anchor-21"></a>  status = ProElementAlloc ( PRO_E_SMT_FLAT_WALL_ANGLE, 
+			     &amp;pro_e_smt_flat_wall_angle );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				   pro_e_smt_flat_wall_angle  );
+
+<a name="anchor-22"></a>/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_FLAT_WALL_ANGLE_TYPE
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_FLAT_WALL_ANGLE_TYPE, 
+			     &amp;pro_e_smt_flat_wall_angle_type );
+<a name="anchor-23"></a>  status = ProElementIntegerSet ( pro_e_smt_flat_wall_angle_type,
+				  PRO_BND_ANGLE_VALUE);
+  status = ProElemtreeElementAdd ( pro_e_smt_flat_wall_angle, NULL, 
+				   pro_e_smt_flat_wall_angle_type );
+
+<a name="anchor-24"></a>/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_FLAT_WALL_ANGLE_VAL
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_FLAT_WALL_ANGLE_VAL, 
+			     &amp;pro_e_smt_flat_wall_angle_val );
+<a name="anchor-25"></a>  status = ProElementDoubleSet (  pro_e_smt_flat_wall_angle_val, 90.000000 );
+  status = ProElemtreeElementAdd ( pro_e_smt_flat_wall_angle, NULL, 
+				   pro_e_smt_flat_wall_angle_val );
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-26"></a>Processing Element PRO_E_SMT_FLAT_WALL_ANGLE_FLIP
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_FLAT_WALL_ANGLE_FLIP, 
+			     &amp;pro_e_smt_flat_wall_angle_flip );
+  status = ProElementIntegerSet ( pro_e_smt_flat_wall_angle_flip, PRO_B_FALSE);
+<a name="anchor-27"></a>  status = ProElemtreeElementAdd ( pro_e_smt_flat_wall_angle, NULL, 
+				   pro_e_smt_flat_wall_angle_flip );
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_STD_SECTION
+<a name="anchor-28"></a>\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_STD_SECTION, &amp;pro_e_std_section );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_std_section  );
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-29"></a>Processing Element PRO_E_SKETCHER
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SKETCHER, &amp;pro_e_sketcher );
+  status = ProElementSpecialvalueSet ( pro_e_sketcher, section );
+  status = ProElemtreeElementAdd ( pro_e_std_section, NULL, 
+<a name="anchor-30"></a>				   pro_e_sketcher );
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_FILLETS
+\*-----------------------------------------------------------------*/
+<a name="anchor-31"></a>  status = ProElementAlloc ( PRO_E_SMT_FILLETS, &amp;pro_e_smt_fillets );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				   pro_e_smt_fillets  );
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-32"></a>Processing Element PRO_E_SMT_FILLETS_USE_RAD
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_FILLETS_USE_RAD, 
+			     &amp;pro_e_smt_fillets_use_rad );
+  status = ProElementIntegerSet ( pro_e_smt_fillets_use_rad,  PRO_B_TRUE);
+<a name="anchor-33"></a>  status = ProElemtreeElementAdd ( pro_e_smt_fillets, NULL, 
+				   pro_e_smt_fillets_use_rad );
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_FILLETS_SIDE
+<a name="anchor-34"></a>\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_FILLETS_SIDE, &amp;pro_e_smt_fillets_side );
+  status = ProElementIntegerSet ( pro_e_smt_fillets_side, 
+				  PRO_BEND_RAD_INSIDE );
+  status = ProElemtreeElementAdd ( pro_e_smt_fillets, NULL, 
+<a name="anchor-35"></a>				   pro_e_smt_fillets_side );
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_FILLETS_VALUE
+\*-----------------------------------------------------------------*/
+<a name="anchor-36"></a>  status = ProElementAlloc ( PRO_E_SMT_FILLETS_VALUE, 
+			     &amp;pro_e_smt_fillets_value );
+  status = ProElementDoubleSet (  pro_e_smt_fillets_value, bend_radius );
+  status = ProElemtreeElementAdd ( pro_e_smt_fillets, NULL, 
+				   pro_e_smt_fillets_value );
+<a name="anchor-37"></a>
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_WALL_HEIGHT
+\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_WALL_HEIGHT, &amp;pro_e_smt_wall_height );
+<a name="anchor-38"></a>  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				   pro_e_smt_wall_height  );
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_WALL_HEIGHT_TYPE
+<a name="anchor-39"></a>\*-----------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_SMT_WALL_HEIGHT_TYPE, 
+			     &amp;pro_e_smt_wall_height_type );
+  status = ProElementIntegerSet ( pro_e_smt_wall_height_type, 
+				  PRO_SMT_WALL_HEIGHT_NONE );
+<a name="anchor-40"></a>  status = ProElemtreeElementAdd ( pro_e_smt_wall_height, NULL, 
+				   pro_e_smt_wall_height_type );
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_BEND_RELIEF
+<a name="anchor-41"></a>\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_BEND_RELIEF, &amp;pro_e_smt_bend_relief );
+ status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				  pro_e_smt_bend_relief  );
+ 
+<a name="anchor-42"></a>/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_BEND_RELIEF_SIDE1
+\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_BEND_RELIEF_SIDE1, 
+			    &amp;pro_e_smt_bend_relief_side1 );
+<a name="anchor-43"></a> status = ProElemtreeElementAdd ( pro_e_smt_bend_relief, NULL, 
+				  pro_e_smt_bend_relief_side1  );
+ 
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_BEND_RELIEF_TYPE
+<a name="anchor-44"></a>\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_BEND_RELIEF_TYPE, &amp;pro_e_bend_relief_type );
+ status = ProElementIntegerSet ( pro_e_bend_relief_type, PRO_BEND_RLF_RIP );
+ status = ProElemtreeElementAdd ( pro_e_smt_bend_relief_side1, NULL, 
+				  pro_e_bend_relief_type );
+<a name="anchor-45"></a>
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_BEND_RELIEF_SIDE2
+\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_BEND_RELIEF_SIDE2, 
+<a name="anchor-46"></a>			    &amp;pro_e_smt_bend_relief_side2 );
+ status = ProElemtreeElementAdd ( pro_e_smt_bend_relief, NULL, 
+				  pro_e_smt_bend_relief_side2  );
+ 
+/*-----------------------------------------------------------------*\
+<a name="anchor-47"></a>Processing Element PRO_E_BEND_RELIEF_TYPE
+\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_BEND_RELIEF_TYPE, 
+			    &amp;pro_e_bend_relief_type );
+ status = ProElementIntegerSet ( pro_e_bend_relief_type, PRO_BEND_RLF_RIP );
+<a name="anchor-48"></a> status = ProElemtreeElementAdd ( pro_e_smt_bend_relief_side2, NULL, 
+				  pro_e_bend_relief_type );
+ 
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_WALL_THICKNESS_FLIP
+<a name="anchor-49"></a>\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_WALL_THICKNESS_FLIP, 
+			    &amp;pro_e_smt_wall_thickness_flip );
+ status = ProElementIntegerSet ( pro_e_smt_wall_thickness_flip, 
+				 PRO_B_FALSE );
+<a name="anchor-50"></a> status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				  pro_e_smt_wall_thickness_flip );
+
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_DEV_LEN_CALCULATION
+<a name="anchor-51"></a>\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_DEV_LEN_CALCULATION, 
+			    &amp;pro_e_smt_dev_len_calculation );
+ status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+				  pro_e_smt_dev_len_calculation  );
+<a name="anchor-52"></a> 
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_DEV_LEN_SOURCE
+\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_DEV_LEN_SOURCE, 
+<a name="anchor-53"></a>			    &amp;pro_e_smt_dev_len_source );
+ status = ProElementIntegerSet ( pro_e_smt_dev_len_source, 
+				 PRO_DVL_SRC_FEAT_YF_ONLY );
+ status = ProElemtreeElementAdd ( pro_e_smt_dev_len_calculation, NULL, 
+				  pro_e_smt_dev_len_source );
+<a name="anchor-54"></a> 
+/*-----------------------------------------------------------------*\
+Processing Element PRO_E_SMT_DEV_LEN_Y_FACTOR
+\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_DEV_LEN_Y_FACTOR, 
+<a name="anchor-55"></a>			    &amp;pro_e_smt_dev_len_y_factor );
+ status = ProElemtreeElementAdd ( pro_e_smt_dev_len_calculation, NULL, 
+				  pro_e_smt_dev_len_y_factor  );
+ 
+/*-----------------------------------------------------------------*\
+<a name="anchor-56"></a>Processing Element PRO_E_SMT_DEV_LEN_Y_FACTOR_VALUE
+\*-----------------------------------------------------------------*/
+ status = ProElementAlloc ( PRO_E_SMT_DEV_LEN_Y_FACTOR_VALUE, 
+			    &amp;pro_e_smt_dev_len_y_factor_value );
+ status = ProElementDoubleSet (  pro_e_smt_dev_len_y_factor_value, 
+<a name="anchor-57"></a>				 0.320000 );
+ status = ProElemtreeElementAdd ( pro_e_smt_dev_len_y_factor, NULL, 
+				  pro_e_smt_dev_len_y_factor_value );
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-58"></a>Create the feature using the element tree
+\*-----------------------------------------------------------------*/
+ status = ProMdlCurrentGet (&amp;model);
+ status = ProMdlToModelitem( model, &amp;model_item );
+ status = ProSelectionAlloc (NULL, &amp;model_item, &amp;model_sel);
+<a name="anchor-59"></a>
+
+  status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+    1, (ProArray*)&amp;opts);
+
+<a name="anchor-60"></a>  opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+ status = ProFeatureWithoptionsCreate (model_sel, pro_e_feature_tree,
+    opts, PRO_REGEN_NO_FLAGS, &amp;feature, &amp;errors);
+
+<a name="anchor-61"></a>  status = ProArrayFree((ProArray*)&amp;opts);
+ if (status == PRO_TK_NO_ERROR)
+ {
+	 ProSelectionAlloc (NULL, &amp;feature, &amp;feat_sel);
+	 ProSelbufferClear ();
+<a name="anchor-62"></a>	 ProSelbufferSelectionAdd (feat_sel);
+	 ProSelectionFree (&amp;feat_sel);
+ }
+
+ return (PRO_TK_NO_ERROR);
+<a name="anchor-63"></a>}
+
+
+/*=====================================================================*\
+FUNCTION: UserSmtFlatWallCreate_OA_CreateISec
+<a name="anchor-64"></a>PURPOSE:  Create sheetmetal flat wall features using Object/Action 
+          selection and Pro/E's predefined rectangular section.
+\*=====================================================================*/
+int UserSmtFlatWallCreate_OA_CreateRectSec ()
+{
+<a name="anchor-65"></a>  ProSelection* sel;
+  ProReference reference;
+  ProPart part;
+  ProDimension thickness_dim;
+  double thickness;
+<a name="anchor-66"></a>  ProSection rect_wall_sec;
+  ProPath w_mdlpath;
+  ProCharPath mdlpath, secpath;
+  char* prodir;
+  
+<a name="anchor-67"></a>/*-----------------------------------------------------------------*\
+Extract the current selected edge or edge chain as the wall attachment
+\*-----------------------------------------------------------------*/
+  status = ProSelbufferSelectionsGet (&amp;sel);
+
+<a name="anchor-68"></a>  status = ProSelectionToReference ( sel[0], &amp;reference );
+  
+/*-----------------------------------------------------------------*\
+Extract the wall thickness to use for the bend radius
+\*-----------------------------------------------------------------*/ 
+<a name="anchor-69"></a>  status = ProMdlCurrentGet ((ProMdl*)&amp;part);
+  status = ProSmtPartThicknessGet(part, &amp;thickness_dim);
+  status = ProDimensionValueGet (&amp;thickness_dim, &amp;thickness);
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-70"></a>Retrieve the Pro/ENGINEER default section for rectangular flat walls
+\*-----------------------------------------------------------------*/ 
+  prodir = getenv (&quot;PRO_DIRECTORY&quot;);
+  if (prodir == NULL)
+	return PRO_TK_INVALID_DIR;
+<a name="anchor-71"></a>
+  ProTKSprintf (secpath, &quot;%s/text/smt/&quot;, prodir);
+  ProTKSprintf (mdlpath, &quot;%srect_flat_wall.sec&quot;, secpath);
+  ProStringToWstring (w_mdlpath, mdlpath);
+  status = ProMdlFiletypeLoad  (w_mdlpath,  PRO_MDLFILE_UNUSED, PRO_B_FALSE, 
+<a name="anchor-72"></a>					   (ProMdl*)&amp;rect_wall_sec);
+
+/*-----------------------------------------------------------------*\
+Create the feature with the extracted information
+\*-----------------------------------------------------------------*/
+<a name="anchor-73"></a>  UserSmtFlatWallCreate (reference, thickness, rect_wall_sec);
+
+  ProReferenceFree (reference);
+
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-74"></a>}
+
+/*=====================================================================*\
+FUNCTION: UserSectionOpen
+PURPOSE:  Retrieve a section using a File Open dialog.
+<a name="anchor-75"></a>\*=====================================================================*/
+ProError UserSectionOpen (ProSection* sec)
+{
+  ProName label;
+  ProLine filter;
+<a name="anchor-76"></a>  ProPath* shortcut_path_arr;
+  ProName* shortcut_name;
+  ProPath path;
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-77"></a>Prompt to select a section using the Open dialog box
+\*-----------------------------------------------------------------*/
+  ProStringToWstring (label, &quot;Select section&quot;);
+  ProStringToWstring (filter, &quot;*.sec&quot;);
+  ProArrayAlloc (0, sizeof (ProPath), 1, (ProArray*) &amp;shortcut_path_arr);
+<a name="anchor-78"></a>  ProArrayAlloc (0, sizeof (ProName), 1, (ProArray*) &amp;shortcut_name);
+
+  status = ProFileMdlnameOpen (label, filter, shortcut_path_arr, shortcut_name,
+			NULL, NULL, path);
+    
+<a name="anchor-79"></a>  if (status == PRO_TK_NO_ERROR)
+  {
+/*-----------------------------------------------------------------*\
+Retrieve the selected section
+\*-----------------------------------------------------------------*/
+<a name="anchor-80"></a>    status = ProMdlFiletypeLoad (path,  PRO_MDLFILE_UNUSED, PRO_B_FALSE, 
+			 (ProMdl*)sec);
+  }
+  
+  ProArrayFree ((ProArray*)&amp;shortcut_path_arr);
+<a name="anchor-81"></a>  ProArrayFree ((ProArray*)&amp;shortcut_name);
+  
+  return (status);
+}
+
+<a name="anchor-82"></a>/*=====================================================================*\
+FUNCTION: UserSmtFlatWallCreate_OA_CreateUserDefSec
+PURPOSE:  Create sheetmetal flat wall features using Object/Action 
+          selection and a user-selected 2D section.
+\*=====================================================================*/
+<a name="anchor-83"></a>int UserSmtFlatWallCreate_OA_CreateUserDefSec ()
+{
+  ProSelection* sel;
+  ProReference reference;
+  ProPart part;
+<a name="anchor-84"></a>  ProDimension thickness_dim;
+  double thickness;
+  ProSection userdef_sec;
+  ProPath w_mdlpath;
+  ProCharPath mdlpath, secpath;
+<a name="anchor-85"></a>  char* prodir;
+  
+/*-----------------------------------------------------------------*\
+Prompt the user to select a section for the flange wall
+\*-----------------------------------------------------------------*/
+<a name="anchor-86"></a>  status = UserSectionOpen (&amp;userdef_sec);
+  
+  if (status != PRO_TK_NO_ERROR)
+    return (status);
+
+<a name="anchor-87"></a>/*-----------------------------------------------------------------*\
+Extract the current selected edge or edge chain as the wall attachment
+\*-----------------------------------------------------------------*/
+  status = ProSelbufferSelectionsGet (&amp;sel);
+
+<a name="anchor-88"></a>  status = ProSelectionToReference ( sel[0], &amp;reference );
+  
+/*-----------------------------------------------------------------*\
+Extract the wall thickness to use for the bend radius
+\*-----------------------------------------------------------------*/ 
+<a name="anchor-89"></a>  status = ProMdlCurrentGet ((ProMdl*)&amp;part);
+  status = ProSmtPartThicknessGet(part, &amp;thickness_dim);
+  status = ProDimensionValueGet (&amp;thickness_dim, &amp;thickness);
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-90"></a>Create the feature with the extracted information
+\*-----------------------------------------------------------------*/
+  UserSmtFlatWallCreate (reference, thickness, userdef_sec);
+ 
+  ProReferenceFree (reference);
+<a name="anchor-91"></a>  ProMdlErase (userdef_sec);
+
+  return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-92"></a>/*=====================================================================*\
+FUNCTION: UserEdgeIsSmtFaceEdge
+PURPOSE:  Returns TRUE if the edge borders a sheetmetal face.
+\*=====================================================================*/
+ProBoolean UserEdgeIsSmtFaceEdge (ProGeomitem* edge)
+<a name="anchor-93"></a>{
+  ProEdge edge_ptr;
+  ProEdge edges [2];
+  ProSurface surfs [2];
+  ProSmtSurfType srf_type, srf_type2;
+<a name="anchor-94"></a>  
+/*-----------------------------------------------------------------*\
+Obtain the neighboring surfaces for the given edge
+\*-----------------------------------------------------------------*/
+  ProGeomitemToEdge (edge, &amp;edge_ptr);
+<a name="anchor-95"></a>  
+  ProEdgeNeighborsGet (edge_ptr, &amp;edges[0], &amp;edges[1],
+		       &amp;surfs [0], &amp;surfs[1]);
+  
+/*-----------------------------------------------------------------*\
+<a name="anchor-96"></a>Test the surfaces
+\*-----------------------------------------------------------------*/
+  ProSmtSurfaceTypeGet (edge->owner, surfs [0], &amp;srf_type);
+  ProSmtSurfaceTypeGet (edge->owner, surfs [1], &amp;srf_type2);
+  
+<a name="anchor-97"></a>  if (srf_type == PRO_SMT_SURF_FACE || 
+      srf_type2 == PRO_SMT_SURF_FACE ||
+      srf_type == PRO_SMT_SURF_OFFSET || 
+      srf_type2 == PRO_SMT_SURF_OFFSET)
+    return PRO_B_TRUE;
+<a name="anchor-98"></a>  else
+    return PRO_B_FALSE;
+}
+
+#define OA 1  /* Standard OA in the menu system, typically gray out 
+<a name="anchor-99"></a>		 the button when not usable*/
+#define PM 2 /* OA in a popup menu, typically remove the button when 
+	         not usable */
+
+/*=====================================================================*\
+<a name="anchor-100"></a>FUNCTION: UserSmtFlatWallCreate_TestLow
+PURPOSE:  Access function for the button for smt flat wall feature creation
+\*=====================================================================*/
+static uiCmdAccessState UserSmtFlatWallCreate_TestLow (ProSelection* sels, 
+						       int mode)
+<a name="anchor-101"></a>{
+  uiCmdAccessState access_result;
+  ProBoolean should_free = PRO_B_FALSE;
+  ProError status;
+  ProMdl mdl;
+<a name="anchor-102"></a>  ProMdlType type;
+  ProMdlsubtype subtype;
+  ProReference reference;
+  ProModelitem item;
+  ProEdge edge;
+<a name="anchor-103"></a>  ProEnttype ent_type;
+  int size;
+
+/*-----------------------------------------------------------------*\
+  Set the default return if the button is unusable.
+<a name="anchor-104"></a>\*-----------------------------------------------------------------*/  
+  if (mode == OA)
+    access_result = ACCESS_UNAVAILABLE;
+  else 
+    access_result = ACCESS_REMOVE;
+<a name="anchor-105"></a>
+  status = ProMdlCurrentGet (&amp;mdl);
+
+  if (status != PRO_TK_NO_ERROR)
+    return (access_result);
+<a name="anchor-106"></a>
+  status = ProMdlTypeGet (mdl, &amp;type);
+
+  status = ProMdlSubtypeGet (mdl, &amp;subtype);
+  
+<a name="anchor-107"></a>  if (type != PRO_MDL_PART || subtype != PROMDLSTYPE_PART_SHEETMETAL)
+    return (access_result);
+
+/*-----------------------------------------------------------------*\
+  If called without selections, extract the current selections from
+<a name="anchor-108"></a>  the buffer.
+\*-----------------------------------------------------------------*/ 
+  if (sels == NULL)
+    {   
+      status = ProSelbufferSelectionsGet (&amp;sels);
+<a name="anchor-109"></a>      
+      if (status != PRO_TK_NO_ERROR)
+	return access_result;
+
+      if (sels == NULL)
+<a name="anchor-110"></a>	return access_result;
+
+      should_free = PRO_B_TRUE;
+    }
+
+<a name="anchor-111"></a>/*-----------------------------------------------------------------*\
+  This command allows only one selection.
+\*-----------------------------------------------------------------*/   
+  status = ProArraySizeGet (sels, &amp;size);
+  
+<a name="anchor-112"></a>  if (status != PRO_TK_NO_ERROR)
+    return access_result;
+
+  if (size == 1)
+    {
+<a name="anchor-113"></a>/*-----------------------------------------------------------------*\
+Extract the reference edge selected by the user
+\*-----------------------------------------------------------------*/    
+      status = ProSelectionToReference (sels [0], &amp;reference);
+      ProTKPrintf (&quot;Status of ProSelectionCollectionGet: %d\n\n&quot;, status);
+<a name="anchor-114"></a>
+      if (status == PRO_TK_NO_ERROR)
+	{
+/*-----------------------------------------------------------------*\
+Check the reference to ensure that the reference is an edge 
+<a name="anchor-115"></a>which borders a sheetmetal face.
+\*-----------------------------------------------------------------*/
+	  ProReferenceTypeGet (reference, &amp;item.type);
+	  
+	  if (item.type == PRO_EDGE)
+<a name="anchor-116"></a>	    {
+	      
+	      ProReferenceOwnerGet (reference, &amp;item.owner);
+	      ProReferenceIdGet (reference, &amp;item.id);
+	      
+<a name="anchor-117"></a>	      ProReferenceFree (reference);
+	      
+	      if (UserEdgeIsSmtFaceEdge (&amp;item))
+		{
+
+<a name="anchor-118"></a>/*-----------------------------------------------------------------*\
+Flat wall attachment edge must be straight
+\*-----------------------------------------------------------------*/
+		  ProGeomitemToEdge (&amp;item, &amp;edge);
+		  
+<a name="anchor-119"></a>		  ProEdgeTypeGet (edge, &amp;ent_type);
+		  
+		  if (ent_type == PRO_ENT_LINE)
+		    {
+/*-----------------------------------------------------------------*\
+<a name="anchor-120"></a>If reference is OK, the button should be active.
+\*-----------------------------------------------------------------*/
+		      access_result = ACCESS_AVAILABLE;
+		    }
+		}
+<a name="anchor-121"></a>	    }
+	}
+    }
+  
+  if (should_free)
+<a name="anchor-122"></a>    ProSelectionarrayFree (sels);
+      
+  return access_result;
+}
+
+<a name="anchor-123"></a>/*=====================================================================*\
+FUNCTION: UserSmtFlatWallCreate_TestMdlTree
+PURPOSE:  Access function for the model tree popup menu button.	
+\*=====================================================================*/
+uiCmdAccessState UserSmtFlatWallCreate_TestMdlTree (uiCmdAccessMode mode)
+<a name="anchor-124"></a>{ 
+  return UserSmtFlatWallCreate_TestLow (NULL, PM);
+}
+
+
+<a name="anchor-125"></a>/*=====================================================================*\
+FUNCTION: UserSmtFlatWallCreate_TestPM
+PURPOSE:  Access function for the graphics window popup menu button.	
+\*=====================================================================*/
+uiCmdAccessState UserSmtFlatWallCreate_TestPM (uiCmdCmdId id,
+<a name="anchor-126"></a>				      ProAppData data,
+				      ProSelection* sels)
+{ 
+  return UserSmtFlatWallCreate_TestLow (sels, PM);
+}
+</pre>
+</body>
+</html>

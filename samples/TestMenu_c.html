@@ -1,0 +1,364 @@
+<html>
+<head>
+<title>TestMenu.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*----------------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*----------------------------------------------------------------------------*/
+<a name="anchor-2"></a>#include &quot;ProToolkit.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProUtil.h&quot;
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-3"></a>Pro/DEVELOP includes
+\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+C System includes
+<a name="anchor-4"></a>\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+Application includes
+\*----------------------------------------------------------------------------*/
+<a name="anchor-5"></a>#include &lt;TestError.h>
+#include &lt;TestMenu.h>
+#include &lt;UtilMessage.h>
+#include &lt;PTApplsUnicodeUtils.h>
+
+<a name="anchor-6"></a>/*----------------------------------------------------------------------------*\
+Application macros
+\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-7"></a>Application data types
+\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+Application global/external data
+<a name="anchor-8"></a>\*----------------------------------------------------------------------------*/
+
+static int menuTestMode = TRUE;
+
+static wchar_t **strings;
+<a name="anchor-9"></a>static wchar_t **help;
+
+
+/*============================================================================*\
+  Function : ProTestMenus
+<a name="anchor-10"></a>  Purpose  : Create a menu to test Menu functions
+\*============================================================================*/
+int ProTestMenus(void *a, int b)
+{
+    int menu_id;
+<a name="anchor-11"></a>    ProError status;
+    int result;
+    int action;
+    int i;
+    char tmp_str[80];
+<a name="anchor-12"></a>    ProBoolean value;
+    FILE *fp = NULL;
+    int ProTestMenuGenaction(FILE*, void*, void*, void*, void*, int*);
+    
+    if((fp = PTApplsUnicodeFopen (&quot;test_menus.txt&quot;, &quot;a&quot;)) == NULL)
+<a name="anchor-13"></a>        return -1;
+        
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;ProTestMenus: enter&quot;);
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-14"></a>Test initialization
+\*----------------------------------------------------------------------------*/
+
+    strings = (wchar_t**)calloc(PRO_TEST_NUM_STRINGS+1, sizeof(wchar_t *));
+    help = (wchar_t**)calloc(PRO_TEST_NUM_STRINGS+1, sizeof(wchar_t *));
+<a name="anchor-15"></a>
+    for( i = 0; i &lt; PRO_TEST_NUM_STRINGS; i++ )
+    {
+	strings[i] = (wchar_t*)calloc(80, sizeof(wchar_t));
+	help[i] = (wchar_t*)calloc(80, sizeof(wchar_t));
+<a name="anchor-16"></a>
+	ProTKSprintf(tmp_str, &quot;Button%d&quot;, i);
+        ProStringToWstring(strings[i], tmp_str);
+	ProTKSprintf(tmp_str, &quot;Select Button%d&quot;, i);
+        ProStringToWstring(help[i], tmp_str);
+<a name="anchor-17"></a>    }
+    strings[i] = (wchar_t*)calloc(80, sizeof(wchar_t));
+    help[i] = (wchar_t*)calloc(80, sizeof(wchar_t));
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-18"></a>Setup the main menu for testing
+\*----------------------------------------------------------------------------*/
+    status = ProMenuFileRegister((char*)&quot;TkMenu&quot;, (char*)&quot;tkmenu.mnu&quot;, &amp;menu_id);
+    TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, &quot;ProTestMenu()&quot;, status, 
+						status != PRO_TK_NO_ERROR);
+<a name="anchor-19"></a>    status = ProMenubuttonLocationSet((char*)&quot;TkMenu&quot;, (char*)&quot;Done&quot;, -1);
+    TEST_CALL_REPORT(&quot;ProMenubuttonLocationSet()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMenu&quot;, (char*)&quot;StringsSelect&quot;, 
+        (ProMenubuttonAction)ProTestMenuAction, fp, PRO_TEST_MENU_STRINGS);
+<a name="anchor-20"></a>    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMenu&quot;, (char*)&quot;Activate&quot;, 
+        (ProMenubuttonAction)ProTestMenuAction, fp, PRO_TEST_MENU_ACTIVATE);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestMenu()&quot;, 
+<a name="anchor-21"></a>					status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMenu&quot;, (char*)&quot;Deactivate&quot;, 
+        (ProMenubuttonAction)ProTestMenuAction, fp, PRO_TEST_MENU_DEACTIVATE);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-22"></a>    action = PRO_TEST_MENU_DONE;
+    status = ProMenubuttonGenactionSet((char*)&quot;TkMenu&quot;, (char*)&quot;Done&quot;, 
+	(ProMenubuttonGenaction)ProTestMenuGenaction, fp, NULL, NULL,
+	NULL, NULL, &amp;action);
+    TEST_CALL_REPORT(&quot;ProMenubuttonGenactionSet()&quot;, &quot;ProTestMenu()&quot;, 
+<a name="anchor-23"></a>					status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMenu&quot;, (char*)&quot;TkMenu&quot;, 
+			(ProMenubuttonAction) ProMenuHold, NULL, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-24"></a>
+/*----------------------------------------------------------------------------*\
+Setup pre- and post- actions for the done button
+\*----------------------------------------------------------------------------*/
+
+<a name="anchor-25"></a>    status = ProMenubuttonPreactionSet((char*)&quot;TkMenu&quot;, (char*)&quot;Done&quot;, 
+        (ProMenubuttonAction)ProTestMenuPremode, fp, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonPreactionSet()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonPostactionSet((char*)&quot;TkMenu&quot;, (char*)&quot;Done&quot;, 
+<a name="anchor-26"></a>        (ProMenubuttonAction)ProTestMenuPostmode, fp, 0);
+    TEST_CALL_REPORT(&quot;ProMenubuttonPostactionSet()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+
+/*----------------------------------------------------------------------------*\
+<a name="anchor-27"></a>Display and Process the main testing menu
+\*----------------------------------------------------------------------------*/
+
+    if( !menuTestMode )
+    {
+<a name="anchor-28"></a>        status = ProMenuDatamodeSet((char*)&quot;TkMenu&quot;, PRO_B_TRUE);
+        TEST_CALL_REPORT(&quot;ProMenuDatamodeSet()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonDelete((char*)&quot;TkMenu&quot;, (char*)&quot;Deactivate&quot;, &amp;result);
+        TEST_CALL_REPORT(&quot;ProMenubuttonDelete()&quot;, &quot;ProTestMenu()&quot;, 
+<a name="anchor-29"></a>					status, status != PRO_TK_NO_ERROR);
+	status = ProMenubuttonVisibilitySet((char*)&quot;TkMenu&quot;, (char*)&quot;Activate&quot;, PRO_B_FALSE);
+        TEST_CALL_REPORT(&quot;ProMenubuttonVisibilitySet()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+        status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkMenu&quot;, &amp;menu_id);
+<a name="anchor-30"></a>        TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+    }
+    else
+    {
+<a name="anchor-31"></a>        status = ProMenuModeSet((char*)&quot;TkMenu&quot;, PROMENUMODE_OPERATIONAL);
+        TEST_CALL_REPORT(&quot;ProMenuModeSet()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+        status = ProMenuPush();
+        TEST_CALL_REPORT(&quot;ProMenuPush()&quot;, &quot;ProTestMenu()&quot;, 
+<a name="anchor-32"></a>					status, status != PRO_TK_NO_ERROR);
+        status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkMenu&quot;, &amp;menu_id);
+        TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonHighlight((char*)&quot;TkMenu&quot;, (char*)&quot;StringsSelect&quot;);
+<a name="anchor-33"></a>        TEST_CALL_REPORT(&quot;ProMenubuttonHighlight()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonDeactivate((char*)&quot;TkMenu&quot;, (char*)&quot;Deactivate&quot;);
+        TEST_CALL_REPORT(&quot;ProMenubuttonDeactivate()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-34"></a>    }
+
+    status = ProMenuProcess((char*)&quot;TkMenu&quot;, &amp;action);
+    TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;, &quot;ProTestMenu()&quot;, 
+		status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_FOUND);
+<a name="anchor-35"></a>
+    status = ProMenuVisibilityGet((char*)&quot;TkMain&quot;, &amp;value);
+    TEST_CALL_REPORT(&quot;ProMenuVisibilityGet()&quot;, &quot;ProTestMenu()&quot;, 
+		status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_FOUND);
+
+<a name="anchor-36"></a>    if (value == PRO_B_FALSE)
+    {
+        status = ProMenuPop();
+        TEST_CALL_REPORT(&quot;ProMenuPop()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-37"></a>    }
+    fclose(fp);
+    return(0);
+}
+
+<a name="anchor-38"></a>/*============================================================================*\
+  Function : ProTestMenuPreMode
+  Purpose  : Function used for testing ProMenubuttonPreactionSet()
+\*============================================================================*/
+int ProTestMenuPremode(FILE *fp, int b)
+<a name="anchor-39"></a>{
+    ProError status;
+    ProTKFprintf(fp, &quot;PreAction called\n&quot;);
+    TEST_CALL_REPORT(&quot;ProMenubuttonAction()&quot;, &quot;ProTestMenuPremode()&quot;, PRO_TK_NO_ERROR, 0);
+
+<a name="anchor-40"></a>    if( menuTestMode )
+    {
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, 
+			   &quot;Cannot currently leave menu test mode!&quot;);
+	status = ProMenuCommandPush((char*)&quot;StringsSelect&quot;);
+<a name="anchor-41"></a>        TEST_CALL_REPORT(&quot;ProMenuCommandPush()&quot;, &quot;ProTestMenu()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+        return(1);
+    }
+
+<a name="anchor-42"></a>    return(0);
+}
+
+/*============================================================================*\
+  Function : ProTestMenuPostMode
+<a name="anchor-43"></a>  Purpose  : Function used for testing ProMenubuttonPostactionSet()
+\*============================================================================*/
+int ProTestMenuPostmode(FILE *fp, int b)
+{
+    TEST_CALL_REPORT(&quot;ProMenubuttonAction()&quot;, &quot;ProTestMenuPostmode()&quot;, PRO_TK_NO_ERROR, 0);
+<a name="anchor-44"></a>
+    ProTKFprintf(fp, &quot;PostAction called\n&quot;);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Menu testing complete!&quot;);
+
+    return(0);
+<a name="anchor-45"></a>}
+
+
+/*============================================================================*\
+  Function : ProTestMenuAction
+<a name="anchor-46"></a>  Purpose  : Available actions for menu picks
+\*============================================================================*/
+int ProTestMenuAction(FILE *fp, int choice)
+{
+    ProError status;
+<a name="anchor-47"></a>    int n_selected;
+    wchar_t **selected;
+    wchar_t title[20];
+    char mess[100], button[20];
+    int i;
+<a name="anchor-48"></a>    static int exit_number=-1;
+
+    TEST_CALL_REPORT(&quot;ProMenubuttonAction()&quot;, &quot;ProTestMenuAction()&quot;, PRO_TK_NO_ERROR, 0);
+
+
+<a name="anchor-49"></a>    switch(choice)
+    {
+        case PRO_TEST_MENU_DONE:
+	    exit_number++;
+            switch (exit_number%3)
+<a name="anchor-50"></a>	    {
+	    case 0:
+    		ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Can not leave menu now.&quot;
+		    &quot; Press once more.&quot;);
+		status = ProMenuHold();
+<a name="anchor-51"></a>                TEST_CALL_REPORT(&quot;ProMenuHold()&quot;, &quot;ProTestMenuAction()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+		break;
+	    case 1: 
+		status = ProMenuDeleteWithStatus(choice);
+<a name="anchor-52"></a>                TEST_CALL_REPORT(&quot;ProMenuDeleteWithStatus()&quot;, 
+		    &quot;ProTestMenuAction()&quot;, status, status != PRO_TK_NO_ERROR);
+		break;
+	    case 2:
+	        status = ProMenuDelete();
+<a name="anchor-53"></a>                TEST_CALL_REPORT(&quot;ProMenuDelete()&quot;, &quot;ProTestMenuAction()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+		break;
+	    }
+	    break;
+<a name="anchor-54"></a>
+	case PRO_TEST_MENU_ACTIVATE:
+	  status = ProMenubuttonDeactivate((char*)&quot;TkMenu&quot;, (char*)&quot;Activate&quot;);
+            TEST_CALL_REPORT(&quot;ProMenubuttonDeactivate()&quot;, &quot;ProTestMenuAction()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-55"></a>	    status = ProMenubuttonActivate((char*)&quot;TkMenu&quot;, (char*)&quot;Deactivate&quot;);
+            TEST_CALL_REPORT(&quot;ProMenubuttonActivate()&quot;, &quot;ProTestMenuAction()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	    break;
+
+<a name="anchor-56"></a>	case PRO_TEST_MENU_DEACTIVATE:
+	    status = ProMenubuttonActivate((char*)&quot;TkMenu&quot;, (char*)&quot;Activate&quot;);
+            TEST_CALL_REPORT(&quot;ProMenubuttonActivate()&quot;, &quot;ProTestMenuAction()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	    status = ProMenubuttonDeactivate((char*)&quot;TkMenu&quot;, (char*)&quot;Deactivate&quot;);
+<a name="anchor-57"></a>            TEST_CALL_REPORT(&quot;ProMenubuttonDeactivate()&quot;, &quot;ProTestMenuAction()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	    break;
+
+	case PRO_TEST_MENU_STRINGS:
+<a name="anchor-58"></a>	    status = ProMenubuttonUnhighlight((char*)&quot;TkMenu&quot;, (char*)&quot;StringsSelect&quot;);
+            TEST_CALL_REPORT(&quot;ProMenubuttonUnhighlight()&quot;, 
+    		&quot;ProTestMenuAction()&quot;, status, status != PRO_TK_NO_ERROR);
+	    ProStringToWstring(title, (char*)&quot;Strings&quot;);
+	    status = ProMenuStringsSelect(title, strings, 1, help, &amp;selected, 
+<a name="anchor-59"></a>	    							&amp;n_selected);
+            TEST_CALL_REPORT(&quot;ProMenuStringsSelect()&quot;, &quot;ProTestMenuAction()&quot;, 
+	    				status, status != PRO_TK_NO_ERROR);
+	    for( i = 0; i &lt; n_selected; i++ )
+	    {
+<a name="anchor-60"></a>		ProWstringToString(button, selected[i]);
+		ProTKSprintf(mess, &quot;%s was selected&quot;, button); 
+		ProTKFprintf(fp, &quot;%s\n&quot;, mess);
+	        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, mess);
+	    }
+<a name="anchor-61"></a>	    break;
+
+	default:
+	    break;
+    }
+<a name="anchor-62"></a>
+    menuTestMode = PRO_B_FALSE;
+
+    return(0);
+}
+<a name="anchor-63"></a>
+/*============================================================================*\
+  Function : ProTestMenuGenaction
+  Purpose  : Available actions for menu picks
+\*============================================================================*/
+<a name="anchor-64"></a>int ProTestMenuGenaction(FILE *fp, void *b, void *c, void *d, void *e, int *f)
+{
+    TEST_CALL_REPORT(&quot;ProMenubuttonGenaction()&quot;,
+					&quot;ProTestMenuGenaction()&quot;, PRO_TK_NO_ERROR, 0);
+    ProTestMenuAction(fp, *f);
+<a name="anchor-65"></a>    return (0); 
+}
+
+/*============================================================================*\
+  Function : ProTestMacro
+<a name="anchor-66"></a>  Purpose  : Run macro entered by user
+\*============================================================================*/
+int ProTestMacro( void* p_dummy, int int_dummy )
+{
+#ifndef PT_PRODUCTS_BUILD
+<a name="anchor-67"></a>    ProError	    status;
+    ProMacro	    w_macro;
+    ProMacro	    w_default_macro;
+    char	    default_macro[] = &quot;#MODE;#PART;#LIST;&quot;;
+    char	    buffer[ PRO_LINE_SIZE ];
+<a name="anchor-68"></a>
+
+    ProStringToWstring( w_default_macro, default_macro );
+    
+    ProTKSprintf( buffer, &quot;Enter macro keys [%s]: &quot;, default_macro );
+<a name="anchor-69"></a>    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, buffer );
+    if( !ProUtilStringGet( w_macro, w_default_macro, PRO_MACRO_SIZE ) )
+	return -1;
+
+    status = ProMacroLoad( w_macro );
+<a name="anchor-70"></a>    TEST_CALL_REPORT( &quot;ProMacroLoad()&quot;, &quot;ProTestMacro()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+#endif
+
+    return 0;
+<a name="anchor-71"></a>}
+</pre>
+</body>
+</html>

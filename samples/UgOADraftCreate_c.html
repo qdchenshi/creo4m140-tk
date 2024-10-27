@@ -1,0 +1,460 @@
+<html>
+<head>
+<title>UgOADraftCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProFeature.h&quot;
+<a name="anchor-2"></a>#include &quot;ProElemId.h&quot;
+#include &quot;ProExtrude.h&quot;
+#include &quot;ProModFeat.h&quot;
+#include &quot;ProStdSection.h&quot;
+#include &quot;ProElement.h&quot;
+<a name="anchor-3"></a>#include &quot;ProElempath.h&quot;
+#include &quot;ProFeatType.h&quot;
+#include &quot;ProFeatForm.h&quot;
+#include &quot;ProSelection.h&quot;
+#include &quot;ProSection.h&quot;
+<a name="anchor-4"></a>#include &quot;ProModelitem.h&quot;
+
+#include &quot;ProSelbuffer.h&quot;
+#include &quot;ProCollect.h&quot;
+#include &quot;ProSrfcollection.h&quot;
+<a name="anchor-5"></a>#include &quot;ProCrvcollection.h&quot;
+
+#include &quot;ProDraft.h&quot;
+#include &quot;ProDirection.h&quot;
+
+<a name="anchor-6"></a>static ProFileName message_file; 
+
+#define C_LOG(a) ProTKPrintf (&quot;Status for %s is = %d\n&quot;, a, status ); \
+	ERROR_CHECK( a, &quot;UgOADraftCreate.c&quot;, status );
+
+<a name="anchor-7"></a>#define C_PRINT(a) ProTKPrintf ( &quot;%s\n&quot;, a);
+
+/*===============================================================*\
+FUNCTION : UserOADraftCreate()
+PURPOSE  : Function for OA creation of Draft features.
+<a name="anchor-8"></a>\*===============================================================*/
+ProError UserOADraftCreate()
+{
+  ProErrorlist            errors;
+  ProMdl                  model;
+<a name="anchor-9"></a>  ProSelection            model_sel;
+  ProFeature              feature;
+  ProFeatureCreateOptions *opts = 0;
+  ProElempath             path;
+  ProElempathItem         path_items[2];
+<a name="anchor-10"></a>  ProSection              section;
+  ProAsmcomppath          comp_path;
+  ProAsmcomppath          *p_comp_path = NULL;
+
+  ProCollection srf_collection = NULL;
+<a name="anchor-11"></a>  ProCollection crv_collection = NULL;
+
+  ProModelitem model_item;
+  ProReference reference, direction_ref = NULL;
+  ProSelection direction_ref_sel = NULL; 
+<a name="anchor-12"></a>  ProName wide_string; 
+
+  ProSelection * selbuff_sels; 
+  int selbuff_sels_size, selbuff_count; 
+
+<a name="anchor-13"></a>  ProElement pro_e_feature_tree;
+  ProElement pro_e_feature_type;
+  ProElement pro_e_std_feature_name;
+  ProElement pro_e_draft_tweak_or_intersec;
+  ProElement pro_e_draft_extend;
+<a name="anchor-14"></a>  ProElement pro_e_draft_split;
+  ProElement pro_e_std_surf_collection_appl;
+  ProElement pro_e_direction_compound;
+  ProElement pro_e_direction_reference;
+  ProElement pro_e_direction_flip;
+<a name="anchor-15"></a>  ProElement pro_e_std_section;
+  ProElement pro_e_std_sec_method;
+  ProElement pro_e_std_sec_select;
+  ProElement pro_e_std_curve_collection_appl;
+  ProElement pro_e_surf_chain_cmpnd;
+<a name="anchor-16"></a>  ProElement pro_e_surf_chain_method;
+  ProElement pro_e_surf_chain_ref_surfs;
+  ProElement pro_e_surf_chain_surf;
+  ProElement pro_e_std_sec_setup_plane;
+  ProElement pro_e_std_sec_plane_view_dir;
+<a name="anchor-17"></a>  ProElement pro_e_std_sec_plane_orient_dir;
+  ProElement pro_e_draft_constant_or_variable;
+  ProElement pro_e_draft_include_tangent;
+  ProElement pro_e_draft_side_1;
+  ProElement pro_e_draft_neutral_object_type_1;
+<a name="anchor-18"></a>  ProElement pro_e_draft_dependent_1;
+  ProElement pro_e_draft_angle_1;
+  ProElement pro_e_draft_angles;
+  ProElement pro_e_draft_side_2;
+  ProElement pro_e_draft_neutral_object_type_2;
+<a name="anchor-19"></a>  ProElement pro_e_draft_dependent_2;
+  ProElement pro_e_draft_angle_2;
+
+  ProStringToWstring ( message_file, &quot;msg_ugfeatcreat.txt&quot; ); 
+
+<a name="anchor-20"></a>  status = ProMdlCurrentGet (&amp;model);
+  if ( status != PRO_TK_NO_ERROR ) return ( status );
+
+  /*---------------------------------------------------------------*\
+    Processing the contents of the selection buffer 
+<a name="anchor-21"></a>    + Allows only 3 entries in the selection buffer as follows -
+      One selection, One curve collection &amp; one surface collection
+    + The 3 entries can be in any order, the code is capable of 
+      extracting the right-ones to get assigned appropriately
+      i.e. selection for draft direction, surface collection for 
+<a name="anchor-22"></a>      draft surface and curve collection for draft hinge elements
+      in the final elemenet tree
+  \*---------------------------------------------------------------*/
+
+  status = ProSelbufferSelectionsGet( &amp;selbuff_sels );
+<a name="anchor-23"></a>  C_LOG( &quot; ProSelbufferSelectionsGet &quot; );    
+  if ( status != PRO_TK_NO_ERROR )
+    return status; 
+
+  status = ProArraySizeGet ( selbuff_sels, &amp;selbuff_sels_size ); 
+<a name="anchor-24"></a>  C_LOG (&quot; ProArraySizeGet&quot;)
+
+    ProTKPrintf ( &quot;Selections in selbuff = %d\n&quot;, selbuff_sels_size );
+  /*---------------------------------------------------------------*\
+    allowing exactly 3 entities in the selection buffer
+<a name="anchor-25"></a>  \*---------------------------------------------------------------*/
+    if ( selbuff_sels_size != 3 )
+      {
+	status = ProMessageDisplay(message_file,
+		  &quot;USER Invalid selection buffer context:&quot;);
+<a name="anchor-26"></a>	C_LOG (&quot; ProMessageDisplay&quot;)
+
+	return PRO_TK_BAD_CONTEXT; 
+      }
+
+<a name="anchor-27"></a>
+  for ( selbuff_count = 0; selbuff_count &lt; selbuff_sels_size; selbuff_count++ )
+    {
+      ProCollection collection; 
+      ProCollectionType coll_type; 
+<a name="anchor-28"></a>      ProTKPrintf ( &quot;Count in selbuff = %d\n&quot;, selbuff_count ); 
+      status = ProSelectionCollectionGet ( selbuff_sels[selbuff_count], 
+					   &amp;collection ); 
+      C_LOG (&quot; ProSelectionCollectionGet&quot;)
+
+<a name="anchor-29"></a>  /*---------------------------------------------------------------*\
+    Processing selection for draft direction
+  \*---------------------------------------------------------------*/
+	if ( status != PRO_TK_NO_ERROR )
+	  {
+<a name="anchor-30"></a>	    if ( direction_ref_sel != NULL )
+	      {
+  /*---------------------------------------------------------------*\
+    Only one selection allowed for this context
+  \*---------------------------------------------------------------*/
+<a name="anchor-31"></a>		status = ProMessageDisplay(message_file,
+			    &quot;USER Invalid selection buffer context:&quot;);
+		C_LOG (&quot; ProMessageDisplay&quot;)
+
+		return PRO_TK_BAD_CONTEXT; 
+<a name="anchor-32"></a>	      }
+
+  /*---------------------------------------------------------------*\
+    Extracting the selection in the selection buffer - draft direction
+  \*---------------------------------------------------------------*/
+<a name="anchor-33"></a>	    status = ProSelectionCopy ( selbuff_sels[selbuff_count], 
+					&amp;direction_ref_sel ); 
+	    C_LOG (&quot; ProSelectionCopy&quot;)
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-34"></a>    Converting to ProReference as required by the elemtree
+  \*---------------------------------------------------------------*/
+	    status = ProSelectionToReference ( direction_ref_sel, 
+					       &amp;direction_ref ); 
+	    C_LOG (&quot; ProSelectionToReference&quot;)
+<a name="anchor-35"></a>	  }
+	else
+	  {
+  /*---------------------------------------------------------------*\
+     Checking for collection types
+<a name="anchor-36"></a>  \*---------------------------------------------------------------*/
+	    status = ProCollectionTypeGet ( collection, &amp;coll_type );
+	    C_LOG (&quot; ProCollectionTypeGet&quot;)
+
+	      if ( coll_type == PRO_COLLECTION_SRFCOLL ) 
+<a name="anchor-37"></a>		{
+		  if ( srf_collection != NULL )
+		    {
+		      status = ProMessageDisplay(message_file,
+			    &quot;USER Invalid selection buffer context:&quot;);
+<a name="anchor-38"></a>		      C_LOG (&quot; ProMessageDisplay&quot;)
+			return PRO_TK_BAD_CONTEXT; 
+		    }
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-39"></a>     Surface collection for draft surface
+  \*---------------------------------------------------------------*/
+		  status = ProSrfcollectionCopy ( collection, &amp;srf_collection ); 
+		  C_LOG (&quot; ProSrfcollectionCopy&quot;)
+		    if ( status != PRO_TK_NO_ERROR )
+<a name="anchor-40"></a>		      return status; 		  
+		}
+	      else
+		{
+		  if ( crv_collection != NULL )
+<a name="anchor-41"></a>		    {
+		      status = ProMessageDisplay(message_file,
+			    &quot;USER Invalid selection buffer context:&quot;);
+		      C_LOG (&quot; ProMessageDisplay&quot;)
+		      return PRO_TK_BAD_CONTEXT; 
+<a name="anchor-42"></a>		    }
+
+  /*---------------------------------------------------------------*\
+     Curve collection for draft hinge
+  \*---------------------------------------------------------------*/
+<a name="anchor-43"></a>		  status = ProCrvcollectionCopy ( collection, &amp;crv_collection ); 
+		  C_LOG (&quot; ProCrvcollectionCopy&quot;)
+		    if ( status != PRO_TK_NO_ERROR )
+		      return status; 
+		}
+<a name="anchor-44"></a>  /*---------------------------------------------------------------*\
+     Freeing the temporary copy of collection
+  \*---------------------------------------------------------------*/ 
+	    status = ProCollectionFree ( &amp;collection ); 
+	    C_LOG (&quot; ProCollectionFree&quot;)
+<a name="anchor-45"></a>  
+	  }
+    }
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-46"></a>     Confirming for the required contents processed
+  \*---------------------------------------------------------------*/
+
+  if ( ( direction_ref_sel == NULL ) || ( srf_collection == NULL ) ||
+       ( crv_collection == NULL ) )
+<a name="anchor-47"></a>    {
+      status = ProMessageDisplay(message_file,
+			    &quot;USER Invalid selection buffer context:&quot;);
+      C_LOG (&quot; ProMessageDisplay&quot;)
+      return PRO_TK_BAD_CONTEXT; 
+<a name="anchor-48"></a>    }
+     
+  /*---------------------------------------------------------------*\
+    Populating root element PRO_E_FEATURE_TREE 
+  \*---------------------------------------------------------------*/
+<a name="anchor-49"></a>  C_PRINT( &quot; *** Processing Element PRO_E_FEATURE_TREE *** &quot; );
+  status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;pro_e_feature_tree ); 
+  C_LOG( &quot; ProElementAlloc &quot; );
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-50"></a>    Populating  element PRO_E_FEATURE_TYPE 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_FEATURE_TYPE *** &quot; );
+  status = ProElementAlloc ( PRO_E_FEATURE_TYPE, &amp;pro_e_feature_type );
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-51"></a>  status = ProElementIntegerSet ( pro_e_feature_type, PRO_FEAT_DRAFT ); 
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_feature_type );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+<a name="anchor-52"></a>  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_DRAFT_EXTEND 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DRAFT_EXTEND *** &quot; );
+  status = ProElementAlloc ( PRO_E_DRAFT_EXTEND, &amp;pro_e_draft_extend );
+<a name="anchor-53"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_draft_extend, PRO_DRAFT_UI_NO_EXTEND );
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_draft_extend );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-54"></a>
+  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_DRAFT_SPLIT 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DRAFT_SPLIT *** &quot; );
+<a name="anchor-55"></a>  status = ProElementAlloc ( PRO_E_DRAFT_SPLIT, &amp;pro_e_draft_split );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_draft_split, PRO_DRAFT_UI_SPLIT_NONE );
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_draft_split );
+<a name="anchor-56"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_STD_SURF_COLLECTION_APPL 
+  \*---------------------------------------------------------------*/
+<a name="anchor-57"></a>  C_PRINT( &quot; *** Processing Element PRO_E_STD_SURF_COLLECTION_APPL *** &quot; );
+  status = ProElementAlloc ( PRO_E_STD_SURF_COLLECTION_APPL, &amp;pro_e_std_surf_collection_appl );
+  C_LOG( &quot; ProElementAlloc &quot; );
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-58"></a>    Assigning the surface collection 
+  \*---------------------------------------------------------------*/
+  status = ProElementCollectionSet( pro_e_std_surf_collection_appl, srf_collection );
+  C_LOG( &quot; ProElementCollectionSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_std_surf_collection_appl );
+<a name="anchor-59"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_DIRECTION_COMPOUND 
+  \*---------------------------------------------------------------*/
+<a name="anchor-60"></a>  C_PRINT( &quot; *** Processing Element PRO_E_DIRECTION_COMPOUND *** &quot; );
+  status = ProElementAlloc ( PRO_E_DIRECTION_COMPOUND, &amp;pro_e_direction_compound );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_direction_compound  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-61"></a>
+  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_DIRECTION_REFERENCE 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DIRECTION_REFERENCE *** &quot; );
+<a name="anchor-62"></a>  status = ProElementAlloc ( PRO_E_DIRECTION_REFERENCE, &amp;pro_e_direction_reference );
+  C_LOG( &quot; ProElementAlloc &quot; );
+
+  /* Assigning the direction reference */ 
+  status = ProElementReferenceSet( pro_e_direction_reference, direction_ref );
+<a name="anchor-63"></a>  C_LOG( &quot; ProElementReferenceSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_direction_compound, NULL, pro_e_direction_reference );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-64"></a>    Populating  element PRO_E_DIRECTION_FLIP 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DIRECTION_FLIP *** &quot; );
+  status = ProElementAlloc ( PRO_E_DIRECTION_FLIP, &amp;pro_e_direction_flip );
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-65"></a>  status = ProElementIntegerSet ( pro_e_direction_flip, 
+				  PRO_DIRECTION_FLIP_ALONG ); 
+  /* ProDirectionFlipOption :: ProDirection.h */ 
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_direction_compound, NULL, pro_e_direction_flip );
+<a name="anchor-66"></a>  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_DRAFT_CONSTANT_OR_VARIABLE 
+  \*---------------------------------------------------------------*/
+<a name="anchor-67"></a>  C_PRINT( &quot; *** Processing Element PRO_E_DRAFT_CONSTANT_OR_VARIABLE *** &quot; );
+  status = ProElementAlloc ( PRO_E_DRAFT_CONSTANT_OR_VARIABLE, &amp;pro_e_draft_constant_or_variable );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_draft_constant_or_variable, PRO_DRAFT_UI_CONSTANT ); /* 1 */ 
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+<a name="anchor-68"></a>  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_draft_constant_or_variable );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_DRAFT_INCLUDE_TANGENT 
+<a name="anchor-69"></a>  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DRAFT_INCLUDE_TANGENT *** &quot; );
+  status = ProElementAlloc ( PRO_E_DRAFT_INCLUDE_TANGENT, &amp;pro_e_draft_include_tangent );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_draft_include_tangent, PRO_DRAFT_UI_INC_TANG );
+<a name="anchor-70"></a>  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_draft_include_tangent );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-71"></a>    Populating  element PRO_E_DRAFT_SIDE_1 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DRAFT_SIDE_1 *** &quot; );
+  status = ProElementAlloc ( PRO_E_DRAFT_SIDE_1, &amp;pro_e_draft_side_1 );
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-72"></a>  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_draft_side_1  );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_DRAFT_NEUTRAL_OBJECT_TYPE_1 
+<a name="anchor-73"></a>  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DRAFT_NEUTRAL_OBJECT_TYPE_1 *** &quot; );
+  status = ProElementAlloc ( PRO_E_DRAFT_NEUTRAL_OBJECT_TYPE_1, &amp;pro_e_draft_neutral_object_type_1 );
+  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_draft_neutral_object_type_1, PRO_DRAFT_UI_CURVE );
+<a name="anchor-74"></a>  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_draft_side_1, NULL, pro_e_draft_neutral_object_type_1 );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-75"></a>    Populating  element PRO_E_STD_CURVE_COLLECTION_APPL 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_STD_CURVE_COLLECTION_APPL *** &quot; );
+  status = ProElementAlloc ( PRO_E_STD_CURVE_COLLECTION_APPL, &amp;pro_e_std_curve_collection_appl );
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-76"></a>
+  /*---------------------------------------------------------------*\
+     Assigning the curve collection 
+  \*---------------------------------------------------------------*/
+  status = ProElementCollectionSet( pro_e_std_curve_collection_appl, crv_collection );
+<a name="anchor-77"></a>  C_LOG( &quot; ProElementCollectionSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_draft_side_1, NULL, pro_e_std_curve_collection_appl );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+  /*---------------------------------------------------------------*\
+<a name="anchor-78"></a>    Populating  element PRO_E_DRAFT_DEPENDENT_1 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DRAFT_DEPENDENT_1 *** &quot; );
+  status = ProElementAlloc ( PRO_E_DRAFT_DEPENDENT_1, &amp;pro_e_draft_dependent_1 );
+  C_LOG( &quot; ProElementAlloc &quot; );
+<a name="anchor-79"></a>  status = ProElementIntegerSet ( pro_e_draft_dependent_1, PRO_DRAFT_UI_INDEPENDENT );
+  C_LOG( &quot; ProElementIntegerSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_draft_side_1, NULL, pro_e_draft_dependent_1 );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+
+<a name="anchor-80"></a>  /*---------------------------------------------------------------*\
+    Populating  element PRO_E_DRAFT_ANGLE_1 
+  \*---------------------------------------------------------------*/
+  C_PRINT( &quot; *** Processing Element PRO_E_DRAFT_ANGLE_1 *** &quot; );
+  status = ProElementAlloc ( PRO_E_DRAFT_ANGLE_1, &amp;pro_e_draft_angle_1 );
+<a name="anchor-81"></a>  C_LOG( &quot; ProElementAlloc &quot; );
+  status = ProElementDoubleSet (  pro_e_draft_angle_1, 10.000000 );
+  C_LOG( &quot; ProElementDoubleSet&quot; );
+  status = ProElemtreeElementAdd ( pro_e_draft_side_1, NULL, pro_e_draft_angle_1 );
+  C_LOG( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-82"></a>
+  /*---------------------------------------------------------------*\
+     Writing the elemtree in XML format
+  \*---------------------------------------------------------------*/
+  status = ProElemtreeWrite ( pro_e_feature_tree, PRO_ELEMTREE_XML, 
+<a name="anchor-83"></a>			      L&quot;draft_tree.out&quot; ); 
+  C_LOG( &quot; ProElemtreeWrite&quot; );
+
+  /*---------------------------------------------------------------*\
+    Creating feature in the current model.
+<a name="anchor-84"></a>  \*---------------------------------------------------------------*/
+  status = ProMdlToModelitem( model, &amp;model_item ); 
+  status = ProSelectionAlloc (p_comp_path, &amp;model_item,
+			      &amp;model_sel);
+  
+<a name="anchor-85"></a>
+  status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+    1, (ProArray*)&amp;opts);
+
+  opts[0]= PRO_FEAT_CR_DEFINE_MISS_ELEMS;
+<a name="anchor-86"></a>
+  status = ProFeatureWithoptionsCreate (model_sel, pro_e_feature_tree,
+    opts, PRO_REGEN_NO_FLAGS, &amp;feature, &amp;errors);
+  C_LOG (&quot; ProFeatureWithoptionsCreate&quot;); 
+
+<a name="anchor-87"></a>  status = ProArrayFree((ProArray*)&amp;opts);
+  
+/*---------------------------------------------------------------*\
+    Freeing allocated memory.
+\*---------------------------------------------------------------*/ 
+<a name="anchor-88"></a>  
+  status = ProSelectionFree (&amp;model_sel ); 
+  C_LOG (&quot; ProSelectionFree&quot;); 
+
+  status = ProElementFree (&amp;pro_e_feature_tree ); 
+<a name="anchor-89"></a>  C_LOG (&quot; ProElementFree&quot;); 
+  
+  return (status);
+}
+
+<a name="anchor-90"></a>#undef C_LOG
+#undef C_PRINT
+</pre>
+</body>
+</html>

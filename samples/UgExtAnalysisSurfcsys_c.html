@@ -1,0 +1,951 @@
+<html>
+<head>
+<title>UgExtAnalysisSurfcsys.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &quot;ProToolkit.h&quot;
+#include &quot;ProFeature.h&quot;
+#include &quot;ProAnalysis.h&quot;
+#include &quot;ProArray.h&quot;
+#include &quot;ProDtmPnt.h&quot;
+<a name="anchor-2"></a>#include &quot;ProElement.h&quot;
+#include &quot;ProExtdata.h&quot;
+#include &quot;ProMessage.h&quot;
+#include &quot;ProPoint.h&quot;
+#include &quot;ProSection.h&quot;
+<a name="anchor-3"></a>#include &quot;Pro2dEntdef.h&quot;
+#include &quot;ProSelection.h&quot;
+#include &quot;ProSurface.h&quot;
+#include &quot;ProGraphic.h&quot;
+#include &quot;ProModelitem.h&quot;
+<a name="anchor-4"></a>#include &quot;ProUtil.h&quot;
+
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;UtilString.h>
+
+<a name="anchor-5"></a>#include &quot;UtilMath.h&quot;
+
+static ProFileName msgfil;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-6"></a>    Data structure to describe the information needed by an analysis
+    feature that creates a surface sys. The csys is centered at a
+    datum point on a surface, with its X and Y axes aligned with the
+    U and V mesh lines. The Z axis can be inwards or outwards, by
+    user choice, and the origin can be offset from the datum point
+<a name="anchor-7"></a>    by an offset value that is stored as a feature dimension.
+\*--------------------------------------------------------------------*/
+typedef struct surf_csys_data
+{
+    /* References */
+<a name="anchor-8"></a>    ProSelection point;   /* The datum point referenced by the csys */
+
+    /* Dimensions */
+    double offset;
+
+<a name="anchor-9"></a>    /* Application-specific data */
+    ProBoolean outwards;
+
+    /* Results storage */
+    ProCsysdata csysdata; /* The geometry of the csys */
+<a name="anchor-10"></a>
+} Surfcsysdata_t;
+
+int UsrClassRegister(ProMdl model, ProExtdataClass *class);
+/*====================================================================*\
+<a name="anchor-11"></a>FUNCTION : UsrSurfcsysUiAction()
+PURPOSE  : Callback for UI action for surface csys
+\*====================================================================*/
+ProError UsrSurfcsysUiAction(
+    ProAnalysis analysis)
+<a name="anchor-12"></a>{
+    Surfcsysdata_t *data;
+    ProError status;
+    ProSelection *sel;
+    int n_sel;
+<a name="anchor-13"></a>    ProModelitem modelitem;
+    ProPoint p;
+    ProDtmpntType ptype;
+    
+    ProError UsrYesnoGet();
+<a name="anchor-14"></a>
+/*--------------------------------------------------------------------*\
+    Ask the user to select a datum point on a surface. Check that it
+    is on a surface, and reject it if it is not.
+\*--------------------------------------------------------------------*/
+<a name="anchor-15"></a>    ProMessageDisplay(msgfil,&quot;USER Select a point on a surface&quot;);
+    while(1)
+    {
+        if(ProSelect(&quot;point&quot;,1,NULL,NULL,NULL,NULL,&amp;sel,&amp;n_sel)
+                != PRO_TK_NO_ERROR || n_sel &lt; 0)
+<a name="anchor-16"></a>            return(PRO_TK_MSG_USER_QUIT);
+        ProSelectionModelitemGet(sel[0], &amp;modelitem);
+        ProPointInit(modelitem.owner, modelitem.id, &amp;p);
+        if(!UsrPointPtypeGet(modelitem.owner, p, &amp;ptype) ||
+                        ptype != PRO_DTMPNT_TYPE_ON_SURF)
+<a name="anchor-17"></a>        {
+            ProMessageDisplay(msgfil,&quot;USER That is not a point on surf. Select again&quot;); 
+            continue;
+        }
+        break;
+<a name="anchor-18"></a>    }
+
+/*--------------------------------------------------------------------*\
+    Get the pointer to the application data stored for this analysis
+    feature, and set the datum point in it.
+<a name="anchor-19"></a>\*--------------------------------------------------------------------*/
+    if(ProAnalysisInfoGet(analysis, (ProAppData*)&amp;data) != 
+PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-20"></a>    ProSelectionCopy(sel[0], &amp;data->point);
+
+/*--------------------------------------------------------------------*\
+    Ask the user whether the Z axis is inwards or outwards, and
+    set the answer in the application data.
+<a name="anchor-21"></a>\*--------------------------------------------------------------------*/
+    ProMessageDisplay(msgfil,&quot;USER Is the Z axis to be outwards? ||| Yes&quot;); 
+
+    if(UsrYesnoGet(msgfil,&quot;YES&quot;,&amp;data->outwards) != PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-22"></a>
+/*--------------------------------------------------------------------*\
+    Ask the user for the Z offset, and store that, too.
+\*--------------------------------------------------------------------*/
+    ProMessageDisplay(msgfil,&quot;USER Enter the Z offset distance|||0.0&quot;); 
+<a name="anchor-23"></a>    status = ProMessageDoubleRead(NULL, &amp;data->offset);
+    if(status == PRO_TK_MSG_USER_QUIT)
+        return(PRO_TK_GENERAL_ERROR);
+
+    if(status != PRO_TK_NO_ERROR)
+<a name="anchor-24"></a>        data->offset = 0.0;
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-25"></a>/*====================================================================*\
+FUNCTION : UsrSurfcsysDimsAction()
+PURPOSE  : Callback for Dims action for surface csys
+\*====================================================================*/
+ProError UsrSurfcsysDimsAction(
+<a name="anchor-26"></a>    ProAnalysis analysis,
+    double **dims)
+{
+    Surfcsysdata_t *data;
+
+<a name="anchor-27"></a>/*--------------------------------------------------------------------*\
+    Get the application data for this analysis
+\*--------------------------------------------------------------------*/
+    if(ProAnalysisInfoGet(analysis, (ProAppData*)&amp;data) != 
+PRO_TK_NO_ERROR)
+<a name="anchor-28"></a>        return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Add the csys offset value as a feature dimension
+\*--------------------------------------------------------------------*/
+<a name="anchor-29"></a>    ProArrayObjectAdd((ProArray*)dims, -1, 1, &amp;data->offset);
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-30"></a>/*====================================================================*\
+FUNCTION : UsrSurfcsysInfoallocAction()
+PURPOSE  : Callback to allocate application data needed to describe
+                the surface csys
+\*====================================================================*/
+<a name="anchor-31"></a>ProError UsrSurfcsysInfoallocAction(
+    ProAnalysis analysis)
+{
+    Surfcsysdata_t *data;
+
+<a name="anchor-32"></a>/*--------------------------------------------------------------------*\
+    Allocate a data structure
+\*--------------------------------------------------------------------*/
+    data = (Surfcsysdata_t*)calloc(1, sizeof(Surfcsysdata_t));
+
+<a name="anchor-33"></a>/*--------------------------------------------------------------------*\
+    Put the data pointer into the analysis
+\*--------------------------------------------------------------------*/
+    ProAnalysisInfoSet(analysis, data);
+
+<a name="anchor-34"></a>    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+FUNCTION : UsrSurfcsysInfofreeAction()
+<a name="anchor-35"></a>PURPOSE  : Callback to free the application data for surface csys
+\*====================================================================*/
+ProError UsrSurfcsysInfofreeAction(
+    ProAnalysis analysis)
+{
+<a name="anchor-36"></a>    Surfcsysdata_t *data;
+
+/*--------------------------------------------------------------------*\
+    Get the data pointer from the analysis
+\*--------------------------------------------------------------------*/
+<a name="anchor-37"></a>    if(ProAnalysisInfoGet(analysis, (ProAppData*)&amp;data) != 
+PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-38"></a>    Free the data
+\*--------------------------------------------------------------------*/
+    free(data);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-39"></a>    Set the data pointer in the analysis to NULL
+\*--------------------------------------------------------------------*/
+    ProAnalysisInfoSet(analysis, NULL);
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-40"></a>}
+
+/*====================================================================*\
+FUNCTION : UsrSurfcsysCompcheckAction()
+PURPOSE  : Callback to tell Pro/E whether computation can be performed
+<a name="anchor-41"></a>                for surface csys analysis feature
+\*====================================================================*/
+ProError UsrSurfcsysCompcheckAction(
+    ProAnalysis analysis)
+{
+<a name="anchor-42"></a>    Surfcsysdata_t *data;
+
+/*--------------------------------------------------------------------*\
+    Get the analysis data
+\*--------------------------------------------------------------------*/
+<a name="anchor-43"></a>    if(ProAnalysisInfoGet(analysis, (ProAppData*)&amp;data) != 
+PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-44"></a>    Return NO_ERROR if the datum point selection is set OK
+\*--------------------------------------------------------------------*/
+    return(data->point!=NULL?PRO_TK_NO_ERROR:PRO_TK_GENERAL_ERROR);
+}
+
+<a name="anchor-45"></a>/*====================================================================*\
+FUNCTION : UsrSurfcsysComputeAction()
+PURPOSE  : Callback to perform the surface csys computation
+\*====================================================================*/
+ProError UsrSurfcsysComputeAction(
+<a name="anchor-46"></a>    ProAnalysis analysis)
+{
+    Surfcsysdata_t *data;
+    ProModelitem modelitem;
+    ProPoint p;
+<a name="anchor-47"></a>    ProVector pos;
+    ProSurface surface;
+    ProUvParam uv;
+    ProVector normal, der1[2];
+    ProFeature feature;
+<a name="anchor-48"></a>
+/*--------------------------------------------------------------------*\
+    Get the application data from the analysis
+\*--------------------------------------------------------------------*/
+    if(ProAnalysisInfoGet(analysis, (ProAppData*)&amp;data) != 
+<a name="anchor-49"></a>PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Get the location of the datum point
+<a name="anchor-50"></a>\*--------------------------------------------------------------------*/
+    ProSelectionModelitemGet(data->point, &amp;modelitem);
+    ProPointInit(modelitem.owner, modelitem.id, &amp;p);
+    ProPointCoordGet(p, data->csysdata.origin);
+
+<a name="anchor-51"></a>/*--------------------------------------------------------------------*\
+    Find the surface the datum point sits on, and find its first
+    derivative vectors and the normal
+\*--------------------------------------------------------------------*/
+    UsrPointSrfGet(data->point, &amp;surface);
+<a name="anchor-52"></a>    ProSurfaceParamEval(modelitem.owner, surface, data->csysdata.origin, 
+uv);
+    ProSurfaceXyzdataEval(surface, uv, NULL, der1, NULL, normal);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-53"></a>    Flip and offset if necessary
+\*--------------------------------------------------------------------*/
+    if(!data->outwards)
+        ProUtilVectorScale(-1.0, normal, normal);
+    ProUtilVectorsLincom(1.0, data->csysdata.origin, data->offset, normal,
+<a name="anchor-54"></a>                data->csysdata.origin);
+
+/*--------------------------------------------------------------------*\
+    Copy this information to the application data as a csys geometry
+\*--------------------------------------------------------------------*/
+<a name="anchor-55"></a>    memcpy(data->csysdata.x_vector, der1[0], sizeof(ProVector));
+    ProUtilVectorNormalize(data->csysdata.x_vector, 
+data->csysdata.x_vector);
+    memcpy(data->csysdata.z_vector, normal, sizeof(ProVector));
+    ProUtilVectorNormalize(data->csysdata.z_vector, 
+<a name="anchor-56"></a>data->csysdata.z_vector);
+    ProUtilVectorCross(data->csysdata.z_vector,
+                        data->csysdata.x_vector, data->csysdata.y_vector);
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-57"></a>}
+
+/*====================================================================*\
+FUNCTION : UsrSurfcsysDisplayAction()
+PURPOSE  : Callback to display the results of the analysis computation
+<a name="anchor-58"></a>\*====================================================================*/
+ProError UsrSurfcsysDisplayAction(
+    ProAnalysis analysis)
+{
+    Surfcsysdata_t *data;
+<a name="anchor-59"></a>    ProVector pos;
+
+/*--------------------------------------------------------------------*\
+    Get the application data from the analysis
+\*--------------------------------------------------------------------*/
+<a name="anchor-60"></a>    if(ProAnalysisInfoGet(analysis, (ProAppData*)&amp;data) != 
+PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-61"></a>    Draw a line for the X vector
+\*--------------------------------------------------------------------*/
+    ProGraphicsPenPosition(data->csysdata.origin);
+    pos[0]=data->csysdata.origin[0]+data->csysdata.x_vector[0];
+    pos[1]=data->csysdata.origin[1]+data->csysdata.x_vector[1];
+<a name="anchor-62"></a>    pos[2]=data->csysdata.origin[2]+data->csysdata.x_vector[2];
+    ProGraphicsLineDraw(pos);
+
+/*--------------------------------------------------------------------*\
+    Draw a line for the Y vector
+<a name="anchor-63"></a>\*--------------------------------------------------------------------*/
+    ProGraphicsPenPosition(data->csysdata.origin);
+    pos[0]=data->csysdata.origin[0]+data->csysdata.y_vector[0];
+    pos[1]=data->csysdata.origin[1]+data->csysdata.y_vector[1];
+    pos[2]=data->csysdata.origin[2]+data->csysdata.y_vector[2];
+<a name="anchor-64"></a>    ProGraphicsLineDraw(pos);
+
+/*--------------------------------------------------------------------*\
+    Draw a line for the Z vector
+\*--------------------------------------------------------------------*/
+<a name="anchor-65"></a>    ProGraphicsPenPosition(data->csysdata.origin);
+    pos[0]=data->csysdata.origin[0]+data->csysdata.z_vector[0];
+    pos[1]=data->csysdata.origin[1]+data->csysdata.z_vector[1];
+    pos[2]=data->csysdata.origin[2]+data->csysdata.z_vector[2];
+    ProGraphicsLineDraw(pos);
+<a name="anchor-66"></a>
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-67"></a>FUNCTION : UsrSurfcsysOutputAction()
+PURPOSE  : Callback to write textual information about the result of
+                the computation
+\*====================================================================*/
+ProError UsrSurfcsysOutputAction(
+<a name="anchor-68"></a>    ProAnalysis analysis,
+    ProLine **lines)
+{
+    Surfcsysdata_t *data;
+    ProCharLine buff;
+<a name="anchor-69"></a>    ProLine ll[4];
+
+/*--------------------------------------------------------------------*\
+    Get the application dara from the analysis
+\*--------------------------------------------------------------------*/
+<a name="anchor-70"></a>    if(ProAnalysisInfoGet(analysis, (ProAppData*)&amp;data) != 
+PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-71"></a>    Write the origin of the csys
+\*--------------------------------------------------------------------*/
+    ProTKSprintf(buff,&quot;Csys is at location (%0.2f, %0.2f, %0.2f)&quot;,
+            data->csysdata.origin[0],
+            data->csysdata.origin[1],
+<a name="anchor-72"></a>            data->csysdata.origin[2]);
+    ProStringToWstring(ll[0], buff);
+
+/*--------------------------------------------------------------------*\
+     X vector
+<a name="anchor-73"></a>\*--------------------------------------------------------------------*/
+    ProTKSprintf(buff,&quot;           X vector (%0.2f, %0.2f, %0.2f)&quot;,
+            data->csysdata.x_vector[0],
+            data->csysdata.x_vector[1],
+            data->csysdata.x_vector[2]);
+<a name="anchor-74"></a>    ProStringToWstring(ll[1], buff);
+
+/*--------------------------------------------------------------------*\
+     Y vector
+\*--------------------------------------------------------------------*/
+<a name="anchor-75"></a>    ProTKSprintf(buff,&quot;           Y vector (%0.2f, %0.2f, %0.2f)&quot;,
+            data->csysdata.y_vector[0],
+            data->csysdata.y_vector[1],
+            data->csysdata.y_vector[2]);
+    ProStringToWstring(ll[2], buff);
+<a name="anchor-76"></a>
+/*--------------------------------------------------------------------*\
+     Z vector
+\*--------------------------------------------------------------------*/
+    ProTKSprintf(buff,&quot;           Z vector (%0.2f, %0.2f, %0.2f)&quot;,
+<a name="anchor-77"></a>            data->csysdata.z_vector[0],
+            data->csysdata.z_vector[1],
+            data->csysdata.z_vector[2]);
+
+    ProStringToWstring(ll[3], buff);
+<a name="anchor-78"></a>
+/*--------------------------------------------------------------------*\
+    Add the four lines to the output array
+\*--------------------------------------------------------------------*/
+    ProArrayObjectAdd((ProArray*)lines, -1, 4, ll);
+<a name="anchor-79"></a>
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-80"></a>FUNCTION : UsrSurfcsysSavecheckAction()
+PURPOSE  : Callback to tell Pro/E whether the analysis application
+                data can be saved
+\*====================================================================*/
+ProError UsrSurfcsysSavecheckAction(
+<a name="anchor-81"></a>    ProAnalysis analysis)
+{
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-82"></a>/*====================================================================*\
+FUNCTION : UsrSurfcsysInfosaveAction()
+PURPOSE  : Callback to tell Pro/E what element references are required
+                by the analysis feature, and save the rest of the info
+                to Ext Data
+<a name="anchor-83"></a>\*====================================================================*/
+ProError UsrSurfcsysInfosaveAction(
+    ProAnalysis analysis,
+    ProFeature  *feature,
+    ProSelection **references)
+<a name="anchor-84"></a>{
+    Surfcsysdata_t *data;
+    ProSelection reference;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-85"></a>    Get the application data from the analysis
+\*--------------------------------------------------------------------*/
+    if(ProAnalysisInfoGet(analysis, (ProAppData*)&amp;data) != 
+PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-86"></a>
+/*--------------------------------------------------------------------*\
+    Output the reference to the datum point
+\*--------------------------------------------------------------------*/
+    ProSelectionCopy(data->point, &amp;reference);
+<a name="anchor-87"></a>    ProArrayObjectAdd((ProArray*)references, -1, 1, &amp;reference);
+
+/*--------------------------------------------------------------------*\
+    Save the &quot;outwards&quot; option
+\*--------------------------------------------------------------------*/
+<a name="anchor-88"></a>    if(!UsrOutwardsSave(feature, data->outwards))
+        return(PRO_TK_GENERAL_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-89"></a>
+ProError UsrSurfcsysDimFilter(
+    ProDimension *dimension, 
+    ProAppData   data)
+{
+<a name="anchor-90"></a>  static ProBoolean first_time = PRO_B_TRUE;
+  if (first_time)
+  {
+    first_time = PRO_B_FALSE;
+    return PRO_TK_NO_ERROR;
+<a name="anchor-91"></a>  }
+  else
+    return PRO_TK_CONTINUE;
+}
+
+<a name="anchor-92"></a>ProError UsrSurfcsysDimAction (
+    ProDimension  *dimension,
+    ProError      status,
+    ProAppData     data)
+{
+<a name="anchor-93"></a>  data = (ProAppData)dimension;
+  return PRO_TK_NO_ERROR;
+}
+
+
+<a name="anchor-94"></a>/*====================================================================*\
+FUNCTION : UsrSurfcsysInforetrieveAction()
+PURPOSE  : Callback to get the references Pro/E has stored with the
+                analysis feature, and retrieve the rest from Ext Data
+\*====================================================================*/
+<a name="anchor-95"></a>ProError UsrSurfcsysInforetrieveAction(
+    ProAnalysis analysis,
+    ProFeature *feature,
+    ProSelection *references)
+{
+<a name="anchor-96"></a>    Surfcsysdata_t *data;
+    ProError status;
+    ProDimension first_dim;
+    double dim_value;
+
+<a name="anchor-97"></a>/*--------------------------------------------------------------------*\
+    Get the application data from the analysis
+\*--------------------------------------------------------------------*/
+
+    if(ProAnalysisInfoGet(analysis, (ProAppData*)&amp;data) != 
+<a name="anchor-98"></a>PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Copy the first reference to the application as the datum point
+<a name="anchor-99"></a>\*--------------------------------------------------------------------*/
+    ProSelectionCopy(references[0], &amp;data->point);
+
+/*--------------------------------------------------------------------*\
+    Retrieve the &quot;outwards&quot; option from Ext Data
+<a name="anchor-100"></a>\*--------------------------------------------------------------------*/
+    UsrOutwardsRetrieve(feature, &amp;data->outwards);
+
+/*--------------------------------------------------------------------*\
+    If the feature has a dimension, take its value as the offset
+<a name="anchor-101"></a>\*--------------------------------------------------------------------*/
+    status = ProFeatureDimensionVisit(feature, 
+                            (ProDimensionVisitAction)UsrSurfcsysDimAction,
+                            (ProDimensionFilterAction)UsrSurfcsysDimFilter,
+                            (ProAppData)&amp;first_dim);
+<a name="anchor-102"></a>
+    status = ProDimensionValueGet(&amp;first_dim, &amp;dim_value);
+    data->offset = dim_value;
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-103"></a>
+/*====================================================================*\
+FUNCTION : UsrSurfcsysInfocopyAction()
+PURPOSE  : Callback to copy application information from one analysis
+                to another.
+<a name="anchor-104"></a>\*====================================================================*/
+ProError UsrSurfcsysInfocopyAction(
+    ProAnalysis from,
+    ProAnalysis to)
+{
+<a name="anchor-105"></a>    Surfcsysdata_t *fdata, *tdata;
+
+/*--------------------------------------------------------------------*\
+    Get the application data from the analyses
+\*--------------------------------------------------------------------*/
+<a name="anchor-106"></a>    if(ProAnalysisInfoGet(from, (ProAppData*)&amp;fdata) != PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+    if(ProAnalysisInfoGet(to,   (ProAppData*)&amp;tdata) != PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-107"></a>/*--------------------------------------------------------------------*\
+    Copy the application-specific data (everything except references)
+\*--------------------------------------------------------------------*/
+    tdata->outwards = fdata->outwards;
+    tdata->offset = fdata->offset;
+<a name="anchor-108"></a>
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-109"></a>FUNCTION : UsrSurfcsysResultAction()
+PURPOSE  : Callback to give Pro/E the feature parameters and geometry
+                that the analysis feature must contain
+\*====================================================================*/
+ProError UsrSurfcsysResultAction(
+<a name="anchor-110"></a>    ProAnalysis analysis,
+    ProBoolean names_only,
+    ProAnalysisParameter **parameters,
+    ProAnalysisGeomitem  **geometry)
+{
+<a name="anchor-111"></a>    Surfcsysdata_t *data;
+    ProAnalysisGeomitem geomitem;
+    ProAnalysisParameter param;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-112"></a>    Get the application data from the analysis
+\*--------------------------------------------------------------------*/
+
+    if(ProAnalysisInfoGet(analysis, (ProAppData*)&amp;data) != 
+PRO_TK_NO_ERROR)
+<a name="anchor-113"></a>        return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Specify a CSYS DATUM with the geometry stored in the application data
+\*--------------------------------------------------------------------*/
+<a name="anchor-114"></a>    ProStringToWstring(geomitem.name,&quot;SURF_CSYS&quot;);
+    geomitem.create = PRO_B_TRUE;
+    geomitem.type = PRO_ANALYSIS_CSYS;
+    if(!names_only)
+    {
+<a name="anchor-115"></a>        ProArrayAlloc(1, sizeof(ProAnalysisEntity), 1, 
+(ProArray*)&amp;geomitem.shapes);
+        memcpy(geomitem.shapes[0].csys.origin,   data->csysdata.origin,   
+sizeof(ProVector));
+        memcpy(geomitem.shapes[0].csys.x_vector, data->csysdata.x_vector, 
+<a name="anchor-116"></a>sizeof(ProVector));
+        memcpy(geomitem.shapes[0].csys.y_vector, data->csysdata.y_vector, 
+sizeof(ProVector));
+        memcpy(geomitem.shapes[0].csys.z_vector, data->csysdata.z_vector, 
+sizeof(ProVector));
+<a name="anchor-117"></a>    }
+
+/*--------------------------------------------------------------------*\
+    Output the csys geometry description
+\*--------------------------------------------------------------------*/
+<a name="anchor-118"></a>    ProArrayAlloc(0, sizeof(ProAnalysisGeomitem), 1, (ProArray*)geometry);
+    ProArrayObjectAdd((ProArray*)geometry, -1, 1, &amp;geomitem);
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-119"></a>
+int UsrExtAnalysisRegister ()
+{
+    ProAnalysisFuncsData data;
+
+<a name="anchor-120"></a>    ProStringToWstring(msgfil,&quot;umsg.txt&quot;);
+
+/*--------------------------------------------------------------------*\
+    Build the description of the surface csys analysis feature
+    data, and register it with Pro/E
+<a name="anchor-121"></a>\*--------------------------------------------------------------------*/
+    memset(&amp;data, '\0', sizeof(ProAnalysisFuncsData));
+    ProStringToWstring(data.type, &quot;Surface Csys&quot;);
+    data.ui_action              = UsrSurfcsysUiAction;
+    data.dims_action            = UsrSurfcsysDimsAction;
+<a name="anchor-122"></a>    data.infoalloc_action       = UsrSurfcsysInfoallocAction;
+    data.infofree_action        = UsrSurfcsysInfofreeAction;
+    data.compcheck_action       = UsrSurfcsysCompcheckAction;
+    data.compute_action         = UsrSurfcsysComputeAction;
+    data.display_action         = UsrSurfcsysDisplayAction;
+<a name="anchor-123"></a>    data.output_action          = UsrSurfcsysOutputAction;
+    data.savecheck_action       = UsrSurfcsysSavecheckAction;
+    data.infosave_action        = UsrSurfcsysInfosaveAction;
+    data.inforetrieve_action    = UsrSurfcsysInforetrieveAction;
+    data.infocopy_action        = UsrSurfcsysInfocopyAction;
+<a name="anchor-124"></a>    data.result_action          = UsrSurfcsysResultAction;
+    ProAnalysisTypeRegister(&amp;data);
+
+    return(0);
+}
+<a name="anchor-125"></a>
+/*====================================================================*\
+FUNCTION : UsrPointPtypeGet()
+PURPOSE  : Utility to get the placement type of a datum point
+\*====================================================================*/
+<a name="anchor-126"></a>int UsrPointPtypeGet(
+    ProSolid owner,
+    ProPoint p,
+    ProDtmpntType *ptype)
+{
+<a name="anchor-127"></a>    ProElempathItem items[5];
+    ProElempath epath;
+    ProValue value;
+    ProValueData vdata;
+    int id;
+<a name="anchor-128"></a>    ProGeomitem geomitem;
+    ProFeature feature;
+
+/*--------------------------------------------------------------------*\
+    Get the feature that owns the point
+<a name="anchor-129"></a>\*--------------------------------------------------------------------*/
+    ProPointIdGet(p, &amp;id);
+    ProModelitemInit(owner, id, PRO_POINT, &amp;geomitem);
+    ProGeomitemFeatureGet(&amp;geomitem, &amp;feature);
+
+<a name="anchor-130"></a>/*--------------------------------------------------------------------*\
+    Get the placement type from the element tree
+\*--------------------------------------------------------------------*/
+    items[0].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+    items[0].path_item.elem_id = PRO_E_DPOINT_POINTS_ARRAY;
+<a name="anchor-131"></a>
+    items[1].type = PRO_ELEM_PATH_ITEM_TYPE_INDEX;
+    items[1].path_item.elem_index = 0;
+
+    items[2].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+<a name="anchor-132"></a>    items[2].path_item.elem_id = PRO_E_DPOINT_PLA_CONSTRAINTS;
+
+    items[3].type = PRO_ELEM_PATH_ITEM_TYPE_INDEX;
+    items[3].path_item.elem_index = 0;
+
+<a name="anchor-133"></a>    items[4].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+    items[4].path_item.elem_id = PRO_E_DPOINT_PLA_CONSTR_TYPE;
+
+    ProElempathAlloc(&amp;epath);
+    ProElempathDataSet(epath, items, 5);
+<a name="anchor-134"></a>    if(ProFeatureElemValueGet(&amp;feature, epath, &amp;value) != PRO_TK_NO_ERROR)
+        return(0);
+    if(ProValueDataGet(value, &amp;vdata) != PRO_TK_NO_ERROR)
+        return(0);
+    *ptype = (ProDtmpntType)vdata.v.i;
+<a name="anchor-135"></a>    return(1);
+}
+
+/*====================================================================*\
+FUNCTION : UsrPointSrfGet()
+<a name="anchor-136"></a>PURPOSE  : Utility to get the surface a datum point is placed on.
+\*====================================================================*/
+int UsrPointSrfGet(
+    ProSelection point,
+    ProSurface *surface)
+<a name="anchor-137"></a>{
+    ProElempathItem items[5];
+    ProElempath epath;
+    ProValue value;
+    ProValueData vdata;
+<a name="anchor-138"></a>    int id;
+    ProGeomitem geomitem;
+    ProFeature feature;
+    ProSelection sel;
+
+<a name="anchor-139"></a>/*--------------------------------------------------------------------*\
+    Get the feature that owns the datum point
+\*--------------------------------------------------------------------*/
+    ProSelectionModelitemGet(point, &amp;geomitem);
+    ProGeomitemFeatureGet(&amp;geomitem, &amp;feature);
+<a name="anchor-140"></a>
+/*--------------------------------------------------------------------*\
+    Get the surface from the element tree
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-141"></a>    items[0].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+    items[0].path_item.elem_id = PRO_E_DPOINT_POINTS_ARRAY;
+
+    items[1].type = PRO_ELEM_PATH_ITEM_TYPE_INDEX;
+    items[1].path_item.elem_index = 0;
+<a name="anchor-142"></a>
+    items[2].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+    items[2].path_item.elem_id = PRO_E_DPOINT_PLA_CONSTRAINTS;
+
+    items[3].type = PRO_ELEM_PATH_ITEM_TYPE_INDEX;
+<a name="anchor-143"></a>    items[3].path_item.elem_index = 0;
+
+    items[4].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+    items[4].path_item.elem_id = PRO_E_DPOINT_PLA_CONSTR_REF;
+   
+<a name="anchor-144"></a>    ProElempathAlloc(&amp;epath);
+    ProElempathDataSet(epath, items, 5);
+   
+    if(ProFeatureElemValueGet(&amp;feature, epath, &amp;value) != PRO_TK_NO_ERROR)
+        return(0);
+<a name="anchor-145"></a>
+    if(ProValueDataGet(value, &amp;vdata) != PRO_TK_NO_ERROR)
+        return(0);
+
+    sel = (ProSelection)vdata.v.r;
+<a name="anchor-146"></a>    ProSelectionModelitemGet(sel, &amp;geomitem);
+    ProSurfaceInit(geomitem.owner, geomitem.id, surface);
+
+    return(1);
+}
+<a name="anchor-147"></a>
+/*====================================================================*\
+FUNCTION : UsrYesnoGet()
+PURPOSE  : Prompt for a yes/no answer
+\*====================================================================*/
+<a name="anchor-148"></a>ProError UsrYesnoGet(
+    wchar_t *msgfil,
+    char *def,      /* INPUT : default answer */
+    ProBoolean *yes)/* Output: TRUE = yes, FALSE no */
+{
+<a name="anchor-149"></a>    wchar_t wreply[4];
+    char reply[4];
+    ProError status;
+
+    while(1)
+<a name="anchor-150"></a>    {
+/*--------------------------------------------------------------------*\
+        Read string from keyboard
+\*--------------------------------------------------------------------*/
+        status = ProMessageStringRead(4, wreply);
+<a name="anchor-151"></a>        if(status == PRO_TK_MSG_USER_QUIT)
+            return(PRO_TK_MSG_USER_QUIT);
+
+/*--------------------------------------------------------------------*\
+        Convert reply (or default) to uppercase C string
+<a name="anchor-152"></a>\*--------------------------------------------------------------------*/
+        if(status == PRO_TK_NO_ERROR)
+            ProWstringToString(reply,wreply);
+        else
+            strcpy(reply, def);
+<a name="anchor-153"></a>        ProUtilStringUpper(reply,reply);
+
+/*--------------------------------------------------------------------*\
+        Output response
+\*--------------------------------------------------------------------*/
+<a name="anchor-154"></a>        if(reply[0] == 'Y')
+        {
+            *yes = PRO_B_TRUE;
+            return(PRO_TK_NO_ERROR);
+        }
+<a name="anchor-155"></a>        if(reply[0] == 'N')
+        {
+            *yes = PRO_B_FALSE;
+            return(PRO_TK_NO_ERROR);
+        }
+<a name="anchor-156"></a>
+/*--------------------------------------------------------------------*\
+        If reply was neither yes or no, ask again.
+\*--------------------------------------------------------------------*/
+       ProMessageDisplay(msgfil,&quot;USER Please answer Y or N : &quot;);
+<a name="anchor-157"></a>    }
+}
+ 
+#define CLASS_NAME &quot;SURFCSYS&quot;
+
+<a name="anchor-158"></a>/*====================================================================*\
+FUNCTION : UsrOutwardsSave()
+PURPOSE  : Save the &quot;outwards&quot; flag to external data
+\*====================================================================*/
+int UsrOutwardsSave(
+<a name="anchor-159"></a>    ProFeature *feature,
+    ProBoolean outwards)
+{
+    ProExtdataClass class;
+    ProCharName slotname;
+<a name="anchor-160"></a>    if(!UsrClassRegister(feature->owner, &amp;class))
+        return(0);
+
+    ProTKSprintf(slotname,&quot;OUTWARDS_%d&quot;,feature->id);
+    UsrIntegerSave(&amp;class, slotname, (int)outwards);
+<a name="anchor-161"></a>    return(1);
+}
+
+/*====================================================================*\
+FUNCTION : UsrOutwardsRetrieve()
+<a name="anchor-162"></a>PURPOSE  : Retrieve the outwards flag from external data
+\*====================================================================*/
+int UsrOutwardsRetrieve(
+    ProFeature *feature,
+    ProBoolean *outwards)
+<a name="anchor-163"></a>{
+    ProExtdataClass class;
+    ProCharName slotname;
+    int i;
+
+<a name="anchor-164"></a>    if(!UsrClassExists(feature->owner, CLASS_NAME, &amp;class))
+        return(0);
+
+    ProTKSprintf(slotname,&quot;OUTWARDS_%d&quot;,feature->id);
+    if(!UsrIntegerRetrieve(&amp;class, slotname, &amp;i))
+<a name="anchor-165"></a>        return(0);
+
+    *outwards = i==0 ? PRO_B_FALSE : PRO_B_TRUE;
+
+    return(1);
+<a name="anchor-166"></a>}
+
+/*====================================================================*\
+FUNCTION : UsrClassRegister()
+PURPOSE  : Register a data class, if it does not already exist
+<a name="anchor-167"></a>\*====================================================================*/
+int UsrClassRegister(
+    ProMdl model,
+    ProExtdataClass *class)
+{
+<a name="anchor-168"></a>    ProName cname;
+
+    if(!UsrClassExists(model, CLASS_NAME, class))
+    {
+        ProStringToWstring(cname, CLASS_NAME);
+<a name="anchor-169"></a>        if(ProExtdataClassRegister(model, cname, class) != 
+PROEXTDATA_TK_NO_ERROR)
+            return(0);
+    }
+
+<a name="anchor-170"></a>    return(1);
+}
+
+/*====================================================================*\
+FUNCTION : UsrIntegerSave()
+<a name="anchor-171"></a>PURPOSE  : Utility to save an integer slot
+\*====================================================================*/
+int UsrIntegerSave(
+    ProExtdataClass *class,
+    char *slotname,
+<a name="anchor-172"></a>    int i)
+{
+    ProExtdataSlot slot;
+    ProName sname;
+
+<a name="anchor-173"></a>/*--------------------------------------------------------------------*\
+    If the specified slot does not exist, create it
+\*--------------------------------------------------------------------*/
+    ProStringToWstring(sname, slotname);
+    if(ProExtdataSlotCreate(class, sname, &amp;slot) != 
+<a name="anchor-174"></a>PROEXTDATA_TK_NO_ERROR)
+    {
+        slot.p_class = class;
+        ProStringToWstring(slot.slot_name, slotname);
+    }
+<a name="anchor-175"></a>
+/*--------------------------------------------------------------------*\
+    Write the integer to the data slot
+\*--------------------------------------------------------------------*/
+    ProExtdataSlotWrite(&amp;slot, KEY_BY_NAME, PRO_INTEGER_TYPE, 0, &amp;i);
+<a name="anchor-176"></a>
+    return(1);
+}
+
+/*====================================================================*\
+<a name="anchor-177"></a>FUNCTION : UsrIntegerRetrieve()
+PURPOSE  : Retrieve an integer
+\*====================================================================*/
+int UsrIntegerRetrieve(
+    ProExtdataClass *class,
+<a name="anchor-178"></a>    char *slotname,
+    int *i)
+{
+    ProExtdataSlot slot;
+    int *data;
+<a name="anchor-179"></a>    int size, type;
+
+/*--------------------------------------------------------------------*\
+    Read the integer from the data slot
+\*--------------------------------------------------------------------*/
+<a name="anchor-180"></a>    slot.p_class = class;
+    ProStringToWstring(slot.slot_name, slotname);
+    if(ProExtdataSlotRead(&amp;slot, KEY_BY_NAME, &amp;type, &amp;size, (void**)&amp;data)
+                != PROEXTDATA_TK_NO_ERROR)
+        return(0);
+<a name="anchor-181"></a>
+    *i = *data;
+
+    return(1);
+}
+<a name="anchor-182"></a>
+/*====================================================================*\
+    FUNCTION :  UsrClassExists
+    PURPOSE  :  Check if the specified class exists
+\*====================================================================*/
+<a name="anchor-183"></a>int UsrClassExists(
+    ProMdl model,
+    char *name,
+    ProExtdataClass *class)
+{
+<a name="anchor-184"></a>    ProExtdataErr status;
+    int n_classes, c;
+    ProName *classes;
+
+    status = ProExtdataClassNamesList(model, &amp;n_classes, &amp;classes);
+<a name="anchor-185"></a>    if(status != PROEXTDATA_TK_NO_ERROR)
+        return(0);
+
+    for(c=0;c&lt;n_classes;c++)
+    {
+<a name="anchor-186"></a>        if(!ProUtilStrwscmp(name, classes[c]))
+        {
+            class->p_model = model;
+            ProStringToWstring(class->class_name, name);
+            ProArrayFree((ProArray *)&amp;classes);
+<a name="anchor-187"></a>            return(1);
+        }
+    }
+
+    ProArrayFree((ProArray *)&amp;classes);
+<a name="anchor-188"></a>
+    return(0);
+}
+</pre>
+</body>
+</html>

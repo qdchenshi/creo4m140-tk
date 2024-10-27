@@ -1,0 +1,482 @@
+<html>
+<head>
+<title>PTAEToRound.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProObjects.h>
+#include &lt;ProRound.h>
+#include &lt;ProElement.h>
+#include &lt;ProCrvcollection.h>
+<a name="anchor-2"></a>#include &lt;ProMdl.h>
+#include &lt;ProGeomitem.h>
+#include &lt;ProSelbuffer.h>
+#include &lt;ProFeature.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>#include &lt;ProVariantFeat.h>
+#include &lt;ProAnnotationFeat.h>
+#include &lt;ProAnnotationElem.h>
+
+#include &lt;PTAFExamples.h>
+<a name="anchor-4"></a>
+/*====================================================================*\
+    FUNCTION :	 TestPTAFExCreateRoundFeatureAccess()
+    PURPOSE  :   Enable access to the Round Feature from AE button	
+\*====================================================================*/
+<a name="anchor-5"></a>uiCmdAccessState TestPTAFExCreateRoundFeatureAccess(uiCmdAccessMode access_mode)
+{
+  ProMdl mdl;
+  ProMdlType mdltype;
+  ProAnnotationElem annotelem;
+<a name="anchor-6"></a>  int featType = -1;
+  ProSelection *sel=NULL;
+
+/*---------------------------------------------------------------------*\
+Test to See if the current model is a Part / Assembly
+<a name="anchor-7"></a>where annotation features exist
+\*---------------------------------------------------------------------*/
+  status = ProMdlCurrentGet(&amp;mdl);
+  if (status != PRO_TK_NO_ERROR) return (ACCESS_UNAVAILABLE);
+
+<a name="anchor-8"></a>  ProMdlTypeGet(mdl, &amp;mdltype); 
+  if ((mdltype != PRO_MDL_PART) &amp;&amp; (mdltype != PRO_MDL_ASSEMBLY))
+    return (ACCESS_UNAVAILABLE);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-9"></a>Test to see if the Selection buffer if empty
+Get the Annotation Element from the Selection buffer
+\*---------------------------------------------------------------------*/
+  status = PTAFExTestforSelectionsInBuffer();
+
+<a name="anchor-10"></a>  PT_TEST_LOG_SUCC(&quot;PTAFExTestforSelectionsInBuffer &quot;);
+
+
+  if (status != PRO_TK_NO_ERROR) return (ACCESS_UNAVAILABLE);
+
+<a name="anchor-11"></a>/*---------------------------------------------------------------------*\
+User gets the ProSelection from the selection buffer
+\*---------------------------------------------------------------------*/
+  status = ProSelbufferSelectionsGet(&amp;sel);
+  PT_TEST_LOG_SUCC(&quot;PTAFExCreateRoundfromAE::ProSelbufferSelectionsGet &quot;);
+<a name="anchor-12"></a>
+/*---------------------------------------------------------------------*\
+Get ModelItem from the ProSelection
+\*---------------------------------------------------------------------*/
+  status = ProSelectionModelitemGet(sel[0], &amp;annotelem);
+<a name="anchor-13"></a>  PT_TEST_LOG_SUCC(&quot;PTAFExCreateRoundfromAE::ProSelectionModelitemGet &quot;);
+
+  ProSelectionarrayFree (sel);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-14"></a>Make sure Modelitem is an AE
+\*---------------------------------------------------------------------*/
+  if (annotelem.type != PRO_ANNOTATION_ELEM) return ACCESS_UNAVAILABLE;
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-15"></a>Get the feature type to be created
+\*---------------------------------------------------------------------*/
+  status = PTAFExGetFeatureType(&amp;annotelem, &amp;featType);
+
+  if (featType == PTAFEX_PRO_FEAT_ROUND) return (ACCESS_AVAILABLE);
+<a name="anchor-16"></a>  else return (ACCESS_UNAVAILABLE);
+}
+
+/*====================================================================*\
+    FUNCTION :	 PTAFExCreateRoundfromAE()
+<a name="anchor-17"></a>    PURPOSE  :   Callback to create Round feature from AE	
+\*====================================================================*/
+ProError PTAFExCreateRoundfromAE()
+{
+  ProSelection *sel=NULL, ref_sel;
+<a name="anchor-18"></a>  ProAnnotationElem annotelem;
+  int feature_type = -1;
+  double radius = -1;
+  ProAnnotationReference *references=NULL;
+  int num_refs = 0, i;
+<a name="anchor-19"></a>  ProGeomitem edge;
+  ProFeature feat;
+  ProFeattype feat_type;
+  ProCrvcollinstr curv_coll_instr;
+  ProCollection curv_coll;
+<a name="anchor-20"></a>  ProAsmcomppath path;
+  ProMdlType type;
+  ProFeature inh_feat;
+  ProReference edge_ref;
+
+<a name="anchor-21"></a>  inh_feat.owner = NULL;
+
+/*---------------------------------------------------------------------*\
+User gets the ProSelection from the selection buffer
+\*---------------------------------------------------------------------*/
+<a name="anchor-22"></a>  status = ProSelbufferSelectionsGet(&amp;sel);
+  PT_TEST_LOG_SUCC(&quot;PTAFExCreateRoundfromAE::ProSelbufferSelectionsGet &quot;);
+
+/*---------------------------------------------------------------------*\
+Get ModelItem from the ProSelection
+<a name="anchor-23"></a>\*---------------------------------------------------------------------*/
+  status = ProSelectionModelitemGet(sel[0], &amp;annotelem);
+  PT_TEST_LOG_SUCC(&quot;PTAFExCreateRoundfromAE::ProSelectionModelitemGet &quot;);
+
+
+<a name="anchor-24"></a>/*---------------------------------------------------------------------*\
+If the selected modelitem owner is not the same as the component path
+owner, and the component path owner is a part, the selection was
+from an inheritance feature.
+\*---------------------------------------------------------------------*/
+<a name="anchor-25"></a>  status = ProSelectionAsmcomppathGet (sel[0], &amp;path);
+  
+  if (status == PRO_TK_NO_ERROR)
+    {
+      status = ProMdlTypeGet (path.owner, &amp;type);
+<a name="anchor-26"></a>      if (type == PRO_MDL_PART)
+	{
+/*---------------------------------------------------------------------*\
+Save the inheritance feature information.
+\*---------------------------------------------------------------------*/
+<a name="anchor-27"></a>	  inh_feat.owner = path.owner;
+	  inh_feat.id = path.comp_id_table [0];
+	  inh_feat.type = PRO_FEATURE;
+	}
+    }
+<a name="anchor-28"></a>      
+/*---------------------------------------------------------------------*\
+Make sure Modelitem is an AE
+\*---------------------------------------------------------------------*/
+  if (annotelem.type != PRO_ANNOTATION_ELEM) return PRO_TK_NO_ERROR;
+<a name="anchor-29"></a>
+/*---------------------------------------------------------------------*\
+If an AE, check for &quot;round&quot; parameter
+\*---------------------------------------------------------------------*/
+  status = PTAFExGetFeatureType(&amp;annotelem, &amp;feature_type);
+<a name="anchor-30"></a> 
+  if (status == PRO_TK_NO_ERROR) {
+/*---------------------------------------------------------------------*\
+If the AE does not contain a round feature type parameter, quit function
+\*---------------------------------------------------------------------*/
+<a name="anchor-31"></a>    if (feature_type != PTAFEX_PRO_FEAT_ROUND) return PRO_TK_NO_ERROR;
+		
+/*---------------------------------------------------------------------*\
+If the AE contains parameter &quot;round&quot;, get the value.
+\*---------------------------------------------------------------------*/
+<a name="anchor-32"></a>    status = PTAFExGetFeatureValue(&amp;annotelem, &amp;radius);
+
+/*---------------------------------------------------------------------*\
+Allocate a new Curve Collection for use as the round reference
+\*---------------------------------------------------------------------*/
+<a name="anchor-33"></a>    status = ProCrvcollectionAlloc( &amp;curv_coll );
+
+/*---------------------------------------------------------------------*\
+Convert the references for the annotation to feature references
+\*---------------------------------------------------------------------*/
+<a name="anchor-34"></a>    status = ProAnnotationelemReferencesCollect(&amp;annotelem, 
+						PRO_ANNOTATION_REF_ALL, 
+						PRO_ANNOT_REF_FROM_ANNOTATION,
+						&amp;references);
+
+<a name="anchor-35"></a>    status = ProArraySizeGet((ProArray*)references, &amp;num_refs);
+    
+    for (i=0; i&lt;num_refs; i++) {
+      ProAnnotationRefType my_ref_type = references[i].type; 
+      
+<a name="anchor-36"></a>      if ( my_ref_type != PRO_ANNOT_REF_SINGLE )
+	continue; 
+      
+/*---------------------------------------------------------------------*\
+Create the Selection from the ProReference
+<a name="anchor-37"></a>\*---------------------------------------------------------------------*/
+      status = ProReferenceToSelection(references[i].object.reference, &amp;ref_sel);
+
+/*---------------------------------------------------------------------*\
+Get the Geomitem from the ProSelection
+<a name="anchor-38"></a>\*---------------------------------------------------------------------*/
+      status = ProSelectionModelitemGet(ref_sel, (ProModelitem*)&amp;edge);
+
+/*---------------------------------------------------------------------*\
+If not an Edge, ignore the reference for chamfer creation
+<a name="anchor-39"></a>\*---------------------------------------------------------------------*/
+      if (edge.type == PRO_EDGE) {
+		
+	status = ProGeomitemFeatureGet(&amp;edge, &amp;feat);
+	status = ProFeatureTypeGet(&amp;feat, &amp;feat_type);
+<a name="anchor-40"></a>
+/*---------------------------------------------------------------------*\
+If the annotation element was from an inheritance feature, we need to 
+convert the references to references in the top-level model.
+\*---------------------------------------------------------------------*/
+<a name="anchor-41"></a>	if (inh_feat.owner != NULL)
+	  {
+	    ProGeomitem new_edge;
+
+	    status = ProDatasharingfeatCopiedgeomitemFind (&amp;inh_feat,
+<a name="anchor-42"></a>							   NULL,
+							   &amp;edge,
+							   &amp;new_edge);
+	    PT_TEST_LOG_SUCC (&quot;ProDatasharingfeatCopiedgeomitemFind()&quot;);
+
+<a name="anchor-43"></a>	    ProReferenceAlloc (&amp;edge_ref);
+	    ProReferenceSet (edge_ref, NULL, &amp;new_edge);
+	  }
+	else
+	  ProSelectionToReference (ref_sel, &amp;edge_ref);
+<a name="anchor-44"></a>	    
+	ProSelectionFree (&amp;ref_sel);
+	
+/*---------------------------------------------------------------------*\
+If the edge belongs to a Hole, it may be 1/2 of a tangent edge circling
+<a name="anchor-45"></a>the top of the hole.  Make this assumption, and create the reference chain
+for the chamfer as a tangent chain.  Otherwise, use just this one edge 
+as the reference chain.
+\*---------------------------------------------------------------------*/
+	if(feat_type == PRO_FEAT_HOLE) status = ProCrvcollinstrAlloc(PRO_CURVCOLL_TAN_INSTR, &amp;curv_coll_instr);
+<a name="anchor-46"></a>	else status = ProCrvcollinstrAlloc(PRO_CURVCOLL_ADD_ONE_INSTR, &amp;curv_coll_instr);
+
+/*---------------------------------------------------------------------*\
+Add the reference to the Instruction
+\*---------------------------------------------------------------------*/
+<a name="anchor-47"></a>	status = ProCrvcollinstrReferenceAdd(curv_coll_instr, edge_ref);
+	ProReferenceFree (edge_ref);
+				
+/*---------------------------------------------------------------------*\
+Add the instruction to the curve collection
+<a name="anchor-48"></a>\*---------------------------------------------------------------------*/
+	status = ProCrvcollectionInstructionAdd( curv_coll, curv_coll_instr );
+      }  
+    }
+
+<a name="anchor-49"></a>
+/*---------------------------------------------------------------------*\
+Create the Round feature based on the attributes
+\*---------------------------------------------------------------------*/
+
+<a name="anchor-50"></a>    if (inh_feat.owner == NULL)
+      status = ProMdlCurrentGet( &amp;curr_mdl);
+    else
+      curr_mdl = inh_feat.owner;
+    status = PTAFExRoundCreate(curr_mdl, radius, curv_coll);
+<a name="anchor-51"></a>
+    ProAnnotationreferencearrayFree (references);
+    ProCollectionFree (&amp;curv_coll);
+  }
+
+<a name="anchor-52"></a>  ProSelectionarrayFree (sel);
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-53"></a>/*====================================================================*\
+  FUNCTION :   PTAFExRoundCreate()
+  PURPOSE  :   Create a chamfer using element tree.  Based on 
+              UserEdgeRoundCreate() in UgEdgeRoundCreate.c (pt_userguide)
+\*====================================================================*/
+<a name="anchor-54"></a>int PTAFExRoundCreate(ProMdl model, double radius, ProCollection curv_coll) 
+{
+  ProElement pro_e_feature_tree;
+  ProElement pro_e_feature_type;
+  ProElement pro_e_rndch_sets;
+<a name="anchor-55"></a>  ProElement pro_e_rndch_set;
+  ProElement pro_e_rndch_dimensional_schema;
+  ProElement pro_e_rndch_chamfer_shape;
+  ProElement pro_e_rndch_shape_options;
+  ProElement pro_e_rndch_variable_radius;
+<a name="anchor-56"></a>  ProElement pro_e_rndch_compound_conic;
+  ProElement pro_e_rndch_conic_type;
+  ProElement pro_e_rndch_conic_value;
+  ProElement pro_e_rndch_conic_dep_opt;
+  ProElement pro_e_rndch_references;
+<a name="anchor-57"></a>  ProElement pro_e_rndch_reference_type;
+  ProElement pro_e_std_curve_collection_appl;  
+  ProElement pro_e_rndch_compound_spine;
+  ProElement pro_e_rndch_ball_spine;
+  ProElement pro_e_rndch_compound_ext_options;
+<a name="anchor-58"></a>  ProElement pro_e_rndch_auto_blend;
+  ProElement pro_e_rndch_radii;
+  ProElement pro_e_rndch_radius;
+  ProElement pro_e_rndch_leg1;
+  ProElement pro_e_rndch_leg_type;
+<a name="anchor-59"></a>  ProElement pro_e_rndch_leg_value;
+  ProElement pro_e_rndch_leg2;
+  ProElement pro_e_rndch_attach_type;
+  ProElement pro_e_rndch_transitions;
+  
+<a name="anchor-60"></a>  status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;pro_e_feature_tree ); 
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  
+  status = ProElementAlloc ( PRO_E_FEATURE_TYPE, &amp;pro_e_feature_type );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+<a name="anchor-61"></a>  status = ProElementIntegerSet ( pro_e_feature_type, 913 );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_feature_type );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_SETS, &amp;pro_e_rndch_sets );
+<a name="anchor-62"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_rndch_sets  );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_SET, &amp;pro_e_rndch_set );
+<a name="anchor-63"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_sets, NULL, pro_e_rndch_set  );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_DIMENSIONAL_SCHEMA, &amp;pro_e_rndch_dimensional_schema );
+<a name="anchor-64"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_dimensional_schema, 0 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_dimensional_schema );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+<a name="anchor-65"></a>  status = ProElementAlloc ( PRO_E_RNDCH_CHAMFER_SHAPE, &amp;pro_e_rndch_chamfer_shape );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_chamfer_shape, 0 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_chamfer_shape );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-66"></a>  
+  status = ProElementAlloc ( PRO_E_RNDCH_SHAPE_OPTIONS, &amp;pro_e_rndch_shape_options );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_shape_options, 0 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_shape_options );
+<a name="anchor-67"></a>  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_VARIABLE_RADIUS, &amp;pro_e_rndch_variable_radius );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_variable_radius, 0 );
+<a name="anchor-68"></a>  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_variable_radius );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_COMPOUND_CONIC, &amp;pro_e_rndch_compound_conic );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+<a name="anchor-69"></a>  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_compound_conic  );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_CONIC_TYPE, &amp;pro_e_rndch_conic_type );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+<a name="anchor-70"></a>  status = ProElementIntegerSet ( pro_e_rndch_conic_type, 2 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_compound_conic, NULL, pro_e_rndch_conic_type );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_CONIC_VALUE, &amp;pro_e_rndch_conic_value );
+<a name="anchor-71"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElementDoubleSet (  pro_e_rndch_conic_value, 0.000000 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_compound_conic, NULL, pro_e_rndch_conic_value );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+<a name="anchor-72"></a>  status = ProElementAlloc ( PRO_E_RNDCH_CONIC_DEP_OPT, &amp;pro_e_rndch_conic_dep_opt );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_conic_dep_opt, 0 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_compound_conic, NULL, pro_e_rndch_conic_dep_opt );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-73"></a>  
+  status = ProElementAlloc ( PRO_E_RNDCH_REFERENCES, &amp;pro_e_rndch_references );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_references  );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+<a name="anchor-74"></a>  
+  status = ProElementAlloc ( PRO_E_RNDCH_REFERENCE_TYPE, &amp;pro_e_rndch_reference_type );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_reference_type, 1 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_references, NULL, pro_e_rndch_reference_type );
+<a name="anchor-75"></a>  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_STD_CURVE_COLLECTION_APPL, &amp;pro_e_std_curve_collection_appl );
+  
+  status = ProElementCollectionSet( pro_e_std_curve_collection_appl, curv_coll );
+<a name="anchor-76"></a>  PT_TEST_LOG_SUCC( &quot; ProElementCollectionSet &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_references, NULL, pro_e_std_curve_collection_appl );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_COMPOUND_SPINE, &amp;pro_e_rndch_compound_spine );
+<a name="anchor-77"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_compound_spine  );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_BALL_SPINE, &amp;pro_e_rndch_ball_spine );
+<a name="anchor-78"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_ball_spine, 0 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_compound_spine, NULL, pro_e_rndch_ball_spine );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+<a name="anchor-79"></a>  status = ProElementAlloc ( PRO_E_STD_CURVE_COLLECTION_APPL, &amp;pro_e_std_curve_collection_appl );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_COMPOUND_EXT_OPTIONS, &amp;pro_e_rndch_compound_ext_options );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+<a name="anchor-80"></a>  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_compound_ext_options  );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_AUTO_BLEND, &amp;pro_e_rndch_auto_blend );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+<a name="anchor-81"></a>  status = ProElementIntegerSet ( pro_e_rndch_auto_blend, 0 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_compound_ext_options, NULL, pro_e_rndch_auto_blend );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_RADII, &amp;pro_e_rndch_radii );
+<a name="anchor-82"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_set, NULL, pro_e_rndch_radii  );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_RADIUS, &amp;pro_e_rndch_radius );
+<a name="anchor-83"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_radii, NULL, pro_e_rndch_radius  );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_LEG1, &amp;pro_e_rndch_leg1 );
+<a name="anchor-84"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_rndch_radius, NULL, pro_e_rndch_leg1  );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_LEG_TYPE, &amp;pro_e_rndch_leg_type );
+<a name="anchor-85"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElementIntegerSet ( pro_e_rndch_leg_type, 1 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_leg1, NULL, pro_e_rndch_leg_type );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+<a name="anchor-86"></a>  status = ProElementAlloc ( PRO_E_RNDCH_LEG_VALUE, &amp;pro_e_rndch_leg_value );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  
+  status = ProElementDoubleSet (  pro_e_rndch_leg_value, radius);
+  
+<a name="anchor-87"></a>  status = ProElemtreeElementAdd ( pro_e_rndch_leg1, NULL, pro_e_rndch_leg_value );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_LEG2, &amp;pro_e_rndch_leg2 );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+<a name="anchor-88"></a>  status = ProElemtreeElementAdd ( pro_e_rndch_radius, NULL, pro_e_rndch_leg2  );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_LEG_TYPE, &amp;pro_e_rndch_leg_type );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+<a name="anchor-89"></a>  status = ProElementIntegerSet ( pro_e_rndch_leg_type, 0 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_leg2, NULL, pro_e_rndch_leg_type );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_LEG_VALUE, &amp;pro_e_rndch_leg_value );
+<a name="anchor-90"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElementDoubleSet (  pro_e_rndch_leg_value, 0.000000 );
+  status = ProElemtreeElementAdd ( pro_e_rndch_leg2, NULL, pro_e_rndch_leg_value );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+<a name="anchor-91"></a>  status = ProElementAlloc ( PRO_E_STD_CURVE_COLLECTION_APPL, &amp;pro_e_std_curve_collection_appl );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_ATTACH_TYPE, &amp;pro_e_rndch_attach_type );
+  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+<a name="anchor-92"></a>  status = ProElementIntegerSet ( pro_e_rndch_attach_type, 0 );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_rndch_attach_type );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = ProElementAlloc ( PRO_E_RNDCH_TRANSITIONS, &amp;pro_e_rndch_transitions );
+<a name="anchor-93"></a>  PT_TEST_LOG_SUCC( &quot; ProElementAlloc &quot; );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, pro_e_rndch_transitions  );
+  PT_TEST_LOG_SUCC( &quot; ProElemtreeElementAdd&quot; );
+  
+  status = PTTestFeatureCreate_low ( model, pro_e_feature_tree  ); 
+<a name="anchor-94"></a>  PT_TEST_LOG_SUCC (&quot; PTTestFeatureCreate_low&quot;); 
+
+  return status;
+}
+</pre>
+</body>
+</html>

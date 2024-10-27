@@ -1,0 +1,639 @@
+<html>
+<head>
+<title>UgModelCheck.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProMdlChk.h>
+#include &lt;ProParameter.h>
+#include &lt;ProSolid.h>
+<a name="anchor-2"></a>#include &lt;ProDrawing.h>
+#include &lt;ProFamtable.h>
+#include &lt;ProSelection.h>
+#include &lt;ProScope.h>
+
+<a name="anchor-3"></a>static wchar_t** s_results_table = NULL;
+static wchar_t*  s_results_url = NULL;
+
+#define MISSING_PARAM (int)999
+#define INVALID_PARAM_TYPE (int)9999
+<a name="anchor-4"></a>
+/*=====================================================================================================*\
+FUNCTION: UserCheckMdlParamNameCompare
+PURPOSE:  Compare the model name to the value of the given param.
+RETURNS:  MISSING_PARAM, INVALID_PARAM_TYPE, or the integer results of the string comparison.
+<a name="anchor-5"></a>\*======================================================================================================*/
+static int UserCheckMdlParamNameCompare (ProMdl mdl, ProName param_name)
+{
+	ProError status = PRO_TK_NO_ERROR;
+	ProMdlName mdl_name;
+<a name="anchor-6"></a>	ProModelitem modelitem;
+	ProParamvalue param_value;
+	ProParameter param;
+	int compare_result;
+
+<a name="anchor-7"></a>	status = ProMdlMdlnameGet (mdl, mdl_name);
+  
+	status = ProMdlToModelitem(mdl, &amp;modelitem);
+
+	status = ProParameterInit(&amp;modelitem, param_name, &amp;param);
+<a name="anchor-8"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	Parameter is missing
+\*------------------------------------------------------------------------------------------------------*/
+	if (status != PRO_TK_NO_ERROR)
+<a name="anchor-9"></a>	{
+		compare_result = MISSING_PARAM;
+	}
+	else
+	{
+<a name="anchor-10"></a>		status = ProParameterValueGet(&amp;param,&amp;param_value);
+
+/*------------------------------------------------------------------------------------------------------*\
+	Parameter is not a string parameter
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-11"></a>		if (status != PRO_TK_NO_ERROR || param_value.type != PRO_PARAM_STRING)
+		{
+			compare_result = INVALID_PARAM_TYPE;
+		}
+		else
+<a name="anchor-12"></a>		{
+/*------------------------------------------------------------------------------------------------------*\
+	Compare the model name to the parameter value.
+\*------------------------------------------------------------------------------------------------------*/
+			ProWstringCompare (param_value.value.s_val, mdl_name, PRO_VALUE_UNUSED, &amp;compare_result);
+<a name="anchor-13"></a>		}
+	}
+
+	return (compare_result);
+}
+<a name="anchor-14"></a>
+/*======================================================================================================*\
+FUNCTION: UserCustCheckMdlParamName
+PURPOSE:  Check function for the ModelCheck check.  Outputs details of the comparison as a ModelCheck error.
+\*======================================================================================================*/
+<a name="anchor-15"></a>static ProError UserCustCheckMdlParamName (ProCharName name, ProMdl mdl, ProAppData appdata, 
+					int* results_count, wchar_t** results_url, wchar_t*** results_table)
+{
+	ProFileName message_file;
+	ProError status = PRO_TK_NO_ERROR;
+<a name="anchor-16"></a>	ProName* param_name_ptr = (ProName*)appdata;
+	ProMdlName mdl_name;
+	int compare_result = UserCheckMdlParamNameCompare (mdl, *param_name_ptr);
+	ProLine error_msg;
+
+<a name="anchor-17"></a>/*------------------------------------------------------------------------------------------------------*\
+	Parameter is set correctly.
+\*------------------------------------------------------------------------------------------------------*/
+    if (compare_result == 0)
+	{
+<a name="anchor-18"></a>		*results_count = 0;
+		*results_url = NULL;
+		*results_table = NULL;
+		return (PRO_TK_NO_ERROR);
+	}
+<a name="anchor-19"></a>/*------------------------------------------------------------------------------------------------------*\
+	Parameter is not set correctly.  Show an appropriate error message.
+\*------------------------------------------------------------------------------------------------------*/
+	else
+	{
+<a name="anchor-20"></a>		ProStringToWstring (message_file, &quot;pt_ug_modelcheck.txt&quot;);
+
+		status = ProMdlMdlnameGet (mdl, mdl_name);
+
+		if (compare_result == MISSING_PARAM)
+<a name="anchor-21"></a>		{
+			status = ProMessageToBuffer (error_msg, message_file, &quot;UG CustomCheck: MDL PARAM NOT FOUND&quot;, 
+											*param_name_ptr, mdl_name);
+		}
+		else if (compare_result == INVALID_PARAM_TYPE)
+<a name="anchor-22"></a>		{
+			status = ProMessageToBuffer (error_msg, message_file, &quot;UG CustomCheck: MDL PARAM INV TYPE&quot;, 
+											*param_name_ptr, mdl_name);
+		}
+		else
+<a name="anchor-23"></a>		{
+			status = ProMessageToBuffer (error_msg, message_file, &quot;UG CustomCheck: MDL PARAM INCORRECT&quot;, 
+											*param_name_ptr, mdl_name);
+		}
+
+<a name="anchor-24"></a>	    status = ProArrayAlloc(1, sizeof(ProWstring), 1, (ProArray*)&amp;s_results_table);
+	 
+		s_results_table [0] = (wchar_t*) calloc (PRO_LINE_SIZE, sizeof (wchar_t));
+		ProWstringCopy (error_msg, s_results_table[0], PRO_VALUE_UNUSED);
+
+<a name="anchor-25"></a>/*------------------------------------------------------------------------------------------------------*\
+	This URL will be used for the &quot;Check Details&quot; link in the ModelCheck report.
+\*------------------------------------------------------------------------------------------------------*/
+		s_results_url = (wchar_t*) calloc (PRO_PATH_SIZE, sizeof (wchar_t));
+		ProStringToWstring (s_results_url, &quot;http://www.ptc.com/&quot;);
+<a name="anchor-26"></a>
+	    *results_table = s_results_table;
+	    *results_count = 1;
+	    *results_url = s_results_url;
+
+<a name="anchor-27"></a>		return (PRO_TK_NO_ERROR);
+	 }
+}
+
+/*======================================================================================================*\
+<a name="anchor-28"></a>FUNCTION: UserCustCheckMdlAccType
+PURPOSE:  Check function for the ModelCheck check for accuracy type.  Outputs the accuracy type.
+\*======================================================================================================*/
+static ProError UserCustCheckMdlAccType (ProCharName name, ProMdl mdl, ProAppData appdata, 
+					int* results_count, wchar_t** results_url, wchar_t*** results_table)
+<a name="anchor-29"></a>{
+	ProFileName message_file;
+	ProError status = PRO_TK_NO_ERROR;
+	ProAccuracyType acc_type;
+	double acc_value;
+<a name="anchor-30"></a>	ProLine info_msg;
+	ProCharLine message_key;
+
+	ProStringToWstring (message_file, &quot;pt_ug_modelcheck.txt&quot;);
+
+<a name="anchor-31"></a>/*------------------------------------------------------------------------------------------------------*\
+	Output the model accuracy type as an info check.
+\*------------------------------------------------------------------------------------------------------*/
+	status = ProSolidAccuracyGet (mdl, &amp;acc_type, &amp;acc_value);
+
+<a name="anchor-32"></a>	switch (acc_type)
+	{
+	case PRO_ACCURACY_ABSOLUTE:
+		strcpy (message_key, &quot;UG CustomCheck: MDL ACC ABS&quot;);
+		break;
+<a name="anchor-33"></a>	case PRO_ACCURACY_RELATIVE:
+		strcpy (message_key, &quot;UG CustomCheck: MDL ACC REL&quot;);
+		break;
+	default:
+		return (PRO_TK_UNSUPPORTED);
+<a name="anchor-34"></a>	}
+
+	status = ProMessageToBuffer (info_msg, message_file, message_key);
+	
+	status = ProArrayAlloc(1, sizeof(ProWstring), 1, (ProArray*)&amp;s_results_table);
+<a name="anchor-35"></a>	 
+	s_results_table [0] = (wchar_t*) calloc (PRO_LINE_SIZE, sizeof (wchar_t));
+	ProWstringCopy (info_msg, s_results_table[0], PRO_VALUE_UNUSED);
+
+	*results_table = s_results_table;
+<a name="anchor-36"></a>	*results_count = 1;
+	*results_url = NULL;
+
+	return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-37"></a>
+/*======================================================================================================*\
+FUNCTION: UserCustCheckRefScope
+PURPOSE:  Check function for the ModelCheck check for reference scope.  Outputs the scope permitted for 
+             external refs.
+<a name="anchor-38"></a>\*======================================================================================================*/
+static ProError UserCustCheckRefScope (ProCharName name, ProMdl mdl, ProAppData appdata, 
+					int* results_count, wchar_t** results_url, wchar_t*** results_table)
+{
+	ProFileName message_file;
+<a name="anchor-39"></a>	ProError status = PRO_TK_NO_ERROR;
+	ProExtRefScope scope;
+	ProInvalidRefBehavior behavior;
+	ProLine info_msg;
+	ProCharLine message_key;
+<a name="anchor-40"></a>
+	ProStringToWstring (message_file, &quot;pt_ug_modelcheck.txt&quot;);
+
+/*------------------------------------------------------------------------------------------------------*\
+	Output the model ref control level as an info check.
+<a name="anchor-41"></a>\*------------------------------------------------------------------------------------------------------*/
+	status = ProRefCtrlSolidGet (mdl, &amp;scope, &amp;behavior);
+
+	switch (scope)
+	{
+<a name="anchor-42"></a>	case PRO_REFCTRL_ALLOW_ALL:
+		strcpy (message_key, &quot;UG CustomCheck: MDL REFC ALL&quot;);
+		break;
+	case PRO_REFCTRL_ALLOW_SUBASSEMBLY:
+		strcpy (message_key, &quot;UG CustomCheck: MDL REFC SUB&quot;);
+<a name="anchor-43"></a>		break;
+	case PRO_REFCTRL_ALLOW_SKELETON:
+		strcpy (message_key, &quot;UG CustomCheck: MDL REFC SKEL&quot;);
+		break;
+	case PRO_REFCTRL_ALLOW_NONE:
+<a name="anchor-44"></a>		strcpy (message_key, &quot;UG CustomCheck: MDL REFC NONE&quot;);
+		break;
+
+	default:
+		return (PRO_TK_UNSUPPORTED);
+<a name="anchor-45"></a>	}
+
+	status = ProMessageToBuffer (info_msg, message_file, message_key);
+	
+	status = ProArrayAlloc(1, sizeof(ProWstring), 1, (ProArray*)&amp;s_results_table);
+<a name="anchor-46"></a>	 
+	s_results_table [0] = (wchar_t*) calloc (PRO_LINE_SIZE, sizeof (wchar_t));
+	ProWstringCopy (info_msg, s_results_table[0], PRO_VALUE_UNUSED);
+
+	*results_table = s_results_table;
+<a name="anchor-47"></a>	*results_count = 1;
+	*results_url = NULL;
+
+	return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-48"></a>
+/*======================================================================================================*\
+FUNCTION: UserCustCheckDwgviewGeneric
+PURPOSE:  Check function for the ModelCheck check for generics in drawing views.  
+			Outputs a list of the view names.
+<a name="anchor-49"></a>\*======================================================================================================*/
+static ProError UserCustCheckDwgviewGeneric (ProCharName name, ProMdl mdl, ProAppData appdata, 
+					int* results_count, wchar_t** results_url, wchar_t*** results_table)
+{
+	ProFileName message_file;
+<a name="anchor-50"></a>	ProError status = PRO_TK_NO_ERROR;
+	ProView* views;
+	int i, size;
+	ProSolid solid;
+	ProFamtable fam_table;
+<a name="anchor-51"></a>	wchar_t* table_entry;
+
+	ProStringToWstring (message_file, &quot;pt_ug_modelcheck.txt&quot;);
+
+/*------------------------------------------------------------------------------------------------------*\
+<a name="anchor-52"></a>	Check the model shown by each view 
+\*------------------------------------------------------------------------------------------------------*/
+	status = ProDrawingViewsCollect ((ProDrawing)mdl, &amp;views);
+
+	if (status == PRO_TK_NO_ERROR)
+<a name="anchor-53"></a>	{
+		status = ProArraySizeGet (views, &amp;size);
+
+		if (status == PRO_TK_NO_ERROR &amp;&amp; size > 0)
+		{
+<a name="anchor-54"></a>			status = ProArrayAlloc(0, sizeof(ProWstring), 1, (ProArray*)&amp;s_results_table);
+
+			for (i = 0; i &lt; size; i ++)
+			{
+				status = ProDrawingViewSolidGet ((ProDrawing)mdl, views[i], &amp;solid);
+<a name="anchor-55"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	If ProFamtableCheck() succeeds, this means that the model has a family table with at least one 
+	instance or item in it.
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-56"></a>				status = ProFamtableInit (solid, &amp;fam_table);
+				status = ProFamtableCheck (&amp;fam_table);
+				
+				if (status == PRO_TK_NO_ERROR)
+				{
+<a name="anchor-57"></a>					table_entry  = (wchar_t*) calloc (PRO_NAME_SIZE, sizeof (wchar_t));
+
+					ProDrawingViewNameGet ((ProDrawing)mdl, views [i], table_entry);
+
+					ProArrayObjectAdd ((ProArray*)&amp;s_results_table, -1, 1, &amp;table_entry);
+<a name="anchor-58"></a>				}
+			}
+
+/*------------------------------------------------------------------------------------------------------*\
+	If no items were found...
+<a name="anchor-59"></a>\*------------------------------------------------------------------------------------------------------*/
+			status = ProArraySizeGet (s_results_table, &amp;size);
+			if (size == 0)
+			{
+				ProArrayFree ((ProArray*)&amp;s_results_table);
+<a name="anchor-60"></a>				s_results_table = NULL;
+			}
+		}
+	}
+				
+<a name="anchor-61"></a>	*results_table = s_results_table;
+	*results_count = size;
+	*results_url = NULL;
+
+	return (PRO_TK_NO_ERROR);
+<a name="anchor-62"></a>}
+
+
+/*======================================================================================================*\
+FUNCTION: UserCustCheckCleanUtility
+<a name="anchor-63"></a>PURPOSE:  Cleanup function for all of the ModelCheck checks. 
+\*======================================================================================================*/
+static ProError UserCustCheckCleanUtility (ProCharName name, ProMdl mdl, ProAppData appdata)
+{
+	int size, i;
+<a name="anchor-64"></a>	ProError status = PRO_TK_NO_ERROR;
+
+	if (s_results_table !=  NULL)
+	{
+		status = ProArraySizeGet (s_results_table, &amp;size);
+<a name="anchor-65"></a>
+		if (status == PRO_TK_NO_ERROR)
+		{
+			for (i = 0; i &lt; size; i++)
+				free (s_results_table [i]);
+<a name="anchor-66"></a>		
+			ProArrayFree ((ProArray*)&amp;s_results_table);
+		}
+		s_results_table = NULL;
+	}
+<a name="anchor-67"></a>
+	if (s_results_url != NULL)
+	{
+		free (s_results_url);
+		s_results_url = NULL;
+<a name="anchor-68"></a>	}
+
+	return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-69"></a>/*======================================================================================================*\
+FUNCTION: UserCustUpdateMdlParamName
+PURPOSE:  Update function for a ModelCheck error due to an invalid or missing model name parameter.
+\*======================================================================================================*/
+static ProError UserCustUpdateMdlParamName (ProCharName name, ProMdl mdl, wchar_t* selected_item, 
+<a name="anchor-70"></a>											ProAppData appdata)
+{
+	ProFileName message_file;
+	ProError status = PRO_TK_NO_ERROR;
+	ProName* param_name_ptr = (ProName*)appdata;
+<a name="anchor-71"></a>	ProMdlName mdl_name;
+	int compare_result = UserCheckMdlParamNameCompare (mdl, *param_name_ptr);
+	ProModelitem modelitem;
+	ProParamvalue param_value;
+	ProParameter param;
+<a name="anchor-72"></a>
+	if (compare_result == 0)
+	{
+		/* Nothing to do */
+		return (PRO_TK_NO_ERROR);
+<a name="anchor-73"></a>	}
+	else
+	{
+		ProStringToWstring (message_file, &quot;pt_ug_modelcheck.txt&quot;);
+
+<a name="anchor-74"></a>		status = ProMdlMdlnameGet (mdl, mdl_name);
+
+		param_value.type = PRO_PARAM_STRING;
+		ProWstringCopy (mdl_name, param_value.value.s_val, PRO_VALUE_UNUSED);
+
+<a name="anchor-75"></a>		status = ProMdlToModelitem (mdl, &amp;modelitem);
+
+/*------------------------------------------------------------------------------------------------------*\
+	Create the missing parameter with the correct value.
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-76"></a>		if (compare_result == MISSING_PARAM)
+		{
+			ProParameterCreate (&amp;modelitem, *param_name_ptr, &amp;param_value, &amp;param);
+			status = ProMessageDisplay (message_file, &quot;UG CustomCheck: MDL PARAM UPDATED&quot;, 
+										*param_name_ptr);
+<a name="anchor-77"></a>		}
+/*------------------------------------------------------------------------------------------------------*\
+	Since there is no way to change a parameter's type except by deleting and recreating it, the
+	check will not attempt to repair this situation.  Instead, show a message to the user.
+\*------------------------------------------------------------------------------------------------------*/
+<a name="anchor-78"></a>		else if (compare_result == INVALID_PARAM_TYPE)
+		{
+			status = ProMessageDisplay (message_file, &quot;UG CustomCheck: MDL PARAM UPDATE TYPE&quot;, 
+										*param_name_ptr);
+		}
+<a name="anchor-79"></a>/*------------------------------------------------------------------------------------------------------*\
+	Change the value of the parameter appropriately.
+\*------------------------------------------------------------------------------------------------------*/
+		else
+		{
+<a name="anchor-80"></a>			ProParameterInit (&amp;modelitem, *param_name_ptr, &amp;param);
+			ProParameterValueSet (&amp;param, &amp;param_value);
+			status = ProMessageDisplay (message_file, &quot;UG CustomCheck: MDL PARAM UPDATED&quot;, 
+										*param_name_ptr);
+		}
+<a name="anchor-81"></a>
+		return (PRO_TK_NO_ERROR);
+	 }
+}
+
+<a name="anchor-82"></a>/*======================================================================================================*\
+FUNCTION: UserDwgviewFilterByName
+PURPOSE:  Filter function to find drawing views by matching the input name.
+\*======================================================================================================*/
+static ProError UserDwgviewFilterByName (ProDrawing drawing, ProView view, ProAppData app_data)
+<a name="anchor-83"></a>{
+	ProError status = PRO_TK_NO_ERROR;
+	ProName name;
+	wchar_t* target_name = (wchar_t*)app_data;
+	int compare_result;
+<a name="anchor-84"></a>
+	status = ProDrawingViewNameGet (drawing, view, name);
+
+	ProWstringCompare (name, target_name, PRO_VALUE_UNUSED, &amp;compare_result);
+
+<a name="anchor-85"></a>	if (compare_result == 0)
+		return (PRO_TK_NO_ERROR);
+	else
+		return (PRO_TK_CONTINUE);
+}
+<a name="anchor-86"></a>
+#define DELTA_X 10.0  /* Screen coordinates */
+#define DELTA_Y 10.0  /* Screen coordinates */
+
+/*======================================================================================================*\
+<a name="anchor-87"></a>FUNCTION: UserDwgviewHighlight
+PURPOSE:  Action function to highlight the drawing view.
+\*======================================================================================================*/
+static ProError UserDwgviewHighlight (ProDrawing drawing, ProView view, ProError filter_status, 
+										ProAppData app_data)
+<a name="anchor-88"></a>{
+	ProError status = PRO_TK_NO_ERROR;
+	int sheet;
+	int win_id;
+	ProPoint3d outline [2];
+<a name="anchor-89"></a>	ProPoint3d points [5];
+	ProColor old_color, highlite_color;
+	ProLinestyle old_ls;
+
+	status = ProDrawingViewSheetGet (drawing, view, &amp;sheet);
+<a name="anchor-90"></a>
+	status = ProDrawingCurrentSheetSet (drawing, sheet);
+
+	status = ProWindowCurrentGet (&amp;win_id);
+	ProWindowRefresh (win_id);
+<a name="anchor-91"></a>
+/*------------------------------------------------------------------------------------------------------*\
+	Draw the outline of the view to highlight it.
+\*------------------------------------------------------------------------------------------------------*/
+	status = ProDrawingViewOutlineGet  (drawing, view, outline);
+<a name="anchor-92"></a>
+	points[0][0] = outline[0][0] - DELTA_X;
+	points[0][1] = outline[0][1] - DELTA_Y;
+	points[0][2] = 0.0;
+	points[1][0] = outline[0][0] - DELTA_X;
+<a name="anchor-93"></a>	points[1][1] = outline[1][1] + DELTA_Y;
+	points[1][2] = 0.0;
+	points[2][0] = outline[1][0] + DELTA_X;
+	points[2][1] = outline[1][1] + DELTA_Y;
+	points[2][2] = 0.0;
+<a name="anchor-94"></a>	points[3][0] = outline[1][0] + DELTA_X;
+	points[3][1] = outline[0][1] - DELTA_Y;
+	points[3][2] = 0.0;
+	points[4][0] = outline[0][0] - DELTA_X;
+	points[4][1] = outline[0][1] - DELTA_Y;
+<a name="anchor-95"></a>	points[4][2] = 0.0;
+
+	ProLinestyleSet (PRO_LINESTYLE_PHANTOM, &amp;old_ls);
+	
+	highlite_color.method = PRO_COLOR_METHOD_TYPE;
+<a name="anchor-96"></a>	highlite_color.value.type = PRO_COLOR_HIGHLITE;
+	ProGraphicsColorModify (&amp;highlite_color, &amp;old_color);
+
+	ProGraphicsPolylineDraw(points, 5); 
+
+<a name="anchor-97"></a>	ProGraphicsColorModify (&amp;old_color, NULL);
+	ProLinestyleSet (old_ls, NULL);
+
+	return (PRO_TK_E_FOUND);
+}
+<a name="anchor-98"></a>
+/*======================================================================================================*\
+FUNCTION: UserCustActionDwgviewGeneric
+PURPOSE:  Action function for the ModelCheck check that locates drawing views using generics.
+\*======================================================================================================*/
+<a name="anchor-99"></a>static ProError UserCustActionDwgviewGeneric (ProCharName name, ProMdl mdl, wchar_t* selected_item, 
+											ProAppData appdata)
+{
+	ProFileName message_file;
+	ProError status = PRO_TK_NO_ERROR;
+<a name="anchor-100"></a>
+	ProStringToWstring (message_file, &quot;pt_ug_modelcheck.txt&quot;);
+
+	ProDrawingViewVisit ((ProDrawing)mdl, UserDwgviewHighlight, UserDwgviewFilterByName, 
+						(ProAppData)selected_item);
+<a name="anchor-101"></a>
+	return (PRO_TK_NO_ERROR);
+}
+
+/*======================================================================================================*\
+<a name="anchor-102"></a>FUNCTION: UserCustomModelChecksDefine
+PURPOSE:  Registers all of the custom Pro/TOOLKIT ModelCheck checks.
+\*======================================================================================================*/
+int UserCustomModelChecksDefine()
+{
+<a name="anchor-103"></a>	ProFileName message_file;
+	ProCharName model_check_name;
+	ProLine check_label, action_label, update_label;
+	static ProName param_name;
+	ProError status;
+<a name="anchor-104"></a>
+/*--------------------------------------------------------------------*\
+	Prepare the button labels
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-105"></a>	/* Parameter name that should contain the model owner name */
+	ProStringToWstring (param_name, &quot;MDL_NAME_PARAM&quot;);
+
+	ProStringToWstring (message_file, &quot;pt_ug_modelcheck.txt&quot;);
+
+<a name="anchor-106"></a>	/* The name of the check. */
+    strcpy(model_check_name, &quot;CHKTK_UG_MDLPARAM_NAME&quot;);
+    
+    /* The label for the check */
+	status = ProMessageToBuffer (check_label, message_file, &quot;UG CustomCheck: MDL PARAM NAME&quot;, param_name);
+<a name="anchor-107"></a>
+    /* Label for the button used to update the model for an 
+       item found by the check */
+	status = ProMessageToBuffer (update_label, message_file, &quot;UG CustomCheckUpdate: MDL PARAM NAME&quot;);
+
+<a name="anchor-108"></a>/*--------------------------------------------------------------------*\
+	Register the custom ModelCheck check.  This check allows update
+	of the incorrect situation.
+\*--------------------------------------------------------------------*/
+    status = ProModelcheckCheckRegister (model_check_name, check_label, NULL, 
+<a name="anchor-109"></a>										UserCustCheckMdlParamName, 
+										UserCustCheckCleanUtility, 
+										NULL, 
+										NULL,
+										update_label, 
+<a name="anchor-110"></a>										UserCustUpdateMdlParamName, 
+										(ProAppData) &amp;param_name);
+
+	
+/*--------------------------------------------------------------------*\
+<a name="anchor-111"></a>	Prepare the button labels
+\*--------------------------------------------------------------------*/
+
+	/* The name of the check. */
+    strcpy(model_check_name, &quot;CHKTK_UG_MDL_ACC_TYPE&quot;);
+<a name="anchor-112"></a>    
+    /* The label for the check */
+	status = ProMessageToBuffer (check_label, message_file, &quot;UG CustomCheck: MDL ACC TYPE&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-113"></a>	Register the custom ModelCheck check (an info check, so no 
+	action or update is possible).
+\*--------------------------------------------------------------------*/
+    status = ProModelcheckCheckRegister (model_check_name, check_label, NULL, 
+										UserCustCheckMdlAccType, 
+<a name="anchor-114"></a>										UserCustCheckCleanUtility, 
+										NULL, 
+										NULL,
+										NULL, 
+										NULL, 
+<a name="anchor-115"></a>										NULL);
+
+/*--------------------------------------------------------------------*\
+	Prepare the button labels
+\*--------------------------------------------------------------------*/
+<a name="anchor-116"></a>
+	/* The name of the check. */
+    strcpy(model_check_name, &quot;CHKTK_UG_MDL_REFC_SCOPE&quot;);
+    
+    /* The label for the check */
+<a name="anchor-117"></a>	status = ProMessageToBuffer (check_label, message_file, &quot;UG CustomCheck: MDL REFC SCOPE&quot;);
+
+/*--------------------------------------------------------------------*\
+	Register the custom ModelCheck check (an info check, so no 
+	action or update is possible).
+<a name="anchor-118"></a>\*--------------------------------------------------------------------*/
+    status = ProModelcheckCheckRegister (model_check_name, check_label, NULL, 
+										UserCustCheckRefScope, 
+										UserCustCheckCleanUtility, 
+										NULL, 
+<a name="anchor-119"></a>										NULL,
+										NULL, 
+										NULL, 
+										NULL);
+
+<a name="anchor-120"></a>/*--------------------------------------------------------------------*\
+	Prepare the button labels
+\*--------------------------------------------------------------------*/
+
+	/* The name of the check. */
+<a name="anchor-121"></a>    strcpy(model_check_name, &quot;CHKTK_UG_DWGVIEW_GENERIC&quot;);
+    
+    /* The label for the check */
+	status = ProMessageToBuffer (check_label, message_file, &quot;UG CustomCheck: DWGVIEW GENERIC&quot;, param_name);
+
+<a name="anchor-122"></a>    /* Label for the button used to update the model for an 
+       item found by the check */
+	status = ProMessageToBuffer (action_label, message_file, &quot;UG CustomCheckAction: DWGVIEW GENERIC&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-123"></a>	Register the custom ModelCheck check; this check has a Highlight
+	action that users can use.
+\*--------------------------------------------------------------------*/
+    status = ProModelcheckCheckRegister (model_check_name, check_label, NULL, 
+										UserCustCheckDwgviewGeneric, 
+<a name="anchor-124"></a>										UserCustCheckCleanUtility, 
+										action_label, 
+										UserCustActionDwgviewGeneric,
+										NULL, 
+										NULL, 
+<a name="anchor-125"></a>										NULL);
+
+	
+
+	return (PRO_TK_NO_ERROR);
+<a name="anchor-126"></a>}
+</pre>
+</body>
+</html>

@@ -1,0 +1,566 @@
+<html>
+<head>
+<title>TestXsec.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/DEVELOP includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-2"></a>/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+<a name="anchor-3"></a>#include &lt;ProMenu.h>
+#include &lt;ProSolid.h>
+#include &lt;ProXsec.h>
+#include &lt;ProSelection.h>
+#include &lt;ProSurface.h>
+<a name="anchor-4"></a>#include &lt;ProUtil.h>
+#include &lt;UtilMenu.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-5"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestXsec.h&quot;
+#include &quot;TestError.h&quot;
+#include &lt;UtilMessage.h>
+#include &lt;ProMessage.h>
+<a name="anchor-6"></a>#include &lt;ProQuilt.h>
+#include &lt;UtilCollect.h>
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;UtilCollect.h>
+#include &lt;ProModelitem.h>
+<a name="anchor-7"></a>#include &lt;UtilString.h>
+#include &lt;ProTKRunTime.h>
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+<a name="anchor-8"></a>
+#define PRO_TEST_XSEC_MODIFY_DIMVALUES  1
+#define PRO_TEST_XSEC_MODIFY_REDEFINE   2
+#define PRO_TEST_XSEC_MODIFY_HATCHING   3
+#define PRO_TEST_XSEC_MODIFY_NAME       4
+<a name="anchor-9"></a>/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-10"></a>Application global/external data
+\*--------------------------------------------------------------------*/
+
+/*====================================================================*\
+    FUNCTION :	ProTestXsec
+<a name="anchor-11"></a>    PURPOSE  :	Menu for section action            
+\*====================================================================*/
+int ProTestXsec (
+    ProSolid *p_model)
+{
+<a name="anchor-12"></a>    int id;
+    ProError status;
+    status = ProMenuFileRegister((char*)&quot;TkXsec&quot;,(char*)&quot;tkxsec.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestXsecMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-13"></a>        
+    status = ProMenubuttonActionSet((char*)&quot;TkXsec&quot;,(char*)&quot;-Create&quot;,
+        (ProMenubuttonAction)ProTestXsecCreate, p_model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestXsecMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-14"></a>    status = ProMenubuttonActionSet((char*)&quot;TkXsec&quot;,(char*)&quot;-Delete&quot;,
+        (ProMenubuttonAction)ProTestXsecDelete, p_model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestXsecMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkXsec&quot;,(char*)&quot;-Show&quot;,
+<a name="anchor-15"></a>        (ProMenubuttonAction)ProTestXsecShow, p_model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestXsecMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkXsec&quot;,(char*)&quot;-Erase&quot;,
+        (ProMenubuttonAction)ProTestNotSupported, p_model,0);
+<a name="anchor-16"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestXsecMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkXsec&quot;,(char*)&quot;-Copy&quot;,
+        (ProMenubuttonAction)ProTestNotSupported, p_model,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestXsecMenu&quot;,
+<a name="anchor-17"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkXsec&quot;,(char*)&quot;-Modify&quot;,
+        (ProMenubuttonAction)ProTestXsecModify, p_model,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestXsecMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-18"></a>    status = ProMenubuttonActionSet((char*)&quot;TkXsec&quot;,(char*)&quot;-ListAllParams&quot;,
+        (ProMenubuttonAction)ProTestXsecListAllParams, p_model,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestXsecMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);    
+    status = ProMenubuttonActionSet((char*)&quot;TkXsec&quot;,(char*)&quot;TkXsec&quot;,
+<a name="anchor-19"></a>        (ProMenubuttonAction)ProMenuDelete, NULL,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestXsecMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);    
+
+
+<a name="anchor-20"></a>    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*)&quot;TkXsec&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate&quot;, &quot;ProTestXsecMenu&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess((char*)&quot;TkXsec&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProTestXsecMenu&quot;,
+<a name="anchor-21"></a>        status, status != PRO_TK_NO_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-22"></a>/*====================================================================*\
+    FUNCTION :	ProTestNotSupported
+    PURPOSE  :	            
+\*====================================================================*/
+int ProTestNotSupported (ProAppData app_data, int app_int)
+<a name="anchor-23"></a>{
+    ProUtilMsgPrint(&quot;gen&quot;,&quot;TEST %0s&quot;,&quot;Function not supported.&quot;);
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-24"></a>/*====================================================================*\
+    FUNCTION :	ProTestXsecCreate
+    PURPOSE  :	Creates a cross section through a datum plane.            
+\*====================================================================*/
+int ProTestXsecCreate (
+<a name="anchor-25"></a>    ProSolid    *p_model)
+{
+    int             sel_num, plane_id, quilt_id;
+    ProXsecCutobj   xsec_type;
+    ProSolid        solid_owner = *p_model;
+<a name="anchor-26"></a>    ProName         w_name;
+    ProError        status;
+    ProSelection    *sel_array = NULL;
+    ProModelitem    model_item;
+    ProSurface      surface;
+<a name="anchor-27"></a>    ProSrftype      surface_type;
+    ProXsec         xsec;
+    ProQuilt	    quilt;
+
+    
+<a name="anchor-28"></a>    ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter name of new cross section:&quot;);
+    
+    if (ProMessageStringRead (PRO_NAME_SIZE, w_name) != PRO_TK_NO_ERROR)
+        return (PRO_TK_NO_ERROR);
+
+<a name="anchor-29"></a>    while (1==1)
+    {
+    	ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select plane through which the cross &quot;
+                                        &quot;section will be created&quot;);
+
+<a name="anchor-30"></a>        status = ProSelect ((char*)&quot;datum,surface&quot;, 1, NULL, NULL, NULL, NULL,
+            &amp;sel_array, &amp;sel_num);
+        TEST_CALL_REPORT (&quot;ProSelect&quot;, &quot;ProTestXsecCreate&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        
+<a name="anchor-31"></a>        if (status == PRO_TK_USER_ABORT || status == PRO_TK_PICK_ABOVE)
+            return (PRO_TK_NO_ERROR);
+   
+        status = ProSelectionModelitemGet (sel_array[0], &amp;model_item);
+        TEST_CALL_REPORT (&quot;ProSelectionModelItemGet&quot;, &quot;ProTestXsecCreate&quot;,
+<a name="anchor-32"></a>            status, status != PRO_TK_NO_ERROR);
+
+        status = ProGeomitemToSurface ((ProGeomitem*)&amp;model_item, &amp;surface);
+        TEST_CALL_REPORT (&quot;ProGeomitemToSurface&quot;, &quot;ProTestXsecCreate&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-33"></a>
+        status = ProSurfaceTypeGet (surface, &amp;surface_type);
+        TEST_CALL_REPORT (&quot;ProSurfaceTypeGet&quot;, &quot;ProTestXsecCreate&quot;,
+            status, status != PRO_TK_NO_ERROR);
+            
+<a name="anchor-34"></a>        if (surface_type == PRO_SRF_PLANE)
+        {
+	    status = ProSurfaceIdGet (surface, &amp;plane_id);
+    	    TEST_CALL_REPORT (&quot;ProSurfaceIdGet&quot;,&quot;ProTestXsecCreate&quot;,
+    	    	status, status != PRO_TK_NO_ERROR);
+<a name="anchor-35"></a>
+            break;
+	}
+
+    	ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Its not plane surface.&quot;
+<a name="anchor-36"></a>    	    	    	    	&quot;Try again.&quot;);
+    }
+
+    xsec_type = (ProXsecCutobj)ProTestXsecTypeMenu ();
+    if ((int)xsec_type == -1)
+<a name="anchor-37"></a>        return (PRO_TK_GENERAL_ERROR);
+
+    if (xsec_type == PRO_XSECTYPE_QUILTS)
+    {
+    	ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select quilt for cut.&quot;);
+<a name="anchor-38"></a>
+        status = ProSelect ((char*)&quot;dtmqlt&quot;, 1, NULL, NULL, NULL, NULL,
+            &amp;sel_array, &amp;sel_num);
+        TEST_CALL_REPORT (&quot;ProSelect&quot;, &quot;ProTestXsecCreate&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-39"></a>
+        if (status == PRO_TK_USER_ABORT || status == PRO_TK_PICK_ABOVE)
+            return (PRO_TK_NO_ERROR);
+
+        status = ProSelectionModelitemGet (sel_array[0], &amp;model_item);
+<a name="anchor-40"></a>        TEST_CALL_REPORT (&quot;ProSelectionModelItemGet&quot;, &quot;ProTestXsecCreate&quot;,
+            status, status != PRO_TK_NO_ERROR);
+
+        status = ProGeomitemToQuilt ((ProGeomitem*)&amp;model_item, &amp;quilt);
+    	TEST_CALL_REPORT (&quot;ProGeomitemToQuild&quot;, &quot;ProTestXsecCreate&quot;,
+<a name="anchor-41"></a>    	    status, status != PRO_TK_NO_ERROR);
+    
+    	status = ProQuiltIdGet (quilt, &amp;quilt_id);
+    	TEST_CALL_REPORT (&quot;ProQuiltIdGet&quot;, &quot;ProTestXsecCreate&quot;,
+    	    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-42"></a>    }
+    else
+        quilt_id = -1;
+
+    status = ProXsecPlanarCreate (solid_owner, w_name,
+<a name="anchor-43"></a>        plane_id, xsec_type, quilt_id, &amp;xsec );
+    TEST_CALL_REPORT (&quot;ProXsecPlanarCreate&quot;, &quot;ProTestXsecCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+	
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-44"></a>    	return status;
+
+    status = ProXsecDisplay( &amp;xsec);
+    TEST_CALL_REPORT (&quot;ProXsecDisplay&quot;, &quot;ProTestXsecCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-45"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestXsecTypeMenu
+<a name="anchor-46"></a>    PURPOSE  :	.            
+\*====================================================================*/
+int ProTestXsecTypeMenu ()
+{
+    int id;
+<a name="anchor-47"></a>
+    ProUtilMenuButtons  buttons[] = {
+            {&quot;TkXsecType&quot;, -1, TEST_CALL_PRO_MENU_DELETE},
+                {&quot;TypeModel&quot;, PRO_XSECTYPE_MODEL, 0},
+                {&quot;TypeQuilts&quot;, PRO_XSECTYPE_QUILTS, 0},
+<a name="anchor-48"></a>                {&quot;TypeModelQuilts&quot;, PRO_XSECTYPE_MODELQUILTS, 0},
+                {&quot;&quot;, -1, 0}};
+                
+    if (ProUtilMenuIntValueSelect( buttons, &amp;id) != PRO_TK_NO_ERROR)
+        return -1;
+<a name="anchor-49"></a>
+    return id;
+}
+
+/*====================================================================*\
+<a name="anchor-50"></a>    FUNCTION :	ProTestXsecDelete
+    PURPOSE  :	.            
+\*====================================================================*/
+int  ProTestXsecDelete (
+    ProSolid *p_solid)
+<a name="anchor-51"></a>{
+    ProXsec     xsec;
+    ProError    status;
+
+    status = ProTestXsecSelect (*p_solid, &amp;xsec);
+<a name="anchor-52"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProXsecDelete(&amp;xsec);
+        TEST_CALL_REPORT (&quot;ProXsecDelete&quot;, &quot;ProTestXsecDelete&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-53"></a>        return (0);
+    }
+    return (-1);
+}
+
+<a name="anchor-54"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestXsecShow
+    PURPOSE  :	.            
+\*====================================================================*/
+<a name="anchor-55"></a>int ProTestXsecShow (
+    ProSolid *p_solid)
+{
+    ProXsec xsec;
+    while (ProTestXsecSelect(*p_solid, &amp;xsec) == PRO_TK_NO_ERROR);
+<a name="anchor-56"></a>    return (0);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestXsecModify
+<a name="anchor-57"></a>    PURPOSE  :	.            
+\*====================================================================*/
+int ProTestXsecModify (
+    ProSolid *p_solid)
+{
+<a name="anchor-58"></a>    int id;
+    ProError status;
+    ProUtilMenuButtons  buttons[] = {
+            {&quot;TkXsecModify&quot;, -1, 0},
+                {&quot;Dim Values&quot;, PRO_TEST_XSEC_MODIFY_DIMVALUES,
+<a name="anchor-59"></a>                    TEST_CALL_PRO_MENU_ACTIVATE},
+                {&quot;Redefine&quot;, PRO_TEST_XSEC_MODIFY_REDEFINE,
+                    TEST_CALL_PRO_MENU_ACTIVATE},
+                {&quot;Hatching&quot;, PRO_TEST_XSEC_MODIFY_HATCHING,
+                    TEST_CALL_PRO_MENU_ACTIVATE},
+<a name="anchor-60"></a>                {&quot;Name&quot;, PRO_TEST_XSEC_MODIFY_NAME,
+                    TEST_CALL_PRO_MENU_ACTIVATE},
+                {&quot;&quot;, -1, 0}};
+    ProXsec xsec;
+    ProName w_name;
+<a name="anchor-61"></a>
+
+    if (ProUtilMenuIntValueSelect( buttons, &amp;id) != PRO_TK_NO_ERROR)
+        return 0;
+    
+<a name="anchor-62"></a>    if (ProTestXsecSelect(*p_solid, &amp;xsec) != PRO_TK_NO_ERROR)
+        return (0);
+
+    switch (id)
+    {
+<a name="anchor-63"></a>    case PRO_TEST_XSEC_MODIFY_DIMVALUES:
+        ProTestNotSupported (NULL, 0);
+        break;
+    case PRO_TEST_XSEC_MODIFY_REDEFINE:
+        ProTestNotSupported (NULL, 0);
+<a name="anchor-64"></a>        break;
+    case PRO_TEST_XSEC_MODIFY_HATCHING:
+        ProTestNotSupported (NULL, 0);
+        break; 
+    case PRO_TEST_XSEC_MODIFY_NAME:
+<a name="anchor-65"></a>        {
+            ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter new name:&quot;);
+
+            if (ProMessageStringRead (PRO_NAME_SIZE, w_name) != PRO_TK_NO_ERROR)
+                return (0);
+<a name="anchor-66"></a>
+            status = ProXsecRename( &amp;xsec, w_name);
+            TEST_CALL_REPORT (&quot;ProXsecRename&quot;, &quot;ProTestXsecModify&quot;,
+                status, status != PRO_TK_NO_ERROR);
+        }
+<a name="anchor-67"></a>        break;
+    }
+    
+    /* bug 1334 */
+    status = ProXsecRegenerate( &amp;xsec );
+<a name="anchor-68"></a>    TEST_CALL_REPORT (&quot;ProXsecRegenerate&quot;, &quot;ProTestXsecModify&quot;,
+        status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_BAD_INPUTS);
+
+    return (0);
+}
+<a name="anchor-69"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestXsecSelect
+    PURPOSE  :	.            
+\*====================================================================*/
+<a name="anchor-70"></a>ProError ProTestXsecSelect (
+    ProSolid    solid_owner,
+    ProXsec *xsec_ptr)      /* Out: Selected Xsec, user's memory */
+{
+    int                 i, array_size;
+<a name="anchor-71"></a>    ProError            status;
+    ProXsec             *xsec_array=NULL;
+    wchar_t             **w_menu_buttons;
+
+    
+<a name="anchor-72"></a>    status = ProMdlCurrentGet ((ProMdl*)&amp;solid_owner);
+    TEST_CALL_REPORT (&quot;ProMdlCurrentGet&quot;, &quot;ProTestXsecSelect&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status =  ProUtilCollectSolidXsec (solid_owner, &amp;xsec_array);
+<a name="anchor-73"></a>    if (status != PRO_TK_NO_ERROR)
+    {
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Model don't have cross section:&quot;);
+        return (PRO_TK_E_NOT_FOUND);
+    }
+<a name="anchor-74"></a>    
+    status = ProArraySizeGet ((ProArray)xsec_array, &amp;array_size);
+        
+    ProUtilMenuStringsAlloc(&amp;w_menu_buttons);
+
+<a name="anchor-75"></a>    for (i=0; i&lt;array_size; i++)
+        ProUtilMenuStringsWstrAdd(&amp;w_menu_buttons, xsec_array[i].xsec_name);
+
+    if (ProUtilMenuStringsIntValueSelect((char*)&quot;TkXsecNames&quot;,  w_menu_buttons, &amp;i) 
+        == PRO_TK_NO_ERROR)
+<a name="anchor-76"></a>    {
+        xsec_ptr[0] = xsec_array[i];
+        
+        status = ProXsecDisplay( xsec_ptr);
+        TEST_CALL_REPORT (&quot;ProXsecDisplay&quot;, &quot;ProTestXsecSelect&quot;,
+<a name="anchor-77"></a>            status, status != PRO_TK_NO_ERROR);
+    }
+    else
+        i = -1;
+    
+<a name="anchor-78"></a>    ProUtilMenuStringsAlloc(&amp;w_menu_buttons);
+    
+    status = ProArrayFree ((ProArray*)&amp;xsec_array);
+    
+    return (i != -1)? PRO_TK_NO_ERROR : PRO_TK_GENERAL_ERROR;
+<a name="anchor-79"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestXsecListAllParams
+    PURPOSE  :	.            
+<a name="anchor-80"></a>\*====================================================================*/
+int ProTestXsecListAllParams (
+    ProSolid *p_solid)
+{
+    int         i, j, array_size, n_geom, csys_selected = 0;
+<a name="anchor-81"></a>    FILE        *fp = NULL;
+    char        c_name[PRO_NAME_SIZE];
+    
+    ProError	    status;
+    ProName         w_name;
+<a name="anchor-82"></a>    ProXsecType     xsec_type;
+    ProXsecGeom     *p_xsec_geom;
+    ProMassProperty xsec_massproperty;
+    ProSolid  	    solid_owner = *p_solid;   
+    ProXsec     *xsec_array=NULL;
+<a name="anchor-83"></a>
+    status = ProUtilCollectSolidXsec (solid_owner, &amp;xsec_array);
+    if (status != PRO_TK_NO_ERROR)
+    {
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Model don't have cross section:&quot;);
+<a name="anchor-84"></a>        return (PRO_TK_E_NOT_FOUND);
+    }
+     
+    status = ProArraySizeGet ((ProArray)xsec_array, &amp;array_size);
+    
+<a name="anchor-85"></a>    fp = PTApplsUnicodeFopen (&quot;xsec_info.inf&quot;, &quot;w&quot;);
+    if (fp != NULL)
+    {
+        for (i=0; i&lt;array_size; i++)
+        {
+<a name="anchor-86"></a>            status = ProXsecTypeGet (&amp;xsec_array[i], &amp;xsec_type);
+            TEST_CALL_REPORT (&quot;ProXsecTypeGet&quot;,
+                &quot;ProTestXsecListAllParams&quot;, status, status != PRO_TK_NO_ERROR);
+
+            ProWstringToString (c_name, xsec_array[i].xsec_name);
+<a name="anchor-87"></a>            ProTKFprintf (fp, &quot;Cross section name %s, type %s,&quot;,
+                        c_name, (xsec_type.cutter)? &quot;offset&quot; : &quot;planar&quot;);
+            switch (xsec_type.cut_object)
+            {
+                case PRO_XSECTYPE_MODEL:
+<a name="anchor-88"></a>                    strcpy (c_name, &quot;model&quot;);
+                    break;
+                case PRO_XSECTYPE_QUILTS:
+                    strcpy (c_name, &quot;quilt&quot;);
+                    break;
+<a name="anchor-89"></a>                case PRO_XSECTYPE_MODELQUILTS:
+                    strcpy (c_name, &quot;model_and_quilts&quot;);
+                    break;
+                default:
+                    strcpy (c_name, &quot;unknown&quot;);
+<a name="anchor-90"></a>            }
+            ProTKFprintf (fp, &quot; cut object %s.\n&quot;, c_name);
+
+            status = ProXsecGeometryRetrieve (&amp;xsec_array[i], &amp;p_xsec_geom);
+            TEST_CALL_REPORT (&quot;ProXsecGeometryRetrieve&quot;,
+<a name="anchor-91"></a>                &quot;ProTestXsecListAllParams&quot;, status, status != PRO_TK_NO_ERROR);
+
+            status = ProArraySizeGet((ProArray)p_xsec_geom, &amp;n_geom);
+            for (j=0; j&lt;n_geom; j++)
+            {
+<a name="anchor-92"></a>                ProTKFprintf (fp, &quot;Geometry %d\n&quot;, j+1);
+    	    	ProTKFprintf (fp, &quot;\tMemb id tab %d quilt id %d\n&quot;,
+		    	    p_xsec_geom[j].memb_id_tab,
+		    	    p_xsec_geom[j].quilt_id);
+            }
+<a name="anchor-93"></a>            
+            if (xsec_type.cutter != PRO_XSEC_OFFSET &amp;&amp; 
+                xsec_type.cut_object != PRO_XSECTYPE_QUILTS)
+            {
+                if (!csys_selected)
+<a name="anchor-94"></a>                {
+                    if (ProTestXsecCsysSelect (solid_owner, w_name) == 0)
+		            w_name[0] = '\0';
+                    csys_selected = 1;
+                    ProWstringToString(c_name, w_name);
+<a name="anchor-95"></a>                }
+                
+                /* Bug 1337 */           
+                status = ProXsecMassPropertyCompute (&amp;xsec_array[i],
+		    	        w_name, &amp;xsec_massproperty);
+<a name="anchor-96"></a>		TEST_CALL_REPORT (&quot;ProXsecMassPropertyCompute&quot;,
+		    &quot;ProTestXsecListAllParams&quot;, status, 
+                    status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_BAD_INPUTS);
+                ProTKFprintf(fp, &quot;Mass properties in csys %s\n&quot;, c_name);
+		ProTKFprintf (fp,
+<a name="anchor-97"></a>		        &quot;\tSurface area %f; center of gravity (%.5f,%.5f).\n&quot;,
+		    	xsec_massproperty.surface_area,
+			xsec_massproperty.center_of_gravity[0],
+			xsec_massproperty.center_of_gravity[1]);
+		ProTKFprintf (fp, &quot;\tCoord system in area:\n&quot;);
+<a name="anchor-98"></a>		ProTKFprintf (fp, &quot;\t\t%.5f\t%.5f\n&quot;,
+		        xsec_massproperty.coor_sys_inertia[0][0],
+			xsec_massproperty.coor_sys_inertia[0][1]);
+		ProTKFprintf (fp, &quot;\t\t%.5f\t%.5f\n&quot;,
+		    	xsec_massproperty.coor_sys_inertia[1][0],
+<a name="anchor-99"></a>			 xsec_massproperty.coor_sys_inertia[1][1]);
+            }
+	    ProTKFprintf (fp, &quot;\n&quot;);
+
+        }
+<a name="anchor-100"></a>        fclose(fp);
+    }
+    
+    status = ProArrayFree ((ProArray*)&amp;xsec_array);
+    TEST_CALL_REPORT (&quot;ProArrayFree&quot;, &quot;ProTestXsecListAllParams&quot;,
+<a name="anchor-101"></a>        status, status != PRO_TK_NO_ERROR);
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-102"></a>    FUNCTION :	ProTestXsecCsysSelect
+    PURPOSE  :	.            
+\*====================================================================*/
+ProError ProTestXsecCsysSelect (
+    ProSolid solid,
+<a name="anchor-103"></a>    ProName  w_csys_name)
+{
+    int     	    	i, array_size;
+    ProError	    	status;
+    ProCsys 	    	*csys_array = NULL;
+<a name="anchor-104"></a>    ProGeomitem 	geomitem;
+    wchar_t             **w_menu_buttons;
+
+    if (ProUtilCollectSolidCsys ( solid, &amp;csys_array) != PRO_TK_NO_ERROR)
+    	return (PRO_TK_E_NOT_FOUND);
+<a name="anchor-105"></a>		
+    status = ProArraySizeGet ((ProArray)csys_array, &amp;array_size);
+    TEST_CALL_REPORT (&quot;ProArrayFree&quot;, &quot;ProArraySizeGet&quot;,
+        status, status != PRO_TK_NO_ERROR);
+ 
+<a name="anchor-106"></a>    ProUtilMenuStringsAlloc(&amp;w_menu_buttons);
+    for (i=0; i&lt;array_size; i++)
+    {
+    	status = ProCsysToGeomitem (solid, csys_array[i], &amp;geomitem);
+	TEST_CALL_REPORT (&quot;ProCsysToGeomitem &quot;, &quot;ProTestXsecCsysSelect&quot;,
+<a name="anchor-107"></a>    	    status, status != PRO_TK_NO_ERROR);
+	    
+	status = ProModelitemNameGet ((ProModelitem*)&amp;geomitem, w_csys_name);
+	TEST_CALL_REPORT (&quot;ProModelitemNameGet&quot;, &quot;ProTestXsecCsysSelect&quot;,
+    	    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-108"></a>
+        ProUtilMenuStringsWstrAdd(&amp;w_menu_buttons, w_csys_name);
+    }
+    status = ProUtilMenuStringsIntValueSelect((char*)&quot;TkCsysNames&quot;,  w_menu_buttons,
+        &amp;i);  
+<a name="anchor-109"></a>    if ( status == PRO_TK_NO_ERROR)
+        ProUtilWstrcpy(w_csys_name, w_menu_buttons[i]);
+    else
+    {
+        i = -1;
+<a name="anchor-110"></a>        w_csys_name[0] = (wchar_t)'\0';
+    }
+    
+    ProUtilMenuStringsFree(&amp;w_menu_buttons);
+    status = ProArrayFree ((ProArray*)&amp;csys_array);
+<a name="anchor-111"></a>    
+    return (i != -1)? PRO_TK_NO_ERROR : PRO_TK_GENERAL_ERROR;
+}
+</pre>
+</body>
+</html>

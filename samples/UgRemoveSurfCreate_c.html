@@ -1,0 +1,244 @@
+<html>
+<head>
+<title>UgRemoveSurfCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProElement.h>
+<a name="anchor-2"></a>#include &lt;ProFeatType.h>
+#include &lt;ProFeatForm.h>
+#include &lt;ProFeature.h>
+#include &lt;ProSection.h>
+#include &lt;ProRemoveSurf.h>
+<a name="anchor-3"></a> 
+/*---------------------- Pro/Develop Includes ------------------------*/
+
+/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+<a name="anchor-4"></a>#include &lt;UtilTree.h>
+#include &lt;UtilFeats.h>
+
+/*---------------------- Application Typedefs ------------------------*/
+
+<a name="anchor-5"></a>
+/*---------------------- Prototypes ----------------------------------*/
+ProError UtilCreateRemoveSurfaceFeature(ProMdl model, ProSelection *p_sel);
+ProError CreateFeature(ProAsmcomppath *p_comp_path ,ProMdl model, 
+                           ProElement pro_e_feature_tree, 
+<a name="anchor-6"></a>                           ProFeature *feature);
+ProError FeatRemoveSurfExample();
+
+
+/*===============================================================*\
+<a name="anchor-7"></a>FUNCTION : FeatRemoveSurfExample
+PURPOSE  : Example to create a remove surface feature
+
+returns : 
+PRO_TK_NO_ERROR - Successfully executed
+<a name="anchor-8"></a>\*===============================================================*/
+ProError FeatRemoveSurfExample()
+{
+    ProError status;
+    ProMdl model;
+<a name="anchor-9"></a>    ProSelection *surf_sels = NULL;
+    int	n_select = 0;
+  
+    status = ProMdlCurrentGet (&amp;model);
+    ERROR_CHECK( &quot;FeatRemoveSurfExample&quot;, &quot;ProMdlCurrentGet&quot;, status );    
+<a name="anchor-10"></a>    if(status != PRO_TK_NO_ERROR)
+        return status;
+    
+    ProStringToWstring ( message_file, &quot;msg_ugfeatcreat.txt&quot; );     
+    status = ProMessageDisplay ( message_file, &quot;USER Select remove surfaces :&quot; ); 
+<a name="anchor-11"></a>    ERROR_CHECK(&quot;ProMessageDisplay&quot;, &quot;FeatRemoveSurfExample&quot;, status);
+    
+    status = ProSelect ( &quot;surface&quot;, -1, NULL, NULL, 
+		 NULL, NULL, &amp;surf_sels, &amp;n_select );
+    ERROR_CHECK(&quot;ProSelect&quot;, &quot;FeatRemoveSurfExample&quot;, status);		 
+<a name="anchor-12"></a>    if ( n_select &lt;= 0 ) return PRO_TK_GENERAL_ERROR; 
+    
+    status = UtilCreateRemoveSurfaceFeature(model, surf_sels);
+    if(PRO_TK_NO_ERROR != status)
+        status = ProMessageDisplay ( message_file,
+<a name="anchor-13"></a>                     &quot;USER Feature created successfully&quot; );
+    else        
+        status = ProMessageDisplay ( message_file,
+                     &quot;USER Feature creation failed&quot;);
+    return status;
+<a name="anchor-14"></a>}
+
+/*===============================================================*\
+FUNCTION : UtilCreateRemoveSurfaceFeature
+PURPOSE  : Create a remove surface feature from the selection input.
+<a name="anchor-15"></a>\*===============================================================*/
+ProError UtilCreateRemoveSurfaceFeature(ProMdl model, ProSelection *p_sel)
+{
+    ProFeature              feature;
+    ProSection              section;
+<a name="anchor-16"></a>    ProAsmcomppath          *p_comp_path = NULL;
+    int no_sels;
+    int i;
+    ProValueData 	value_data;
+      
+<a name="anchor-17"></a>    ProSrfcollinstr instr;
+    ProReference reference;
+    ProSrfcollref isntr_ref;
+    ProName wide_string;
+  
+<a name="anchor-18"></a>    ProError status, rem_surf_status;
+
+    ProElement pro_e_feature_tree;
+    ProElement pro_e_std_feature_name;
+    ProElement pro_e_rm_surf_ref_type;
+<a name="anchor-19"></a>    ProElement pro_e_rm_surf_srf_refs;
+    ProElement pro_e_std_excl_cntrs;
+  
+ 
+    ProCollection srf_collection = NULL;
+<a name="anchor-20"></a>    ProCollection collection;
+
+   if(p_sel == NULL)
+   {
+     return PRO_TK_BAD_INPUTS;
+<a name="anchor-21"></a>   }
+
+   /*
+   PRO_E_FEATURE_TREE
+   |
+<a name="anchor-22"></a>   |
+   |-- PRO_E_FEATURE_TYPE
+   |
+   |-- PRO_E_STD_FEATURE_NAME
+   |
+<a name="anchor-23"></a>   |-- PRO_E_RM_SURF_REF_TYPE
+   |
+   |-- PRO_E_RM_SURF_ATTACH_TYPE  */
+   /*-----------------------------------------------------*\ 
+   Populating root element PRO_E_FEATURE_TREE  
+<a name="anchor-24"></a>   \*-----------------------------------------------------*/
+   status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;pro_e_feature_tree );
+
+   /*-----------------------------------------------------*\ 
+   Populating root element PRO_E_FEATURE_TYPE  
+<a name="anchor-25"></a>   \*-----------------------------------------------------*/   
+   value_data.v.i = PRO_FEAT_RM_SURF; 
+   status = ProUtilElemtreeElementAdd( pro_e_feature_tree, PRO_E_FEATURE_TYPE,
+                                 ELEM_VALUE_TYPE_INT, &amp;value_data.v.i);        
+      
+<a name="anchor-26"></a>   
+   /*-----------------------------------------------------*\
+   Populating element PRO_E_STD_FEATURE_NAME 
+   \*-----------------------------------------------------*/
+   /*status = ProElementAlloc ( PRO_E_STD_FEATURE_NAME,
+<a name="anchor-27"></a>      &amp;pro_e_std_feature_name );
+   ProStringToWstring ( wide_string, &quot;REMOVE_1&quot; );
+   status = ProElementWstringSet (  pro_e_std_feature_name,
+      wide_string );
+   status = ProElemtreeElementAdd ( pro_e_feature_tree,
+<a name="anchor-28"></a>      NULL, pro_e_std_feature_name ); */
+
+   /*-----------------------------------------------------*\ 
+   Populating element PRO_E_RM_SURF_REF_TYPE  
+   \*-----------------------------------------------------*/
+<a name="anchor-29"></a>   value_data.v.i = PRO_RM_SURF_SRF_REF; 
+   status = ProUtilElemtreeElementAdd( pro_e_feature_tree, PRO_E_RM_SURF_REF_TYPE,
+                                 ELEM_VALUE_TYPE_INT, &amp;value_data.v.i);     
+
+   /*-----------------------------------------------------*\ 
+<a name="anchor-30"></a>   Populating element PRO_E_RM_SURF_ATTACH_TYPE  
+   \*-----------------------------------------------------*/
+   value_data.v.i = FM_RM_SURF_ATTACH_SAME; 
+   status = ProUtilElemtreeElementAdd( pro_e_feature_tree, PRO_E_RM_SURF_ATTACH_TYPE,
+                                 ELEM_VALUE_TYPE_INT, &amp;value_data.v.i); 
+<a name="anchor-31"></a>
+   /*
+          |
+          |-- PRO_E_RM_SURF_SRF_REFS
+          |    |
+<a name="anchor-32"></a>          |    |-- PRO_E_STD_SURF_COLLECTION_APPL
+          |    |
+          |    |-- PRO_E_STD_EXCL_CNTRS
+          |         |
+          |         |-- PRO_E_STD_EXCL_CNTRS_ONE_CNTR
+<a name="anchor-33"></a>          |              |
+          |              |-- PRO_E_STD_EXCL_CNTR_SRF_REF      
+          |              |
+          |              |-- PRO_E_STD_EXCL_CNTR_EDGE_REF      
+          |
+<a name="anchor-34"></a>          |-- PRO_E_RM_SURF_CRV_REFS
+          |    |
+          |    |-- PRO_E_STD_CURVE_COLLECTION_APPL      
+   */
+
+<a name="anchor-35"></a>
+   /*-----------------------------------------------------*\ 
+   Populating element PRO_E_RM_SURF_SRF_REFS  
+   \*-----------------------------------------------------*/
+   status = ProElementAlloc ( PRO_E_RM_SURF_SRF_REFS,
+<a name="anchor-36"></a>      &amp;pro_e_rm_surf_srf_refs );
+   status = ProElemtreeElementAdd ( pro_e_feature_tree,
+      NULL, pro_e_rm_surf_srf_refs ); 
+
+
+<a name="anchor-37"></a>   /*-----------------------------------------------------*\ 
+   Creating the collection object and setting the instructions
+   \*-----------------------------------------------------*/
+   status = ProSrfcollectionAlloc ( &amp;collection );
+   /* status = ProCrvcollinstrAlloc ( PRO_CURVCOLL_ADD_ONE_INSTR, &amp;instr ); */
+<a name="anchor-38"></a>   status = ProSrfcollinstrAlloc ( 1, PRO_B_TRUE, &amp;instr );
+   status = ProSrfcollinstrIncludeSet ( instr, 1 );
+   
+   status = ProArraySizeGet ( p_sel, &amp;no_sels);
+   for (i=0; i&lt;no_sels; i++)
+<a name="anchor-39"></a>      {
+      status = ProSelectionToReference ( p_sel[i], &amp;reference );
+      ERROR_CHECK(&quot;ProMdlToModelitem&quot;, &quot;UtilCreateRemoveSurfaceFeature&quot;, status); 
+      status = ProSrfcollrefAlloc ( PRO_SURFCOLL_REF_SINGLE,
+         reference, &amp;isntr_ref );
+<a name="anchor-40"></a>      status = ProSrfcollinstrReferenceAdd ( instr, isntr_ref );
+      ERROR_CHECK(&quot;ProSrfcollinstrReferenceAdd&quot;, &quot;UtilCreateRemoveSurfaceFeature&quot;, status);       
+      }
+   status = ProSrfcollectionInstructionAdd ( collection, instr );
+   status = ProSrfcollectionCopy ( collection, &amp;srf_collection ); 
+<a name="anchor-41"></a>   if ( status != PRO_TK_NO_ERROR )
+      {
+      return status; 		  
+      }
+      
+<a name="anchor-42"></a>   /*-----------------------------------------------------*\   
+   Populating element PRO_E_STD_SURF_COLLECTION_APPL  
+   \*-----------------------------------------------------*/
+   status = ProUtilElemtreeElementAdd( pro_e_rm_surf_srf_refs, PRO_E_STD_SURF_COLLECTION_APPL,
+                                 ELEM_VALUE_TYPE_COLLECTION, srf_collection); 
+<a name="anchor-43"></a>                                 
+   /*-----------------------------------------------------*\ 
+   Populating element PRO_E_STD_EXCL_CNTRS  
+   \*-----------------------------------------------------*/
+   status = ProElementAlloc ( PRO_E_STD_EXCL_CNTRS, &amp;pro_e_std_excl_cntrs );
+<a name="anchor-44"></a>   status = ProElemtreeElementAdd ( pro_e_rm_surf_srf_refs,
+      NULL, pro_e_std_excl_cntrs ); 
+
+   /*-----------------------------------------------------*\   
+   Creating feature in the model. 
+<a name="anchor-45"></a>   \*-----------------------------------------------------*/
+   rem_surf_status = ProUtilFeatCreate(p_comp_path, 
+                     model, pro_e_feature_tree, &amp;feature);  
+
+   /*-----------------------------------------------------*\   
+<a name="anchor-46"></a>   Free up the allocated memory.
+   \*-----------------------------------------------------*/ 
+   status = ProElementFree (&amp;pro_e_feature_tree); 
+   return rem_surf_status;
+}
+<a name="anchor-47"></a>
+</pre>
+</body>
+</html>

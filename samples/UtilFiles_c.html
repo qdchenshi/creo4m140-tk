@@ -1,0 +1,206 @@
+<html>
+<head>
+<title>UtilFiles.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProMdl.h>
+#include &lt;ProFeature.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-3"></a>#include &lt;ProUtil.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-4"></a>#include &quot;TestError.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilMessage.h&quot;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-5"></a>Application global/external data
+\*--------------------------------------------------------------------*/
+
+static struct str_to_type
+{
+<a name="anchor-6"></a>    char *str;
+    ProType type;
+}
+
+str_type_table[] =
+<a name="anchor-7"></a>    {
+        {(char *)&quot;sec&quot;, PRO_2DSECTION},
+        {(char *)&quot;prt&quot;, PRO_PART},
+        {(char *)&quot;asm&quot;, PRO_ASSEMBLY},
+        {(char *)&quot;drw&quot;, PRO_DRAWING},
+<a name="anchor-8"></a>        {(char *)&quot;mfg&quot;, PRO_MFG},
+        {(char *)&quot;lay&quot;, PRO_LAYOUT},
+        {(char *)&quot;frm&quot;, PRO_DWGFORM},
+        {(char *)&quot;rep&quot;, PRO_REPORT},
+        {(char *)&quot;mrk&quot;, PRO_MARKUP},
+<a name="anchor-9"></a>        {(char *)&quot;dgm&quot;, PRO_DIAGRAM},
+        {(char *)&quot;???&quot;, PRO_TYPE_INVALID}
+    };
+
+/*====================================================================*\
+<a name="anchor-10"></a>  Function : ProUtilGetProType
+  Purpose  : looks up the type for a specified string
+\*====================================================================*/
+ProType ProUtilGetProType( char *type_str )
+{
+<a name="anchor-11"></a>    int table_size;
+    int i;
+
+    table_size = sizeof(str_type_table)/sizeof(struct str_to_type);
+    for( i = 0; i &lt; table_size - 1; i++ )
+<a name="anchor-12"></a>    {
+	if( !ProUtilStrcmp(type_str, str_type_table[i].str) )
+	    return( str_type_table[i].type );
+    }
+
+<a name="anchor-13"></a>    return( str_type_table[table_size-1].type );
+}
+
+/*====================================================================*\
+  Function : ProUtilGetMdlTypeStr
+<a name="anchor-14"></a>  Purpose  : looks up the string for a specified type
+\*====================================================================*/
+char *ProUtilGetMdlTypeStr( ProMdlType mdltype )
+{
+    int table_size;
+<a name="anchor-15"></a>    int i;
+
+    table_size = sizeof(str_type_table)/sizeof(struct str_to_type);
+    for( i = 0; i &lt; table_size - 1; i++ )
+    {
+<a name="anchor-16"></a>	if( str_type_table[i].type == (ProType)mdltype )
+	    return( str_type_table[i].str );
+    }
+
+    return( str_type_table[table_size-1].str );
+<a name="anchor-17"></a>}
+
+   
+char *ProUtilModelnameGet(ProMdl *model, char *name, char *type);
+
+<a name="anchor-18"></a>/*====================================================================*\
+   FUNCTION :	UserGenFilename
+   PURPOSE  :	Generate a name for an output file
+   INPUT    :   p_obj - the model
+		filext - file extension
+<a name="anchor-19"></a>		permission - file permission used to open the file
+   OUTPUT   :	filename - file name used to open the file
+\*====================================================================*/
+FILE *ProUtilGenFilePtr(ProMdl p_obj, char *filext, char *filename, 
+							char *permission)
+<a name="anchor-20"></a>{
+	char model_name[PRO_NAME_SIZE];
+	char type[PRO_EXTENSION_SIZE];
+	char *error;
+	FILE *fp;
+<a name="anchor-21"></a>	char str[PRO_LINE_SIZE];
+
+	error = ProUtilModelnameGet(&amp;p_obj, model_name, type);
+
+	if( error == NULL )
+<a name="anchor-22"></a>	    return( NULL );
+	else
+	    ProUtilstrcpy(filename, (const char *)model_name);
+
+	ProUtilstrcat(filename,(const char *)filext);
+<a name="anchor-23"></a>
+	if( (fp = PTApplsUnicodeFopen(filename, permission)) == NULL )
+	{
+	    ProTKSprintf(str, &quot;Could not open the file '%s'&quot;, filename);
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;USER %0s&quot;, str);
+<a name="anchor-24"></a>	}
+
+	return(fp);
+}
+
+<a name="anchor-25"></a>/*====================================================================*\
+  Function : ProUtilConfirmNameType
+  Purpose  : Confirm a valid name and type
+\*====================================================================*/
+int ProUtilConfirmNameType(char *input_name, char *name, ProType *type)
+<a name="anchor-26"></a>{
+    char *dot_occur,		/* occurrence of a dot in input_name */
+	 *slash_occur,		/* occurence of a slash */
+	  type_str[PRO_EXTENSION_SIZE];
+    int name_length,		/* length of a part name */
+<a name="anchor-27"></a>	type_length;		/* lenght of a part type */
+
+    /*** if there is a full path name, extract the filename first ***/
+    if((slash_occur = strrchr(input_name, '/')) != NULL)
+	ProUtilstrcpy(input_name, (const char *)&amp;slash_occur[1]);
+<a name="anchor-28"></a>
+    /*** get the position of the dot in a file name ***/
+    if((dot_occur = strchr(input_name, '.')) != NULL)
+    {
+	/*** extract name ***/
+<a name="anchor-29"></a>	if(( name_length = strlen(input_name) - strlen(dot_occur))>0)
+	{
+	    ProUtilstrncpy(name,(const char *)input_name,name_length);
+	    name[name_length] = '\0';
+	}
+<a name="anchor-30"></a>	else
+	    return( PRO_TK_BAD_INPUTS );
+
+	/*** extract type ***/
+	if ((type_length = strlen( &amp;dot_occur[1] ))==3)
+<a name="anchor-31"></a>	{
+	    ProUtilstrncpy(type_str, (const char *)&amp;dot_occur[1], type_length);
+	    type_str[3]='\0';
+
+	    /* get the mode */
+<a name="anchor-32"></a>	    return( (*type = ProUtilGetProType(type_str)) );
+	}
+	else
+	    return( PRO_TK_BAD_INPUTS );
+    }
+<a name="anchor-33"></a>    else
+        return( PRO_TK_BAD_INPUTS );
+}
+
+/*============================================================================*\
+<a name="anchor-34"></a> Function:  ProUtilFileOpen
+ Purpose:   Select file from disk
+\*============================================================================*/
+ProError ProUtilFileOpen(
+    char *extension,
+<a name="anchor-35"></a>    char *file_name)
+{ 
+    ProLine	w_ext;
+    ProPath     *w_path_arr, w_def_path, w_sel_path;
+    ProName     *w_path_lab_arr;
+<a name="anchor-36"></a>    ProError     err;
+                             
+    ProStringToWstring(w_def_path, (char *)&quot;.&quot;);
+    ProStringToWstring(w_ext, extension);
+
+<a name="anchor-37"></a>    /* No default dirs */
+    err = ProArrayAlloc(0, sizeof(ProPath), 1, (ProArray*)&amp;w_path_arr);
+    err = ProArrayAlloc(0, sizeof(ProPath), 1, (ProArray*)&amp;w_path_lab_arr);
+    /* Open file */
+    err = ProFileMdlnameOpen(NULL, w_ext, w_path_arr, w_path_lab_arr, w_def_path, NULL,
+<a name="anchor-38"></a>		      w_sel_path);
+    TEST_CALL_REPORT(&quot;ProFileMdlnameOpen()&quot;, &quot;ProUtilFileOpen()&quot;, 
+					    err, err != PRO_TK_NO_ERROR);
+    ProArrayFree((ProArray*)&amp;w_path_arr);
+    ProArrayFree((ProArray*)&amp;w_path_lab_arr);
+<a name="anchor-39"></a>    ProWstringToString(file_name, w_sel_path);
+    return(err);
+}
+</pre>
+</body>
+</html>

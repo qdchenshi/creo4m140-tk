@@ -1,0 +1,169 @@
+<html>
+<head>
+<title>PTWCServerFileUtils.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;PTWCServer.h>
+#include &lt;ProUtil.h>
+
+/*====================================================================*\
+<a name="anchor-2"></a>FUNCTION: PTUDFExGetLine
+PURPOSE:  Read one line from the file.
+\*====================================================================*/
+static ProError PTWCGetLine (FILE* f, char** line)
+{
+<a name="anchor-3"></a>	char buf [1000];
+	char* ret;
+	int len;
+
+	if (fgets (buf, 1000, f) == NULL)
+<a name="anchor-4"></a>	{
+		return (PRO_TK_E_NOT_FOUND);
+	}
+
+/*-------------------------------------------------------------------*\
+<a name="anchor-5"></a>	Copy the line to the output string (and strip off the newline char)
+\*-------------------------------------------------------------------*/
+	len = strlen (buf);
+	ret = (char*) calloc (len, sizeof (char));
+	strncpy (ret, buf, len - 1);
+<a name="anchor-6"></a>	ret [len - 1] = '\0';
+
+	*line = ret;
+
+	return (PRO_TK_NO_ERROR);
+<a name="anchor-7"></a>}
+
+/*====================================================================*\
+  FUNCTION: PTWCAddPathToArray
+  PURPOSE:  Add model path to the array of paths
+<a name="anchor-8"></a>\*====================================================================*/
+static ProError PTWCAddPathToArray (wchar_t* new_path, 
+									wchar_t*** path_array)
+{
+	wchar_t** actual_array = *path_array;
+<a name="anchor-9"></a>	if (actual_array == NULL)
+	{
+		status = ProArrayAlloc (1, sizeof (wchar_t*), 1, (ProArray*)&amp;actual_array);
+		PT_TEST_LOG_SUCC (&quot;ProArrayAlloc()&quot;);
+		actual_array [0] = new_path;
+<a name="anchor-10"></a>	}
+	else
+	{
+		status = ProArrayObjectAdd ((ProArray*)&amp;actual_array, PRO_VALUE_UNUSED, 1, 
+							&amp;new_path);
+<a name="anchor-11"></a>		PT_TEST_LOG_SUCC (&quot;ProArrayObjectAdd()&quot;);
+	}
+	*path_array = actual_array;
+	return PRO_TK_NO_ERROR;
+}
+<a name="anchor-12"></a>
+/*====================================================================*\
+  FUNCTION: PTWCGetRegistryFileInfo
+  PURPOSE:  Read data from the populate registry file
+\*====================================================================*/
+<a name="anchor-13"></a>ProError PTWCGetInitFileInfo (char* file, PTWCInitFileInfo* info)
+{
+	FILE* fileHandle;
+	char* line;
+
+<a name="anchor-14"></a>	if (file == NULL || info == NULL)
+		return PRO_TK_BAD_INPUTS;
+
+	info->username = info->password = info->server_url = info->project = NULL;
+	info->design_models = NULL;
+<a name="anchor-15"></a>	info->plan_models = NULL;
+
+	fileHandle = fopen (file, &quot;r&quot;);
+	if (fileHandle == NULL)
+		return PRO_TK_E_NOT_FOUND;
+<a name="anchor-16"></a>
+	while (PTWCGetLine (fileHandle, &amp;line) == PRO_TK_NO_ERROR)
+	{
+		char* label = strtok (line, &quot; &quot;);
+		char* value;
+<a name="anchor-17"></a>		wchar_t* wValue;
+		if (label == NULL)
+			continue;
+		value = strtok (NULL, &quot; &quot;);
+		if (value == NULL)
+<a name="anchor-18"></a>			continue;
+		wValue = (wchar_t*)calloc (strlen (value) + 1, sizeof (wchar_t));
+		ProStringToWstring (wValue, value);
+
+		if (strcmp (label, REG_FILE_USERNAME) == 0)
+<a name="anchor-19"></a>		{
+			info->username = wValue;
+		}
+		else if (strcmp (label, REG_FILE_PASSWORD) == 0)
+		{
+<a name="anchor-20"></a>			info->password = wValue;
+		}
+		else if (strcmp (label, REG_FILE_SERVER_URL) == 0)
+		{
+			info->server_url = wValue;
+<a name="anchor-21"></a>		}
+		else if (strcmp (label, REG_FILE_PROJECT) == 0)
+		{
+			info->project = wValue;
+		}
+<a name="anchor-22"></a>		else if (strcmp (label, REG_FILE_DESIGN_MODEL) == 0)
+		{
+			PTWCAddPathToArray (wValue, &amp;info->design_models);
+		}
+		else if (strcmp (label, REG_FILE_PLAN_MODEL) == 0)
+<a name="anchor-23"></a>		{
+			PTWCAddPathToArray (wValue, &amp;info->plan_models);
+		}
+	}
+
+<a name="anchor-24"></a>	fclose (fileHandle);
+
+	return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-25"></a>/*====================================================================*\
+  FUNCTION: PTWCRegistryFileDataFree  
+  PURPOSE:  Clear memory from the registry file data 
+\*====================================================================*/
+void PTWCInitFileDataFree (PTWCInitFileInfo* info)
+<a name="anchor-26"></a>{
+	int num_paths, i;
+
+	if (info->username != NULL)
+		free (info->username);
+<a name="anchor-27"></a>	if (info->password != NULL)
+		free (info->password);
+	if (info->server_url != NULL)
+		free (info->server_url);
+	if (info->project != NULL)
+<a name="anchor-28"></a>		free (info->project);
+	if (info->design_models != NULL)
+	{
+		ProArraySizeGet (info->design_models, &amp;num_paths);
+
+<a name="anchor-29"></a>		for (i = 0; i &lt; num_paths; i++)
+			free (info->design_models [i]);
+
+		ProArrayFree ((ProArray*)&amp;info->design_models);
+	}
+<a name="anchor-30"></a>	if (info->plan_models != NULL)
+	{
+		ProArraySizeGet (info->plan_models, &amp;num_paths);
+
+		for (i = 0; i &lt; num_paths; i++)
+<a name="anchor-31"></a>			free (info->plan_models [i]);
+
+		ProArrayFree ((ProArray*)&amp;info->plan_models);
+	}
+}
+<a name="anchor-32"></a>
+</pre>
+</body>
+</html>

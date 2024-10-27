@@ -1,0 +1,1173 @@
+<html>
+<head>
+<title>TestGraphics.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+
+/*--------------------------------------------------------------------*\
+    Pro/TOOLKIT includes
+<a name="anchor-2"></a>\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProWindows.h&quot;
+#include &quot;ProMdl.h&quot;
+#include &quot;ProModelitem.h&quot;
+<a name="anchor-3"></a>#include &quot;ProDisplist.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProMessage.h&quot;
+#include &quot;ProColor.h&quot;
+#include &quot;ProUtil.h&quot;
+<a name="anchor-4"></a>#include &quot;ProArray.h&quot;
+#include &quot;ProCurve.h&quot;
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-5"></a>    Pro/DEVELOP includes
+\*--------------------------------------------------------------------*/
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-6"></a>    C System includes
+\*--------------------------------------------------------------------*/
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-7"></a>    Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilMatrix.h&quot;
+<a name="anchor-8"></a>#include &quot;UtilMath.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &quot;TestGraphics.h&quot;
+#include &lt;ProTKRunTime.h>
+<a name="anchor-9"></a>
+/*--------------------------------------------------------------------*\
+    Macros
+\*--------------------------------------------------------------------*/
+#define GRAPHICS_COLOR	    0	/* The color of the graphics */
+<a name="anchor-10"></a>#define TEXT_COLOR	    1	/* The color of the text */
+
+
+/*--------------------------------------------------------------------*\
+    Data types
+<a name="anchor-11"></a>\*--------------------------------------------------------------------*/
+
+
+/*--------------------------------------------------------------------*\
+    Application global/external data
+<a name="anchor-12"></a>\*--------------------------------------------------------------------*/
+
+
+/*---------------------------------------------------------------------*\
+    Functions declaration
+<a name="anchor-13"></a>\*---------------------------------------------------------------------*/
+int	    ProTestEntityDrawMenu( void*, int );
+int	    ProTestColorSet( void*, int );
+int	    ProTestAssignColor( ProColor*, ProColortype );
+int	    ProTestColormap( void*, int );
+<a name="anchor-14"></a>int	    ProTestGraphicsFreehandDraw( void* p_dummy, int int_dummy );
+int	    ProTestRay (void*, int);
+int     ProTestCurveColor(void*, int);
+int     ProTestCurveLinestyle(void*, int);
+
+<a name="anchor-15"></a>/*===========================================================================*\
+  Function : user_entity_menu
+  Purpose  : To set up the entity menu
+\*===========================================================================*/
+/*---------------------------------------------------------------------*\
+<a name="anchor-16"></a>    Function:	ProTestGraphics()
+    Purpose:	Top-level function. Create and run TkGraph menu to test
+		ProGraphics functions.
+    Returns:	0 - success; -1 - error. Now ignored.
+\*---------------------------------------------------------------------*/
+<a name="anchor-17"></a>int ProTestGraphics( void* p_dummy, int int_dummy )
+{
+    ProError    status;
+    int			menu_id;    /* The identifier of the created menu */
+    int			action;
+<a name="anchor-18"></a>
+
+    /*-----------------------------*\
+	Create new menu TkGraphics
+    \*-----------------------------*/
+<a name="anchor-19"></a>
+    /* Load base menu from file */
+    status = ProMenuFileRegister( (char*)&quot;TkGraphics&quot;, (char*)&quot;tkgraph.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestGraphics()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-20"></a>
+    /* Define menu buttons */
+    status = ProMenubuttonActionSet((char*) &quot;TkGraphics&quot;,(char*) &quot;Draw&quot;, 
+        (ProMenubuttonAction)ProTestEntityDrawMenu, NULL, 0 );
+    status = ProMenubuttonActionSet((char*) &quot;TkGraphics&quot;,(char*) &quot;Display List 2D&quot;, 
+<a name="anchor-21"></a>        (ProMenubuttonAction)ProTest2dDisplistMenu, NULL, 0 );
+    status = ProMenubuttonActionSet((char*) &quot;TkGraphics&quot;,(char*) &quot;Display List 3D&quot;, 
+        (ProMenubuttonAction)ProTest3dDisplistMenu, NULL, 0 );
+    status = ProMenubuttonActionSet((char*) &quot;TkGraphics&quot;,(char*) &quot;Ray demo&quot;, 
+        (ProMenubuttonAction)ProTestRay, NULL, 0  );
+<a name="anchor-22"></a>    status = ProMenubuttonActionSet((char*) &quot;TkGraphics&quot;,(char*) &quot;Curve color&quot;, 
+	    (ProMenubuttonAction)ProTestCurveColor, NULL, 0 );
+    status = ProMenubuttonActionSet((char*) &quot;TkGraphics&quot;,(char*) &quot;Curve linestyle&quot;, 
+	    (ProMenubuttonAction)ProTestCurveLinestyle, NULL, 0 );
+    status = ProMenubuttonActionSet((char*) &quot;TkGraphics&quot;,(char*) &quot;Done&quot;, 
+<a name="anchor-23"></a>	    (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+    status = ProMenubuttonActionSet((char*) &quot;TkGraphics&quot;,(char*) &quot;TkGraphics&quot;, 
+	    (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+
+<a name="anchor-24"></a>    /*-----------------------*\
+	Run menu TkGraphics
+    \*-----------------------*/
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkGraphics&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestGraphics()&quot;, 
+<a name="anchor-25"></a>			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+	status = ProMenuProcess((char*) &quot;TkGraphics&quot;, &amp;action );
+	TEST_CALL_REPORT((char*) &quot;ProMenuProcess()&quot;, &quot;ProTestGraphics()&quot;, 
+<a name="anchor-26"></a>			    status, status != PRO_TK_NO_ERROR );
+    }
+
+
+    return 0;
+<a name="anchor-27"></a>}
+
+
+
+/*===========================================================================*\
+<a name="anchor-28"></a>  Function : ProTestGrMenuDelete
+  Purpose  : Deletes menus
+\*===========================================================================*/
+int ProTestGrMenuDelete (void *data, int dummy)
+{
+<a name="anchor-29"></a>    ProMenuDelete();
+    ProMenuDelete();
+    return (0);
+}
+
+<a name="anchor-30"></a>/*---------------------------------------------------------------------*\
+    Function:	ProTestEntityDrawMenu()
+    Purpose:	On-button function. Set up the entity draw menu.
+    Returns:	0 - success; Now ignored.
+\*---------------------------------------------------------------------*/
+<a name="anchor-31"></a>int ProTestEntityDrawMenu( void* p_dummy, int int_dummy )
+{
+    ProError		status;
+    int			menu_id;    /* The identifier of the created menu */
+    int			action;
+<a name="anchor-32"></a>    static ProColor	old_color, drawing_color;
+    static ProColor	old_text_color;
+    ProDrawMode		old_mode;
+    int			dummy;
+    static char *cmpnd_menu[] = {&quot;Gr Draw&quot;,&quot;Gr Set&quot;,&quot;&quot;};
+<a name="anchor-33"></a>
+    int ProTestGraphicsMultiPolylinesDraw( void* p_dummy, int int_dummy );
+
+
+    /* Set the graphics mode to complement */
+<a name="anchor-34"></a>    status = ProGraphicsModeSet( PRO_DRAW_SET_MODE, &amp;old_mode );
+    TEST_CALL_REPORT( &quot;ProGraphicsModeSet()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+			status, 
+			(status!=PRO_TK_NO_ERROR) &amp;&amp; (status!=PRO_TK_NO_CHANGE) );
+
+<a name="anchor-35"></a>    /* Set the color PRO_COLOR_DRAWING */
+	drawing_color.method = PRO_COLOR_METHOD_TYPE;
+	drawing_color.value.type = PRO_COLOR_DRAWING;
+	
+    status = ProGraphicsColorModify( &amp;drawing_color, &amp;old_color );
+<a name="anchor-36"></a>    TEST_CALL_REPORT( &quot;ProGraphicsColorModify()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+			status, 
+			(status!=PRO_TK_NO_ERROR) &amp;&amp; (status!=PRO_TK_NO_CHANGE) );
+
+    status = ProTextColorModify( &amp;drawing_color, &amp;old_text_color );
+<a name="anchor-37"></a>    TEST_CALL_REPORT( &quot;ProTextColorModify()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+			status, 
+			(status!=PRO_TK_NO_ERROR) &amp;&amp; (status!=PRO_TK_NO_CHANGE) );
+
+    /*-----------------------------*\
+<a name="anchor-38"></a>	Create new menu Gr Draw
+    \*-----------------------------*/
+
+    /* Load menu from file */
+    status = ProMenuFileRegister((char*) &quot;Gr Draw&quot;,(char*) &quot;tkgrdraw.mnu&quot;, &amp;menu_id );
+<a name="anchor-39"></a>    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    /* Define menu buttons */
+    ProMenubuttonActionSet((char*) &quot;Gr Draw&quot;,(char*) &quot;Arc&quot;, 
+<a name="anchor-40"></a>	(ProMenubuttonAction)ProTestGraphicsArcDraw, NULL, 0 );
+    ProMenubuttonActionSet((char*) &quot;Gr Draw&quot;,(char*) &quot;Text&quot;, 
+	(ProMenubuttonAction)ProTestGraphicsTextDisplay, NULL, 0 );
+    ProMenubuttonActionSet((char*) &quot;Gr Draw&quot;,(char*) &quot;Circle&quot;, 
+	(ProMenubuttonAction)ProTestGraphicsCircleDraw, NULL, 0 );
+<a name="anchor-41"></a>    ProMenubuttonActionSet((char*) &quot;Gr Draw&quot;,(char*) &quot;Line&quot;, 
+	(ProMenubuttonAction)ProTestGraphicsLineDraw, NULL, 0 );
+    ProMenubuttonActionSet((char*) &quot;Gr Draw&quot;,(char*) &quot;PolyLine&quot;, 
+	(ProMenubuttonAction)ProTestGraphicsPolylineDraw, NULL, 0 );
+    ProMenubuttonActionSet((char*) &quot;Gr Draw&quot;,(char*) &quot;MultiPolyLine&quot;,
+<a name="anchor-42"></a>        (ProMenubuttonAction)ProTestGraphicsMultiPolylinesDraw, NULL, 0 );
+    ProMenubuttonActionSet((char*) &quot;Gr Draw&quot;,(char*) &quot;Box&quot;, 
+	(ProMenubuttonAction)ProTestGraphicsPolygonDraw, NULL, 0 );
+    ProMenubuttonActionSet((char*) &quot;Gr Draw&quot;,(char*) &quot;Freehand&quot;, 
+	(ProMenubuttonAction)ProTestGraphicsFreehandDraw, NULL, 0 );
+<a name="anchor-43"></a>    ProMenubuttonActionSet((char*) &quot;Gr Draw&quot;,(char*) &quot;Gr Draw&quot;, 
+	(ProMenubuttonAction)ProMenuHold, NULL, 0 );
+
+    status = ProMenuFileRegister((char*) &quot;Gr Set&quot;,(char*) &quot;tkgrset.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+<a name="anchor-44"></a>			status, status != PRO_TK_NO_ERROR );
+    ProMenubuttonActionSet((char*) &quot;Gr Set&quot;,(char*) &quot;Set Text&quot;, 
+        (ProMenubuttonAction)ProTestText, NULL, 0 );
+    ProMenubuttonActionSet((char*) &quot;Gr Set&quot;,(char*) &quot;Set Line&quot;, 
+        (ProMenubuttonAction)ProTestLineSetMenu, NULL, 0 );
+<a name="anchor-45"></a>    ProMenubuttonActionSet((char*) &quot;Gr Set&quot;,(char*) &quot;Color Map&quot;, 
+        (ProMenubuttonAction)ProTestColormap, NULL, 0  );
+    ProMenubuttonActionSet((char*) &quot;Gr Set&quot;,(char*) &quot;Color&quot;, 
+	(ProMenubuttonAction)ProTestColorSet, NULL, GRAPHICS_COLOR );
+    ProMenubuttonActionSet((char*) &quot;Gr Set&quot;,(char*) &quot;Text Color&quot;, 
+<a name="anchor-46"></a>	(ProMenubuttonAction)ProTestColorSet, NULL, TEXT_COLOR );
+    ProMenubuttonActionSet((char*) &quot;Gr Set&quot;,(char*) &quot;Done&quot;, 
+	(ProMenubuttonAction)ProTestGrMenuDelete, NULL, 0 );
+    ProMenubuttonActionSet((char*) &quot;Gr Set&quot;,(char*) &quot;Gr Set&quot;, 
+	(ProMenubuttonAction)ProMenuHold, NULL, 0 );
+<a name="anchor-47"></a>
+    /*----------------------*\
+	Run menu Gr Draw
+    \*----------------------*/
+    status = ProCompoundmenuCreate(cmpnd_menu, &amp;menu_id);
+<a name="anchor-48"></a>    TEST_CALL_REPORT(&quot;ProCompoundmenuCreate()&quot;, 
+        &quot;ProTestEntityDrawMenu()&quot;,
+	status , status != PRO_TK_NO_ERROR);   
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-49"></a>	status = ProMenuProcess((char*) &quot;Gr Draw&quot;, &amp;action );
+	TEST_CALL_REPORT((char*) &quot;ProMenuProcess()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+
+<a name="anchor-50"></a>
+    /* Restore old colors */
+    status = ProGraphicsColorModify( &amp;old_color, NULL );
+    TEST_CALL_REPORT( &quot;ProGraphicsColorModify()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+			status, 
+<a name="anchor-51"></a>			(status!=PRO_TK_NO_ERROR) &amp;&amp; (status!=PRO_TK_NO_CHANGE) );
+
+    status = ProTextColorModify( &amp;old_text_color, NULL );
+    TEST_CALL_REPORT( &quot;ProTextColorModify()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+			status, 
+<a name="anchor-52"></a>			(status!=PRO_TK_NO_ERROR) &amp;&amp; (status!=PRO_TK_NO_CHANGE) );
+
+    status = ProGraphicsModeSet( old_mode, (ProDrawMode *)&amp;dummy );
+    TEST_CALL_REPORT( &quot;ProGraphicsModeSet()&quot;, &quot;ProTestEntityDrawMenu()&quot;, 
+			status, 
+<a name="anchor-53"></a>			(status!=PRO_TK_NO_ERROR) &amp;&amp; (status!=PRO_TK_NO_CHANGE) );
+
+
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-54"></a>
+
+
+/*===========================================================================*\
+  Function : user_entity_color
+<a name="anchor-55"></a>  Purpose  : To set up the color menu
+\*===========================================================================*/
+/*---------------------------------------------------------------------*\
+    Function:	ProTestColorSet()
+    Purpose:	On-button function. Run menu to select color, then set
+<a name="anchor-56"></a>		selected color as current.
+    Returns:	PRO_TK_NO_ERROR - success; Otherwise - error. 
+		Now ignored.
+\*---------------------------------------------------------------------*/
+int ProTestColorSet( 
+<a name="anchor-57"></a>    void* p_dummy, 
+    int type )	    /* (In)	TEXT_COLOR or GRAPHICS_COLOR */
+{
+    ProError		status;
+    int			menu_id;    /* The identifier of the created menu */
+<a name="anchor-58"></a>    int			action;
+    ProColor	new_color ;
+    ProColor	old_color;
+
+
+<a name="anchor-59"></a>    /*-----------------------------*\
+	Create new menu Color
+    \*-----------------------------*/
+
+    /* Load base menu from file */
+<a name="anchor-60"></a>    status = ProMenuFileRegister((char*) &quot;Color&quot;,(char*) &quot;tkgrcolor.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestColorSet()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+			
+	new_color.method = PRO_COLOR_METHOD_TYPE;
+<a name="anchor-61"></a>	new_color.value.type = PRO_COLOR_DRAWING;		
+
+    /* Define menu buttons */
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Letter&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor, 
+<a name="anchor-62"></a>	&amp;new_color, PRO_COLOR_LETTER );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Highlight&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;new_color, PRO_COLOR_HIGHLITE );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Drawing&quot;, 
+<a name="anchor-63"></a>	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;new_color, PRO_COLOR_DRAWING );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Background&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;new_color, PRO_COLOR_BACKGROUND );
+<a name="anchor-64"></a>    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Half Tone&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;new_color, PRO_COLOR_HALF_TONE );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Edge Highlt&quot;,
+	(ProMenubuttonAction)ProTestAssignColor,
+<a name="anchor-65"></a>	&amp;new_color, PRO_COLOR_EDGE_HIGHLIGHT );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Dimmed&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;new_color, PRO_COLOR_DIMMED );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Error&quot;, 
+<a name="anchor-66"></a>	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;new_color, PRO_COLOR_ERROR );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Warning&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;new_color, PRO_COLOR_WARNING );
+<a name="anchor-67"></a>    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Color&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+
+    /*-------------------*\
+<a name="anchor-68"></a>	Run menu Color
+    \*-------------------*/
+    status = ProMenuCreate( PROMENUTYPE_MAIN,(char*) &quot;Color&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestColorSet()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-69"></a>    if( status == PRO_TK_NO_ERROR )
+    {
+	status = ProMenuProcess((char*) &quot;Color&quot;, &amp;action );
+	TEST_CALL_REPORT((char*) &quot;ProMenuProcess()&quot;, &quot;ProTestColorSet()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-70"></a>    }
+
+    /* Set selected color as current */
+    if( type == TEXT_COLOR )
+    {
+<a name="anchor-71"></a>        status = ProTextColorModify( &amp;new_color, &amp;old_color );
+	TEST_CALL_REPORT( &quot;ProTextColorModify()&quot;, &quot;ProTestColorSet()&quot;, 
+			status, 
+			(status!=PRO_TK_NO_ERROR) &amp;&amp; (status!=PRO_TK_NO_CHANGE) );
+    }
+<a name="anchor-72"></a>    else
+    {
+        status = ProGraphicsColorModify( &amp;new_color, &amp;old_color );
+	TEST_CALL_REPORT( &quot;ProGraphicsColorModify()&quot;, &quot;ProTestColorSet()&quot;, 
+			status,
+<a name="anchor-73"></a>			(status!=PRO_TK_NO_ERROR) &amp;&amp; (status!=PRO_TK_NO_CHANGE) );
+    }
+
+
+    return status;
+<a name="anchor-74"></a>}
+
+
+
+/*===========================================================================*\
+<a name="anchor-75"></a>  Function : user_assign_color
+  Purpose  :
+\*===========================================================================*/
+/*---------------------------------------------------------------------*\
+    Function:	ProTestAssignColor()
+<a name="anchor-76"></a>    Purpose:	On-button function. Run menu to select color, then set
+		selected color as current.
+    Returns:	0 - success; Now ignored.
+\*---------------------------------------------------------------------*/
+int ProTestAssignColor( 
+<a name="anchor-77"></a>    ProColor* p_color,  /* (Out)	Variable to assign color to */
+    ProColortype col_type)	    /* (In)	Color to assign */
+{
+    ProError	    status;
+
+<a name="anchor-78"></a>	(*p_color).method = PRO_COLOR_METHOD_TYPE;
+	(*p_color).value.type = col_type;
+    
+    status = ProMenuDelete();
+    TEST_CALL_REPORT( &quot;ProMenuDelete()&quot;, &quot;ProTestAssignColor()&quot;, 
+<a name="anchor-79"></a>			status, status!=PRO_TK_NO_ERROR );
+
+
+    return 0;
+}
+<a name="anchor-80"></a>
+
+
+/*===========================================================================*\
+  Function : user__color
+<a name="anchor-81"></a>  Purpose  : ucolor.c
+\*===========================================================================*/
+/*---------------------------------------------------------------------*\
+    Function:	ProTestColormap()
+    Purpose:	On-button. Test of the color map functions
+<a name="anchor-82"></a>    Returns:	0 - success; -1 - error. Now ignored.
+\*---------------------------------------------------------------------*/
+int ProTestColormap( void* p_dummy, int int_dummy )
+{
+    ProError	    status;
+<a name="anchor-83"></a>    int		    menu_id;    /* The identifier of the created menu */
+    int		    action;
+    ProColortype    c_type = PRO_COLOR_DRAWING;
+	ProColor color;
+    ProColormap	    color_map;
+<a name="anchor-84"></a>    double	    range[ 2 ] = {0.0, 1.0};
+    char	    buffer[ PRO_LINE_SIZE ];
+
+
+    /* Load base menu from file */
+<a name="anchor-85"></a>    status = ProMenuFileRegister((char*) &quot;Color&quot;,(char*) &quot;tkgrcolor.mnu&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestColormap()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    /* Define menu buttons */
+<a name="anchor-86"></a>    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Letter&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor, 
+	&amp;color, PRO_COLOR_LETTER );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Highlight&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor,
+<a name="anchor-87"></a>	&amp;color, PRO_COLOR_HIGHLITE );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Drawing&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;color, PRO_COLOR_DRAWING );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Background&quot;, 
+<a name="anchor-88"></a>	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;color, PRO_COLOR_BACKGROUND );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Half Tone&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;color, PRO_COLOR_HALF_TONE );
+<a name="anchor-89"></a>    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Edge Highlt&quot;,
+	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;color, PRO_COLOR_EDGE_HIGHLIGHT );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Dimmed&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor,
+<a name="anchor-90"></a>	&amp;color, PRO_COLOR_DIMMED );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Error&quot;, 
+	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;color, PRO_COLOR_ERROR );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Warning&quot;, 
+<a name="anchor-91"></a>	(ProMenubuttonAction)ProTestAssignColor,
+	&amp;color, PRO_COLOR_WARNING );
+    ProMenubuttonActionSet((char*) &quot;Color&quot;,(char*) &quot;Color&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+<a name="anchor-92"></a>
+    /*-------------------*\
+	Run menu Color
+    \*-------------------*/
+    status = ProMenuCreate( PROMENUTYPE_MAIN,(char*) &quot;Color&quot;, &amp;menu_id );
+<a name="anchor-93"></a>    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestColormap()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+	status = ProMenuProcess((char*) &quot;Color&quot;, &amp;action );
+<a name="anchor-94"></a>	TEST_CALL_REPORT((char*) &quot;ProMenuProcess()&quot;, &quot;ProTestColormap()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+
+    /*  First get the color values  */
+<a name="anchor-95"></a>    status = ProColormapGet( c_type, &amp;color_map );
+    TEST_CALL_REPORT( &quot;ProColormapGet()&quot;, &quot;ProTestColormap()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+<a name="anchor-96"></a>
+    ProTKSprintf( buffer, &quot;Current color map: red %f gree %f blue %f&quot;, 
+		color_map.red, color_map.green, color_map.blue ); 
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, buffer );
+    ProMessageClear();
+<a name="anchor-97"></a>    TEST_CALL_REPORT( &quot;ProMessageClear()&quot;, &quot;ProTestOptionOrderedVerify()&quot;, 
+			(ProError)0, 0 );
+
+    /*  Ask the user for new values  */
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Red Value: &quot; );
+<a name="anchor-98"></a>    if( !ProUtilDoubleGet( range, NULL, &amp;(color_map.red) ) )
+	return -1;
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Green Value: &quot; );
+    if( !ProUtilDoubleGet( range, NULL, &amp;(color_map.green) ) )
+<a name="anchor-99"></a>	return -1;
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Blue Value: &quot; );
+    if( !ProUtilDoubleGet( range, NULL, &amp;(color_map.blue) ) )
+	return -1;
+<a name="anchor-100"></a>
+
+    /*  Now set the color values  */
+    status = ProColormapSet( c_type, &amp;color_map );
+    TEST_CALL_REPORT( &quot;ProColormapSet()&quot;, &quot;ProTestColormap()&quot;, 
+<a name="anchor-101"></a>			status, status != PRO_TK_NO_ERROR );
+
+
+    return 0;
+}
+<a name="anchor-102"></a>
+
+
+/*---------------------------------------------------------------------*\
+    Function:	ProTestGraphicsArcDraw()
+<a name="anchor-103"></a>    Purpose:	On-button function. Test arc drawing.
+		Ask user to pick 3 points. Use this points to draw the arc.
+    Returns:	1 - success; 0 - error.
+\*---------------------------------------------------------------------*/
+int ProTestGraphicsArcDraw( void* p_dummy, int int_dummy )
+<a name="anchor-104"></a>{
+    ProError		status;
+    ProMouseButton	button;
+    ProPoint3d		point1;
+    ProPoint3d		point2;
+<a name="anchor-105"></a>    ProPoint3d		point3;
+    ProPoint3d		center;
+    double		radius;
+
+    
+<a name="anchor-106"></a>    /* Declare functions from UtilArcEndPoints.c */
+    int ProUtilArc3Points( double pnt1[3], double pnt2[3], double pnt3[3], 
+			    double* p_rad, double center[3] );
+    int ProUtilArcEndPoints( double, double, double, double, double, double, 
+			    double, double, double, double, double, double, 
+<a name="anchor-107"></a>			    double end1[3], double end2[3] );
+
+    /*--------------------------*\
+	Pick 3 points by mouse
+    \*--------------------------*/
+<a name="anchor-108"></a>    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick the first point&quot; );
+    status = ProMousePickGet( PRO_LEFT_BUTTON, &amp;button, point1 );
+    TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, &quot;ProTestGraphicsArcDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+<a name="anchor-109"></a>	return 0;
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick the second point&quot; );
+    status = ProMousePickGet( PRO_LEFT_BUTTON, &amp;button, point2 );
+    TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, &quot;ProTestGraphicsArcDraw()&quot;, 
+<a name="anchor-110"></a>			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return 0;
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick the third point&quot; );
+<a name="anchor-111"></a>    status = ProMousePickGet( PRO_LEFT_BUTTON, &amp;button, point3 );
+    TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, &quot;ProTestGraphicsArcDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return 0;
+<a name="anchor-112"></a>
+
+
+    /* Create an arc from 3 points */
+    ProUtilArc3Points( point1, point2, point3, &amp;radius, center );
+<a name="anchor-113"></a>
+    /* Arc is drawn CCW,  from end1 to end2 */
+    ProUtilArcEndPoints( point1[0], point1[1], point1[2], 
+			    point2[0], point2[1], point2[2],
+			    point3[0], point3[1], point3[2], 
+<a name="anchor-114"></a>			    center[0], center[1], center[2], 
+			    point1, point2 );
+
+    /* Draw the arc */
+    status = ProGraphicsArcDraw( center, radius, point1, point2 );
+<a name="anchor-115"></a>    TEST_CALL_REPORT( &quot;ProGraphicsArcDraw()&quot;, &quot;ProTestGraphicsArcDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    
+
+    return (status == PRO_TK_NO_ERROR) ? 1 : 0;
+<a name="anchor-116"></a>}
+
+
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-117"></a>    Function:	ProTestGraphicsCircleDraw()
+    Purpose:	On-button function. Test circle drawing.
+		Ask user to pick 2 points. Use this points to draw 
+		the circle.
+    Returns:	1 - success; 0 - error.
+<a name="anchor-118"></a>\*---------------------------------------------------------------------*/
+int ProTestGraphicsCircleDraw( void* p_dummy, int int_dummy )
+{
+    ProError		status;
+    ProMouseButton	button;
+<a name="anchor-119"></a>    ProPoint3d		point1;
+    ProPoint3d		point2;
+    double		radius;
+    ProMatrix		view_matrix;
+    ProMatrix		trf_matrix;
+<a name="anchor-120"></a>
+
+    /* Obtain the view matrix  */
+    status = ProViewMatrixGet( NULL, NULL, view_matrix );
+    TEST_CALL_REPORT( &quot;ProViewMatrixGet()&quot;, &quot;ProTestGraphicsCircleDraw()&quot;, 
+<a name="anchor-121"></a>			status, status != PRO_TK_NO_ERROR );
+    ProUtilMatrixInvert( view_matrix, trf_matrix );
+
+
+    /* Pick 2 points by mouse */
+<a name="anchor-122"></a>    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick the first point&quot; );
+    status = ProMousePickGet( PRO_LEFT_BUTTON, &amp;button, point1 );
+    TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, &quot;ProTestGraphicsCircleDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+<a name="anchor-123"></a>	return 0;
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick the second point&quot; );
+    status = ProMousePickGet( PRO_LEFT_BUTTON, &amp;button, point2 );
+    TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, &quot;ProTestGraphicsCircleDraw()&quot;, 
+<a name="anchor-124"></a>			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return 0;
+
+    /* Transform points by matrix */
+<a name="anchor-125"></a>    ProUtilPointTrans( trf_matrix, point1, point1 );
+    ProUtilPointTrans( trf_matrix, point2, point2 );
+
+    /* Calculate the radius */
+    radius = ProUtilPointsDist( point1, point2 );
+<a name="anchor-126"></a>
+    /* Draw the circle */
+    ProGraphicsCircleDraw( point1, radius );
+    TEST_CALL_REPORT( &quot;ProGraphicsCircleDraw()&quot;, &quot;ProTestGraphicsCircleDraw()&quot;, 
+			(ProError)0, 0 );
+<a name="anchor-127"></a>
+
+    return 1;
+}
+
+<a name="anchor-128"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProTestGraphicsTextDisplay()
+    Purpose:	On-button function. Test text displaying.
+<a name="anchor-129"></a>		Ask user to pick the text location and enter the text to
+		display.
+    Returns:	1 - success; 0 - error.
+\*---------------------------------------------------------------------*/
+int ProTestGraphicsTextDisplay( void* p_dummy, int int_dummy )
+<a name="anchor-130"></a>{
+    ProError		status;
+    ProMouseButton	button;
+    ProPoint3d		point1;
+    wchar_t		w_string[ 80 ];
+<a name="anchor-131"></a>
+
+    /* Pick the point by mouse */
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick the first point&quot; );
+    status = ProMousePickGet( PRO_LEFT_BUTTON, &amp;button, point1 );
+<a name="anchor-132"></a>    TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, &quot;ProTestGraphicsTextDisplay()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return 0;
+
+<a name="anchor-133"></a>    /* Get a text to display */
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter the text: &quot; );
+    status = ProMessageStringRead( 80, w_string );
+    TEST_CALL_REPORT( &quot;ProMessageStringRead()&quot;, &quot;ProTestGraphicsTextDisplay()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-134"></a>    if( status != PRO_TK_NO_ERROR )
+	return 0;
+
+    /* Display the text */
+    status = ProGraphicsTextDisplay( point1, w_string );
+<a name="anchor-135"></a>    TEST_CALL_REPORT( &quot;ProGraphicsTextDisplay()&quot;, 
+			&quot;ProTestGraphicsTextDisplay()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+
+<a name="anchor-136"></a>    return 1;
+}
+
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-137"></a>    Function:	ProTestGraphicsLineDraw()
+    Purpose:	On-button function. Test line drawing.
+    Returns:	1 - success; 0 - error.
+\*---------------------------------------------------------------------*/
+int ProTestGraphicsLineDraw( void* p_dummy, int int_dummy )
+<a name="anchor-138"></a>{
+    ProError		status;
+    ProMouseButton	button;
+    ProPoint3d		point1;
+    ProPoint3d		point2;
+<a name="anchor-139"></a>    ProMatrix		view_matrix;
+    ProMatrix		trf_matrix;
+
+
+    /* Obtain the view matrix  */
+<a name="anchor-140"></a>    status = ProViewMatrixGet( NULL, NULL, view_matrix );
+    TEST_CALL_REPORT( &quot;ProViewMatrixGet()&quot;, &quot;ProTestGraphicsLineDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    ProUtilMatrixInvert( view_matrix, trf_matrix );
+
+<a name="anchor-141"></a>   /* Pick 2 points by mouse */
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick the first point&quot; );
+    status = ProMousePickGet( PRO_LEFT_BUTTON, &amp;button, point1 );
+    TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, &quot;ProTestGraphicsLineDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-142"></a>    if( status != PRO_TK_NO_ERROR )
+	return 0;
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick the second point&quot; );
+    status = ProMousePickGet( PRO_LEFT_BUTTON, &amp;button, point2 );
+<a name="anchor-143"></a>    TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, &quot;ProTestGraphicsLineDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return 0;
+
+<a name="anchor-144"></a>    /* Transform points by matrix */
+    ProUtilPointTrans( trf_matrix, point1, point1 );
+    ProUtilPointTrans( trf_matrix, point2, point2 );
+
+    /* Draw the line */
+<a name="anchor-145"></a>    ProGraphicsPenPosition( point1 );
+    TEST_CALL_REPORT( &quot;ProGraphicsPenPosition()&quot;, &quot;ProTestGraphicsLineDraw()&quot;, 
+			(ProError)0, 0 );
+    ProGraphicsLineDraw( point2 );
+    TEST_CALL_REPORT( &quot;ProGraphicsLineDraw()&quot;, &quot;ProTestGraphicsLineDraw()&quot;, 
+<a name="anchor-146"></a>			(ProError)0, 0 );
+
+
+    return 1;
+}
+<a name="anchor-147"></a>
+/*---------------------------------------------------------------------*\
+    Function:	ProTestGraphicsPolylineDraw()
+    Purpose:	On-button function. Test polyline drawing.
+    Returns:	1 - success; 0 - error.
+<a name="anchor-148"></a>\*---------------------------------------------------------------------*/
+int ProTestGraphicsPolylineDraw( void* p_dummy, int int_dummy )
+{
+    ProError		status;
+    ProMouseButton	button;
+<a name="anchor-149"></a>    ProPoint3d		point1;
+    ProPoint3d*		p_point_arr;
+    int			n_points;
+    int			i;
+    ProMatrix		view_matrix;
+<a name="anchor-150"></a>    ProMatrix		trf_matrix;
+
+
+    /* Obtain the view matrix  */
+    status = ProViewMatrixGet( NULL, NULL, view_matrix );
+<a name="anchor-151"></a>    TEST_CALL_REPORT( &quot;ProViewMatrixGet()&quot;, &quot;ProTestGraphicsPolylineDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    ProUtilMatrixInvert( view_matrix, trf_matrix );
+
+    /* Init the points array */
+<a name="anchor-152"></a>    status = ProArrayAlloc( 0, sizeof(ProPoint3d), 1, (ProArray*)&amp;p_point_arr );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestGraphicsPolylineDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return 0;
+<a name="anchor-153"></a>
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick 'n+1' points&quot; );
+    for( i=0; i&lt;200; i++ )
+    {
+	 /* Pick the next point by mouse */
+<a name="anchor-154"></a>	status = ProMousePickGet( PRO_ANY_BUTTON, &amp;button, point1 );
+	TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, &quot;ProTestGraphicsPolylineDraw()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	if( (status != PRO_TK_NO_ERROR) || (button != PRO_LEFT_BUTTON) )
+	    break;  /* Leave the loop */
+<a name="anchor-155"></a>
+	/* Transform point by matrix */
+	ProUtilPointTrans( trf_matrix, point1, point1 );
+
+	/* Add the point to the array */
+<a name="anchor-156"></a>	status = ProArrayObjectAdd( (ProArray*)&amp;p_point_arr, PRO_VALUE_UNUSED, 1, point1 );
+	TEST_CALL_REPORT( &quot;ProArrayObjectAdd()&quot;, 
+			    &quot;ProTestGraphicsPolylineDraw()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-157"></a>	/* Draw the small circle to mark the point */
+	ProGraphicsCircleDraw( point1, 0.05 );
+	TEST_CALL_REPORT( &quot;ProGraphicsCircleDraw()&quot;, 
+			    &quot;ProTestGraphicsPolylineDraw()&quot;, (ProError)0, 0 );
+    }
+<a name="anchor-158"></a>
+    /* Get the number of points */
+    status = ProArraySizeGet( p_point_arr, &amp;n_points );
+    TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestGraphicsPolylineDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-159"></a>
+    if( n_points > 1 )
+    {
+	/* Draw a series of connected line segments */
+	ProGraphicsPolylineDraw( p_point_arr, n_points );
+<a name="anchor-160"></a>	TEST_CALL_REPORT( &quot;ProGraphicsPolylineDraw()&quot;, 
+			    &quot;ProTestGraphicsPolylineDraw()&quot;, (ProError)0, 0 );
+    }
+
+    /* Free the pre-allocated array */
+<a name="anchor-161"></a>    status = ProArrayFree( (ProArray*)&amp;p_point_arr );
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestGraphicsPolylineDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+
+<a name="anchor-162"></a>    return 1;
+}
+/*---------------------------------------------------------------------*\
+    Function:	ProTestGraphicsPolygonDraw()
+    Purpose:	On-button function. Test the polygon drawing.
+<a name="anchor-163"></a>    Returns:	1 - success; 0 - error.
+\*---------------------------------------------------------------------*/
+int ProTestGraphicsPolygonDraw( void* p_dummy, int int_dummy )
+{
+    ProError		status;
+<a name="anchor-164"></a>    ProMouseButton	button;
+    ProOutline		outline;
+    ProPoint3d		points[ 4 ];
+    ProPoint3d		start_point;
+    ProPoint2d		rect[ 5 ];
+<a name="anchor-165"></a>    int			i;
+
+
+    /* Select rectangle by mouse */
+    status = ProMousePickGet( PRO_LEFT_BUTTON, &amp;button, start_point );
+<a name="anchor-166"></a>    TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, &quot;ProTestGraphicsPolygonDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+    status = ProMouseBoxInput( start_point, outline );
+    TEST_CALL_REPORT( &quot;ProMouseBoxInput()&quot;, &quot;ProTestGraphicsPolygonDraw()&quot;, 
+<a name="anchor-167"></a>			status, status != PRO_TK_NO_ERROR );
+
+    /* Init rectangle vertices */
+    ProUtilVectorCopy( outline[0], points[0] );
+    ProUtilVectorCopy( outline[1], points[2] );
+<a name="anchor-168"></a>    ProUtilVectorCopy( points[0], points[1] );
+    ProUtilVectorCopy( points[2], points[3] );
+    points[1][1] = points[2][1];
+    points[3][1] = points[0][1];
+
+<a name="anchor-169"></a>    /* Copy the array of 3d points to the array of 2d points */
+    rect[4][0] = points[0][0];
+    rect[4][1] = points[0][1];
+    for( i=0; i&lt;4; i++ )
+    {
+<a name="anchor-170"></a>	rect[i][0] = points[i][0];
+	rect[i][1] = points[i][1];
+    }
+
+    /* Draw the filled polygon */
+<a name="anchor-171"></a>    status = ProGraphicsPolygonDraw( rect, 5, PRO_COLOR_ERROR );
+    TEST_CALL_REPORT( &quot;ProGraphicsPolygonDraw()&quot;, 
+			&quot;ProTestGraphicsPolygonDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-172"></a>
+    return 1;
+}
+
+
+<a name="anchor-173"></a>
+int ProTestGraphicsFreehandDraw( void* p_dummy, int int_dummy )
+
+{
+    ProError		status;
+<a name="anchor-174"></a>    ProMouseButton	button;
+    ProPoint3d		point;
+    ProMatrix		view_matrix;
+    ProMatrix		trf_matrix;
+
+<a name="anchor-175"></a>
+    /* Obtain the view matrix  */
+    status = ProViewMatrixGet( NULL, NULL, view_matrix );
+    TEST_CALL_REPORT( &quot;ProViewMatrixGet()&quot;, &quot;ProTestGraphicsFreehandDraw()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-176"></a>    ProUtilMatrixInvert( view_matrix, trf_matrix );
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick the point&quot; );
+    status = ProMousePickGet( PRO_LEFT_BUTTON, &amp;button, point );
+    TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, &quot;ProTestGraphicsFreehandDraw()&quot;, 
+<a name="anchor-177"></a>			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return 0;
+
+    /* Transform points by matrix */
+<a name="anchor-178"></a>    ProUtilPointTrans( trf_matrix, point, point );
+
+    ProGraphicsPenPosition( point );
+    TEST_CALL_REPORT( &quot;ProGraphicsPenPosition()&quot;, &quot;ProTestGraphicsFreehandDraw()&quot;, 
+			(ProError)0, 0 );
+<a name="anchor-179"></a>
+    button = PRO_NO_BUTTON;
+    while( button != PRO_LEFT_BUTTON )
+    {
+	status = ProMouseTrack( PRO_B_FALSE, &amp;button, point );
+<a name="anchor-180"></a>	TEST_CALL_REPORT( &quot;ProMouseTrack()&quot;, &quot;ProTestGraphicsFreehandDraw()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+ 
+	/* Transform points by matrix */
+	ProUtilPointTrans( trf_matrix, point, point );
+<a name="anchor-181"></a>
+	ProGraphicsLineDraw( point );
+	TEST_CALL_REPORT( &quot;ProGraphicsLineDraw()&quot;, &quot;ProTestGraphicsFreehandDraw()&quot;, 
+			    (ProError)0, 0 );
+   }
+<a name="anchor-182"></a>    
+    
+    return 1;
+}
+
+<a name="anchor-183"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProTestGraphicsMultiPolylinesDraw()
+    Purpose:	On-button function. Test multipolylines drawing.
+<a name="anchor-184"></a>    Returns:	1 - success; 0 - error.
+\*---------------------------------------------------------------------*/
+int ProTestGraphicsMultiPolylinesDraw( void* p_dummy, int int_dummy )
+{
+    ProError		status;
+<a name="anchor-185"></a>    ProMouseButton	button;
+    ProPoint3d		point1;
+    ProPoint3d*		p_point_arr;
+    int*         	p_span_arr;
+    int			n_points;
+<a name="anchor-186"></a>    ProMatrix		view_matrix;
+    ProMatrix		trf_matrix;
+    int			done = 1;
+
+
+<a name="anchor-187"></a>    /* Obtain the view matrix  */
+    status = ProViewMatrixGet( NULL, NULL, view_matrix );
+    TEST_CALL_REPORT( &quot;ProViewMatrixGet()&quot;, 
+	&quot;ProTestGraphicsMultiPolylineDraw()&quot;, 
+	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-188"></a>    ProUtilMatrixInvert( view_matrix, trf_matrix );
+
+    /* Init the points array */
+    status = ProArrayAlloc( 0, sizeof(ProPoint3d), 1, (ProArray*)&amp;p_point_arr );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestGraphicsMultiPolylineDraw()&quot;, 
+<a name="anchor-189"></a>	status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return 0;
+
+    /* Init the polylines size array */
+<a name="anchor-190"></a>    status = ProArrayAlloc( 0, sizeof(int), 1, (ProArray*)&amp;p_span_arr );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestGraphicsMultiPolylineDraw()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+        return 0;
+<a name="anchor-191"></a>
+    while( done )
+    {
+	n_points = 0;
+	while( done )
+<a name="anchor-192"></a>	{
+    	    button = PRO_NO_BUTTON;
+	    
+	    /* Pick the next point by mouse */
+	    status = ProMousePickGet( PRO_ANY_BUTTON, &amp;button, point1 );
+<a name="anchor-193"></a>	    TEST_CALL_REPORT( &quot;ProMousePickGet()&quot;, 
+		&quot;ProTestGraphicsMultiPolylineDraw()&quot;, 
+	    	status, status != PRO_TK_NO_ERROR );
+	    if( (status != PRO_TK_NO_ERROR) || (button != PRO_LEFT_BUTTON) )
+	    	break;  /* Leave the loop */
+<a name="anchor-194"></a>
+	    /* Transform point by matrix */
+	    ProUtilPointTrans( trf_matrix, point1, point1 );
+
+	    /* Add the point to the array */
+<a name="anchor-195"></a>	    status = ProArrayObjectAdd( (ProArray*)&amp;p_point_arr, 
+		PRO_VALUE_UNUSED, 
+		1, point1 );
+	    TEST_CALL_REPORT( &quot;ProArrayObjectAdd()&quot;, 
+    		&quot;ProTestGraphicsMultiPolylineDraw()&quot;, 
+<a name="anchor-196"></a>		status, status != PRO_TK_NO_ERROR );
+
+	    /* Draw the small circle to mark the point */
+	    ProGraphicsCircleDraw( point1, 0.05 );
+	    TEST_CALL_REPORT( &quot;ProGraphicsCircleDraw()&quot;, 
+<a name="anchor-197"></a>	    	&quot;ProTestGraphicsMultiPolylineDraw()&quot;, (ProError)0, 0 );
+
+	    n_points++;
+	}
+
+<a name="anchor-198"></a>        if( status != PRO_TK_NO_ERROR )
+            break;  /* Leave the loop */
+
+	if( n_points > 0 )
+	{
+<a name="anchor-199"></a>            /* Add the point counter to the array */
+            status = ProArrayObjectAdd( (ProArray*)&amp;p_span_arr,
+            	PRO_VALUE_UNUSED, 1, &amp;n_points );
+            TEST_CALL_REPORT( &quot;ProArrayObjectAdd()&quot;,
+            	&quot;ProTestGraphicsMultiPolylineDraw()&quot;,
+<a name="anchor-200"></a>            	status, status != PRO_TK_NO_ERROR );
+	}
+
+        if( button == PRO_RIGHT_BUTTON )
+            break;  /* Leave the loop */
+<a name="anchor-201"></a>    }
+
+    /* Get the number of points */
+    status = ProArraySizeGet( p_span_arr, &amp;n_points );
+    TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, 
+<a name="anchor-202"></a>	&quot;ProTestGraphicsMultiPolylineDraw()&quot;, 
+	status, status != PRO_TK_NO_ERROR );
+
+    if( n_points > 1 )
+    {
+<a name="anchor-203"></a>	/* Draw a series of connected line segments */
+	ProGraphicsMultiPolylinesDraw( p_point_arr, p_span_arr, n_points );
+	TEST_CALL_REPORT( &quot;ProGraphicsMultiPolylinesDraw()&quot;, 
+	    &quot;ProTestGraphicsMultiPolylineDraw()&quot;, (ProError)0, 0 );
+    }
+<a name="anchor-204"></a>
+    /* Free the pre-allocated array */
+    status = ProArrayFree( (ProArray*)&amp;p_point_arr );
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestGraphicsMultiPolylineDraw()&quot;, 
+	status, status != PRO_TK_NO_ERROR );
+<a name="anchor-205"></a>
+    /* Free the pre-allocated array */
+    status = ProArrayFree( (ProArray*)&amp;p_span_arr );
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestGraphicsMultiPolylineDraw()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-206"></a>
+
+    return 1;
+}
+
+<a name="anchor-207"></a>/*============================================================================*\
+  Function : ProTestCurveColor
+  Purpose  : Test ProCurveColor functions
+\*============================================================================*/
+int ProTestCurveColor( void* p_dummy, int int_dummy )
+<a name="anchor-208"></a>{
+    ProError status;
+    ProMdl owner;
+    ProModelitem modelitem;
+    ProCurve curve;
+<a name="anchor-209"></a>    ProSelection *p_sel;
+    int n_sel, opt = 0;
+    ProColortype old_color;
+    static ProUtilMenuButtons color_type[] = { 
+        {&quot;-Color&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+<a name="anchor-210"></a>        {&quot;Yellow&quot;, PRO_COLOR_LETTER, 0},
+        {&quot;Red&quot;,PRO_COLOR_HIGHLITE, 0},
+        {&quot;White&quot;, PRO_COLOR_DRAWING, 0},
+        {&quot;Background&quot;, PRO_COLOR_BACKGROUND, 0},
+        {&quot;Grey&quot;, PRO_COLOR_HALF_TONE , 0},
+<a name="anchor-211"></a>        {&quot;Blue&quot;, PRO_COLOR_EDGE_HIGHLIGHT,0},
+        {&quot;Grey&quot;, PRO_COLOR_DIMMED, 0},
+        {&quot;Magenta&quot;, PRO_COLOR_ERROR , 0},
+        {&quot;Cyan&quot;, PRO_COLOR_WARNING , 0},
+        {&quot;Green&quot;, PRO_COLOR_SHEETMETAL, 0},
+<a name="anchor-212"></a>        {&quot;Brown&quot;, PRO_COLOR_CURVE, 0},
+        {&quot;MAX&quot;, PRO_COLOR_MAX, 0},
+        {&quot;&quot;,0,0}
+    };
+    
+<a name="anchor-213"></a>    status = ProUtilMenuIntValueSelect(color_type, &amp;opt);
+    TEST_CALL_REPORT (&quot;ProUtilMenuIntValueSelect()&quot;, &quot;ProTestCurveColor()&quot;,
+       status, status!= PRO_TK_NO_ERROR);
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select curve&quot;);
+<a name="anchor-214"></a>    status = ProSelect ((char*)&quot;curve&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel,
+        &amp;n_sel);
+    if (status != PRO_TK_NO_ERROR || n_sel != 1)
+        return (0);
+
+<a name="anchor-215"></a>    status = ProSelectionModelitemGet (p_sel[0], &amp;modelitem);
+    TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestCurveColor()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProModelitemMdlGet (&amp;modelitem, &amp;owner);
+<a name="anchor-216"></a>    TEST_CALL_REPORT (&quot;ProModelitemMdlGet()&quot;, &quot;ProTestCurveColor()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProCurveInit ((ProSolid)owner, modelitem.id, &amp;curve);
+    TEST_CALL_REPORT (&quot;ProCurveInit()&quot;, &quot;ProTestCurveColor()&quot;,
+<a name="anchor-217"></a>        status, status != PRO_TK_NO_ERROR);
+        
+    status = ProCurvePersistentColorGet (curve, &amp;old_color);
+    TEST_CALL_REPORT (&quot;ProCurvePersistentColorGet()&quot;, &quot;ProTestCurveColor()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-218"></a>    if(opt == old_color)
+    {
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;This color has been already set&quot;);
+        return(0);    
+    }
+<a name="anchor-219"></a>    status = ProCurvePersistentColorSet ((ProSolid)owner, curve, (ProColortype)opt);
+    TEST_CALL_REPORT (&quot;ProCurvePersistentColorSet()&quot;, &quot;ProTestCurveColor()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    return(0);
+<a name="anchor-220"></a>
+}
+
+/*============================================================================*\
+  Function : ProTestCurveLinestyle
+<a name="anchor-221"></a>  Purpose  : Test ProCurveLinestyle functions
+\*============================================================================*/
+int ProTestCurveLinestyle (void* p_dummy, int int_dummy )
+{
+    ProError        status;
+<a name="anchor-222"></a>    ProMdl          owner;
+    ProModelitem    modelitem;
+    ProCurve        curve;
+    ProSelection    *p_sel;
+    ProLinestyle    old_style;
+<a name="anchor-223"></a>    
+    int             n_sel, opt = 0;
+
+    static ProUtilMenuButtons style_type[] = { 
+        {&quot;-LineStyle&quot;,  0,                          TEST_CALL_PRO_MENU_DELETE},
+<a name="anchor-224"></a>        {&quot;Solid&quot;,       PRO_LINESTYLE_SOLID,        0},
+        {&quot;Dot&quot;,         PRO_LINESTYLE_DOT,          0},
+        {&quot;Centerline&quot;,  PRO_LINESTYLE_CENTERLINE,   0},
+        {&quot;Phantom&quot;,     PRO_LINESTYLE_PHANTOM,      0},
+        {&quot;&quot;,            0,                          0}
+<a name="anchor-225"></a>    };
+    
+    status = ProUtilMenuIntValueSelect (style_type, &amp;opt);
+    TEST_CALL_REPORT (&quot;ProUtilMenuIntValueSelect()&quot;, &quot;ProTestCurveLinestyle()&quot;,
+       status, status!= PRO_TK_NO_ERROR);
+<a name="anchor-226"></a>
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select curve&quot;);
+    status = ProSelect ((char*)&quot;curve&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel,
+        &amp;n_sel);
+    if (status != PRO_TK_NO_ERROR || n_sel != 1)
+<a name="anchor-227"></a>        return (0);
+
+    status = ProSelectionModelitemGet (p_sel[0], &amp;modelitem);
+    TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestCurveLinestyle()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-228"></a>
+    status = ProModelitemMdlGet (&amp;modelitem, &amp;owner);
+    TEST_CALL_REPORT (&quot;ProModelitemMdlGet()&quot;, &quot;ProTestCurveLinestyle()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-229"></a>    status = ProCurveInit ((ProSolid)owner, modelitem.id, &amp;curve);
+    TEST_CALL_REPORT (&quot;ProCurveInit()&quot;, &quot;ProTestCurveLinestyle()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+        
+    status = ProCurvePersistentLinestyleGet (curve, &amp;old_style);
+<a name="anchor-230"></a>    TEST_CALL_REPORT (&quot;ProCurvePersistentLinestyleGet()&quot;, &quot;ProTestCurveLinestyle()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    if(opt == old_style)
+    {
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, 
+<a name="anchor-231"></a>            &quot;This linestyle has been already set.&quot;);
+        return(0);    
+    }
+    status = ProCurvePersistentLinestyleSet ((ProSolid)owner, curve, (ProLinestyle)opt);
+    TEST_CALL_REPORT (&quot;ProCurvePersistentLinestyleSet()&quot;, &quot;ProTestCurveLinestyle()&quot;,
+<a name="anchor-232"></a>        status, status != PRO_TK_NO_ERROR);
+
+    return(0);
+
+}
+</pre>
+</body>
+</html>

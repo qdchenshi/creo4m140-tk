@@ -1,0 +1,712 @@
+<html>
+<head>
+<title>UgInterfaceExport.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ctype.h>
+#include &lt;stdio.h>
+#include &lt;stdlib.h>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+<a name="anchor-2"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMdl.h>
+#include &lt;ProIntf3Dexport.h>
+<a name="anchor-3"></a>#include &lt;ProShrinkwrap.h>
+#include &lt;ProFaminstance.h>
+#include &lt;ProSolid.h>
+#include &lt;ProToolkitDll.h>
+#include &lt;ProSimprep.h>
+<a name="anchor-4"></a>#include &lt;ProDrawing.h>
+#include &lt;ProUtil.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProWstring.h>
+#include &lt;ProTKRunTime.h>
+<a name="anchor-5"></a>#include &lt;ProMessage.h>
+#include &lt;UtilString.h>
+/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+
+<a name="anchor-6"></a>#define MSGFIL L##&quot;msg_uginterface.txt&quot;
+
+static ProError UserDBSObjectTypeGet(ProArgument* input_arguments, ProName label, int* object_type);
+
+static ProError UserDBSObjectNameGet (ProArgument* input_arguments, ProName label, ProName name);
+<a name="anchor-7"></a>/*====================================================================*\
+FUNCTION: UserIGESGeomflagsExport()
+PURPOSE:  Export the current model to IGES 
+\*====================================================================*/
+int UserIGESGeomflagsExport()
+<a name="anchor-8"></a>{
+  	ProError status;
+	ProMdl model;
+	ProMdlType type;
+	ProPath output_file;
+<a name="anchor-9"></a>	wchar_t* input;
+
+	status = ProMdlCurrentGet (&amp;model);
+	if (status != PRO_TK_NO_ERROR)
+		return PRO_TK_GENERAL_ERROR;
+<a name="anchor-10"></a>
+	status = ProMdlTypeGet (model, &amp;type);
+
+	if (type != PRO_MDL_PART &amp;&amp; type != PRO_MDL_ASSEMBLY)
+		return PRO_TK_GENERAL_ERROR;
+<a name="anchor-11"></a>
+/*--------------------------------------------------------------------*\
+	Prompt the user for the directory in which the export file will go.
+\*--------------------------------------------------------------------*/
+	ProMessageDisplay (MSGFIL, 
+<a name="anchor-12"></a>					&quot;USER Select directory location for output file&quot;);
+	status = ProDirectoryChoose (NULL, NULL, NULL, NULL, output_file);
+
+/*--------------------------------------------------------------------*\
+	Prompt the user for the name of the export file
+<a name="anchor-13"></a>\*--------------------------------------------------------------------*/
+	status = UserPromptUI (&quot;Export IGES file&quot;, &quot;Enter IGES file name&quot;,
+					PRO_NAME_SIZE - 1, &amp;input);
+	if (status != PRO_TK_NO_ERROR)
+		return status;
+<a name="anchor-14"></a>	else
+	{
+#if OS_API == WINDOWS
+		ProUtilWstrcat (output_file, L&quot;\\&quot;);
+#else
+<a name="anchor-15"></a>		ProUtilWstrcat (output_file, &quot;/&quot;);
+#endif
+		ProUtilWstrcat (output_file, input);
+		ProUtilWstrcat (output_file, L&quot;.igs&quot;);
+		ProWstringFree (input);
+<a name="anchor-16"></a>	}
+
+	UserSolidIGESExportWithFlags (model, NULL, output_file);	
+
+	return(PRO_TK_NO_ERROR);	
+<a name="anchor-17"></a>}
+
+/*====================================================================*\
+FUNCTION: UserSolidIGESExportWithFlags()
+PURPOSE:  Exports a model to IGES
+<a name="anchor-18"></a>\*====================================================================*/
+
+int UserSolidIGESExportWithFlags(ProSolid solid, 
+								 ProSelection reference_csys,
+								ProPath output_file)
+<a name="anchor-19"></a>{
+	ProError status;
+	ProIntf3DExportType output_format = PRO_INTF_EXPORT_IGES;
+	ProOutputAssemblyConfiguration asm_config = 
+									PRO_OUTPUT_ASSEMBLY_MULTI_FILES;
+<a name="anchor-20"></a>	ProOutputBrepRepresentation brep_flags;
+	ProOutputInclusion inclusion;
+	ProOutputLayerOptions layer_options;
+	ProBoolean is_supported;
+
+<a name="anchor-21"></a>/*--------------------------------------------------------------------*\
+	Verify that this is a permitted assembly configuration option	
+\*--------------------------------------------------------------------*/
+	status = ProOutputAssemblyConfigurationIsSupported (output_format, 
+													asm_config,
+<a name="anchor-22"></a>													&amp;is_supported);
+	if (status != PRO_TK_NO_ERROR || !is_supported)
+	{
+		ProMessageDisplay (MSGFIL, 
+					&quot;USER Assembly configuration is not supported!&quot;);
+<a name="anchor-23"></a>		return PRO_TK_BAD_INPUTS;
+	}
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-24"></a>	Preallocate geometry flags for export
+\*--------------------------------------------------------------------*/
+	status = ProOutputBrepRepresentationAlloc (&amp;brep_flags);
+
+	status = ProOutputBrepRepresentationFlagsSet (brep_flags,
+<a name="anchor-25"></a>											PRO_B_FALSE,
+											PRO_B_TRUE,
+											PRO_B_FALSE,
+											PRO_B_FALSE);
+
+<a name="anchor-26"></a>/*--------------------------------------------------------------------*\
+	Verify that these flags are supported for this export type		
+\*--------------------------------------------------------------------*/
+	status = ProOutputBrepRepresentationIsSupported (output_format, 
+													brep_flags,
+<a name="anchor-27"></a>													&amp;is_supported);
+	if (status != PRO_TK_NO_ERROR || !is_supported)
+	{
+		ProMessageDisplay (MSGFIL, 
+					&quot;USER B-rep flag combination is not supported!&quot;);
+<a name="anchor-28"></a>		ProOutputBrepRepresentationFree (brep_flags);
+
+		return PRO_TK_BAD_INPUTS;
+	}
+
+<a name="anchor-29"></a>/*--------------------------------------------------------------------*\
+	Allocate inclusion flags and layer options
+\*--------------------------------------------------------------------*/
+	status = ProOutputInclusionAlloc (&amp;inclusion);
+
+<a name="anchor-30"></a>	status = ProOutputInclusionFlagsSet (inclusion, 
+										PRO_B_TRUE,
+										PRO_B_FALSE,
+										PRO_B_FALSE);
+
+<a name="anchor-31"></a>	status = ProOutputLayerOptionsAlloc (&amp;layer_options);
+
+	status = ProOutputLayerOptionsAutoidSet (layer_options, PRO_B_TRUE);
+
+	
+<a name="anchor-32"></a>/*--------------------------------------------------------------------*\
+	Export IGES file(s)
+\*--------------------------------------------------------------------*/
+	ProIntf3DFileWrite (solid, output_format, output_file,
+						asm_config, reference_csys, brep_flags, 
+<a name="anchor-33"></a>						inclusion, layer_options);
+
+/*--------------------------------------------------------------------*\
+	Free input argument memory
+\*--------------------------------------------------------------------*/
+<a name="anchor-34"></a>	ProOutputBrepRepresentationFree (brep_flags);
+	ProOutputLayerOptionsFree (layer_options);
+	ProOutputInclusionFree (inclusion);
+
+	return PRO_TK_NO_ERROR;
+<a name="anchor-35"></a>}
+
+/*====================================================================*\
+FUNCTION: UserShrinkwrapExport()
+PURPOSE:  Export the current model to a shrinkwrap (VRML) 
+<a name="anchor-36"></a>\*====================================================================*/
+int UserShrinkwrapExport()
+{
+  	ProError status;
+	ProMdl model;
+<a name="anchor-37"></a>	ProMdlType type;
+	ProMdlName output_file;
+	wchar_t* input;
+	
+	status = ProMdlCurrentGet (&amp;model);
+<a name="anchor-38"></a>	if (status != PRO_TK_NO_ERROR)
+		return PRO_TK_GENERAL_ERROR;
+
+	status = ProMdlTypeGet (model, &amp;type);
+
+<a name="anchor-39"></a>	if (type != PRO_MDL_PART &amp;&amp; type != PRO_MDL_ASSEMBLY)
+		return PRO_TK_GENERAL_ERROR;
+
+/*--------------------------------------------------------------------*\
+	Prompt user for the name of the shrinkwrap file name
+<a name="anchor-40"></a>\*--------------------------------------------------------------------*/
+	status = UserPromptUI (&quot;Create shrinkwrap model&quot;, 
+							&quot;Enter shrinkwrap VRML file name&quot;,
+							PRO_MDLNAME_SIZE - 1, &amp;input);
+	if (status != PRO_TK_NO_ERROR)
+<a name="anchor-41"></a>		return status;
+	else
+	{
+		ProUtilWstrcpy (output_file, input);
+		ProWstringFree (input);
+<a name="anchor-42"></a>	}
+
+	UserShrinkwrapExportToVRML (model, output_file);
+		
+
+<a name="anchor-43"></a>	return(PRO_TK_NO_ERROR);	
+}
+
+/*====================================================================*\
+FUNCTION: UserShrinkwrapExportToVRML()
+<a name="anchor-44"></a>PURPOSE:  Exports a model to VRML shrinkwrap
+\*====================================================================*/
+
+int UserShrinkwrapExportToVRML(ProSolid solid, 
+								ProMdlName output_file_name)
+<a name="anchor-45"></a>{
+	ProError status;
+	ProShrinkwrapOptions options;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-46"></a>	Preallocate needed input arguments
+\*--------------------------------------------------------------------*/
+	status = ProShrinkwrapoptionsAlloc (PRO_SWCREATE_FACETED_SOLID, 
+										&amp;options);
+
+<a name="anchor-47"></a>	status = ProShrinkwrapoptionsAutoholefillingSet (options, 
+													PRO_B_FALSE);
+
+	status = ProShrinkwrapoptionsFacetedformatSet (options, 
+													PRO_SWFACETED_VRML);
+<a name="anchor-48"></a>
+/*--------------------------------------------------------------------*\
+	Export shrinkwrap file
+\*--------------------------------------------------------------------*/
+	status = ProSolidShrinkwrapMdlnameCreate (solid, NULL, output_file_name, 
+<a name="anchor-49"></a>										options);
+
+/*--------------------------------------------------------------------*\
+	Free input argument memory
+\*--------------------------------------------------------------------*/
+<a name="anchor-50"></a>	ProShrinkwrapoptionsFree (options);
+
+	return PRO_TK_NO_ERROR;
+
+}
+<a name="anchor-51"></a>
+/*====================================================================*\
+FUNCTION: UserNewShrinkwrapCreate()
+PURPOSE:  Creates a new shrinkwrap merged solid from the current model 
+\*====================================================================*/
+<a name="anchor-52"></a>int UserNewShrinkwrapCreate()
+{
+  	ProError status;
+	ProMdl model;
+	ProMdlType type;
+<a name="anchor-53"></a>	ProMdlName  new_model_name;
+	wchar_t* input;
+
+	status = ProMdlCurrentGet (&amp;model);
+	if (status != PRO_TK_NO_ERROR)
+<a name="anchor-54"></a>		return PRO_TK_GENERAL_ERROR;
+
+	status = ProMdlTypeGet (model, &amp;type);
+
+	if (type != PRO_MDL_PART &amp;&amp; type != PRO_MDL_ASSEMBLY)
+<a name="anchor-55"></a>		return PRO_TK_GENERAL_ERROR;
+
+/*--------------------------------------------------------------------*\
+	Prompt the user for the name of the new shrinkwrap model
+\*--------------------------------------------------------------------*/
+<a name="anchor-56"></a>	status = UserPromptUI (&quot;Create shrinkwrap model&quot;, 
+							&quot;Enter new shrinkwrap model name&quot;,
+							PRO_MDLNAME_SIZE - 1, &amp;input);
+	if (status != PRO_TK_NO_ERROR)
+		return status;
+<a name="anchor-57"></a>	else
+	{
+		ProUtilWstrcpy (new_model_name, input);
+		ProWstringFree (input);
+	}
+<a name="anchor-58"></a>
+	UserShrinkwrapCreateInNewModel (model, new_model_name);
+		
+	return(PRO_TK_NO_ERROR);	
+}
+<a name="anchor-59"></a>
+/*====================================================================*\
+FUNCTION: UserShrinkwrapCreateInNewModel()
+PURPOSE:  Creates a new Shrinkwrap part model as a merged solid.
+\*====================================================================*/
+<a name="anchor-60"></a>
+int UserShrinkwrapCreateInNewModel(ProSolid solid, 
+									ProMdlName new_model_name)
+{
+	ProError status;
+<a name="anchor-61"></a>	ProShrinkwrapOptions options;
+	ProSolid new_model;
+
+/*--------------------------------------------------------------------*\
+	Preallocate needed input arguments
+<a name="anchor-62"></a>\*--------------------------------------------------------------------*/
+	status = ProShrinkwrapoptionsAlloc (PRO_SWCREATE_MERGED_SOLID, 
+										&amp;options);
+
+	status = ProShrinkwrapoptionsAssignmasspropsSet (options, 
+<a name="anchor-63"></a>													PRO_B_TRUE);
+
+/*--------------------------------------------------------------------*\
+	Export shrinkwrap file
+\*--------------------------------------------------------------------*/
+<a name="anchor-64"></a>	status = ProSolidMdlnameCreate (new_model_name, PRO_MDLFILE_PART, &amp;new_model);
+
+	status = ProSolidShrinkwrapMdlnameCreate (solid, new_model, NULL, options);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-65"></a>	Free input argument memory
+\*--------------------------------------------------------------------*/
+	ProShrinkwrapoptionsFree (options);
+
+	return PRO_TK_NO_ERROR;
+<a name="anchor-66"></a>
+}
+
+/*====================================================================*\
+FUNCTION: UserInstanceCreationTask()
+<a name="anchor-67"></a>PURPOSE:  Loads a given instance of the current Distributed Pro/BATCH generic
+                 model.  This instance will be considered the current model fo any subsequent 
+		 tasks in the TTD.
+\*====================================================================*/
+
+<a name="anchor-68"></a>PRO_TK_DLL_EXPORT ProError UserInstanceCreationTask(ProArgument* input_args, ProArgument** output_args)
+{
+	ProMdlName object_name;
+	ProFileName input_file;
+	ProMdl model_handle;
+<a name="anchor-69"></a>	int mdl_type;
+	ProFamtable family_table;
+	ProFamilyName part_name;
+	ProName f_name;
+        ProFaminstance f_inst;
+<a name="anchor-70"></a>	ProMdl inst_model;
+	ProArgument *op_args;
+	ProMdlName model_name;
+	ProMdlType model_type = PRO_MDL_UNUSED;
+	char p [PRO_PATH_SIZE ];
+<a name="anchor-71"></a>	ProName type;
+	char name [PRO_PATH_SIZE];
+	ProError status;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-72"></a>	Get the object name and its type loaded through Dbatch.
+\*--------------------------------------------------------------------*/
+	
+	status = UserDBSObjectNameGet (input_args, L&quot;DBS_CURRENT_OBJECT_NAME&quot;,object_name); 
+	
+<a name="anchor-73"></a>	status = UserDBSObjectTypeGet (input_args,L&quot;DBS_CURRENT_OBJECT_TYPE&quot;,&amp;mdl_type);
+	
+	
+	if (mdl_type == PRO_MDL_UNUSED)
+  	{
+<a name="anchor-74"></a>	  	status = PRO_TK_BAD_INPUTS;
+		return status;
+  	}
+	
+/*--------------------------------------------------------------------*\
+<a name="anchor-75"></a>	Initialise the model handle.
+\*--------------------------------------------------------------------*/
+        
+	status = ProMdlnameInit(object_name, (ProMdlfileType)mdl_type, &amp;model_handle);
+  	
+<a name="anchor-76"></a>/*--------------------------------------------------------------------*\
+	Initiaise the family table
+\*--------------------------------------------------------------------*/
+	
+	status = ProFamtableInit (model_handle, &amp;family_table);
+<a name="anchor-77"></a>	
+/*--------------------------------------------------------------------*\
+	Get the USER_DATA from TTD passed by user.
+\*--------------------------------------------------------------------*/
+	
+<a name="anchor-78"></a>	status = UserDBSObjectNameGet (input_args, L&quot;INST_NAME&quot;,f_name); 
+	
+/*--------------------------------------------------------------------*\
+	Initialise the family instance handle
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-79"></a>	 
+	 status = ProFaminstanceInit(f_name,&amp;family_table,&amp;f_inst);
+	
+/*--------------------------------------------------------------------*\
+	Create the instance model of specified instance handle
+<a name="anchor-80"></a>\*--------------------------------------------------------------------*/ 
+	 
+	status = ProFaminstanceRetrieve (&amp;f_inst, &amp;inst_model);
+	
+/*--------------------------------------------------------------------*\
+<a name="anchor-81"></a>	Put the output model (its name and type) in output arguments
+\*--------------------------------------------------------------------*/ 
+	
+	status = ProArrayAlloc ( 2, sizeof (ProArgument), 1, (ProArray*) &amp;op_args);
+  
+<a name="anchor-82"></a>	status = ProMdlMdlnameGet(inst_model,model_name);
+	
+	/* Instance model object name*/
+  	
+	ProStringToWstring (op_args[0].label, &quot;DBS_CURRENT_OBJECT_NAME&quot;);
+<a name="anchor-83"></a>  	op_args[0].value.type = PRO_VALUE_TYPE_WSTRING;
+  	ProValuedataWstringSet (&amp;op_args[0].value, model_name);
+	
+	status = ProMdlTypeGet(inst_model, &amp;model_type);
+
+<a name="anchor-84"></a>/*--------------------------------------------------------------------*\
+	Convert instance model type to string and then to wide string. (Output
+	arguments only take wstring type of data)
+\*--------------------------------------------------------------------*/ 
+	 
+<a name="anchor-85"></a>	 ProTKSprintf(p,&quot;%d&quot;,model_type);
+	 
+	 ProStringToWstring(type,p);
+
+  	 ProStringToWstring (op_args[1].label, &quot;DBS_CURRENT_OBJECT_TYPE&quot;);
+<a name="anchor-86"></a>  	 op_args[1].value.type = PRO_VALUE_TYPE_WSTRING;
+  	 ProValuedataWstringSet (&amp;op_args[1].value, type);
+	
+	*output_args = op_args;
+  	status = PRO_TK_NO_ERROR;
+<a name="anchor-87"></a>	
+	return status;
+}
+
+/*====================================================================*\
+<a name="anchor-88"></a>FUNCTION: UserSimprepActivateTask()
+PURPOSE:  Activates a simplified representation of the current Distributed
+          	 Pro/BATCH model.  This simplified rep will be considered the current model 
+          	 for any subsequent tasks in the TTD.
+\*====================================================================*/
+<a name="anchor-89"></a>
+PRO_TK_DLL_EXPORT ProError UserSimprepActivateTask(ProArgument* input_args, ProArgument**output_args)
+{
+	ProMdlName object_name;
+	ProFileName input_file;
+<a name="anchor-90"></a>	ProMdl model_handle;
+	ProMdlType mdl_type = PRO_MDL_UNUSED;
+	ProSimprep simp_rep;
+	ProFileName file_name, file;
+	ProName rep_name;
+<a name="anchor-91"></a>	ProError status;
+
+/*--------------------------------------------------------------------*\
+	Get the object name and its type loaded through Dbatch.
+\*--------------------------------------------------------------------*/
+<a name="anchor-92"></a>	
+	status = UserDBSObjectNameGet (input_args, L&quot;DBS_CURRENT_OBJECT_NAME&quot;,object_name); 
+	
+	status = UserDBSObjectTypeGet (input_args,L&quot;DBS_CURRENT_OBJECT_TYPE&quot;,(int *)&amp;mdl_type);	
+	
+<a name="anchor-93"></a>	if (mdl_type == PRO_MDL_UNUSED)
+  	{
+	  	status = PRO_TK_BAD_INPUTS;
+		return status;
+  	}
+<a name="anchor-94"></a>	
+/*--------------------------------------------------------------------*\
+	Initialise the model handle.
+\*--------------------------------------------------------------------*/
+	
+<a name="anchor-95"></a>	status = ProMdlnameInit(object_name, (ProMdlfileType)mdl_type, &amp;model_handle);
+	
+/*--------------------------------------------------------------------*\
+	Get the USER_DATA from TTD passed by user.
+\*--------------------------------------------------------------------*/	
+<a name="anchor-96"></a>	
+	status = UserDBSObjectNameGet (input_args, L&quot;SIMP_REP&quot;,rep_name); 
+	
+/*--------------------------------------------------------------------*\
+	 Initialise the simplified representation.
+<a name="anchor-97"></a>\*--------------------------------------------------------------------*/
+	
+	status = ProSimprepInit (rep_name,-1,(ProSolid)model_handle, &amp;simp_rep);
+	 
+/*--------------------------------------------------------------------*\
+<a name="anchor-98"></a>	 Activate the specified simplified representation
+\*--------------------------------------------------------------------*/
+	status = ProSimprepActivate((ProSolid)model_handle,&amp;simp_rep);
+	
+	status = ProMdlEraseNotDisplayed();
+<a name="anchor-99"></a>	
+	return status;
+} 
+
+/*====================================================================*\
+<a name="anchor-100"></a>FUNCTION: UserSheetExportTask()
+PURPOSE:  Set the current sheet for the current Distributed Pro/BATCH
+		 drawing. This current sheet will be used in any subsequent export tasks
+          	 in the TTD if those tasks process only the current sheet.
+\*====================================================================*/
+<a name="anchor-101"></a>
+PRO_TK_DLL_EXPORT ProError UserSheetExportTask(ProArgument* input_args, ProArgument**output_args)
+{
+	ProMdlName object_name, sheet_name;
+	ProFileName input_file;
+<a name="anchor-102"></a>	ProMdl model_handle;
+	ProMdlType mdl_type = PRO_MDL_UNUSED;
+	int number;
+	char  sheet_no[PRO_NAME_SIZE]; 
+  	ProError status;
+<a name="anchor-103"></a>	
+/*--------------------------------------------------------------------*\
+	Get the object name and its type loaded through Dbatch.
+\*--------------------------------------------------------------------*/
+	
+<a name="anchor-104"></a>	status = UserDBSObjectNameGet (input_args, L&quot;DBS_CURRENT_OBJECT_NAME&quot;,object_name); 
+	
+	status = UserDBSObjectTypeGet (input_args,L&quot;DBS_CURRENT_OBJECT_TYPE&quot;,(int *)&amp;mdl_type);
+	
+	if (mdl_type == PRO_MDL_UNUSED)
+<a name="anchor-105"></a>  	{
+	  	status = PRO_TK_BAD_INPUTS;
+		return status;
+  	}
+	
+<a name="anchor-106"></a>/*--------------------------------------------------------------------*\
+	Initialise the model handle.
+\*--------------------------------------------------------------------*/
+	
+        status = ProMdlnameInit(object_name, (ProMdlfileType)mdl_type, &amp;model_handle);
+<a name="anchor-107"></a>	 
+/*--------------------------------------------------------------------*\
+	Get the USER_DATA from TTD passed by user.
+\*--------------------------------------------------------------------*/	
+	
+<a name="anchor-108"></a>	status = UserDBSObjectNameGet (input_args, L&quot;SHEET_NO&quot;,sheet_name); 
+	
+	ProWstringToString (sheet_no,sheet_name);
+
+	number = atoi(sheet_no);
+<a name="anchor-109"></a>	 
+/*--------------------------------------------------------------------*\
+	  Set the current sheet number of specified drawing.
+\*--------------------------------------------------------------------*/
+	 
+<a name="anchor-110"></a>	 status = ProDrawingCurrentSheetSet((ProDrawing)model_handle, number);
+	
+	 return status;
+}
+
+<a name="anchor-111"></a>/*====================================================================*\
+FUNCTION: UserRegenerateTask()
+PURPOSE:  Force a full regeneration of the current Distributed Pro/BATCH
+          	 solid model.  If the regeneration succeeds, the model is saved.
+         	 If the regeneration fails, this information is stored to the task log file.
+<a name="anchor-112"></a>\*====================================================================*/
+
+PRO_TK_DLL_EXPORT ProError UserRegenerateTask(ProArgument* input_args, ProArgument** output_args)
+{
+	ProMdlName object_name;
+<a name="anchor-113"></a>	ProFileName input_file;
+	ProMdl model_handle;
+	ProMdlType mdl_type = PRO_MDL_UNUSED;
+	ProError status;
+		
+<a name="anchor-114"></a>/*--------------------------------------------------------------------*\
+	Get the object name and its type loaded through Dbatch.
+\*--------------------------------------------------------------------*/
+
+	status = UserDBSObjectNameGet (input_args, L&quot;DBS_CURRENT_OBJECT_NAME&quot;,object_name); 
+<a name="anchor-115"></a>	
+	status = UserDBSObjectTypeGet (input_args,L&quot;DBS_CURRENT_OBJECT_TYPE&quot;,(int *)&amp;mdl_type);
+	
+	if (mdl_type == PRO_MDL_UNUSED)
+  	{
+<a name="anchor-116"></a>	  	status = PRO_TK_BAD_INPUTS;
+		return status;
+  	}
+	
+/*--------------------------------------------------------------------*\
+<a name="anchor-117"></a>	Initialise the model handle.
+\*--------------------------------------------------------------------*/
+	
+        status = ProMdlnameInit(object_name, (ProMdlfileType)mdl_type, &amp;model_handle);
+		
+<a name="anchor-118"></a>/*--------------------------------------------------------------------*\
+	Regenerate the solid.
+\*--------------------------------------------------------------------*/
+	
+	status = ProSolidRegenerate((ProSolid)model_handle,PRO_REGEN_FORCE_REGEN);
+<a name="anchor-119"></a>	
+	if (status == PRO_TK_NO_ERROR)
+	{
+		status = ProMdlSave(model_handle);
+	}
+<a name="anchor-120"></a>
+	return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+<a name="anchor-121"></a>FUNCTION: UserDBSObjectNameGet()
+PURPOSE:  Get the object name loaded through Dbatch.
+\*====================================================================*/
+
+ProError UserDBSObjectNameGet (ProArgument* input_arguments, ProName label, ProMdlName name)
+<a name="anchor-122"></a>{
+	
+	ProValueData data;
+	int length;
+	ProError status;
+<a name="anchor-123"></a>	
+	/*--------------------------------------------------------------------*\
+	Get the value of argument
+	\*--------------------------------------------------------------------*/
+
+<a name="anchor-124"></a>	status = ProArgumentByLabelGet(input_arguments, label, &amp;data);
+
+	if (status != PRO_TK_NO_ERROR)
+    	return status;
+	
+<a name="anchor-125"></a>	/*--------------------------------------------------------------------*\
+	Data will always be of wstring type
+	\*--------------------------------------------------------------------*/
+
+	if (data.type != PRO_VALUE_TYPE_WSTRING)
+<a name="anchor-126"></a>	{
+    		status = PRO_TK_INVALID_TYPE;
+		return status;
+	}
+	ProWstringLengthGet (data.v.w, &amp;length);
+<a name="anchor-127"></a>	
+	if (length > PRO_NAME_SIZE -1)
+	{
+		status = PRO_TK_LINE_TOO_LONG;
+		return status;
+<a name="anchor-128"></a>	}
+	
+	/*--------------------------------------------------------------------*\
+	Copy the data in output value
+	\*--------------------------------------------------------------------*/
+<a name="anchor-129"></a>
+ 	ProWstringCopy (data.v.w, name, PRO_VALUE_UNUSED);
+	status = PRO_TK_NO_ERROR;
+	return status;
+
+<a name="anchor-130"></a>}
+
+/*====================================================================*\
+FUNCTION: UserDBSObjectTypeGet()
+PURPOSE:  Get the object type loaded through Dbatch.
+<a name="anchor-131"></a>\*====================================================================*/
+ProError UserDBSObjectTypeGet(ProArgument* input_arguments, ProName label, int* object_type)
+{
+	ProValueData data;
+	char  model_type[PRO_NAME_SIZE];
+<a name="anchor-132"></a>	int length;
+	ProError status;
+	
+	/*--------------------------------------------------------------------*\
+	Get the value of argument
+<a name="anchor-133"></a>	\*--------------------------------------------------------------------*/
+	
+	status = ProArgumentByLabelGet(input_arguments, label, &amp;data);
+	
+	if (status != PRO_TK_NO_ERROR)
+<a name="anchor-134"></a>    	return status;
+	
+	/*--------------------------------------------------------------------*\
+	Data will always be of wstring type
+	\*--------------------------------------------------------------------*/
+<a name="anchor-135"></a>
+	if (data.type != PRO_VALUE_TYPE_WSTRING)
+	{
+    		status = PRO_TK_INVALID_TYPE;
+		return status;
+<a name="anchor-136"></a>	}
+	
+	ProWstringLengthGet (data.v.w, &amp;length);
+	
+	if (length > PRO_NAME_SIZE -1)
+<a name="anchor-137"></a>	{
+		status = PRO_TK_LINE_TOO_LONG;
+		return status;
+	}
+	
+<a name="anchor-138"></a>	/*--------------------------------------------------------------------*\
+	Copy the data in output value
+	\*--------------------------------------------------------------------*/
+	
+	ProWstringToString (model_type,data.v.w);
+<a name="anchor-139"></a>	
+	*object_type = atoi(model_type);
+	
+	status = PRO_TK_NO_ERROR;
+	
+<a name="anchor-140"></a>	return status;
+}
+#undef MSGFIL
+
+</pre>
+</body>
+</html>

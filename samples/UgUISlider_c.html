@@ -1,0 +1,246 @@
+<html>
+<head>
+<title>UgUISlider.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProDimension.h>
+#include &lt;ProFeature.h>
+#include &lt;ProSelection.h>
+#include &lt;ProUICheckbutton.h>
+<a name="anchor-2"></a>#include &lt;ProUIPushbutton.h>
+#include &lt;ProUIDialog.h>
+#include &lt;ProUIInputpanel.h>
+#include &lt;ProUILabel.h>
+#include &lt;ProUISlider.h>
+<a name="anchor-3"></a>#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProUIOptionmenu.h>
+#define  OK     1
+#define  CANCEL 0
+
+<a name="anchor-4"></a>static ProName msgfil;
+int UsrAngleGet();
+/*====================================================================*\ 
+FUNCTION : UsrModAngle() 
+PURPOSE  : Command to modify an angular dimension using a slider 
+<a name="anchor-5"></a>\*====================================================================*/ 
+void UsrModAngle()
+ {
+     ProError status;
+     ProSelection *sel;
+<a name="anchor-6"></a>     int n_sel, angle;
+     double value;
+     ProName wname;
+     ProCharName name;
+     ProCharLine prompt;
+<a name="anchor-7"></a>     ProDimension dimension;
+     ProDimensiontype dtype;
+
+    while(1)
+     { 
+<a name="anchor-8"></a>
+/*--------------------------------------------------------------------*\ 
+        Select a feature or a dimension 
+\*--------------------------------------------------------------------*/ 
+        status = ProSelect(&quot;feature,dimension&quot;,1,
+<a name="anchor-9"></a>                            NULL,NULL,NULL,NULL,&amp;sel,&amp;n_sel);
+        if(status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+             break;
+
+        ProSelectionModelitemGet(sel[0], &amp;dimension);
+<a name="anchor-10"></a>
+/*--------------------------------------------------------------------*\ 
+        If it's a feature, display the dimensions 
+\*--------------------------------------------------------------------*/ 
+        if(dimension.type == PRO_FEATURE)
+<a name="anchor-11"></a>             ProFeatureParamsDisplay(sel[0], PRO_DIM_PARAM);
+        else
+         { 
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-12"></a>            Check that it's angular 
+\*--------------------------------------------------------------------*/ 
+            ProDimensionTypeGet(&amp;dimension, &amp;dtype);
+            if(dtype != PRODIMTYPE_ANGLE)
+                 continue;
+<a name="anchor-13"></a>
+/*--------------------------------------------------------------------*\ 
+            Get the current value 
+\*--------------------------------------------------------------------*/ 
+            ProDimensionValueGet(&amp;dimension, &amp;value);
+<a name="anchor-14"></a>
+            angle = (int)value;
+
+/*--------------------------------------------------------------------*\ 
+            Get the name and form a prompt string 
+<a name="anchor-15"></a>\*--------------------------------------------------------------------*/ 
+            ProDimensionSymbolGet(&amp;dimension, wname);
+            ProWstringToString(name, wname);
+            ProTKSprintf(prompt,&quot;Enter the new value of %s&quot;,name);
+
+<a name="anchor-16"></a>/*--------------------------------------------------------------------*\ 
+            Input the new angle using a dialog box with a slider 
+\*--------------------------------------------------------------------*/ 
+            if(!UsrAngleGet(prompt, &amp;angle))
+                 continue;
+<a name="anchor-17"></a>
+/*--------------------------------------------------------------------*\ 
+            Set the new value and update the dim display 
+\*--------------------------------------------------------------------*/ 
+            value = (double)angle;
+<a name="anchor-18"></a>             if(ProDimensionValueSet(&amp;dimension, value) != PRO_TK_NO_ERROR)
+             {
+               ProMessageDisplay(msgfil,&quot;USER Could not modify dimension&quot;);
+                 continue;
+
+<a name="anchor-19"></a>             }
+
+             ProDimensionDisplayUpdate(&amp;dimension);
+         }
+     }
+<a name="anchor-20"></a> }
+
+/*====================================================================*\ 
+FUNCTION : UsrOKAction() 
+PURPOSE  : Action function for the OK button 
+<a name="anchor-21"></a>\*====================================================================*/ 
+static void UsrSliderOKAction(
+     char *dialog,
+     char *component,
+     ProAppData data)
+<a name="anchor-22"></a> {
+     ProUIDialogExit(dialog, OK);
+ } 
+
+/*====================================================================*\ 
+<a name="anchor-23"></a>FUNCTION : UsrCancelAction() 
+PURPOSE  : Action function for the CANCEL button 
+\*====================================================================*/ 
+static void UsrSliderCancelAction(
+     char *dialog,
+<a name="anchor-24"></a>     char *component,
+     ProAppData data)
+ {
+     ProUIDialogExit(dialog, CANCEL);
+ } 
+<a name="anchor-25"></a>
+
+/*====================================================================*\ 
+FUNCTION : UsrSliderAction() PURPOSE  : Callback for movement of the 
+slider 
+<a name="anchor-26"></a>\*====================================================================*/ 
+void UsrSliderAction(
+     char *dialog,
+     char *component,
+     ProAppData data)
+<a name="anchor-27"></a> {
+     ProName wstr;
+     ProCharName str;
+     int *angle = (int*)data;
+
+<a name="anchor-28"></a>/*--------------------------------------------------------------------*\ 
+    Get the new value 
+\*--------------------------------------------------------------------*/ 
+    ProUISliderIntegerGet(dialog,component,angle);
+
+<a name="anchor-29"></a>/*--------------------------------------------------------------------*\ 
+    Set the input panel to the same value 
+\*--------------------------------------------------------------------*/ 
+    ProTKSprintf(str,&quot;%d&quot;,*angle);
+     ProStringToWstring(wstr, str);
+<a name="anchor-30"></a>     ProUIInputpanelValueSet(dialog,&quot;InputPanel&quot;,wstr);
+ } 
+
+/*====================================================================*\ 
+FUNCTION : UsrInputpanelAction() 
+<a name="anchor-31"></a>PURPOSE  : Callback for input to the input panel 
+\*====================================================================*/ 
+void UsrInputpanelAction(
+     char *dialog,
+     char *component,
+<a name="anchor-32"></a>     ProAppData data)
+ {
+     wchar_t *wstr;
+     ProCharName str;
+     int *angle = (int*)data;
+<a name="anchor-33"></a>
+/*--------------------------------------------------------------------*\ 
+    Get the current value as an integer 
+\*--------------------------------------------------------------------*/ 
+    ProUIInputpanelValueGet(dialog,component,&amp;wstr);
+<a name="anchor-34"></a>     ProWstringToString(str, wstr);
+     *angle = atoi(str);
+
+/*--------------------------------------------------------------------*\ 
+    Set the slider to the same value 
+<a name="anchor-35"></a>\*--------------------------------------------------------------------*/ 
+    ProUISliderIntegerSet(dialog,&quot;Slider&quot;,*angle);
+ }
+
+/*====================================================================*\ 
+<a name="anchor-36"></a>FUNCTION : UsrAngleGet() 
+PURPOSE  : Input an angle using a dialog with a slider 
+\*====================================================================*/ 
+int UsrAngleGet(
+     char *text, /* Text of the prompt displayed on the dialog */
+<a name="anchor-37"></a>     int *angle)
+ {
+     int status;
+     ProName wstr;
+     ProCharName str;
+<a name="anchor-38"></a>     ProLine wline;
+
+/*--------------------------------------------------------------------*\ 
+    Load the dialog from the resource file 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-39"></a>    ProUIDialogCreate(&quot;angle&quot;,&quot;angle&quot;);
+
+/*--------------------------------------------------------------------*\ 
+    Set the prompt as the text of the Label component 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-40"></a>    ProStringToWstring(wline,text);
+     ProUILabelTextSet(&quot;angle&quot;,&quot;Prompt&quot;,wline);
+
+/*--------------------------------------------------------------------*\ 
+    Set the OK and Cancel callbacks 
+<a name="anchor-41"></a>\*--------------------------------------------------------------------*/ 
+    ProUIPushbuttonActivateActionSet(&quot;angle&quot;,&quot;OK&quot;,
+				     UsrSliderOKAction,NULL);
+    ProUIPushbuttonActivateActionSet(&quot;angle&quot;,&quot;Cancel&quot;,
+				     UsrSliderCancelAction,NULL);
+<a name="anchor-42"></a>
+/*--------------------------------------------------------------------*\ 
+    Set the slider action and initial value 
+\*--------------------------------------------------------------------*/ 
+    ProUISliderUpdateActionSet(&quot;angle&quot;,&quot;Slider&quot;,UsrSliderAction, angle);
+<a name="anchor-43"></a>    ProUISliderIntegerSet(&quot;angle&quot;,&quot;Slider&quot;,*angle);
+
+/*--------------------------------------------------------------------*\ 
+    Set the input panel action and initial value 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-44"></a>    ProUIInputpanelActivateActionSet(&quot;angle&quot;,&quot;InputPanel&quot;,
+                                             UsrInputpanelAction,angle);
+     ProTKSprintf(str,&quot;%d&quot;,*angle);
+     ProStringToWstring(wstr, str);
+     ProUIInputpanelValueSet(&quot;angle&quot;,&quot;InputPanel&quot;,wstr);
+<a name="anchor-45"></a>
+/*--------------------------------------------------------------------*\ 
+    Display and activate the dialog 
+\*--------------------------------------------------------------------*/ 
+    ProUIDialogActivate(&quot;angle&quot;,&amp;status);
+<a name="anchor-46"></a>
+/*--------------------------------------------------------------------*\ 
+    Dispose of the dialog 
+\*--------------------------------------------------------------------*/ 
+    ProUIDialogDestroy(&quot;angle&quot;);
+<a name="anchor-47"></a>
+    return(status==OK?1:0);
+ }
+</pre>
+</body>
+</html>

@@ -1,0 +1,291 @@
+<html>
+<head>
+<title>TestMechanism.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProAssembly.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProElemId.h>
+#include &lt;ProElement.h>
+<a name="anchor-3"></a>#include &lt;ProExpldstate.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMessage.h>
+#include &lt;ProModelitem.h>
+<a name="anchor-4"></a>#include &lt;ProMenu.h>
+#include &lt;ProSelection.h>
+#include &lt;ProSolid.h>
+#include &lt;ProUtil.h>
+#include &lt;ProValue.h>
+<a name="anchor-5"></a>#include &lt;ProSkeleton.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-6"></a>#include &quot;TestError.h&quot;
+#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilFiles.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+<a name="anchor-7"></a>#include &quot;UtilNames.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;UtilTree.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &lt;PTApplsUnicodeUtils.h>
+<a name="anchor-8"></a>#include &lt;ProTKRunTime.h>
+#include &lt;TestError.h>
+#include &lt;UtilFiles.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-9"></a>Application macros
+\*--------------------------------------------------------------------*/
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-10"></a>Application data types
+\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+<a name="anchor-11"></a>\*--------------------------------------------------------------------*/
+
+
+ProError ProUtilAsmcompSelect(ProAsmcomp *p_asmcomp);
+/*====================================================================*\
+<a name="anchor-12"></a>  Function : ProTestAsmcompSetPlaced()
+  Purpose  : Menu callback
+\*====================================================================*/
+int  ProTestAsmcompSetPlaced (ProAppData data, int dummy)
+{
+<a name="anchor-13"></a>    ProError err;
+    ProAsmcomp asmcomp;
+    ProBoolean  p_is_placed;
+    
+    static ProUtilMenuButtons placed_type[] = {
+<a name="anchor-14"></a>	{&quot;TkAsmcompSetPlaced&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+	{&quot;Placed&quot;, PRO_B_TRUE, 0 },
+	{&quot;Unplaced&quot;, PRO_B_FALSE, 0 },
+	{&quot;&quot;,0,0}
+    };
+<a name="anchor-15"></a>    err = ProUtilAsmcompSelect(&amp;asmcomp); 
+
+    if (err != PRO_TK_NO_ERROR)
+	 return (0);
+
+<a name="anchor-16"></a>    err = ProUtilMenuIntValueSelect(placed_type, (int *)&amp;p_is_placed);
+    if (err != PRO_TK_NO_ERROR)
+	 return (0);
+
+
+<a name="anchor-17"></a>    err = ProAsmcompSetPlaced (&amp;asmcomp, p_is_placed);
+    TEST_CALL_REPORT(&quot;ProAsmcompSetPlaced()&quot;,
+			         &quot;ProTestAsmcompSetPlaced()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+
+<a name="anchor-18"></a>
+     return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-19"></a>  Function : ProTestAsmcompSelectPath()
+  Purpose  : Select comp and get path
+\*====================================================================*/
+ProError ProTestAsmcompSelectPath (
+    ProAsmcomppath* asmcomppath)
+<a name="anchor-20"></a>{
+   ProSelection *p_sel;
+   ProError status;
+   int n_sel;
+   
+<a name="anchor-21"></a>
+   status = ProSelect((char *)&quot;prt_or_asm&quot;, 1, NULL, NULL, NULL, NULL,
+	&amp;p_sel, &amp;n_sel);
+   TEST_CALL_REPORT(&quot;ProSelect()&quot;, 
+	&quot;ProTestAsmcompSelectPath()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-22"></a>   if (status != PRO_TK_NO_ERROR)
+	return (status);
+
+   status = ProSelectionAsmcomppathGet(p_sel[0], asmcomppath);
+   TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, 
+<a name="anchor-23"></a>	&quot;ProTestAsmcompSelectPath()&quot;, status, status != PRO_TK_NO_ERROR);
+
+
+   return (PRO_TK_NO_ERROR);  
+}
+<a name="anchor-24"></a>
+/*====================================================================*\
+  Function : ProTestAsmcompMakeUniqueSubas()
+  Purpose  : Menu callback
+\*====================================================================*/
+<a name="anchor-25"></a>int  ProTestAsmcompMakeUniqueSubas (ProAppData data, int dummy)
+{
+    ProError err;
+    ProAsmcomppath asmcomppath;
+    
+<a name="anchor-26"></a>
+    err = ProTestAsmcompSelectPath (&amp;asmcomppath);
+    if (err != PRO_TK_NO_ERROR)
+	 return (0);
+
+<a name="anchor-27"></a>    err = ProAsmcompMakeUniqueSubasm (&amp;asmcomppath);
+     TEST_CALL_REPORT(&quot;ProAsmcompMakeUniqueSubasm()&quot;,
+			         &quot;ProTestAsmcompMakeUniqueSubas()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+
+<a name="anchor-28"></a>     return (0);
+}     
+
+/*====================================================================*\
+  Function : ProTestAsmcompRmvUniqueSubas()
+<a name="anchor-29"></a>  Purpose  : Menu callback
+\*====================================================================*/
+int  ProTestAsmcompRmvUniqueSubas (ProAppData data, int dummy)
+{
+    ProError err;
+<a name="anchor-30"></a>    ProAsmcomppath asmcomppath;
+    
+
+    err = ProTestAsmcompSelectPath (&amp;asmcomppath);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-31"></a>	 return (0);
+         
+    /* bug in the function ProAsmcompRmvUniqueSubasm() */
+    err = ProAsmcompRmvUniqueSubasm (&amp;asmcomppath);
+     TEST_CALL_REPORT(&quot;ProAsmcompRmvUniqueSubasm()&quot;,
+<a name="anchor-32"></a>			         &quot;ProTestAsmcompRmvUniqueSubas()&quot;, err, 0 );
+
+     return (0);
+}     
+
+<a name="anchor-33"></a>/*====================================================================*\
+  Function : ProTestAsmcompPlacedInfoCollect()
+  Purpose  : Menu callback
+\*====================================================================*/
+int  ProTestAsmcompPlacedInfoCollect (ProAppData data, int dummy)
+<a name="anchor-34"></a>{
+    ProError err;
+    ProAssembly c_asm;
+    ProAsmcomp *asm_comps;
+    int n_asm_comps = 0, i;
+<a name="anchor-35"></a>    
+    FILE * qcr_place_info;
+    ProBool is_plcd = PRO_B_TRUE;
+    ProMdlfileType mdl_type;
+    ProFamilyMdlName mdl_name;
+<a name="anchor-36"></a>    char mdl_char_name [PRO_FAMILY_MDLNAME_SIZE];
+
+    err = ProMdlCurrentGet ((ProMdl*)&amp;c_asm);
+    TEST_CALL_REPORT(&quot;ProMdelCurrentGet()&quot;,
+			         &quot;ProTestAsmcompPlacedInfoCollect()&quot;,
+<a name="anchor-37"></a>		     err, err != PRO_TK_NO_ERROR );
+    if (err !=PRO_TK_NO_ERROR)
+	return (0);
+
+    err = ProUtilCollectAsmcomp (c_asm, &amp;asm_comps);
+<a name="anchor-38"></a>    if (err !=PRO_TK_NO_ERROR)
+	return (0);
+
+    err = ProArraySizeGet ((ProArray)asm_comps, &amp;n_asm_comps);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+<a name="anchor-39"></a>			         &quot;ProTestAsmcompPlacedInfoCollect()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+    if (err !=PRO_TK_NO_ERROR)
+	return (0);
+    qcr_place_info = (FILE *)PTApplsUnicodeFopen (&quot;comp_plcd.info&quot;, &quot;w+t&quot;);
+<a name="anchor-40"></a>    
+    if (qcr_place_info == NULL)
+       return 0;
+    
+    for (i=0; i&lt;n_asm_comps; i++)
+<a name="anchor-41"></a>    {
+	    
+	err = ProAsmcompIsPlaced (&amp; (asm_comps[i]), &amp;is_plcd);
+	 TEST_CALL_REPORT(&quot;ProAsmcompIsPlaced()&quot;,
+			         &quot;ProTestAsmcompPlacedInfoCollect()&quot;,
+<a name="anchor-42"></a>		     err, err != PRO_TK_NO_ERROR );
+	    
+	if (err !=PRO_TK_NO_ERROR)
+	    break;
+	
+<a name="anchor-43"></a>        err = ProAsmcompMdlMdlnameGet (&amp; (asm_comps[i]), &amp;mdl_type,
+	    mdl_name);
+	TEST_CALL_REPORT(&quot;ProAsmcompMdlMdlnameGet()&quot;,
+			         &quot;ProTestAsmcompPlacedInfoCollect()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+<a name="anchor-44"></a>	ProWstringToString (mdl_char_name, mdl_name);
+	ProTKFprintf (qcr_place_info,
+	    &quot;Component ID: %d\tModel name : %s\tComp. placement: %s\n&quot;,
+	    (asm_comps[i]).id, mdl_char_name,
+	    (is_plcd == PRO_B_TRUE ? &quot;placed&quot;:&quot;unplaced&quot;));
+<a name="anchor-45"></a>    }
+
+    fclose (qcr_place_info);
+
+    err = ProArrayFree ((ProArray*)&amp;asm_comps);
+<a name="anchor-46"></a>    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+			         &quot;ProTestAsmcompPlacedInfoCollect()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+    return (0);
+}
+<a name="anchor-47"></a>
+/*====================================================================*\
+  Function : ProTestAsmcompMechanismMenu()
+  Purpose  : Menu callback
+\*====================================================================*/
+<a name="anchor-48"></a>int  ProTestAsmcompMechanismMenu (ProAppData data, int dummy)
+{
+    ProError err;
+       char * cnames [] =
+    {
+<a name="anchor-49"></a>	&quot;Set Placed&quot;,
+	&quot;Make Unique&quot;,
+	&quot;Remove Unique&quot;,
+	&quot;Collect Plcd Info&quot;,
+	&quot;&quot;
+<a name="anchor-50"></a>    };
+    wchar_t **wnames;
+    int i, dummy1;
+
+    ProUtilMenuStringsAlloc(&amp;wnames);
+<a name="anchor-51"></a>    for (i=0; i&lt;sizeof (cnames)/sizeof (char*); i++)
+    {
+        ProUtilMenuStringsStrAdd(&amp;wnames, cnames[i]);
+    }
+    err = ProMenuFromStringsRegister((char *)&quot;TkAsmcompMachanism&quot;, NULL, wnames, NULL, 
+<a name="anchor-52"></a>	    NULL, &amp;dummy1);
+    TEST_CALL_REPORT(&quot;ProMenuFromStringsRegister()&quot;, 
+	&quot;ProTestAsmcompMechanismMenu()&quot;, err, err != PRO_TK_NO_ERROR);
+    ProUtilMenuStringsFree(&amp;wnames);
+    
+<a name="anchor-53"></a>    ProMenubuttonActionSet( (char *)&quot;TkAsmcompMachanism&quot;, (char *)&quot;Set Placed&quot;, 
+	    (ProMenubuttonAction)ProTestAsmcompSetPlaced, NULL, 0);
+    ProMenubuttonActionSet( (char *)&quot;TkAsmcompMachanism&quot;, (char *)&quot;Make Unique&quot;, 
+	    (ProMenubuttonAction)ProTestAsmcompMakeUniqueSubas, NULL, 0);
+    ProMenubuttonActionSet( (char *)&quot;TkAsmcompMachanism&quot;, (char *)&quot;Remove Unique&quot;, 
+<a name="anchor-54"></a>	    (ProMenubuttonAction)ProTestAsmcompRmvUniqueSubas, NULL, 0);
+    ProMenubuttonActionSet( (char *)&quot;TkAsmcompMachanism&quot;, (char *)&quot;Collect Plcd Info&quot;, 
+	    (ProMenubuttonAction)ProTestAsmcompPlacedInfoCollect, NULL, 0); 
+    ProMenubuttonActionSet( (char *)&quot;TkAsmcompMachanism&quot;, (char *)&quot;TkAsmcompMachanism&quot;, 
+       	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-55"></a>
+    ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;TkAsmcompMachanism&quot;, NULL);
+    ProMenuProcess((char *)&quot;TkAsmcompMachanism&quot;, &amp;i); 
+    
+
+<a name="anchor-56"></a>    return (0);
+}
+     
+</pre>
+</body>
+</html>

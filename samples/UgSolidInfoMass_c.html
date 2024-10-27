@@ -1,0 +1,262 @@
+<html>
+<head>
+<title>UgSolidInfoMass.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMenuBar.h>
+#include &lt;ProMdl.h>
+#include &lt;ProPart.h>
+#include &lt;ProMdlUnits.h>
+#include &lt;ProSolid.h>
+<a name="anchor-3"></a>#include &lt;ProMessage.h>
+#include &lt;ProUtil.h>
+#include &lt;ProWstring.h>
+#include &lt;ProSelbuffer.h>
+
+<a name="anchor-4"></a>#include &lt;TestError.h>
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+<a name="anchor-5"></a>static wchar_t  MSGFIL[] = {'u','t','i','l','i','t','i','e','s','.','t','x','t','\0'};
+
+/*=====================================================================*\
+FUNCTION: UserPartInfoMass
+PURPOSE:  Write a part's mass value &amp; units to the message window.	
+<a name="anchor-6"></a>\*=====================================================================*/
+int UserPartInfoMass (ProPart part)
+{
+  ProError status;
+  double density;
+<a name="anchor-7"></a>  ProMassProperty massProps;
+  ProUnitsystem unitSystem;
+  ProUnitsystemType type;
+  ProUnititem unit, forceUnit, timeUnit, lengthUnit;
+  ProLine massUnitsLabel;
+<a name="anchor-8"></a>
+/*--------------------------------------------------------------------*\
+Check for the density.  If it hasn't been set, inform the user
+\*--------------------------------------------------------------------*/
+  status = ProPartDensityGet (part, &amp;density);
+<a name="anchor-9"></a>
+  if (status != PRO_TK_NO_ERROR)
+    {
+      ProMessageDisplay ( MSGFIL, &quot;USER Part has not been assigned density.&quot;);
+      return PRO_TK_E_NOT_FOUND;
+<a name="anchor-10"></a>    }
+
+/*--------------------------------------------------------------------*\
+Extract the mass properties using the default part coordinate system
+\*--------------------------------------------------------------------*/
+<a name="anchor-11"></a>  status = ProSolidMassPropertyGet (part, NULL, &amp;massProps);
+
+/*--------------------------------------------------------------------*\
+Extract system of units
+\*--------------------------------------------------------------------*/
+<a name="anchor-12"></a>  status = ProMdlPrincipalunitsystemGet (part, &amp;unitSystem);
+
+  ProUnitsystemTypeGet (&amp;unitSystem, &amp;type);
+  
+  if (type == PRO_UNITSYSTEM_MLT)
+<a name="anchor-13"></a>    {
+      ProUnitsystemUnitGet (&amp;unitSystem, PRO_UNITTYPE_MASS, &amp;unit);
+
+      ProWstringCopy (unit.name, massUnitsLabel, PRO_VALUE_UNUSED);
+    }
+<a name="anchor-14"></a>  else
+    {
+/*--------------------------------------------------------------------*\
+If the units are Force/Length/Time, format the units into the correct
+equivalent for mass.
+<a name="anchor-15"></a>\*--------------------------------------------------------------------*/
+      ProUnitsystemUnitGet (&amp;unitSystem, PRO_UNITTYPE_FORCE, &amp;forceUnit); 
+  
+      ProUnitsystemUnitGet (&amp;unitSystem, PRO_UNITTYPE_TIME, &amp;timeUnit);     
+   
+<a name="anchor-16"></a>      ProUnitsystemUnitGet (&amp;unitSystem, PRO_UNITTYPE_LENGTH, &amp;lengthUnit);  
+      
+      ProMessageToBuffer (massUnitsLabel,
+			  MSGFIL, &quot;USER Force unit -> mass&quot;, &amp;forceUnit.name, 
+			  &amp;timeUnit.name, &amp;lengthUnit.name);
+<a name="anchor-17"></a>    }
+
+/*--------------------------------------------------------------------*\
+Show the mass to the user
+\*--------------------------------------------------------------------*/
+<a name="anchor-18"></a>  ProMessageDisplay ( MSGFIL, &quot;USER Part mass&quot;, &amp;massProps.mass, &amp;massUnitsLabel);
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-19"></a>/*=====================================================================*\
+FUNCTION: UserPartInfoMass_AO
+PURPOSE:  Action/Object callback for extracting mass from a part.	
+\*=====================================================================*/
+int UserPartInfoMass_AO()
+<a name="anchor-20"></a>{
+  ProMdl currMdl;
+  ProError status;
+  
+  status = ProMdlCurrentGet (&amp;currMdl);
+<a name="anchor-21"></a>  ERROR_CHECK (&quot;UserPartInfoMass_AO()&quot;,
+	       &quot;ProMdlCurrentGet()&quot;, status);
+
+  UserPartInfoMass ((ProPart)currMdl);
+
+<a name="anchor-22"></a>  return (1);
+}
+
+/*=====================================================================*\
+FUNCTION: UserPartInfoMass_TestAO
+<a name="anchor-23"></a>PURPOSE:  Access function for extracting mass from the current part.
+\*=====================================================================*/
+uiCmdAccessState UserPartInfoMass_TestAO (uiCmdAccessMode mode)
+{ 
+  ProMdl currMdl;
+<a name="anchor-24"></a>  ProError status;
+  ProMdlType type;
+  
+  status = ProMdlCurrentGet (&amp;currMdl);
+  ERROR_CHECK (&quot;UserPartInfoMass_TestAO()&quot;,
+<a name="anchor-25"></a>	       &quot;ProMdlCurrentGet()&quot;, status);
+  
+  if (status == PRO_TK_NO_ERROR)
+    {
+      status = ProMdlTypeGet (currMdl, &amp;type);
+<a name="anchor-26"></a>
+      if (status == PRO_TK_NO_ERROR &amp;&amp; type == PRO_MDL_PART)
+	return ACCESS_AVAILABLE;
+    }
+  return ACCESS_UNAVAILABLE;
+<a name="anchor-27"></a>}
+
+/*=====================================================================*\
+FUNCTION: UserPartInfoMass_OA
+PURPOSE:  Object/Action callback for extracting mass from the selected part.
+<a name="anchor-28"></a>\*=====================================================================*/
+int UserPartInfoMass_OA()
+{
+  ProError status; 
+  ProSelection* sel_array;
+<a name="anchor-29"></a>  ProModelitem item;
+
+/*--------------------------------------------------------------------*\
+Extract the current selected part
+\*--------------------------------------------------------------------*/
+<a name="anchor-30"></a>  status = ProSelbufferSelectionsGet (&amp;sel_array);
+
+  status = ProSelectionModelitemGet (sel_array [0], &amp;item);
+
+  UserPartInfoMass (item.owner);
+<a name="anchor-31"></a>
+  ProSelectionarrayFree (sel_array);
+
+  return (1);
+}
+<a name="anchor-32"></a>
+#define OA 1  /* Standard OA in the menu system, typically gray out 
+		 the button when not usable*/
+#define PM 2 /* OA in a popup menu, typically remove the button when 
+	         not usable */
+<a name="anchor-33"></a>
+/*=====================================================================*\
+FUNCTION: UserPartInfoMass_TestLow
+PURPOSE:  Access function for the button for printing mass info for a part.
+\*=====================================================================*/
+<a name="anchor-34"></a>static uiCmdAccessState UserPartInfoMass_TestLow (ProSelection* sels, int mode)
+{
+  uiCmdAccessState access_result;
+  ProBoolean should_free = PRO_B_FALSE;
+  ProError status;
+<a name="anchor-35"></a>  int size;
+
+/*-----------------------------------------------------------------*\
+  Set the default return if the button is unusable.
+\*-----------------------------------------------------------------*/  
+<a name="anchor-36"></a>  if (mode == OA)
+    access_result = ACCESS_UNAVAILABLE;
+  else 
+    access_result = ACCESS_REMOVE;
+
+<a name="anchor-37"></a>/*-----------------------------------------------------------------*\
+  If called without selections, extract the current selections from
+  the buffer.
+\*-----------------------------------------------------------------*/ 
+  if (sels == NULL)
+<a name="anchor-38"></a>    {   
+      status = ProSelbufferSelectionsGet (&amp;sels);
+      
+      if (status != PRO_TK_NO_ERROR)
+	return access_result;
+<a name="anchor-39"></a>
+      if (sels == NULL)
+	return access_result;
+
+      should_free = PRO_B_TRUE;
+<a name="anchor-40"></a>    }
+
+/*-----------------------------------------------------------------*\
+  This command allows only one selection.
+\*-----------------------------------------------------------------*/   
+<a name="anchor-41"></a>  status = ProArraySizeGet (sels, &amp;size);
+  
+  if (status != PRO_TK_NO_ERROR)
+    return access_result;
+
+<a name="anchor-42"></a>  if (size == 1)
+    {
+      ProModelitem item;
+
+      status = ProSelectionModelitemGet (sels [0], &amp;item);
+<a name="anchor-43"></a>
+/*-----------------------------------------------------------------*\
+  The selected type must be part.
+\*-----------------------------------------------------------------*/   
+      if (item.type == PRO_PART)
+<a name="anchor-44"></a>	{
+	  access_result = ACCESS_AVAILABLE;	  
+	}
+    }
+
+<a name="anchor-45"></a>  if (should_free)
+    ProSelectionarrayFree (sels);
+  
+  return access_result;
+}
+<a name="anchor-46"></a>
+/*=====================================================================*\
+FUNCTION: UserPartInfoMass_TestMdlTree
+PURPOSE:  Access function for the model tree popup menu button.	
+\*=====================================================================*/
+<a name="anchor-47"></a>uiCmdAccessState UserPartInfoMass_TestMdlTree (uiCmdAccessMode mode)
+{ 
+  return UserPartInfoMass_TestLow (NULL, PM);
+}
+
+<a name="anchor-48"></a>/*=====================================================================*\
+FUNCTION: UserPartInfoMass_TestPM
+PURPOSE:  Access function for the graphics window popup menu button.	
+\*=====================================================================*/
+uiCmdAccessState UserPartInfoMass_TestPM (uiCmdCmdId id,
+<a name="anchor-49"></a>				      ProAppData data,
+				      ProSelection* sels)
+{ 
+  return UserPartInfoMass_TestLow (sels, PM);
+}
+<a name="anchor-50"></a>
+#undef OA
+#undef PM
+
+</pre>
+</body>
+</html>

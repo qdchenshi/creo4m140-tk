@@ -1,0 +1,841 @@
+<html>
+<head>
+<title>TestGeomdata.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProArray.h>
+#include &lt;ProSurfacedata.h>
+#include &lt;ProEdgedata.h>
+#include &lt;ProQuiltdata.h>
+#include &lt;ProDatumdata.h>
+<a name="anchor-3"></a>#include &lt;ProUtil.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-4"></a>#include &quot;TestError.h&quot;
+#include &quot;UtilString.h&quot;
+#include &lt;UtilMessage.h>
+#include &lt;ProTKRunTime.h>
+
+<a name="anchor-5"></a>ProError ProUtilCurvedataCopy(ProCurvedata *c_in, ProCurvedata *c_out);
+void ProTestEdgeCreationTypeGet (int *creation_type);
+
+ProError ProUtilArrayCopy(
+    ProArray array_from, 
+<a name="anchor-6"></a>    ProArray *array_to,
+    int obj_size)
+{
+    ProError err;
+    int n;
+<a name="anchor-7"></a>
+    err = ProArraySizeGet(array_from, &amp;n);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProUtilArrayCopy()&quot;,
+						err, err != PRO_TK_NO_ERROR);
+    if (err == PRO_TK_NO_ERROR)
+<a name="anchor-8"></a>    {
+	err = ProArrayAlloc(n, obj_size, 1, array_to);
+	TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProUtilArrayCopy()&quot;,
+						err, err != PRO_TK_NO_ERROR);
+	if (err == PRO_TK_NO_ERROR)
+<a name="anchor-9"></a>	    memcpy(*array_to, array_from, obj_size*n);
+
+    }
+
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-10"></a>}
+
+
+/*====================================================================*\
+    FUNCTION :  ProUtilSurfaceshapedataCopy()
+<a name="anchor-11"></a>    PURPOSE  :  copy one ProSurfaceshapedata struct to another  
+\*====================================================================*/
+ProError ProUtilSurfaceshapedataCopy(
+    ProSrftype s_type,
+    ProSurfaceshapedata *s_in,    /* In : input struct*/
+<a name="anchor-12"></a>    ProSurfaceshapedata *s_out)   /* Out : output struct */
+{
+   ProVector e1, e2, e3, *p_u_t_arr, *p_v_t_arr, *p_uvd_arr;
+   ProVector *p_new_u_t_arr, *p_new_v_t_arr, *p_new_uvd_arr;
+   Pro3dPnt origin, *p_arr, *p_new_arr;
+<a name="anchor-13"></a>   double rad1, rad2, alpha, *p_u_arr, *p_v_arr, *p_wg_arr;
+   double *p_new_u_arr, *p_new_v_arr, *p_new_wg_arr;
+   ProCurvedata cur1, cur2, new_cur1, new_cur2;
+   int num_u, num_v, num_c_p, deg[2];
+   ProSplinedata pnt_spline, ctr_spline, tan_spline;
+<a name="anchor-14"></a>   ProSplinesrfdata  splsrf;
+   ProError err;
+   ProSurfaceshapedata shape_data;
+   ProCurvedata new_pnt_spline, new_ctr_spline, new_tan_spline;
+
+<a name="anchor-15"></a>    switch (s_type)
+    {
+    case  PRO_SRF_PLANE:
+        err = ProPlanedataGet( s_in, e1, e2, e3, origin);
+        TEST_CALL_REPORT(&quot;ProPlanedataGet()&quot;, &quot;ProUtilSurfaceshapedataCopy()&quot;,
+<a name="anchor-16"></a>						err, err != PRO_TK_NO_ERROR);
+	err = ProPlanedataInit( e1, e2, e3, origin, s_out);
+        TEST_CALL_REPORT(&quot;ProPlanedataInit()&quot;, &quot;ProUtilSurfaceshapedataCopy()&quot;,
+						err, err != PRO_TK_NO_ERROR);
+	break;
+<a name="anchor-17"></a>    case PRO_SRF_CYL:
+        err = ProCylinderdataGet( s_in, e1, e2, e3, origin, &amp;rad1);
+        TEST_CALL_REPORT(&quot;ProCylinderdataGet()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProCylinderdataInit( e1, e2, e3, origin, rad1, s_out);
+<a name="anchor-18"></a>        TEST_CALL_REPORT(&quot;ProCylinderdataInit()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	break;
+    case PRO_SRF_CONE:
+        err = ProConedataGet( s_in, e1, e2, e3, origin, &amp;alpha);
+<a name="anchor-19"></a>        TEST_CALL_REPORT(&quot;ProConedataGet()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProConedataInit( e1, e2, e3, origin, alpha, s_out);
+        TEST_CALL_REPORT(&quot;ProConedataInit()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-20"></a>	break;
+    case PRO_SRF_TORUS:
+        err = ProTorusdataGet( s_in, e1, e2, e3, origin, &amp;rad1, &amp;rad2);
+        TEST_CALL_REPORT(&quot;ProTorusdataGet()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>	err = ProTorusdataInit( e1, e2, e3, origin, rad1, rad2, s_out);
+        TEST_CALL_REPORT(&quot;ProTorusdataInit()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	break;
+    case PRO_SRF_SPL:
+<a name="anchor-22"></a>        err = ProSplinesrfdataGet( s_in, &amp;p_u_arr, &amp;p_v_arr, &amp;p_arr,
+	    &amp;p_u_t_arr, &amp;p_v_t_arr, &amp;p_uvd_arr, &amp;num_u, &amp;num_v);
+        TEST_CALL_REPORT(&quot;ProSplinesrfdataGet()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProUtilArrayCopy ((ProArray)p_u_arr, (ProArray*)&amp;p_new_u_arr,
+<a name="anchor-23"></a>				sizeof (double));
+	err = ProUtilArrayCopy ((ProArray)p_v_arr, (ProArray*)&amp;p_new_v_arr,
+				sizeof (double));
+	err = ProUtilArrayCopy ((ProArray)p_arr, (ProArray*)&amp;p_new_arr,
+				sizeof (Pro3dPnt));
+<a name="anchor-24"></a>	err = ProUtilArrayCopy ((ProArray)p_u_t_arr, (ProArray*)&amp;p_new_u_t_arr,
+				sizeof (Pro3dPnt));
+	err = ProUtilArrayCopy ((ProArray)p_v_t_arr, (ProArray*)&amp;p_new_v_t_arr,
+				sizeof (Pro3dPnt));
+	err = ProUtilArrayCopy ((ProArray)p_uvd_arr, (ProArray*)&amp;p_new_uvd_arr,
+<a name="anchor-25"></a>				sizeof (Pro3dPnt));
+	
+	err = ProSplinesrfdataInit( p_new_u_arr, p_new_v_arr,
+	    p_new_arr, p_new_u_t_arr, 
+	    p_new_v_t_arr, p_new_uvd_arr, num_u, num_v, s_out);
+<a name="anchor-26"></a>        TEST_CALL_REPORT(&quot;ProSplinesrfdataInit()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	break;
+    case PRO_SRF_FIL:
+        err = ProFilsrfdataGet( s_in, &amp;pnt_spline, &amp;ctr_spline, &amp;tan_spline);
+<a name="anchor-27"></a>        TEST_CALL_REPORT(&quot;ProFilsrfdataGet()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProUtilCurvedataCopy ((ProCurvedata*)&amp;pnt_spline,
+				    &amp;new_pnt_spline);
+	err = ProUtilCurvedataCopy ((ProCurvedata*)&amp;ctr_spline,
+<a name="anchor-28"></a>				    &amp;new_ctr_spline);
+	err = ProUtilCurvedataCopy ((ProCurvedata*)&amp;tan_spline,
+				    &amp;new_tan_spline);
+	err = ProFilsrfdataInit( (ProSplinedata*)&amp;new_pnt_spline,
+            (ProSplinedata*)&amp;new_ctr_spline,
+<a name="anchor-29"></a> 	    (ProSplinedata*) &amp;new_tan_spline, s_out);
+        TEST_CALL_REPORT(&quot;ProFilsrfdataInit()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	break;
+    case PRO_SRF_RUL:
+<a name="anchor-30"></a>        err = ProRulsrfdataGet( s_in, e1, e2, e3, origin, &amp;cur1, &amp;cur2);
+        TEST_CALL_REPORT(&quot;ProRulsrfdataGet()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProUtilCurvedataCopy (&amp;cur1, &amp;new_cur1);
+	err = ProUtilCurvedataCopy (&amp;cur2, &amp;new_cur2);
+<a name="anchor-31"></a>	err = ProRulsrfdataInit( e1, e2, e3, origin, &amp;new_cur1, &amp;new_cur2,
+	    s_out);
+        TEST_CALL_REPORT(&quot;ProRulsrfdataInit()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	break;
+<a name="anchor-32"></a>    case PRO_SRF_REV:
+        err = ProSrfrevdataGet( s_in, e1, e2, e3, origin, &amp;cur1);
+        TEST_CALL_REPORT(&quot;ProSrfrevdataGet()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProUtilCurvedataCopy (&amp;cur1, &amp;new_cur1);
+<a name="anchor-33"></a>	err = ProSrfrevdataInit( e1, e2, e3, origin, &amp;new_cur1, s_out);
+        TEST_CALL_REPORT(&quot;ProSrfrevdataInit()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	break;
+    case PRO_SRF_TABCYL:
+<a name="anchor-34"></a>        err = ProTabcyldataGet( s_in, e1, e2, e3, origin, &amp;cur1);
+        TEST_CALL_REPORT(&quot;ProTabcyldataGet()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);  
+	err = ProUtilCurvedataCopy (&amp;cur1, &amp;new_cur1);
+	
+<a name="anchor-35"></a>	err = ProTabcyldataInit( e1, e2, e3, origin, &amp;new_cur1, s_out);
+        TEST_CALL_REPORT(&quot;ProTabcyldataInit()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	break;
+    case PRO_SRF_B_SPL:
+<a name="anchor-36"></a>        err = ProBsplinesrfdataGet( s_in, deg, &amp;p_u_arr, &amp;p_v_arr, &amp;p_wg_arr,
+ 	    &amp;p_arr, &amp;num_u, &amp;num_v, &amp;num_c_p);
+        TEST_CALL_REPORT(&quot;ProBsplinesrfdataGet()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProUtilArrayCopy ((ProArray)p_u_arr, (ProArray*)&amp;p_new_u_arr,
+<a name="anchor-37"></a>				sizeof (double));
+	err = ProUtilArrayCopy ((ProArray)p_v_arr, (ProArray*)&amp;p_new_v_arr,
+				sizeof (double));
+	err = ProUtilArrayCopy ((ProArray)p_wg_arr, (ProArray*)&amp;p_new_wg_arr,
+				sizeof (double));
+<a name="anchor-38"></a>	err = ProBsplinesrfdataInit( deg, p_u_arr, p_v_arr, p_wg_arr, 
+	    p_arr, num_u, num_v, num_c_p, s_out);
+        TEST_CALL_REPORT(&quot;ProBsplinesrfdataInit()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	break;
+<a name="anchor-39"></a>    case PRO_SRF_CYL_SPL:
+        err = ProCylsplsrfdataGet( s_in, e1, e2, e3, origin, &amp;splsrf);
+        TEST_CALL_REPORT(&quot;ProCylsplsrfdataGet()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	
+<a name="anchor-40"></a>	err = ProUtilSurfaceshapedataCopy (PRO_SRF_SPL,
+	    (ProSurfaceshapedata*)&amp;splsrf, &amp;shape_data);
+	
+	err = ProCylsplsrfdataInit( e1, e2, e3, origin,
+	    (ProSplinesrfdata*)&amp;shape_data, s_out);
+<a name="anchor-41"></a>        TEST_CALL_REPORT(&quot;ProCylsplsrfdataInit()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	break;
+    default:
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Unknown surface type&quot;);
+<a name="anchor-42"></a>	ProTKFprintf(stderr, &quot;Copy: Unknown surface type %d\n&quot;, s_type);	
+	s_out[0] = s_in[0];
+	break;
+   }
+
+<a name="anchor-43"></a>   return (err);
+}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilContourdataCopy()
+<a name="anchor-44"></a>    PURPOSE  :  copy contour array using different functions
+\*====================================================================*/
+ProError ProUtilContourdataCopy(
+    ProContourdata **p_c_array)   /* In, Out : contourdata array */
+{
+<a name="anchor-45"></a>    ProError err;
+    ProContourdata *p_new_array, *p_c_data;
+    int i, n, *p_edge_arr, *p_new_edge_arr;
+    ProContourTraversal trav;
+
+<a name="anchor-46"></a>    err = ProArrayAlloc(0, sizeof(ProContourdata), 1, (ProArray*)&amp;p_new_array);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, 
+		   &quot;ProUtilContourdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProArraySizeGet((ProArray)*p_c_array, &amp;n);
+<a name="anchor-47"></a>    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, 
+		   &quot;ProUtilContourdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    for (i=0; i&lt;n; i++)
+    {
+<a name="anchor-48"></a>	err = ProContourdataAlloc(&amp;p_c_data);
+    	TEST_CALL_REPORT(&quot;ProContourdataAlloc()&quot;, 
+		   &quot;ProUtilContourdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        err = ProContourdataGet(p_c_array[0]+i, &amp;trav);
+<a name="anchor-49"></a>    	TEST_CALL_REPORT(&quot;ProContourdataGet()&quot;, 
+		   &quot;ProUtilContourdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProContourdataInit(trav, p_c_data);
+    	TEST_CALL_REPORT(&quot;ProContourdataInit()&quot;, 
+<a name="anchor-50"></a>		   &quot;ProUtilContourdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProContourdataEdgeIdArrayGet(p_c_array[0]+i, &amp;p_edge_arr);
+    	TEST_CALL_REPORT(&quot;ProContourdataEdgeIdArrayGet()&quot;, 
+		   &quot;ProUtilContourdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-51"></a>	
+	err = ProUtilArrayCopy ((ProArray)p_edge_arr,
+	    (ProArray*)&amp;p_new_edge_arr, sizeof (int));
+	
+	err = ProContourdataEdgeIdArraySet(p_c_data, p_new_edge_arr);
+<a name="anchor-52"></a>    	TEST_CALL_REPORT(&quot;ProContourdataEdgeIdArraySet()&quot;, 
+		   &quot;ProUtilContourdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	
+	err = ProArrayObjectAdd((ProArray*)&amp;p_new_array, PRO_VALUE_UNUSED,
+	    1, p_c_data);
+<a name="anchor-53"></a>    	TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, 
+		   &quot;ProUtilContourdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	
+        memset(p_c_data, '\0', sizeof(ProContourdata));
+
+<a name="anchor-54"></a>	err = ProContourdataFree(p_c_data);
+	TEST_CALL_REPORT(&quot;ProContourdataFree()&quot;, 
+		   &quot;ProUtilContourdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+	
+<a name="anchor-55"></a>
+    err = ProArrayFree((ProArray*)p_c_array);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, 
+		   &quot;ProUtilContourdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+ 
+<a name="anchor-56"></a>    *p_c_array = p_new_array;
+    return (err);
+}
+
+/*====================================================================*\
+<a name="anchor-57"></a>    FUNCTION :  ProUtilSurfacedataCopy()
+    PURPOSE  :  copy surfacedata using different functions
+\*====================================================================*/
+ProError ProUtilSurfacedataCopy(
+    ProSurfacedata **p_s_data)   /* In, Out : surface data */
+<a name="anchor-58"></a>{
+    ProError err;
+    ProSurfacedata *surf_data;
+    ProSrftype srftype;
+    ProUvParam uvpar1, uvpar2;
+<a name="anchor-59"></a>    ProSurfaceOrient s_orient; 
+    ProSurfaceshapedata s_shapedata, s_shapedata_new;
+    ProContourdata *p_cont_arr;
+    int s_id;
+
+<a name="anchor-60"></a>    err = ProSurfacedataAlloc( &amp;surf_data);
+    TEST_CALL_REPORT(&quot;ProSurfacedataAlloc()&quot;, 
+		   &quot;ProUtilSurfacedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProSurfacedataGet(*p_s_data, &amp;srftype, uvpar1, uvpar2, &amp;s_orient, 
+<a name="anchor-61"></a>	&amp;s_shapedata, &amp;s_id);
+    TEST_CALL_REPORT(&quot;ProSurfacedataGet()&quot;, 
+		   &quot;ProUtilSurfacedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProUtilSurfaceshapedataCopy(srftype, &amp;s_shapedata, &amp;s_shapedata_new);
+<a name="anchor-62"></a>
+    err = ProSurfacedataInit(srftype, uvpar1, uvpar2, s_orient, 
+	&amp;s_shapedata_new, s_id, surf_data);
+    TEST_CALL_REPORT(&quot;ProSurfacedataInit()&quot;, 
+		   &quot;ProUtilSurfacedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-63"></a>
+    err = ProSurfacedataContourArrayGet( *p_s_data, &amp;p_cont_arr);
+    TEST_CALL_REPORT(&quot;ProSurfacedataContourArrayGet()&quot;, 
+	           &quot;ProUtilSurfacedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-64"></a>    err = ProUtilContourdataCopy(&amp;p_cont_arr);
+
+    err = ProSurfacedataContourArraySet( surf_data, p_cont_arr);
+    TEST_CALL_REPORT(&quot;ProSurfacedataContourArraySet()&quot;, 
+	           &quot;ProUtilSurfacedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-65"></a>
+    err = ProArrayFree((ProArray*)&amp;p_cont_arr);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, 
+	           &quot;ProUtilSurfacedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-66"></a>    err = ProSurfacedataFree(*p_s_data);
+    TEST_CALL_REPORT(&quot;ProSurfacedataFree()&quot;, 
+	           &quot;ProUtilSurfacedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    *p_s_data = surf_data;
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-67"></a>}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilCurvedataCopy()
+    PURPOSE  :  copy curvedata using different functions
+<a name="anchor-68"></a>\*====================================================================*/
+ProError ProUtilComponentArrayCopy(
+    ProComponentCurvedata *p_comp_arr,
+    ProComponentCurvedata **new_comp_arr)
+{
+<a name="anchor-69"></a>    ProError err;
+    int n_comp, i;
+    ProComponentCurvedata *p_curve_data;
+    ProCurveDir dir;
+    ProCurvedata curve_data, new_data;
+<a name="anchor-70"></a>
+    err = ProArraySizeGet((ProArray)p_comp_arr, &amp;n_comp);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, 
+	        &quot;ProUtilComponentArrayCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-71"></a>    err = ProArrayAlloc(0, sizeof(ProComponentCurvedata), 1, 
+	(ProArray*)new_comp_arr);
+    for (i=0; i&lt;n_comp; i++)
+    {
+	err = ProComponentCurvedataAlloc(&amp;p_curve_data);
+<a name="anchor-72"></a>	TEST_CALL_REPORT(&quot;ProComponentCurvedataAlloc()&quot;, 
+	    &quot;ProUtilComponentArrayCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	if (err != PRO_TK_NO_ERROR)
+	    break;
+
+<a name="anchor-73"></a>	err = ProComponentCurvedataGet(&amp;p_comp_arr[i], &amp;curve_data, &amp;dir);
+	TEST_CALL_REPORT(&quot;ProComponentCurvedataGet()&quot;, 
+	        &quot;ProUtilComponentArrayCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	if (err != PRO_TK_NO_ERROR)
+	    break;
+<a name="anchor-74"></a>
+	err = ProUtilCurvedataCopy(&amp;curve_data, &amp;new_data);
+
+	err = ProComponentCurvedataInit(&amp;new_data, dir, p_curve_data);
+	TEST_CALL_REPORT(&quot;ProComponentCurvedataInit()&quot;, 
+<a name="anchor-75"></a>	        &quot;ProUtilComponentArrayCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	if (err != PRO_TK_NO_ERROR)
+	    break;
+	
+	err = ProArrayObjectAdd((ProArray*)new_comp_arr, PRO_VALUE_UNUSED,
+<a name="anchor-76"></a>	    1, p_curve_data);
+	if (err != PRO_TK_NO_ERROR)
+	    break;
+
+#if 1
+<a name="anchor-77"></a>	memset(p_curve_data, '\0', sizeof(ProComponentCurvedata));
+#endif     
+         	
+	err = ProComponentCurvedataFree(p_curve_data);
+	TEST_CALL_REPORT(&quot;ProComponentCurvedataFree()&quot;, 
+<a name="anchor-78"></a>	        &quot;ProUtilComponentArrayCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	if (err != PRO_TK_NO_ERROR)
+	    break;
+    }
+<a name="anchor-79"></a>    
+    return (err);
+}
+
+/*====================================================================*\
+<a name="anchor-80"></a>    FUNCTION :  ProUtilCurvedataCopy()
+    PURPOSE  :  copy curvedata using different functions
+\*====================================================================*/
+ProError ProUtilCurvedataCopy(
+    ProCurvedata *c_in,
+<a name="anchor-81"></a>    ProCurvedata *c_out)	/* In, out : edge data */
+{
+    int                     n_point, n_knots, degree;
+    double                  *p_par_arr, *p_weight_arr, *p_par_arr2,
+                            *p_weight_arr2, st_a, en_a, rad;
+<a name="anchor-82"></a>    double                  d1, d2, d3, d4; 
+    ProError                err;
+    ProEnttype              c_type;
+    Pro3dPnt                p1, p2;
+    ProVector               v1, v2;
+<a name="anchor-83"></a>    ProPoint3d              *p_pnt_arr, *p_tan_arr, *p_pnt_arr2, *p_tan_arr2;
+    ProComponentCurvedata   *p_comp_arr, *new_comp_arr;
+
+    err = ProCurvedataTypeGet(c_in, &amp;c_type);
+    TEST_CALL_REPORT(&quot;ProCurvedataTypeGet()&quot;, 
+<a name="anchor-84"></a>	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    switch(c_type)
+    {
+    case PRO_ENT_POINT:
+	err = ProPointdataGet(c_in, p1);
+<a name="anchor-85"></a>    	TEST_CALL_REPORT(&quot;ProPointdataGet()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    if (err != PRO_TK_NO_ERROR)
+	        break;
+	    err = ProPointdataInit(p1, c_out);
+<a name="anchor-86"></a>    	TEST_CALL_REPORT(&quot;ProPointdataInit()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    break;
+    case PRO_ENT_LINE:
+	    err = ProLinedataGet(c_in, p1, p2);
+<a name="anchor-87"></a>    	TEST_CALL_REPORT(&quot;ProLinedataGet()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    if (err != PRO_TK_NO_ERROR)
+	        break;
+	    err = ProLinedataInit(p1, p2, c_out);
+<a name="anchor-88"></a>    	TEST_CALL_REPORT(&quot;ProLinedataInit()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    break;
+    case PRO_ENT_ARC:
+	    err = ProArcdataGet(c_in, v1, v2, p1, &amp;st_a, &amp;en_a, &amp;rad);
+<a name="anchor-89"></a>    	TEST_CALL_REPORT(&quot;ProArcdataGet()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    if (err != PRO_TK_NO_ERROR)
+	        break;
+	    err = ProArcdataInit(v1, v2, p1, st_a, en_a, rad, c_out);
+<a name="anchor-90"></a>    	TEST_CALL_REPORT(&quot;ProArcdataInit()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    break;
+    case PRO_ENT_SPLINE:
+	    err = ProSplinedataGet(c_in, &amp;p_par_arr, &amp;p_pnt_arr, &amp;p_tan_arr,
+<a name="anchor-91"></a>	        &amp;n_point);
+    	TEST_CALL_REPORT(&quot;ProSplinedataGet()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-92"></a>	        break;
+	    err = ProUtilArrayCopy((ProArray)p_par_arr, (ProArray*)&amp;p_par_arr2,
+	        sizeof(p_par_arr[0]));
+    	TEST_CALL_REPORT(&quot;ProUtilArrayCopy()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-93"></a>	    err = ProUtilArrayCopy((ProArray)p_pnt_arr, (ProArray*)&amp;p_pnt_arr2,
+	        sizeof(p_pnt_arr[0]));
+    	TEST_CALL_REPORT(&quot;ProUtilArrayCopy()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    err = ProUtilArrayCopy((ProArray)p_tan_arr, (ProArray*)&amp;p_tan_arr2,
+<a name="anchor-94"></a>	        sizeof(p_tan_arr[0]));
+    	TEST_CALL_REPORT(&quot;ProUtilArrayCopy()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-95"></a>	        break;
+	    err = ProSplinedataInit(p_par_arr2, p_pnt_arr2, p_tan_arr2, n_point,
+	        c_out);
+    	TEST_CALL_REPORT(&quot;ProSplinedataInit()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-96"></a>	    break;
+    case PRO_ENT_B_SPLINE:
+	err = ProBsplinedataGet(c_in, &amp;degree, &amp;p_par_arr, &amp;p_weight_arr,
+	        &amp;p_pnt_arr, &amp;n_knots, &amp;n_point);
+    	TEST_CALL_REPORT(&quot;ProBsplinedataGet()&quot;, 
+<a name="anchor-97"></a>	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	if (err != PRO_TK_NO_ERROR)
+	        break;
+	err = ProUtilArrayCopy((ProArray)p_pnt_arr, (ProArray*)&amp;p_pnt_arr2,
+	        sizeof(p_pnt_arr[0]));
+<a name="anchor-98"></a>    	TEST_CALL_REPORT(&quot;ProUtilArrayCopy()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProUtilArrayCopy((ProArray)p_par_arr, (ProArray*)&amp;p_par_arr2,
+	        sizeof(p_par_arr[0]));
+    	TEST_CALL_REPORT(&quot;ProUtilArrayCopy()&quot;, 
+<a name="anchor-99"></a>	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	
+        if (p_weight_arr != NULL)
+        {
+            err = ProUtilArrayCopy((ProArray)p_weight_arr, 
+<a name="anchor-100"></a>	        (ProArray*)&amp;p_weight_arr2, sizeof(p_weight_arr[0]));
+    	    TEST_CALL_REPORT(&quot;ProUtilArrayCopy()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+        }
+        else
+<a name="anchor-101"></a>               p_weight_arr2 = NULL;
+
+	if (err != PRO_TK_NO_ERROR)
+	    break;
+	err = ProBsplinedataInit(degree, p_par_arr2, p_weight_arr2, p_pnt_arr2,
+<a name="anchor-102"></a>	        n_knots, n_point, c_out);
+    	TEST_CALL_REPORT(&quot;ProBsplinedataInit()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+        break;
+    case PRO_ENT_CMP_CRV:
+<a name="anchor-103"></a>	    err = ProCompositeCurvedataGet(c_in, &amp;p_comp_arr);
+    	TEST_CALL_REPORT(&quot;ProCompositeCurvedataGet()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    if (err != PRO_TK_NO_ERROR)
+	        break;
+<a name="anchor-104"></a>	    err = ProUtilComponentArrayCopy(p_comp_arr, &amp;new_comp_arr);
+	    if (err != PRO_TK_NO_ERROR)
+	        break;
+	    err = ProCompositeCurvedataInit(new_comp_arr, c_out);
+    	TEST_CALL_REPORT(&quot;ProCompositeCurvedataInit()&quot;, 
+<a name="anchor-105"></a>	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    if (err != PRO_TK_NO_ERROR)
+	        break;
+
+	    break;
+<a name="anchor-106"></a>    case PRO_ENT_ELLIPSE:
+        err = ProEllipsedataGet (c_in, p1, v1, v2, &amp;d1, &amp;d2, &amp;d3, &amp;d4);
+        TEST_CALL_REPORT(&quot;ProEllipsedataGet()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-107"></a>	        break;
+        err = ProEllipsedataInit (p1, v1, v2, d1, d2, d3, d4, c_out);
+        TEST_CALL_REPORT(&quot;ProEllipsedataInit()&quot;, 
+	           &quot;ProUtilCurvedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+        break;
+<a name="anchor-108"></a>    default:
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Unknown curve type&quot;);
+        ProTKFprintf(stderr, &quot;Copy: Unknown curve type %d \n&quot;, c_type);
+	    c_out[0] = c_in[0];
+ 	    break;
+<a name="anchor-109"></a>    }
+    return (err);
+}
+
+/*====================================================================*\
+<a name="anchor-110"></a>    FUNCTION :  ProUtilEdgedataCopy()
+    PURPOSE  :  copy edgedata using different functions
+\*====================================================================*/
+ProError ProUtilEdgedataCopy(
+    ProEdgedata **pp_edge_data)	/* In, out : edge data */
+<a name="anchor-111"></a>{
+    ProError err;
+    int		edge_id;
+    int		edge_surf_ids[2];
+    ProEdgeDir	edge_dirs[2];
+<a name="anchor-112"></a>    ProUvParam	(*edge_uv_point_arr)[2], (*edge_uv_point_arr_new)[2];
+    ProCurvedata edge_uv_curve_0, edge_uv_curve_1;
+    ProCurvedata *p_edge_uv_curve[2];
+    ProCurvedata edge_xyz_curve;
+
+<a name="anchor-113"></a>    ProEdgedata	 *p_edge_data_new;
+    ProCurvedata *p_edge_uv_curve_new[2]={NULL, NULL};
+    ProCurvedata *p_edge_xyz_curve_new;
+    ProEnttype	 curve_type;
+
+<a name="anchor-114"></a>    p_edge_uv_curve[0] = &amp;edge_uv_curve_0;
+    p_edge_uv_curve[1] = &amp;edge_uv_curve_1;
+    err = ProEdgedataGet(*pp_edge_data,
+			 &amp;edge_id,
+			 edge_surf_ids,
+<a name="anchor-115"></a>			 edge_dirs,
+			 &amp;edge_uv_point_arr,
+			 p_edge_uv_curve,
+			 &amp;edge_xyz_curve);
+    TEST_CALL_REPORT(&quot;ProEdgedataGet()&quot;, 
+<a name="anchor-116"></a>	           &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	           
+    err = ProCurvedataTypeGet (p_edge_uv_curve[0], &amp;curve_type);
+    TEST_CALL_REPORT(&quot;ProCurvedataTypeGet()&quot;, 
+                   &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-117"></a>    if ((err == PRO_TK_NO_ERROR) &amp;&amp; (curve_type != PRO_ENT_NONE))
+    {
+	err = ProCurvedataAlloc( &amp;p_edge_uv_curve_new[0] );
+	TEST_CALL_REPORT(&quot;ProCurvedataAlloc()&quot;,
+                         &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-118"></a>	err = ProUtilCurvedataCopy( p_edge_uv_curve[0], p_edge_uv_curve_new[0]);
+    }
+    else
+	p_edge_uv_curve_new[0] = NULL;
+
+<a name="anchor-119"></a>    err = ProCurvedataTypeGet (p_edge_uv_curve[1], &amp;curve_type);
+    TEST_CALL_REPORT(&quot;ProCurvedataTypeGet()&quot;, 
+                   &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    if ((err == PRO_TK_NO_ERROR) &amp;&amp; (curve_type != PRO_ENT_NONE))
+    { 
+<a name="anchor-120"></a>        err = ProCurvedataAlloc( &amp;p_edge_uv_curve_new[1] ); 
+        TEST_CALL_REPORT(&quot;ProCurvedataAlloc()&quot;,
+                         &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProUtilCurvedataCopy(p_edge_uv_curve[1], p_edge_uv_curve_new[1]);
+    }
+<a name="anchor-121"></a>    else
+	p_edge_uv_curve_new[1] = NULL; 
+
+    err = ProCurvedataTypeGet (&amp;edge_xyz_curve, &amp;curve_type);
+    TEST_CALL_REPORT(&quot;ProCurvedataTypeGet()&quot;, 
+<a name="anchor-122"></a>	           &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    if ((err == PRO_TK_NO_ERROR) &amp;&amp; (curve_type != PRO_ENT_NONE))
+    {
+        err = ProCurvedataAlloc( &amp;p_edge_xyz_curve_new);
+        TEST_CALL_REPORT(&quot;ProCurvedataAlloc()&quot;, 
+<a name="anchor-123"></a>                         &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProUtilCurvedataCopy(&amp;edge_xyz_curve, p_edge_xyz_curve_new);   
+    }
+    else
+	p_edge_xyz_curve_new = NULL;
+<a name="anchor-124"></a>
+    err = ProEdgedataAlloc(&amp;p_edge_data_new);
+    TEST_CALL_REPORT(&quot;ProEdgedataAlloc()&quot;,
+                   &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+                   
+<a name="anchor-125"></a>    if ( edge_uv_point_arr != NULL)
+    {
+        err = ProUtilArrayCopy((ProArray)edge_uv_point_arr,
+            (ProArray*)&amp;edge_uv_point_arr_new, sizeof(ProUvParam)*2 );
+    }
+<a name="anchor-126"></a>    else
+        edge_uv_point_arr_new = NULL;
+    err = ProEdgedataInit(edge_id, edge_surf_ids, edge_dirs,
+			  edge_uv_point_arr,
+			  (!p_edge_uv_curve_new[0]&amp;&amp;!p_edge_uv_curve_new[1]) ?
+<a name="anchor-127"></a>				NULL : p_edge_uv_curve_new,
+			  p_edge_xyz_curve_new,
+			  p_edge_data_new );
+    TEST_CALL_REPORT(&quot;ProEdgedataInit()&quot;, 
+	           &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-128"></a>
+    if (p_edge_xyz_curve_new != NULL)
+    {
+        err = ProCurvedataMemoryFree(p_edge_xyz_curve_new);
+        TEST_CALL_REPORT(&quot;ProCurvedataMemoryFree()&quot;, 
+<a name="anchor-129"></a>	           &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+   
+    if (p_edge_uv_curve_new[0] != NULL)
+    {
+<a name="anchor-130"></a>        memset(p_edge_uv_curve_new[0], '\0', sizeof(ProCurvedata));
+        err = ProCurvedataFree(p_edge_uv_curve_new[0]);
+        TEST_CALL_REPORT(&quot;ProCurvedataFree()&quot;, 
+	           &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+<a name="anchor-131"></a>    }
+
+
+    if (p_edge_uv_curve_new[1] != NULL)
+    {
+<a name="anchor-132"></a>        err = ProCurvedataMemoryFree(p_edge_uv_curve_new[1]);
+        TEST_CALL_REPORT(&quot;ProCurvedataMemoryFree()&quot;, 
+	           &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+    }
+<a name="anchor-133"></a>
+    err = ProEdgedataFree( *pp_edge_data);
+    TEST_CALL_REPORT(&quot;ProEdgedataFree()&quot;, 
+	           &quot;ProUtilEdgedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-134"></a>    *pp_edge_data = p_edge_data_new;
+
+    return (err); 	
+}
+
+<a name="anchor-135"></a>
+/*====================================================================*\
+    FUNCTION :  ProUtilQuiltdataCopy()
+    PURPOSE  :  Copy quilt data using different commands
+\*====================================================================*/
+<a name="anchor-136"></a>ProError ProUtilQuiltdataCopy(
+    ProQuiltdata **p_q_data)    /* In, out - quilt data */
+{
+    ProError err;
+    ProQuiltdata *quilt_data;
+<a name="anchor-137"></a>    int quilt_id;
+    ProSurfacedata **p_surf_arr, **p_new_surf_arr;
+
+    err = ProQuiltdataAlloc( &amp;quilt_data);
+    TEST_CALL_REPORT(&quot;ProQuiltdataAlloc()&quot;, 
+<a name="anchor-138"></a>	           &quot;ProUtilQuiltdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProQuiltdataGet(*p_q_data, &amp;quilt_id);
+    TEST_CALL_REPORT(&quot;ProQuiltdataGet()&quot;, 
+	           &quot;ProUtilQuiltdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-139"></a>
+    err = ProQuiltdataInit(quilt_id, quilt_data);
+    TEST_CALL_REPORT(&quot;ProQuiltdataInit()&quot;, 
+	           &quot;ProUtilQuiltdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-140"></a>    err = ProQuiltdataSurfArrayGet(*p_q_data, &amp;p_surf_arr);
+    TEST_CALL_REPORT(&quot;ProQuiltdataSurfArrayGet()&quot;, 
+	           &quot;ProUtilQuiltdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProUtilArrayCopy ((ProArray)p_surf_arr, (ProArray*)&amp;p_new_surf_arr,
+	sizeof (ProSurfacedata*));
+<a name="anchor-141"></a>    
+    err = ProQuiltdataSurfArraySet(quilt_data, p_new_surf_arr);
+    TEST_CALL_REPORT(&quot;ProQuiltdataSurfArraySet()&quot;, 
+	           &quot;ProUtilQuiltdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+#if 1
+<a name="anchor-142"></a>memset(  *p_q_data, '\0', sizeof(ProQuiltdata));
+#endif
+ 
+    err = ProQuiltdataFree( *p_q_data);
+    TEST_CALL_REPORT(&quot;ProQuiltdataFree()&quot;, 
+<a name="anchor-143"></a>	           &quot;ProUtilQuiltdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    p_q_data[0] = quilt_data; 
+    return (err);
+}
+
+<a name="anchor-144"></a>/*====================================================================*\
+    FUNCTION :  ProUtilDatumobjectCopy()
+    PURPOSE  :  Copy Datum object using different commands
+\*====================================================================*/
+ProError ProUtilDatumobjectCopy(
+<a name="anchor-145"></a>    ProType	    datum_type,
+    ProDatumobject *p_object)    /* In, out - Datum object */
+{
+    ProDatumobject datum_object;
+    ProPlanedata planedata;
+<a name="anchor-146"></a>    ProCsysdata csysdata;	
+    ProCurvedata *p_curvedata, curvedata;
+    ProError err = PRO_TK_NO_ERROR;
+
+    memset(&amp;datum_object, '\0', sizeof(datum_object));
+<a name="anchor-147"></a>    switch (datum_type)
+    {
+    case PRO_CURVE:
+	    err = ProCurvedataAlloc(&amp;p_curvedata);
+	    TEST_CALL_REPORT(&quot;ProCurvedataAlloc()&quot;, 
+<a name="anchor-148"></a>	           &quot;ProUtilDatumobjectCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    err = ProDatumCurvedataGet(p_object, p_curvedata);
+	    TEST_CALL_REPORT(&quot;ProDatumCurvedataGet()&quot;, 
+	           &quot;ProUtilDatumobjectCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-149"></a>
+	    memset(&amp;curvedata, '\0', sizeof(ProCurvedata));
+	    err = ProUtilCurvedataCopy(p_curvedata, &amp;curvedata);
+
+            err = ProCurvedataMemoryFree(p_curvedata);
+<a name="anchor-150"></a>	    TEST_CALL_REPORT(&quot;ProCurvedataMemoryFree()&quot;, 
+	           &quot;ProUtilDatumobjectCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+	    err = ProDatumCurvedataInit(&amp;curvedata, &amp;datum_object);
+	    TEST_CALL_REPORT(&quot;ProDatumCurvedataInit()&quot;, 
+	           &quot;ProUtilDatumobjectCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-151"></a>
+	    p_object[0] = datum_object;
+	    break;
+	case PRO_CSYS:
+	    err = ProDatumCsysdataGet(p_object, &amp;csysdata);
+<a name="anchor-152"></a>	    TEST_CALL_REPORT(&quot;ProDatumCsysdataGet()&quot;, 
+	           &quot;ProUtilDatumobjectCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    err = ProDatumCsysdataInit(&amp;csysdata, &amp;datum_object);
+	    TEST_CALL_REPORT(&quot;ProDatumCsysdataInit()&quot;, 
+<a name="anchor-153"></a>	           &quot;ProUtilDatumobjectCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    p_object[0] = datum_object;
+	    break;		   
+	case PRO_DATUM_PLANE:
+<a name="anchor-154"></a>	    err = ProDatumPlanedataGet(p_object, &amp;planedata);
+	    TEST_CALL_REPORT(&quot;ProDatumPlanedataGet()&quot;, 
+	           &quot;ProUtilDatumobjectCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    err = ProDatumPlanedataInit(&amp;planedata, &amp;datum_object);
+<a name="anchor-155"></a>	    TEST_CALL_REPORT(&quot;ProDatumPlanedataInit()&quot;, 
+	           &quot;ProUtilDatumobjectCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    p_object[0] = datum_object;
+	    break;		   
+<a name="anchor-156"></a>	default:
+	    ProTKFprintf(stderr, &quot;unsupported datum data %d\n&quot;,datum_type);
+	    err = PRO_TK_GENERAL_ERROR;
+	    break;
+    }
+<a name="anchor-157"></a>    return (err);
+}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilDatumdataCopy()
+<a name="anchor-158"></a>    PURPOSE  :  Copy Datum data using different commands
+\*====================================================================*/
+ProError ProUtilDatumdataCopy(
+    ProDatumdata **p_d_data)    /* In, out - Datum data */
+{
+<a name="anchor-159"></a>    ProError err;
+    ProDatumdata *datum_data;
+    int datum_id;
+    ProType datum_type;
+    ProName w_name;
+<a name="anchor-160"></a>    ProDatumobject datum_obj;
+    ProUtilCname name;
+
+    err = ProDatumdataAlloc( &amp;datum_data);
+    TEST_CALL_REPORT(&quot;ProDatumdataAlloc()&quot;, 
+<a name="anchor-161"></a>	           &quot;ProUtilDatumdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProDatumdataGet(*p_d_data, &amp;datum_id, &amp;datum_type, w_name, 
+	&amp;datum_obj);
+    TEST_CALL_REPORT(&quot;ProDatumdataGet()&quot;, 
+<a name="anchor-162"></a>	           &quot;ProUtilDatumdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+    ProWstringToString(name,w_name);
+
+   
+    err = ProUtilDatumobjectCopy(datum_type, &amp;datum_obj);
+<a name="anchor-163"></a>
+    if (err == PRO_TK_NO_ERROR)
+    {
+
+        err = ProDatumdataInit(datum_id, datum_type, w_name, &amp;datum_obj,
+<a name="anchor-164"></a>	    datum_data);
+        TEST_CALL_REPORT(&quot;ProDatumdataInit()&quot;, 
+	           &quot;ProUtilDatumdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        err = ProDatumdataFree( *p_d_data);
+<a name="anchor-165"></a>        TEST_CALL_REPORT(&quot;ProDatumdataFree()&quot;, 
+	           &quot;ProUtilDatumdataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        p_d_data[0] = datum_data; 
+
+<a name="anchor-166"></a>    }
+    return (err);
+}
+</pre>
+</body>
+</html>

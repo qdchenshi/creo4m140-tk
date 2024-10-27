@@ -1,0 +1,144 @@
+<html>
+<head>
+<title>PTWCServerUpdateDXF.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProWorkspace.h>
+#include &lt;ProWTUtils.h>
+#include &lt;ProBrowser.h>
+#include &lt;ProUtil.h>
+<a name="anchor-2"></a>#include &lt;ProMenuBar.h>
+#include &lt;ProMode.h>
+
+#include &lt;PTWCServer.h>
+
+<a name="anchor-3"></a>/*====================================================================*\
+  FUNCTION: PTWCCreateOrUpdateDXF
+  PURPOSE:  Create or update a DXF copy of the active drawing.  If the 
+            copy is already in the project, it will be checked out and 
+			updated.  If the file is new, it will be created in &quot;Plans&quot;.
+<a name="anchor-4"></a>\*====================================================================*/
+int PTWCCreateOrUpdateDXF ()
+{
+	ProMdl model;
+	ProMdlType type;
+<a name="anchor-5"></a>	ProMdlFileName filename;
+	ProMdlName modelname;
+	ProPath filepath, ws_path;
+	wchar_t* server;
+	wchar_t* ws_name;
+<a name="anchor-6"></a>	wchar_t* context;
+	wchar_t* model_url = NULL;
+	ProServerCheckoutConflicts conflicts;
+	ProPath folder;
+
+<a name="anchor-7"></a>/*--------------------------------------------------------------------*\
+	Obtain current drawing handle and export to DXF
+\*--------------------------------------------------------------------*/
+	status = ProMdlCurrentGet (&amp;model);
+	PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet()&quot;);
+<a name="anchor-8"></a>
+	status = ProMdlMdlnameGet (model, modelname);
+	PT_TEST_LOG_SUCC (&quot;ProMdlMdlnameGet()&quot;);
+
+	ProWstringCopy (modelname, filename, PRO_VALUE_UNUSED);
+<a name="anchor-9"></a>	PTWCUtilWstringToLower (filename);
+	ProWstringConcatenate (L&quot;_drw.dxf&quot;, filename, PRO_VALUE_UNUSED);
+
+	status = ProOutputFileMdlnameWrite (model, filename, PRO_DXF_FILE, NULL, NULL, NULL, NULL);
+	PT_TEST_LOG_SUCC (&quot;ProOutputFileMdlnameWrite()&quot;);
+<a name="anchor-10"></a>
+/*--------------------------------------------------------------------*\
+	If the file already exists in the project, check it out by its 
+	object name.
+\*--------------------------------------------------------------------*/
+<a name="anchor-11"></a>	status = ProServerObjectsCheckout (NULL, filename, PRO_B_TRUE, 
+									NULL, &amp;model_url, &amp;conflicts);
+	PT_TEST_LOG_SUCC (&quot;ProServerObjectsCheckout()&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-12"></a>	A conflict most likely indicates that the file does not exist
+	in the project already.  This error is ignored.
+\*--------------------------------------------------------------------*/
+	if (status == PRO_TK_CHECKOUT_CONFLICT)
+	{
+<a name="anchor-13"></a>		ProServerconflictsFree (conflicts);
+	}
+
+/*--------------------------------------------------------------------*\
+	Get the full disk path to the output DXF file as the source of the 
+<a name="anchor-14"></a>	File Copy operation.
+\*--------------------------------------------------------------------*/
+	status = ProDirectoryCurrentGet (filepath);
+	PT_TEST_LOG_SUCC (&quot;ProDirectoryCurrentGet()&quot;);
+
+<a name="anchor-15"></a>	ProWstringConcatenate (filename, filepath, PRO_VALUE_UNUSED);
+
+/*--------------------------------------------------------------------*\
+	Build the workspace path as the target of the File Copy operation.
+\*--------------------------------------------------------------------*/
+<a name="anchor-16"></a>	status = ProServerActiveGet (&amp;server);
+	PT_TEST_LOG_SUCC (&quot;ProServerActiveGet()&quot;);
+
+	status = ProServerContextGet (server, &amp;context);
+	PT_TEST_LOG_SUCC (&quot;ProServerContextGet()&quot;);
+<a name="anchor-17"></a>
+	status = ProServerWorkspaceGet (server, &amp;ws_name);
+	PT_TEST_LOG_SUCC (&quot;ProServerWorkspaceGet()&quot;);
+
+	PTWCUtilBuildWSPath (server, ws_name, ws_path);
+<a name="anchor-18"></a>
+/*--------------------------------------------------------------------*\
+	Copy the file to the workspace as a top-level object.
+\*--------------------------------------------------------------------*/
+	status = ProFileCopyToWS (filepath, ws_path, NULL);
+<a name="anchor-19"></a>	PT_TEST_LOG_SUCC (&quot;ProFileCopyToWS()&quot;);
+
+/*--------------------------------------------------------------------*\
+	Checkin the workspace.  If the object is new, it will go to
+	the Plans folder.
+<a name="anchor-20"></a>\*--------------------------------------------------------------------*/
+	PTWCUtilBuildPJLFolder (server, context, &quot;Plans&quot;, folder);
+	PTWCUtilCheckinWSToFolder (ws_name, folder);
+
+	ProWstringFree (server);
+<a name="anchor-21"></a>	ProWstringFree (context);
+	ProWstringFree (ws_name);
+	ProWstringFree (model_url);
+
+	return 0;
+<a name="anchor-22"></a>}
+
+/*====================================================================*\
+  FUNCTION: PTWCAccessCreateOrUpdateDXF
+  PURPOSE:  The access function for the create or update DXF command.
+<a name="anchor-23"></a>\*====================================================================*/
+uiCmdAccessState PTWCAccessCreateOrUpdateDXF (uiCmdAccessMode m)
+{
+	ProMode mode;
+	wchar_t* server;
+<a name="anchor-24"></a>	wchar_t* server_class;
+	int result;
+
+/*--------------------------------------------------------------------*\
+	This command accessible only in drawing mode.
+<a name="anchor-25"></a>\*--------------------------------------------------------------------*/
+	status = ProModeCurrentGet (&amp;mode);
+	
+	if (mode != PRO_MODE_DRAWING)
+		return ACCESS_REMOVE;
+<a name="anchor-26"></a>
+/*--------------------------------------------------------------------*\
+	Ensure that there is an active Windchill server
+\*--------------------------------------------------------------------*/
+	return (PTWCUtilAccessIfWCServer ());
+<a name="anchor-27"></a>}
+</pre>
+</body>
+</html>

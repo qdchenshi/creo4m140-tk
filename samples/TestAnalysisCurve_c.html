@@ -1,0 +1,649 @@
+<html>
+<head>
+<title>TestAnalysisCurve.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProAnalysis.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProMessage.h>
+#include &lt;ProArray.h>
+#include &lt;ProPoint.h>
+<a name="anchor-3"></a>#include &lt;ProDtmPnt.h>
+#include &lt;ProUtil.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-4"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestAnalysis.h&quot;
+#include &quot;TestDimension.h&quot;
+
+<a name="anchor-5"></a>#include &quot;UtilMath.h&quot;
+
+/*====================================================================*\
+FUNCTION : ProTestCurveUiAction()
+PURPOSE  : Callback for UI action of analysis feature
+<a name="anchor-6"></a>\*====================================================================*/
+ProError ProTestCurveUiAction (
+    ProAnalysis analysis)
+{
+    Curvedata_t *data;
+<a name="anchor-7"></a>    ProError err = PRO_TK_NO_ERROR;
+    ProSelection *sel;
+    int n_sel;
+    ProFeature feature;
+    ProCurve curve;
+<a name="anchor-8"></a>    ProVector origin, x, y;
+
+    TEST_CALL_REPORT (&quot;ProAnalysisUiAction()&quot;, 
+        &quot;ProTestCurveUiAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-9"></a>/*--------------------------------------------------------------------*\
+    Ask the user to select a curve. 
+\*--------------------------------------------------------------------*/
+    ProMessageDisplay (msgfil, (char *)&quot;USER Select a curve&quot;);
+
+<a name="anchor-10"></a>    while (1)
+    {
+        if (ProSelect ((char *)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel) 
+            != PRO_TK_NO_ERROR || n_sel &lt; 0)
+            return (PRO_TK_USER_ABORT);
+<a name="anchor-11"></a>
+        err = ProSelectionModelitemGet(sel[0], &amp;feature);
+        TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, 
+            &quot;ProTestCurveUiAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-12"></a>        if (!ProTestCurvePlaneGet(&amp;feature, origin, x, y))
+            ProMessageDisplay (msgfil,
+                (char *)&quot;USER That is not a sketched curve. Select again&quot;);
+        else
+            break;
+<a name="anchor-13"></a>    }
+/*--------------------------------------------------------------------*\
+    Get the pointer to the data stored for this analysis feature,
+    and set the datum point in it.
+\*--------------------------------------------------------------------*/
+<a name="anchor-14"></a>    err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+        &quot;ProTestCurveUiAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+	return(PRO_TK_USER_ABORT);
+<a name="anchor-15"></a>
+    memcpy (&amp;data->curve, &amp;feature, sizeof (ProFeature));
+
+    ProMessageDisplay (msgfil, (char *)&quot;USER Enter the Z offset distance|||0.0&quot;); 
+    err = ProMessageDoubleRead(NULL, &amp;data->offset);
+<a name="anchor-16"></a>
+    if (err == PRO_TK_MSG_USER_QUIT)
+        return(PRO_TK_USER_ABORT);
+    if (err != PRO_TK_NO_ERROR)
+        data->offset = 0.0;
+<a name="anchor-17"></a>
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-18"></a>FUNCTION : ProTestCurveDimsAction()
+PURPOSE  : Create dimentions
+\*====================================================================*/
+ProError ProTestCurveDimsAction(
+    ProAnalysis analysis,
+<a name="anchor-19"></a>    double **dims)
+{
+    Curvedata_t *data;
+    ProError err = PRO_TK_NO_ERROR;
+
+<a name="anchor-20"></a>    TEST_CALL_REPORT (&quot;ProAnalysisDimsAction()&quot;, 
+        &quot;ProTestCurveDimsAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProAnalysisInfoGet(analysis, (ProAppData*)&amp;data);
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+<a name="anchor-21"></a>        &quot;ProTestCurveDimsAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+	return(PRO_TK_GENERAL_ERROR);
+
+    err = ProArrayObjectAdd ((ProArray*)dims, PRO_VALUE_UNUSED, 1, 
+<a name="anchor-22"></a>        &amp;data->offset);
+    TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;, 
+        &quot;ProTestCurveDimsAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-23"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestCurveInfoallocAction()
+PURPOSE  : Callback to allocate application data needed to describe
+<a name="anchor-24"></a>		the analysis feature
+\*====================================================================*/
+ProError ProTestCurveInfoallocAction(
+    ProAnalysis analysis)
+{
+<a name="anchor-25"></a>    Curvedata_t *data;
+    ProError err = PRO_TK_NO_ERROR;
+
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoallocAction()&quot;, 
+        &quot;ProTestCurveInfoallocAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-26"></a>/*--------------------------------------------------------------------*\
+    Allocate a data structure
+\*--------------------------------------------------------------------*/
+    data = (Curvedata_t*)calloc(1, sizeof(Curvedata_t));
+    if (data == NULL)
+<a name="anchor-27"></a>        return PRO_TK_USER_ABORT;
+
+/*--------------------------------------------------------------------*\
+    Put the data pointer into the analysis
+\*--------------------------------------------------------------------*/
+<a name="anchor-28"></a>    err = ProAnalysisInfoSet(analysis, data);
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoSet()&quot;, 
+        &quot;ProTestCurveInfoallocAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-29"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestCurveInfofreeAction()
+PURPOSE  : Callback to free the application data
+<a name="anchor-30"></a>\*====================================================================*/
+ProError ProTestCurveInfofreeAction(
+    ProAnalysis analysis)
+{
+    Curvedata_t *data;
+<a name="anchor-31"></a>    ProError err = PRO_TK_NO_ERROR;
+
+    TEST_CALL_REPORT (&quot;ProAnalysisInfofreeAction()&quot;, 
+        &quot;ProTestCurveInfofreeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+/*--------------------------------------------------------------------*\
+<a name="anchor-32"></a>    Get the data pointer from the analysis
+\*--------------------------------------------------------------------*/
+    err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+        &quot;ProTestCurveInfofreeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-33"></a>    if (err != PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Free the data
+<a name="anchor-34"></a>\*--------------------------------------------------------------------*/
+    free (data);
+
+/*--------------------------------------------------------------------*\
+    Set the data pointer in the analysis to NULL
+<a name="anchor-35"></a>\*--------------------------------------------------------------------*/
+    err = ProAnalysisInfoSet (analysis, NULL);
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoSet()&quot;, 
+        &quot;ProTestCurveInfofreeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-36"></a>    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+FUNCTION : ProTestCurveCompcheckAction()
+<a name="anchor-37"></a>PURPOSE  : Callback to tell Pro/E whether computation can be performed
+		in this analysis feature
+\*====================================================================*/
+ProError ProTestCurveCompcheckAction(
+    ProAnalysis analysis)
+<a name="anchor-38"></a>{
+    Curvedata_t *data;
+    ProError err = PRO_TK_NO_ERROR;
+    ProCurve curve;
+    ProEnttype type;
+<a name="anchor-39"></a>
+    TEST_CALL_REPORT (&quot;ProAnalysisComputecheckAction()&quot;, 
+        &quot;ProTestCurveCompcheckAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-40"></a>    Get the analysis data
+\*--------------------------------------------------------------------*/
+    err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+        &quot;ProTestCurveCompcheckAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-41"></a>    if (err != PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+
+    err = ProFeatureTypeGet (&amp;data->curve, (int*)&amp;type);
+    TEST_CALL_REPORT (&quot;ProFeatureTypeGet()&quot;,
+<a name="anchor-42"></a>        &quot;ProTestCurveCompcheckAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (type != PRO_FEAT_CURVE)
+        return (PRO_TK_USER_ABORT);
+
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-43"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestCurveComputeAction()
+PURPOSE  : Callback to perform the analysis feature computation
+<a name="anchor-44"></a>\*====================================================================*/
+ProError ProTestCurveComputeAction(
+    ProAnalysis analysis)
+{
+    ProError err = PRO_TK_NO_ERROR;
+<a name="anchor-45"></a>    ProGeomitem *curves;
+    ProGeomitemdata *gdata;
+    double *par_arr, double1, double2, double3;
+    ProPoint3d *pnt_arr, point1, point2;
+    ProVector *tan_arr, vector1, vector2;
+<a name="anchor-46"></a>    ProBoolean is_inactive;
+    int c, p, n_curves, n_pnt;
+    Curvedata_t *data;
+    ProCurvedata p_curve_data;
+
+<a name="anchor-47"></a>    TEST_CALL_REPORT (&quot;ProAnalysisComputeAction()&quot;, 
+        &quot;ProTestCurveComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Get the application data from the analysis
+<a name="anchor-48"></a>\*--------------------------------------------------------------------*/
+    err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+        &quot;ProTestCurveComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-49"></a>	return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Get the location of the datum point
+\*--------------------------------------------------------------------*/
+<a name="anchor-50"></a>    err = ProUtilCollectFeatureGeomitems (&amp;data->curve, PRO_CURVE, &amp;curves);
+    if (err != PRO_TK_NO_ERROR)
+        return PRO_TK_USER_ABORT;
+
+    ProArraySizeGet (curves, &amp;n_curves);
+<a name="anchor-51"></a>    err = ProArrayAlloc (0, sizeof(ProCurvedata), 1, 
+        (ProArray*)&amp;data->p_curve_data);
+    for (c = 0; c &lt; n_curves; c++)
+    {
+        err = ProGeomitemIsInactive (&amp;curves[c], &amp;is_inactive);
+<a name="anchor-52"></a>        TEST_CALL_REPORT (&quot;ProGeomitemIsInactive()&quot;,
+            &quot;ProTestCurvewrapComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+        if (is_inactive == PRO_B_TRUE)
+            continue;
+
+<a name="anchor-53"></a>        err = ProGeomitemdataGet(&amp;curves[c], &amp;gdata);
+        TEST_CALL_REPORT (&quot;ProGeomitemdataGet()&quot;, 
+            &quot;ProTestCurvewrapComputeAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        switch(gdata->data.p_curve_data->line.type)
+<a name="anchor-54"></a>        {
+	case PRO_ENT_LINE :
+            err = ProLinedataGet (gdata->data.p_curve_data, point1, point2);
+            point1[2] += data->offset;
+            point2[2] += data->offset;
+<a name="anchor-55"></a>            err = ProLinedataInit (point1, point2, &amp;p_curve_data);
+            break;
+        case PRO_ENT_ARC :
+            err = ProArcdataGet (gdata->data.p_curve_data, vector1, vector2, 
+                point1, &amp;double1, &amp;double2, &amp;double3);
+<a name="anchor-56"></a>            point1[2] += data->offset;
+            err = ProArcdataInit (vector1, vector2, point1, double1, 
+                double2, double3, &amp;p_curve_data);
+            break;
+        case PRO_ENT_SPLINE :
+<a name="anchor-57"></a>            err = ProSplinedataGet (gdata->data.p_curve_data, &amp;par_arr,
+                &amp;pnt_arr, &amp;tan_arr, &amp;n_pnt);
+            for (p = 0; p &lt; n_pnt; p++)
+                pnt_arr[p][2] += data->offset;
+            err = ProSplinedataInit (par_arr, pnt_arr, tan_arr, n_pnt,
+<a name="anchor-58"></a>                &amp;p_curve_data);
+            break;
+        default : continue;
+        }
+        err = ProArrayObjectAdd ((ProArray*)&amp;data->p_curve_data,
+<a name="anchor-59"></a>            PRO_VALUE_UNUSED, 1, &amp;p_curve_data);
+
+        err = ProGeomitemdataFree(&amp;gdata);
+        TEST_CALL_REPORT (&quot;ProGeomitemdataFree()&quot;,
+            &quot;ProTestCurvewrapComputeAction()&quot;,
+<a name="anchor-60"></a>            err, err != PRO_TK_NO_ERROR);
+    }   
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-61"></a>
+/*====================================================================*\
+FUNCTION : ProTestCurveDisplayAction()
+PURPOSE  : Callback to display the results of the analysis computation
+\*====================================================================*/
+<a name="anchor-62"></a>ProError ProTestCurveDisplayAction(
+    ProAnalysis analysis)
+{
+    Curvedata_t *data;
+    ProVector pos;
+<a name="anchor-63"></a>    ProError err = PRO_TK_NO_ERROR;
+    ProEnttype type;
+    int i, num, n_pnt;
+    double *par_arr, double1, double2, double3;
+    ProPoint3d *pnt_arr, point1, point2;
+<a name="anchor-64"></a>    ProVector *tan_arr, vector1, vector2;
+
+    TEST_CALL_REPORT (&quot;ProAnalysisDisplayAction()&quot;, 
+        &quot;ProTestCurveDisplayAction()&quot;, err, err != PRO_TK_NO_ERROR);
+/*--------------------------------------------------------------------*\
+<a name="anchor-65"></a>    Get the application data from the analysis
+\*--------------------------------------------------------------------*/
+    err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+        &quot;ProTestCurveDisplayAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-66"></a>    if (err != PRO_TK_NO_ERROR)
+	return(PRO_TK_GENERAL_ERROR);
+
+    err = ProArraySizeGet (data->p_curve_data, &amp;num);
+    TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;, 
+<a name="anchor-67"></a>        &quot;ProTestCurveDisplayAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    for (i = 0; i &lt; num; i++)
+    {
+        err = ProCurvedataTypeGet (&amp;data->p_curve_data[i], &amp;type);
+        TEST_CALL_REPORT (&quot;ProCurvedataTypeGet()&quot;, 
+<a name="anchor-68"></a>            &quot;ProTestCurveDisplayAction()&quot;, err, err != PRO_TK_NO_ERROR);
+        switch (type)
+        {
+            case PRO_ENT_LINE :
+            err = ProLinedataGet (&amp;data->p_curve_data[i], point1, point2);
+<a name="anchor-69"></a>            ProGraphicsPenPosition(point1);
+            ProGraphicsLineDraw(point2);
+            break;
+            case PRO_ENT_ARC :
+            err = ProArcdataGet (&amp;data->p_curve_data[i], vector1, vector2, 
+<a name="anchor-70"></a>                point1, &amp;double1, &amp;double2, &amp;double3);
+            ProGraphicsArcDraw (point1, double3, vector1, vector2);
+            break;
+            case PRO_ENT_SPLINE :
+            err = ProSplinedataGet (&amp;data->p_curve_data[i], &amp;par_arr,
+<a name="anchor-71"></a>                &amp;pnt_arr, &amp;tan_arr, &amp;n_pnt);
+            ProGraphicsPolylineDraw (pnt_arr, n_pnt);
+            break;
+            default : continue; 
+	}
+<a name="anchor-72"></a>    }
+
+   return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-73"></a>/*====================================================================*\
+FUNCTION : ProTestCurveOutputAction()
+PURPOSE  : Callback to write textual information about the result of
+		the computation
+\*====================================================================*/
+<a name="anchor-74"></a>ProError ProTestCurveOutputAction(
+    ProAnalysis analysis,
+    ProLine **lines)
+{
+    Curvedata_t *data;
+<a name="anchor-75"></a>    ProError err = PRO_TK_NO_ERROR;
+    ProCharLine buff;
+    ProLine ll[4];
+
+    TEST_CALL_REPORT (&quot;ProAnalysisOutputAction()&quot;, 
+<a name="anchor-76"></a>        &quot;ProTestCurveOutputAction()&quot;, err, err != PRO_TK_NO_ERROR);
+/*--------------------------------------------------------------------*\
+    Get the application dara from the analysis
+\*--------------------------------------------------------------------*/
+    err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+<a name="anchor-77"></a>    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+        &quot;ProTestCurveOutputAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+	return(PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-78"></a>/*--------------------------------------------------------------------*\
+    Write the origin of the csys
+\*--------------------------------------------------------------------*/
+    ProTKSprintf(buff,&quot;Curve offset = %0.2f&quot;,
+	    data->offset);
+<a name="anchor-79"></a>    ProStringToWstring(ll[0], buff);
+
+    err = ProArrayObjectAdd ((ProArray*)lines, PRO_VALUE_UNUSED, 1, ll);
+    TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;, 
+        &quot;ProTestCurveOutputAction()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-80"></a>
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-81"></a>FUNCTION : ProTestCurveSavecheckAction()
+PURPOSE  : Callback to tell Pro/E whether the analysis application
+		data can be saved
+\*====================================================================*/
+ProError ProTestCurveSavecheckAction(
+<a name="anchor-82"></a>    ProAnalysis analysis)
+{
+    ProError err = PRO_TK_NO_ERROR;
+    
+    TEST_CALL_REPORT (&quot;ProAnalysisSavecheckAction()&quot;, 
+<a name="anchor-83"></a>        &quot;ProTestCurveSavecheckAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-84"></a>/*====================================================================*\
+FUNCTION : ProTestCurveInfosaveAction()
+PURPOSE  : Callback to tell Pro/E what element references are required
+		by the analysis feature
+\*====================================================================*/
+<a name="anchor-85"></a>ProError ProTestCurveInfosaveAction(
+    ProAnalysis analysis,
+    ProFeature  *feature,
+    ProSelection **references)
+{
+<a name="anchor-86"></a>    ProError err = PRO_TK_NO_ERROR;
+    Curvedata_t *data;
+    ProSelection sel;
+
+    TEST_CALL_REPORT (&quot;ProAnalysisInfosaveAction()&quot;, 
+<a name="anchor-87"></a>        &quot;ProTestCurveInfosaveAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Get the application data from the analysis
+\*--------------------------------------------------------------------*/
+<a name="anchor-88"></a>    err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+        &quot;ProTestCurveInfosaveAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+        return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-89"></a>
+/*--------------------------------------------------------------------*\
+    Output the reference to the datum point
+\*--------------------------------------------------------------------*/
+    err = ProSelectionAlloc (NULL, &amp;data->curve, &amp;sel);
+<a name="anchor-90"></a>    TEST_CALL_REPORT (&quot;ProSelectionAlloc()&quot;, 
+        &quot;ProTestCurveInfosaveAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    err = ProArrayObjectAdd((ProArray*)references, PRO_VALUE_UNUSED, 1, &amp;sel);
+    TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;, 
+<a name="anchor-91"></a>        &quot;ProTestCurveInfosaveAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-92"></a>
+/*====================================================================*\
+FUNCTION : ProTestCurveInforetrieveAction()
+PURPOSE  : Callback to get the references Pro/E has stored with the
+		analysis feature
+<a name="anchor-93"></a>\*====================================================================*/
+ProError ProTestCurveInforetrieveAction(
+    ProAnalysis analysis,
+    ProFeature *feature,
+    ProSelection *references)
+<a name="anchor-94"></a>{
+    Curvedata_t *data;
+    int n_dims;
+    ProDimension *p_dims;
+    ProError err = PRO_TK_NO_ERROR;
+<a name="anchor-95"></a>
+    TEST_CALL_REPORT (&quot;ProAnalysisInforetrieveAction()&quot;, 
+        &quot;ProTestCurveInforetrieveAction()&quot;, 
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-96"></a>    err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+        &quot;ProTestCurveInforetrieveAction()&quot;, 
+        err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-97"></a>	return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Copy the first reference to the application as the datum point
+\*--------------------------------------------------------------------*/
+<a name="anchor-98"></a>    err = ProSelectionModelitemGet(references[0], &amp;data->curve);
+    TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, 
+        &quot;ProTestCurveInforetrieveAction()&quot;, 
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-99"></a>/*--------------------------------------------------------------------*\
+    If the feature has a dimension, take its value as the offset
+\*--------------------------------------------------------------------*/
+    err = ProTestFeatureDimensionsCollect (feature, &amp;p_dims);
+    err = ProArraySizeGet ((ProArray)p_dims, &amp;n_dims);
+<a name="anchor-100"></a>
+    if(n_dims > 0)
+    {
+        double dim_value;
+        err = ProDimensionValueGet(&amp;p_dims[0], &amp;dim_value);
+<a name="anchor-101"></a>        data->offset = dim_value;
+    }
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-102"></a>
+/*====================================================================*\
+FUNCTION : ProTestCurveInfocopyAction()
+PURPOSE  : 
+\*====================================================================*/
+<a name="anchor-103"></a>ProError ProTestCurveInfocopyAction(
+    ProAnalysis from,
+    ProAnalysis to)
+{
+    Curvedata_t *fdata, *tdata;
+<a name="anchor-104"></a>    ProError err = PRO_TK_NO_ERROR;
+
+    TEST_CALL_REPORT (&quot;ProAnalysisInfocopyAction()&quot;, 
+        &quot;ProTestCurveInfocopyAction()&quot;, 
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-105"></a>
+/*--------------------------------------------------------------------*\
+    Get the application data from the analyses
+\*--------------------------------------------------------------------*/
+    err = ProAnalysisInfoGet (from, (ProAppData*)&amp;fdata);
+<a name="anchor-106"></a>    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+        &quot;ProTestCurveInfocopyAction()&quot;, 
+        err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+	return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-107"></a>    
+    err = ProAnalysisInfoGet (to,   (ProAppData*)&amp;tdata);
+     TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;, 
+        &quot;ProTestCurveInfocopyAction()&quot;, 
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-108"></a>    if (err != PRO_TK_NO_ERROR)
+	return(PRO_TK_GENERAL_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Copy the application-specific data (everything except references)
+<a name="anchor-109"></a>\*--------------------------------------------------------------------*/
+    memcpy (&amp;tdata->curve, &amp;fdata->curve, sizeof (ProFeature));
+    tdata->offset = fdata->offset;
+    
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-110"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestCurveResultAction()
+PURPOSE  : Callback to give Pro/E the feature parameters and geometry
+<a name="anchor-111"></a>		that the analysis feature must contain
+\*====================================================================*/
+ProError ProTestCurveResultAction(
+    ProAnalysis analysis,
+    ProBoolean names_only,
+<a name="anchor-112"></a>    ProAnalysisParameter **parameters,
+    ProAnalysisGeomitem  **geometry)
+{
+    Curvedata_t *data;
+    ProAnalysisGeomitem geomitem;
+<a name="anchor-113"></a>    ProAnalysisParameter param;
+    ProError err = PRO_TK_NO_ERROR;
+    int num, i, n_pnt, s;
+    double *par_arr, double1, double2, double3;
+    ProPoint3d *pnt_arr, point1, point2;
+<a name="anchor-114"></a>    ProVector *tan_arr, vector1, vector2;
+
+    TEST_CALL_REPORT (&quot;ProAnalysisResultAction()&quot;, 
+        &quot;ProTestCurveResultAction()&quot;, 
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-115"></a>
+/*--------------------------------------------------------------------*\
+    Get the application data from the analysis
+\*--------------------------------------------------------------------*/
+    err = ProAnalysisInfoGet (analysis, (ProAppData*)&amp;data);
+<a name="anchor-116"></a>    TEST_CALL_REPORT (&quot;ProAnalysisInfoGet()&quot;,
+        &quot;ProTestCurveResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+	return(PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-117"></a>/*  CURVE */
+
+    ProStringToWstring (geomitem.name,(char *)&quot;DTM_CURVE&quot;);
+    geomitem.create = PRO_B_TRUE;
+    geomitem.type = PRO_ANALYSIS_CURVE;
+<a name="anchor-118"></a>
+    if (!names_only)
+    {
+        ProArraySizeGet (data->p_curve_data, &amp;num);
+        ProArrayAlloc (num, sizeof(ProAnalysisEntity), 1, 
+<a name="anchor-119"></a>            (ProArray*)&amp;geomitem.shapes);
+        for (i = 0; i &lt; num; i++)
+	{
+            err = ProCurvedataAlloc (&amp;geomitem.shapes[i].curve);
+            TEST_CALL_REPORT (&quot;ProCurvedataAlloc()&quot;,
+<a name="anchor-120"></a>                &quot;ProTestCurveResultAction()&quot;, err, 
+                err != PRO_TK_NO_ERROR);
+            switch (data->p_curve_data[i].line.type)
+	    {
+      	    case PRO_ENT_LINE :
+<a name="anchor-121"></a>                err = ProLinedataGet (&amp;data->p_curve_data[i], point1, 
+                    point2);               
+                err = ProLinedataInit (point1, point2, 
+                    geomitem.shapes[i].curve);
+                break;
+<a name="anchor-122"></a>            case PRO_ENT_ARC :
+                err = ProArcdataGet (&amp;data->p_curve_data[i], vector1, 
+                    vector2, point1, &amp;double1, &amp;double2, &amp;double3);
+                err = ProArcdataInit (vector1, vector2, point1, double1, 
+                    double2, double3, geomitem.shapes[i].curve);
+<a name="anchor-123"></a>                break;
+            case PRO_ENT_SPLINE :
+                err = ProSplinedataGet (&amp;data->p_curve_data[i], &amp;par_arr,
+                    &amp;pnt_arr, &amp;tan_arr, &amp;n_pnt);
+                TEST_CALL_REPORT (&quot;ProSplinedataGet()&quot;,
+<a name="anchor-124"></a>                    &quot;ProTestCurveResultAction()&quot;, err, 
+                    err != PRO_TK_NO_ERROR);
+                err = ProSplinedataInit (par_arr, pnt_arr, tan_arr, n_pnt,
+                    geomitem.shapes[i].curve);
+                TEST_CALL_REPORT (&quot;ProSplinedataInit()&quot;,
+<a name="anchor-125"></a>                    &quot;ProTestCurveResultAction()&quot;, err, 
+                    err != PRO_TK_NO_ERROR);
+                break;
+	    default:
+                break;
+<a name="anchor-126"></a>	    }
+        }
+    }
+    err = ProArrayObjectAdd((ProArray*)geometry, PRO_VALUE_UNUSED, 
+        1, &amp;geomitem);
+<a name="anchor-127"></a>    TEST_CALL_REPORT (&quot;ProArrayObjectAdd()&quot;,
+        &quot;ProTestCurveResultAction()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-128"></a>
+</pre>
+</body>
+</html>

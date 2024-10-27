@@ -1,0 +1,1604 @@
+<HTML>
+<HEAD>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<TITLE>ProSolid.h</TITLE>
+</HEAD>
+<BODY BGCOLOR="#ffffff">
+<PRE>#ifndef <A HREF="prosolid_h.html#PROSOLID_H">PROSOLID_H</A>
+<A name="PROSOLID_H"></A>#define PROSOLID_H
+
+/* Creo Parametric TOOLKIT declarations for <A HREF="proobjects_h.html#ProSolid">ProSolid</A> object related actions */
+
+#include &lt;<A HREF="proobjects_h.html">ProObjects.h</A>&gt;
+#include &lt;<A HREF="promdl_h.html">ProMdl.h</A>&gt;
+#include &lt;<A HREF="profeature_h.html">ProFeature.h</A>&gt;
+#include &lt;<A HREF="proselection_h.html">ProSelection.h</A>&gt;
+#include &lt;<A HREF="procolor_h.html">ProColor.h</A>&gt;
+#include &lt;<A HREF="proanalysis_h.html">ProAnalysis.h</A>&gt;
+#include &lt;<A HREF="prodimension_h.html">ProDimension.h</A>&gt;
+
+
+
+<A name="ProModelClass"></A>typedef enum
+{
+<A name="PROMODELCLASS_NONE"></A>   PROMODELCLASS_NONE = -1,
+<A name="PROMODELCLASS_FINE"></A>   PROMODELCLASS_FINE = 0,
+<A name="PROMODELCLASS_MEDIUM"></A>   PROMODELCLASS_MEDIUM = 1,
+<A name="PROMODELCLASS_COARSE"></A>   PROMODELCLASS_COARSE = 2,
+<A name="PROMODELCLASS_VERY_COARSE"></A>   PROMODELCLASS_VERY_COARSE = 3
+} <A HREF="prosolid_h.html#ProModelClass">ProModelClass</A>;
+
+<A name="ProSolidOutlExclTypes"></A>typedef enum pro_solid_outline_exclude
+{
+<A name="PRO_OUTL_EXC_NOT_USED"></A>   PRO_OUTL_EXC_NOT_USED     = 1,
+<A name="PRO_OUTL_EXC_DATUM_PLANE"></A>   PRO_OUTL_EXC_DATUM_PLANE  = 2,
+<A name="PRO_OUTL_EXC_DATUM_POINT"></A>   PRO_OUTL_EXC_DATUM_POINT  = 3,
+<A name="PRO_OUTL_EXC_DATUM_CSYS"></A>   PRO_OUTL_EXC_DATUM_CSYS   = 4,
+<A name="PRO_OUTL_EXC_DATUM_AXES"></A>   PRO_OUTL_EXC_DATUM_AXES   = 5,
+<A name="PRO_OUTL_EXC_FACETS"></A>   PRO_OUTL_EXC_FACETS       = 6,
+<A name="PRO_OUTL_EXC_ALL_CRVS"></A>   PRO_OUTL_EXC_ALL_CRVS     = 7
+
+
+} <A HREF="prosolid_h.html#ProSolidOutlExclTypes">ProSolidOutlExclTypes</A>;
+
+<A name="ProRay"></A>typedef struct
+{
+   <A HREF="proobjects_h.html#Pro3dPnt">Pro3dPnt</A> start_point;
+   <A HREF="proobjects_h.html#ProVector">ProVector</A> dir_vector;
+} <A HREF="prosolid_h.html#ProRay">ProRay</A>;
+
+
+<A name="ProMassProperty"></A>typedef struct pro_mass_property
+{
+   double   volume;
+   double   surface_area;
+   double   density;
+   double   mass;
+
+   /* center of gravity with respect to coordinate frame */
+   double   center_of_gravity[3];
+
+   /* inertia matrix with respect to coordinate frame */
+   /* (Element ij is the integral of x_i x_j over the object) */
+   double   coor_sys_inertia[3][3];
+
+   /* inertia tensor with respect to coordinate frame */
+   /* inertia_tensor = trace(inertia) * identity - inertia */
+   double   coor_sys_inertia_tensor[3][3];
+
+   /* inertia tensor translated to center of gravity */
+   double   cg_inertia_tensor[3][3];
+
+   /* principal moments of inertia (eigenvalues of cg_inertia_tensor) */
+   double   principal_moments[3];
+
+   /* principal axes (the eigenvectors of cg_inertia_tensor) */
+   /* The vectors are stored in columns */
+   double   principal_axes[3][3];
+} <A HREF="prosolid_h.html#ProMassProperty">ProMassProperty</A>;
+
+/* <A HREF="3909.html">ProSolidRegenerate</A>() bit_flags */
+<A name="PRO_REGEN_NO_FLAGS"></A>#define PRO_REGEN_NO_FLAGS                  0
+<A name="PRO_REGEN_CAN_FIX"></A>#define PRO_REGEN_CAN_FIX                   1  /* Allow UI in FixModel        */
+<A name="PRO_REGEN_SKIP_DISALLOW_SYS_RECOVER"></A>#define PRO_REGEN_SKIP_DISALLOW_SYS_RECOVER 2 
+<A name="PRO_REGEN_UPDATE_INSTS"></A>#define PRO_REGEN_UPDATE_INSTS              4  /* Update instances in memory. */
+                                               /* May cause slower performance*/
+<A name="PRO_REGEN_RGN_BCK_USING_DISK"></A>#define PRO_REGEN_RGN_BCK_USING_DISK        8  /* Use disk for regen backup   */
+/* Note: The flag PRO_REGEN_RGN_BCK_USING_DISK is obsolete */
+
+<A name="PRO_REGEN_FORCE_REGEN"></A>#define PRO_REGEN_FORCE_REGEN               16 /* Force full object           */
+                                               /* regeneration                */
+<A name="PRO_REGEN_UPDATE_ASSEMBLY_ONLY"></A>#define PRO_REGEN_UPDATE_ASSEMBLY_ONLY      32 /* Update assembly and sub-asm */
+/* placements, regenerate assembly features and intersected parts.            */
+/* This flag is affected by the following config options: */
+/* - bump_revnum_on_retr_regen -- If no, the assembly will not be marked as   */
+/* modified when updating the component placements using this option. This is */
+/* similar to retrieval regeneration in the Creo Parametric UI.                  */
+/* - regen_int_mdls_on_retr -- If yes, assembly features are updated during   */
+/* regeneration.                                                              */
+/* CANNOT be used with <A HREF="prosolid_h.html#PRO_REGEN_FORCE_REGEN">PRO_REGEN_FORCE_REGEN</A>                                  */
+
+<A name="PRO_REGEN_RESUME_EXCL_COMPS"></A>#define PRO_REGEN_RESUME_EXCL_COMPS         64 /* This option will make       */
+/* Creo Parametric resume simplified-rep excluded components (if the models are  */
+/* in memory) during regeneration. This could result in a more accurate       */
+/* regeneration of the components in the simplified representation.           */
+
+<A name="PRO_REGEN_NO_RESOLVE_MODE"></A>#define PRO_REGEN_NO_RESOLVE_MODE    128 /* regenerate in no resolve mode     */
+<A name="PRO_REGEN_RESOLVE_MODE"></A>#define PRO_REGEN_RESOLVE_MODE       256 /* regenerate in resolve mode        */
+/* The above flags allow temporary override default settings, which control   */
+/* regeneration behavior                                                      */
+<A name="PRO_REGEN_ALLOW_CONFIRM"></A>#define PRO_REGEN_ALLOW_CONFIRM      512 /* Deprecated since Creo 4. Allows Regen Failure popup <A HREF="prouidialog_h.html#dialog">dialog</A> */
+<A name="PRO_REGEN_UNDO_IF_FAIL"></A>#define PRO_REGEN_UNDO_IF_FAIL      1024 /* Undo, if possible, in case of fail*/
+/* The above two flags should be used only with <A HREF="prosolid_h.html#PRO_REGEN_NO_RESOLVE_MODE">PRO_REGEN_NO_RESOLVE_MODE</A> or  */
+/* if the current mode is 'No Resolve'.  Also, they cannot be used together.  */
+/* If one breaks these rules <A HREF="3909.html">ProSolidRegenerate</A> will return <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_CONTEXT">PRO_TK_BAD_CONTEXT</A>*/
+<A name="PRO_REGEN_SKIP_INSTS_REMAKE"></A>#define PRO_REGEN_SKIP_INSTS_REMAKE 2048 /*Reserved for internal use.         */
+/* Skip remake of instances in memory                                         */
+
+/* Don't forget to change <A HREF="prosolid_h.html#PRO_REGEN_LAST_USED">PRO_REGEN_LAST_USED</A> if you add a flag!              */
+
+<A name="PRO_REGEN_LAST_USED"></A>#define PRO_REGEN_LAST_USED  <A HREF="prosolid_h.html#PRO_REGEN_SKIP_INSTS_REMAKE">PRO_REGEN_SKIP_INSTS_REMAKE</A>
+
+/*===========================================================================*/
+
+<A HREF="proansi_h.html#PRO_BEGIN_C_DECLS">PRO_BEGIN_C_DECLS</A>
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3905.html">ProSolidInit</A>   (<A HREF="prosizeconst_h.html#ProName">ProName</A>     name, 
+                                <A HREF="proobjects_h.html#ProType">ProType</A>     type,
+                                <A HREF="proobjects_h.html#ProSolid">ProSolid</A>   *p_handle);
+/*
+    Purpose: &lt;b&gt;Note:&lt;/b&gt; This function is deprecated Use <A HREF="3906.html">ProSolidMdlnameInit</A> 
+             instead. &lt;b&gt;Note: &lt;b&gt;This function accepts only <A HREF="proobjects_h.html#ProType">ProType</A> values 
+             which are listed in <A HREF="promdl_h.html#ProMdlType">ProMdlType.</A> Passing any other values may 
+             result in unpredictable behavior. Initializes the &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt; 
+             handle.
+
+    Input Arguments:
+        name - The solid name
+        type - The solid type
+
+    Output Arguments:
+        p_handle - The handle to initialize
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully initialized the handle.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3906.html">ProSolidMdlnameInit</A>( <A HREF="prosizeconst_h.html#ProMdlName">ProMdlName</A>  name, 
+                                     <A HREF="promdl_h.html#ProMdlfileType">ProMdlfileType</A>     type,
+                                     <A HREF="proobjects_h.html#ProSolid">ProSolid</A>   *p_handle);
+/*
+    Purpose: Initializes the &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt; handle. &lt;b&gt;Note:&lt;/b&gt; In Creo 3 
+             this function does not support names longer than 80 characters. It 
+             will return <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> for longer names. The support for 
+             <A HREF="prosizeconst_h.html#ProMdlName">ProMdlName</A> will be added in a future release.
+
+    Input Arguments:
+        name - The solid name
+        type - The solid type
+
+    Output Arguments:
+        p_handle - The handle to initialize
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully initialized the handle.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3907.html">ProSolidCreate</A>  (<A HREF="prosizeconst_h.html#ProName">ProName</A>     name, 
+                                 <A HREF="proobjects_h.html#ProType">ProType</A>     type,
+                                 <A HREF="proobjects_h.html#ProSolid">ProSolid</A>   *p_handle);
+/*
+    Purpose: &lt;b&gt;Note:&lt;/b&gt; This function is deprecated Use <A HREF="3908.html">ProSolidMdlnameCreate</A> 
+             instead. Creates a new Creo Parametric object of the specified 
+             type, and initializes the &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt; handle.
+
+    Input Arguments:
+        name - The name of the new object
+        type - The solid type (<A HREF="proobjects_h.html#PRO_PART">PRO_PART</A> or <A HREF="proobjects_h.html#PRO_ASSEMBLY">PRO_ASSEMBLY</A>)
+
+    Output Arguments:
+        p_handle - The handle to initialize
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully created the new object.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_FOUND">PRO_TK_E_FOUND</A> - An object of the specified name and type already 
+                         exists.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - The object could not be created.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_LINE_TOO_LONG">PRO_TK_LINE_TOO_LONG</A> - Name length of the new object is more than 31 
+                               chars.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3908.html">ProSolidMdlnameCreate</A> ( <A HREF="prosizeconst_h.html#ProMdlName">ProMdlName</A>  name, 
+                                        <A HREF="promdl_h.html#ProMdlfileType">ProMdlfileType</A>     type,
+                                        <A HREF="proobjects_h.html#ProSolid">ProSolid</A>   *p_handle);
+/*
+    Purpose: Creates a new Creo Parametric object of the specified type, and 
+             initializes the &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt; handle. &lt;b&gt;Note:&lt;/b&gt; In Creo 3 
+             this function does not support names longer than 31 characters. It 
+             will return <A HREF="protoolkiterrors_h.html#PRO_TK_LINE_TOO_LONG">PRO_TK_LINE_TOO_LONG</A> for longer names. The support for 
+             <A HREF="prosizeconst_h.html#ProMdlName">ProMdlName</A> will be added in a future release.
+
+    Input Arguments:
+        name - The name of the new object
+        type - The solid type (<A HREF="proobjects_h.html#PRO_PART">PRO_PART</A> or <A HREF="proobjects_h.html#PRO_ASSEMBLY">PRO_ASSEMBLY</A>)
+
+    Output Arguments:
+        p_handle - The handle to initialize
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully created the new object.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_FOUND">PRO_TK_E_FOUND</A> - An object of the specified name and type already 
+                         exists.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - The object could not be created.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_LINE_TOO_LONG">PRO_TK_LINE_TOO_LONG</A> - Name length of the new object is more than 31 
+                               chars.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3909.html">ProSolidRegenerate</A>  (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>    p_handle,
+                                                  int  flags);
+/*
+    Purpose: Regenerates the specified &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt;.
+
+    Input Arguments:
+        p_handle - The &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt; to regenerate.
+        flags - Bitmask containing one or more of the bit flags PRO_REGEN_*
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully regenerated the 
+                          &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt;.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_UNATTACHED_FEATS">PRO_TK_UNATTACHED_FEATS</A> - Unattached features were detected, but there 
+                                  was no regeneration failure
+        <A HREF="protoolkiterrors_h.html#PRO_TK_REGEN_AGAIN">PRO_TK_REGEN_AGAIN</A> - The model is too complex to regenerate the first 
+                             time
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - Failure in regeneration
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - Incompatible flags used.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_CONTEXT">PRO_TK_BAD_CONTEXT</A> - Invalid regen flags and/or combination of 
+                             regeneration flags if mixed with 
+                             <A HREF="prosolid_h.html#PRO_REGEN_FORCE_REGEN">PRO_REGEN_FORCE_REGEN.</A>
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3910.html">ProSolidToPostfixId</A>   (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>    handle,
+                                       int        *p_id);
+/*
+    Purpose: Retrieves an internal postfix identifier for the specified solid 
+             (to be used in relations).
+
+    Input Arguments:
+        handle - The &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt; for which to retrieve the postfix 
+                 identifier
+
+    Output Arguments:
+        p_id - The postfix identifier
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The specified &lt;i&gt;p_handle&lt;/i&gt; does not correspond 
+                            to any valid model in session.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - There was a general internal failure.
+
+*/
+     
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3911.html">ProPostfixIdToSolid</A>  (int         id,
+                                      <A HREF="proobjects_h.html#ProSolid">ProSolid</A>   *p_handle);
+/*
+    Purpose: Retrieves the solid handle, given the postfix identifier.
+
+    Input Arguments:
+        id - The postfix identifier of the solid
+
+    Output Arguments:
+        p_handle - The address of the &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt; handle
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The specified identifier does not correspond to any 
+                            valid model in session.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - There was a general internal failure.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3912.html">ProSolidDisplay</A>       (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>   p_handle);
+/*
+    Purpose: Displays the specified object. &lt;b&gt;Note&lt;/b&gt;:
+             &lt;ul&gt; 
+             &lt;li&gt;If no model is currently displayed, the specified model will 
+             be placed in the base window. 
+             &lt;li&gt;If a model is already displayed in the base window, the 
+             specified model will be placed in an accessory window. The current 
+             window will not be affected. 
+             &lt;li&gt;If the specified model has been assigned a new window, the 
+             model will be displayed in the new window provided a model is 
+             present in the base window, else the model is displayed in the 
+             base window.
+             &lt;/ul&gt;
+
+    Input Arguments:
+        p_handle - The object to display
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully displayed the object.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - The system failed to create a window.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The specified argument is invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_FOUND">PRO_TK_E_FOUND</A> - The model is already in a window (from calling 
+                         &lt;b&gt;<A HREF="6129.html">ProObjectwindowMdlnameCreate</A>()&lt;/b&gt;).
+
+    See Also:
+        <A HREF="6129.html">ProObjectwindowMdlnameCreate</A>()
+*/
+
+/*===========================================================================*/
+/*                        Modelitem Visit actions                            */
+/*===========================================================================*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3913.html">ProAxisVisitAction</A>) ( <A HREF="proobjects_h.html#ProAxis">ProAxis</A>  axis,
+                                         <A HREF="protoolkiterrors_h.html#ProError">ProError</A> status,
+                                         <A HREF="proobjects_h.html#ProAppData">ProAppData</A> app_data );
+/*
+    Purpose: This is the generic function for visiting an axis.
+
+    Input Arguments:
+        axis - The axis handle
+        status - The status
+        app_data - The application data passed to the function 
+                   &lt;b&gt;<A HREF="3915.html">ProSolidAxisVisit</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Continue visiting.
+        Any other value - Stop visiting and return this error from the visit 
+                          function.
+
+*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3914.html">ProAxisFilterAction</A>) ( <A HREF="proobjects_h.html#ProAxis">ProAxis</A>  axis,
+                                          <A HREF="proobjects_h.html#ProAppData">ProAppData</A> app_data );
+/*
+    Purpose: This is the generic function for filtering an axis.
+
+    Input Arguments:
+        axis - The axis handle
+        app_data - The application data passed to the function 
+                   &lt;b&gt;<A HREF="3915.html">ProSolidAxisVisit</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CONTINUE">PRO_TK_CONTINUE</A> - Skip visiting this axis and go to the next axis.
+        Other - Call the visit action for this axis. The return value is passed 
+                as input to the visit action.
+
+*/
+       
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3915.html">ProSolidAxisVisit</A>  (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>     p_handle, 
+                                    <A HREF="3913.html">ProAxisVisitAction</A>  visit_action,
+                                    <A HREF="3914.html">ProAxisFilterAction</A> filter_action,
+                                    <A HREF="proobjects_h.html#ProAppData">ProAppData</A>   app_data);
+/*
+    Purpose: Visits all the axes in the specified &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt;.
+
+    Input Arguments:
+        p_handle - The solid handle.
+        visit_action - The visiting function. If it returns anything other than 
+                       <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A>, visiting stops.
+        filter_action - The filter function. If NULL, all axes are visited 
+                        using the action function.
+        app_data - The application data passed to the filter and visiting 
+                   functions.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully visited all the axes.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - Either no axes exist, or they were all filtered 
+                             out by the filter function.
+        Other - Any other value is the value returned by the action function 
+                (visiting stopped).
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3916.html">ProSolidCsysVisit</A>  (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>     p_handle, 
+                                    <A HREF="3369.html">ProCsysVisitAction</A>  visit_action,
+                                    <A HREF="3370.html">ProCsysFilterAction</A> filter_action,
+                                    <A HREF="proobjects_h.html#ProAppData">ProAppData</A>   app_data);
+/*
+    Purpose: Visits all the coordinate systems in the specified solid.
+
+    Input Arguments:
+        p_handle - The solid handle.
+        visit_action - The visiting function. If it returns anything other than 
+                       <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A>, visiting stops.
+        filter_action - The filter function. If NULL, all items are visited 
+                        using the action function.
+        app_data - The application data passed to the filter and visiting 
+                   functions.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully visited all the items.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - Either no coordinate systems exist, or they were 
+                             all filtered out by the filter function.
+        Other - Any other value is the value returned by the action function 
+                (visiting stopped).
+
+*/
+
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3917.html">ProSurfaceVisitAction</A>) (<A HREF="proobjects_h.html#ProSurface">ProSurface</A> p_surface,
+                                           <A HREF="protoolkiterrors_h.html#ProError">ProError</A> status,
+                                           <A HREF="proobjects_h.html#ProAppData">ProAppData</A> app_data );
+/*
+    Purpose: This is the generic function for visiting a surface.
+
+    Input Arguments:
+        p_surface - The surface handle
+        status - The status
+        app_data - The application data passed to the function 
+                   &lt;b&gt;<A HREF="3919.html">ProSolidSurfaceVisit</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Continue visiting.
+        Any other value - Stop visiting and return this error from the visit 
+                          function.
+
+*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3918.html">ProSurfaceFilterAction</A>) (<A HREF="proobjects_h.html#ProSurface">ProSurface</A> p_surface,
+                                            <A HREF="proobjects_h.html#ProAppData">ProAppData</A> app_data );
+/*
+    Purpose: This is the generic function for filtering a surface.
+
+    Input Arguments:
+        p_surface - The surface handle
+        app_data - The application data passed to the function 
+                   &lt;b&gt;<A HREF="3919.html">ProSolidSurfaceVisit</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CONTINUE">PRO_TK_CONTINUE</A> - Skip visiting this surface and go to the next 
+                          surface.
+        Other - Call the visit action for this surface. The return value is 
+                passed as input to the visit action.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3919.html">ProSolidSurfaceVisit</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>     p_handle, 
+                                      <A HREF="3917.html">ProSurfaceVisitAction</A> visit_action,
+                                      <A HREF="3918.html">ProSurfaceFilterAction</A> filter_action,
+                                      <A HREF="proobjects_h.html#ProAppData">ProAppData</A>   app_data);
+/*
+    Purpose: Visits all the surfaces in the specified solid.
+
+    Input Arguments:
+        p_handle - The solid handle.
+        visit_action - The visiting function. If it returns anything other than 
+                       <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A>, visiting stops.
+        filter_action - The filter function. If NULL, all surfaces are are 
+                        visited using the action function.
+        app_data - The application data passed to the filter and visiting 
+                   functions.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully visited all the surfaces.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - Either no surfaces exist, or they were all 
+                             filtered out by the filter function.
+        Other - Any other value is the value returned by the action function 
+                (visiting stopped).
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3920.html">ProSolidQuiltVisit</A>    (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>     p_handle, 
+                                       <A HREF="3371.html">ProQuiltVisitAction</A>  visit_action,
+                                       <A HREF="3372.html">ProQuiltFilterAction</A>  filter_action,
+                                       <A HREF="proobjects_h.html#ProAppData">ProAppData</A>            app_data);
+/*
+    Purpose: Visits all the quilts in the specified solid.
+
+    Input Arguments:
+        p_handle - The solid handle.
+        visit_action - The visiting function. If it returns anything other than 
+                       <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A>, visiting stops.
+        filter_action - The filter function. If NULL, all quilts are visited 
+                        using the action function.
+        app_data - The application data passed to the filter and visiting 
+                   functions.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully visited all the quilts.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - Either no quilts exist, or they were all filtered 
+                             out by the filter function.
+        Other - Any other value is the value returned by the action function 
+                (visiting stopped).
+
+*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3921.html">ProFeatureVisitAction</A>) ( <A HREF="proobjects_h.html#ProFeature">ProFeature</A>* p_feature,
+                                            <A HREF="protoolkiterrors_h.html#ProError">ProError</A> status,
+                                            <A HREF="proobjects_h.html#ProAppData">ProAppData</A> app_data );
+/*
+    Purpose: This is the generic function for visiting a feature.
+
+    Input Arguments:
+        p_feature - The feature handle
+        status - The status
+        app_data - The application data passed to the function 
+                   &lt;b&gt;<A HREF="3923.html">ProSolidFeatVisit</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Continue visiting.
+        Any other value - Stop visiting and return this error from the visit 
+                          function.
+
+*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3922.html">ProFeatureFilterAction</A>) ( <A HREF="proobjects_h.html#ProFeature">ProFeature</A>* p_feature,
+                                             <A HREF="proobjects_h.html#ProAppData">ProAppData</A> app_data );
+/*
+    Purpose: This is the generic function for filtering features.
+
+    Input Arguments:
+        p_feature - The feature handle
+        app_data - The application data passed to the function 
+                   &lt;b&gt;<A HREF="3923.html">ProSolidFeatVisit</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CONTINUE">PRO_TK_CONTINUE</A> - Skip visiting this feature and go to the next 
+                          feature.
+        Other - Call the visit action for this feature. The return value is 
+                passed as input to the visit action.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3923.html">ProSolidFeatVisit</A>     (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>     p_handle, 
+                                       <A HREF="3921.html">ProFeatureVisitAction</A>  visit_action,
+                                      <A HREF="3922.html">ProFeatureFilterAction</A>  filter_action,
+                                       <A HREF="proobjects_h.html#ProAppData">ProAppData</A>   app_data);
+/*
+    Purpose: Visits all the features in the specified solid. 
+             &lt;P&gt; &lt;B&gt;NOTE:&lt;/B&gt; Internal features are also visited. Use 
+             &lt;B&gt;<A HREF="1424.html">ProFeatureVisibilityGet</A>()&lt;/B&gt; to filter/skip them if required.
+
+    Input Arguments:
+        p_handle - The solid handle.
+        visit_action - The visiting function. If it returns anything other than 
+                       <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A>, visiting stops.
+        filter_action - The filter function. If NULL, all features in the 
+                        specified solid are visited using the action function.
+        app_data - The application data passed to the filter and visiting 
+                   functions.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully visited all the features.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - Either no features exist, or they were all 
+                             filtered out by the filter function.
+        Other - Any other value is the value returned by the action function 
+                (visiting stopped).
+
+    See Also:
+        <A HREF="1424.html">ProFeatureVisibilityGet</A>()
+*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3924.html">ProSolidDispCompFilterAction</A>) (<A HREF="proobjects_h.html#ProAsmcomppath">ProAsmcomppath</A> *p_path,
+                                                  <A HREF="proobjects_h.html#ProSolid">ProSolid</A>        handle,
+                                                  <A HREF="proobjects_h.html#ProAppData">ProAppData</A>      app_data);
+/*
+    Purpose: This is used to filter assembly components. If it returns 
+             <A HREF="protoolkiterrors_h.html#PRO_TK_CONTINUE">PRO_TK_CONTINUE</A>, all the SUB-COMPONENTS of handle will not be 
+             visited.
+
+    Input Arguments:
+        p_path - The assembly component path
+        handle - The component solid handle
+        app_data - The application data passed to the function 
+                   &lt;b&gt;<A HREF="3926.html">ProSolidDispCompVisit</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CONTINUE">PRO_TK_CONTINUE</A> - Skip visiting this assembly component and go to the 
+                          next.
+        Other - Call the visit action for this assembly component. The return 
+                value is passed as input to the visit action.
+
+*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3925.html">ProSolidDispCompVisitAction</A>) (<A HREF="proobjects_h.html#ProAsmcomppath">ProAsmcomppath</A> *p_path,
+                                                 <A HREF="proobjects_h.html#ProSolid">ProSolid</A>        handle,
+                                                 <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A>      down,
+                                                 <A HREF="proobjects_h.html#ProAppData">ProAppData</A>      app_data);
+/*
+    Purpose: This is used to visit assembly components. If it returns anything 
+             other than <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A>, assembly traversal stops.
+
+    Input Arguments:
+        p_path - The assembly component path
+        handle - The component solid handle
+        down - Use <A HREF="protoolkit_h.html#PRO_B_TRUE">PRO_B_TRUE</A> when going down to this component and <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE</A> 
+               when going up from this component.
+        app_data - The application data passed to the function 
+                   &lt;b&gt;<A HREF="3926.html">ProSolidDispCompVisit</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Continue visiting.
+        Any other value - Stop visiting and return this error from the visit 
+                          function.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3926.html">ProSolidDispCompVisit</A> ( <A HREF="proobjects_h.html#ProSolid">ProSolid</A>  handle,
+                                      <A HREF="3925.html">ProSolidDispCompVisitAction</A>  visit_action,
+                                     <A HREF="3924.html">ProSolidDispCompFilterAction</A> filter_action,
+                                        <A HREF="proobjects_h.html#ProAppData">ProAppData</A>                   app_data);
+/*
+    Purpose: Visits all the displayed components in the solid handle.
+
+    Input Arguments:
+        handle - The solid handle.
+        visit_action - Visiting function applied to a displayed component 
+                       solid. See comments for <A HREF="3925.html">ProSolidDispCompVisitAction.</A>
+        filter_action - The filter function. If NULL, all displayed components 
+                        in the solid handle are visited using the action 
+                        function.
+        app_data - The application data to be passed to the filter and visiting 
+                   functions.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully visited all the solids.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+        Other - Any other value returned by the visit action (visiting 
+                stopped).
+
+*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3927.html">ProAnalysisVisitAction</A>)(<A HREF="proobjects_h.html#ProAnalysis">ProAnalysis</A> analysis,
+                                           <A HREF="protoolkiterrors_h.html#ProError">ProError</A>    filter_status,
+                                           <A HREF="proobjects_h.html#ProAppData">ProAppData</A>  appdata);
+/*
+    Purpose: Action function called while visiting Creo Parametric analyses 
+             using the function <A HREF="3929.html">ProSolidAnalysisVisit</A>().
+
+    Input Arguments:
+        analysis - Analysis or measurement performed
+        filter_status - Return value from filter action function
+        appdata - Application data passed to the function 
+                  <A HREF="3929.html">ProSolidAnalysisVisit</A>()
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Continue visiting analyses
+        Other - Stop visiting analyses
+
+*/
+
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3928.html">ProAnalysisFilterAction</A>)(<A HREF="proobjects_h.html#ProAnalysis">ProAnalysis</A> analysis,
+                                            <A HREF="proobjects_h.html#ProAppData">ProAppData</A>  appdata);
+/*
+    Purpose: Filter function called while visiting Creo Parametric analysis 
+             using the function <A HREF="3929.html">ProSolidAnalysisVisit</A>().
+
+    Input Arguments:
+        analysis - Analysis or measurement performed
+        appdata - Application data passed to the function 
+                  <A HREF="3929.html">ProSolidAnalysisVisit</A>()
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CONTINUE">PRO_TK_CONTINUE</A> - Do not call visit action function for this object.
+        Other - Call visit action function for this object. The return value is 
+                passed as input to the visit action.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3929.html">ProSolidAnalysisVisit</A>(<A HREF="proobjects_h.html#ProSolid">ProSolid</A>                solid,
+                                      <A HREF="3927.html">ProAnalysisVisitAction</A>  visit_action,
+                                      <A HREF="3928.html">ProAnalysisFilterAction</A> filter_action,
+                                      <A HREF="proobjects_h.html#ProAppData">ProAppData</A>                appdata);
+/*
+    Purpose: Visits External Analyses in the Creo Parametric solid model.
+
+    Input Arguments:
+        solid - Handle to visited solid
+        visit_action - Callback visit function
+        filter_action - Callback filter function. If NULL, all items are 
+                        visited using the action function.
+        appdata - Application data passed to visit and filter callback 
+                  functions
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Successful completion of filter and visit functions.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - An input argument is invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - Nothing to visit
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - Function failed
+        Other - Return value from visit action function that stops 
+                <A HREF="3929.html">ProSolidAnalysisVisit</A>
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3930.html">ProSolidDimensionVisit</A>(
+   <A HREF="proobjects_h.html#ProSolid">ProSolid</A>                 solid,
+   <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A>               refdim,
+   <A HREF="569.html">ProDimensionVisitAction</A>  action,
+   <A HREF="568.html">ProDimensionFilterAction</A> filter,
+   <A HREF="proobjects_h.html#ProAppData">ProAppData</A>               data);
+/*
+    Purpose: Visits all dimensions stored in the specified solid. i.e. all 
+             dimensions whose default names are of the form "d#", "rd#" or 
+             "ad#". This includes dimensions created in drawing mode when the 
+             config.pro option "create_drawing_dims_only" was set to NO (the 
+             default).
+
+    Input Arguments:
+        solid - Handle of the solid (part or assembly) whose dimensions are to 
+                be visited.
+        refdim - TRUE if the reference dimensions are to be visited, FALSE for 
+                 standard dimensions.
+        action - the function that gets called for each solid dimension being 
+                 visited.
+        filter - the function that gets called for each solid dimension. This 
+                 function decides whether the dimension should be visited or 
+                 skipped. If NULL, all dimensions are visited using the action 
+                 function.
+        data - caller-specified data that gets passed to the action and filter 
+               functions.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully visited all the model's 
+                          dimensions.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The function failed because one or more of the 
+                            input arguments are invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - No model dimensions were visited.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - An error occurred while locating the dimensions.
+        other - Visiting was stopped by the caller supplied functions with this 
+                error return.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3931.html">ProSolidFeatstatusflagsGet</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>  solid,
+                                           int          **p_feat_id_array,
+                                           unsigned int **p_status_bitflag_arr);
+/*
+    Purpose: Returns a list of features of the specified solid and the array of 
+             unsigned int values representing their statuses. Each item in 
+             status array represents the status of corresponding feature as a 
+             bit flag. Bit flag contains as many status values as feature can 
+             have at the same time. Status values are among PRO_FEAT_STAT_... 
+             defined in <A HREF="profeature_h.html">ProFeature.h</A>
+
+    Input Arguments:
+        solid - The solid
+
+    Output Arguments:
+        p_feat_id_array - An array of feature ids. The function allocates the 
+                          memory for this argument. Free this array using 
+                          &lt;b&gt;<A HREF="140.html">ProArrayFree</A>()&lt;/b&gt;.
+        p_status_bitflag_arr - An array of feature statuses. The function 
+                               allocates the memory for this argument.Free this 
+                               array using &lt;b&gt;<A HREF="140.html">ProArrayFree</A>()&lt;/b&gt;.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully returned the features.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+
+    See Also:
+        <A HREF="140.html">ProArrayFree</A>()
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3932.html">ProSolidFeatstatusGet</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>  solid,
+                                       int           **p_feat_id_array,
+                                       <A HREF="profeature_h.html#ProFeatStatus">ProFeatStatus</A> **p_status_array,
+                                       int            *p_num_features);
+/*
+    Purpose: Returns a list of features of the specified solid and their 
+             statuses (<A HREF="profeature_h.html#PRO_FEAT_ACTIVE">PRO_FEAT_ACTIVE</A>, <A HREF="profeature_h.html#PRO_FEAT_SUPPRESSED">PRO_FEAT_SUPPRESSED</A>, or 
+             <A HREF="profeature_h.html#PRO_FEAT_PROG_SUPPRESSED">PRO_FEAT_PROG_SUPPRESSED</A>).
+
+    Input Arguments:
+        solid - The solid
+
+    Output Arguments:
+        p_feat_id_array - An array of features (preallocated by a call to 
+                          &lt;b&gt;<A HREF="139.html">ProArrayAlloc</A>()&lt;/b&gt;). If you reuse the array, new 
+                          elements will be appended to the existing elements 
+                          unless you reset the array size to 0 with 
+                          <A HREF="141.html">ProArraySizeSet.</A>
+        p_status_array - An array of feature statuses (preallocated by a call 
+                         to &lt;b&gt;<A HREF="139.html">ProArrayAlloc</A>()&lt;/b&gt;). If you reuse the array, 
+                         new elements will be appended to the existing elements 
+                         unless you reset the array size to 0 with 
+                         <A HREF="141.html">ProArraySizeSet.</A>
+        p_num_features - The size of the above arrays
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully returned the features.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+
+    See Also:
+        <A HREF="139.html">ProArrayAlloc</A>()
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3933.html">ProSolidFeatstatusSet</A>   (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>  solid,
+                                         int           *feat_id_array,
+                                         <A HREF="profeature_h.html#ProFeatStatus">ProFeatStatus</A> *status_array,
+                                         int            num_features,
+                                         <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A>     can_fix);
+/*
+    Purpose: Assigns the feature order and status of the specified solid based 
+             on the input (<A HREF="profeature_h.html#PRO_FEAT_ACTIVE">PRO_FEAT_ACTIVE</A>, <A HREF="profeature_h.html#PRO_FEAT_SUPPRESSED">PRO_FEAT_SUPPRESSED</A>, or 
+             <A HREF="profeature_h.html#PRO_FEAT_PROG_SUPPRESSED">PRO_FEAT_PROG_SUPPRESSED</A>).
+             &lt;p&gt; NOTES:
+             &lt;ul&gt; 
+             &lt;li&gt;You can change the status of active or user-suppressed 
+             features only. 
+             &lt;li&gt;Upon assignment of the order and status, the system 
+             regenerates the model. If it fails, the model is restored to its 
+             original state.
+             &lt;/ul&gt;
+
+    Input Arguments:
+        solid - The solid.
+        feat_id_array - An array of features.
+        status_array - An array of feature statuses. If this is NULL, the 
+                       statuses are not changed.
+        num_features - The size of the above arrays.
+        can_fix - If regeneration fails, invoke the Fix Model user interface.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully assigned the feature order 
+                          and statuses.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the arguments are invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - There were regeneration errors. The 
+                               &lt;i&gt;p_errors&lt;/i&gt; argument supplies a detailed 
+                               description of the errors.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3934.html">ProSolidFeatstatusWithoptionsSet</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>  solid,
+                                                  int      *feat_id_array,
+                                                  int      *status_array,
+                                                  int       flags);
+/*
+    Purpose: Assigns the feature order and status of the specified solid based 
+             on the input (<A HREF="profeature_h.html#PRO_FEAT_ACTIVE">PRO_FEAT_ACTIVE</A>, <A HREF="profeature_h.html#PRO_FEAT_SUPPRESSED">PRO_FEAT_SUPPRESSED</A>, or 
+             <A HREF="profeature_h.html#PRO_FEAT_PROG_SUPPRESSED">PRO_FEAT_PROG_SUPPRESSED</A>).
+             &lt;p&gt; NOTES:
+             &lt;ul&gt; 
+             &lt;li&gt;You can change the status of active or user-suppressed 
+             features only. 
+             &lt;li&gt;Upon assignment of the order and status, the system 
+             regenerates the model. If it fails, the model is restored to its 
+             original state.
+             &lt;/ul&gt;
+
+    Input Arguments:
+        solid - The solid.
+        feat_id_array - A <A HREF="proarray_h.html#ProArray">ProArray</A> of features.
+        status_array - A <A HREF="proarray_h.html#ProArray">ProArray</A> of feature statuses in the form of bit mask 
+                       statuses like PRO_FEAT_STAT_*. If this is NULL, the 
+                       statuses are not changed.
+        flags - The regeneration control flags. Pass as bitmask containing one 
+                or more of the bit flags PRO_REGEN* defined in <A HREF="prosolid_h.html">ProSolid.h</A>
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully assigned the feature order 
+                          and statuses.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the arguments are invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - There were regeneration errors. The 
+                               &lt;i&gt;p_errors&lt;/i&gt; argument supplies a detailed 
+                               description of the errors.
+
+    See Also:
+        <A HREF="139.html">ProArrayAlloc</A>()
+        <A HREF="143.html">ProArrayObjectAdd</A>()
+        <A HREF="140.html">ProArrayFree</A>()
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A>  <A HREF="3935.html">ProSolidDispoutlineGet</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A> solid, 
+                                         <A HREF="proobjects_h.html#ProMatrix">ProMatrix</A> transform,
+                                         double r_outline_points[2][3]);
+/*
+    Purpose: Computes the display outline of a solid. The display outline would 
+             be used to calculate how to refit the model in a window, the 
+             extents of a drawing view, or the coordinates of a note free 
+             attachment.
+
+    Input Arguments:
+        solid - The solid whose outline is to be computed.
+        transform - The orientation matrix (with respect to the base coordinate 
+                    system) to which the outline is to be computed.
+
+    Output Arguments:
+        r_outline_points - The two points that define the display outline of 
+                           the solid in the specified orientation.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully computed the outline.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+
+    See Also:
+        <A HREF="3326.html">ProNoteAttachFreeGet</A>()
+        <A HREF="3325.html">ProNoteAttachFreeSet</A>()
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3936.html">ProSolidOutlineCompute</A> (    <A HREF="proobjects_h.html#ProSolid">ProSolid</A>              p_solid, 
+                                            <A HREF="proobjects_h.html#ProMatrix">ProMatrix</A>             matrix,
+                                            <A HREF="prosolid_h.html#ProSolidOutlExclTypes">ProSolidOutlExclTypes</A> excludes[],
+                                            int                   num_excludes,
+                                            <A HREF="proobjects_h.html#Pro3dPnt">Pro3dPnt</A> r_outline_points[2]);
+/*
+    Purpose: Computes the outline of a solid. This outline can include external 
+             datums.
+
+    Input Arguments:
+        p_solid - The solid whose outline is to be computed.
+        matrix - The orientation matrix (with respect to the base coordinate 
+                 system) to which the outline is to be computed.
+        excludes - An array of types to exclude from outline computation (such 
+                   as nongeometric features). If you set this to 
+                   <A HREF="prosolid_h.html#PRO_OUTL_EXC_NOT_USED">PRO_OUTL_EXC_NOT_USED</A>, nothing is excluded.
+        num_excludes - The number of exclusions in the array.
+
+    Output Arguments:
+        r_outline_points - The two points that define the boundary box of the 
+                           solid in the specified orientation.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully computed the outline.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - A general error occurred and the function 
+                               failed.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3937.html">ProSolidOutlineGet</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>  p_solid,
+                                    <A HREF="proobjects_h.html#Pro3dPnt">Pro3dPnt</A>  r_outline_points[2]);
+/*
+    Purpose: Retrieves the regeneration outline of a solid, with respect to the 
+             base coordinate system orientation. The regeneration outline does 
+             not include datums, annotations, or other non-geometric items. 
+             This outline is used to compute part accuracy.
+
+    Input Arguments:
+        p_solid - The solid whose outline is to be determined
+
+    Output Arguments:
+        r_outline_points - The two points that define the boundary box of the 
+                           solid, in the orientation of the base coordinate 
+                           system
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - A general error occurred and the function 
+                               failed.
+
+*/
+
+<A name="ProAccuracyType"></A>typedef enum 
+{
+<A name="PRO_ACCURACY_RELATIVE"></A>  PRO_ACCURACY_RELATIVE = 1,
+<A name="PRO_ACCURACY_ABSOLUTE"></A>  PRO_ACCURACY_ABSOLUTE = 2
+} <A HREF="prosolid_h.html#ProAccuracyType">ProAccuracyType</A>;
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3938.html">ProSolidAccuracySet</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>         solid,
+                                     <A HREF="prosolid_h.html#ProAccuracyType">ProAccuracyType</A>  type,
+                                     double           accuracy);
+/*
+    Purpose: Sets either the relative or absolute accuracy of a part or an 
+             assembly.
+             &lt;p&gt; NOTE: 
+             &lt;p&gt; This function does not regenerate the solid. You must perform 
+             this action separately.
+
+    Input Arguments:
+        solid - The solid whose accuracy is to be changed.
+        type - The relative or absolute accuracy.
+        accuracy - If you are setting the relative accuracy, this number has no 
+                   dimension because the accuracy will be scaled by the part 
+                   size. If you are setting absolute accuracy, the number is 
+                   based on the solid units.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully set the accuracy of the 
+                          solid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the arguments are invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3939.html">ProSolidAccuracyGet</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>         solid,
+                                     <A HREF="prosolid_h.html#ProAccuracyType">ProAccuracyType</A> *r_type,
+                                     double          *r_accuracy);
+/*
+    Purpose: Retrieves the accuracy of the specified part or assembly.
+
+    Input Arguments:
+        solid - The part or assembly
+
+    Output Arguments:
+        r_type - The type of accuracy
+        r_accuracy - The accuracy value
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3940.html">ProSolidRayIntersectionCompute</A> ( <A HREF="proobjects_h.html#ProMdl">ProMdl</A> model,
+                                            double         aperture_radius,
+                                            <A HREF="prosolid_h.html#ProRay">ProRay</A>*        p_ray,
+                                            <A HREF="proselection_h.html#ProSelection">ProSelection</A>** p_sel_arr,
+                                            int*           p_count
+                                         );
+/*
+    Purpose: Returns a list of ray intersections with a model. The function 
+             computes the intersection points of both the original ray and its 
+             "negative" with the geometry of the model. The output array is 
+             sorted in order of increasing signed distance. It is the 
+             responsibility of the user to find whether the ray is inside or 
+             outside the model.
+             &lt;p&gt; If a ray hits in the middle of a face on the model, the face 
+             is selected. If however, the intersection point is very close 
+             (within an internally determined selection aperture) to an edge is 
+             also selected. Thus, more than one entry of type surface or edge 
+             in the &lt;i&gt;<A HREF="proselection_h.html#ProSelection">ProSelection</A>&lt;/i&gt; array may correspond to one actual 
+             piercing of the model by the ray.
+             &lt;p&gt; In an assembly, each part is processed separately. Therefore, 
+             if two coincident mating faces are hit, these will be recorded as 
+             two separate hits, because they are on two distinct faces.
+             &lt;p&gt; You can set the default value of the &lt;i&gt;aperture_radius&lt;/i&gt; 
+             using the configuration file option "pick_aperture_radius value" 
+             (the default is 7). This is the radius, in pixels, that controls 
+             whether a ray is close enough to an edge for it to be counted as a 
+             ray hit.
+
+    Input Arguments:
+        model - The part or assembly through which the ray is shot.
+        aperture_radius - The value of &lt;i&gt;pick_aperture_radius&lt;/i&gt;. If the 
+                          value is less than or equal to 0.0, the function uses 
+                          the default value (7.0), or the current value in the 
+                          configuration file.
+        p_ray - The starting point of the ray and the direction vector (defined 
+                as X,Y,Z). The vector is normalized within the function before 
+                it is being used.
+
+    Output Arguments:
+        p_sel_arr - An array of &lt;i&gt;<A HREF="proselection_h.html#ProSelection">ProSelection</A>&lt;/i&gt;, one for each selection 
+                    made. The geometry is in terms of the coordinate system of 
+                    the part being intersected, not the parent assembly. The 
+                    function allocates the memory for this argument, and reuses 
+                    it on subsequent calls.
+        p_count - The number of selections in &lt;i&gt;p_sel_arr&lt;/i&gt;. If the ray does 
+                  not intersect the model, &lt;i&gt;p_count&lt;/i&gt; is 0.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - No objects were found in the workspace.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the invalid arguments are invalid.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3941.html">ProSolidFamtableCheck</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>       handle);
+/*
+    Purpose: Determines whether the specified solid has a family table, and if 
+             that family table is valid and/or empty.
+
+    Input Arguments:
+        handle - The &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt; to check.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The family table is found and is not empty.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - The family table was not found for the specified 
+                             owner.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_EMPTY">PRO_TK_EMPTY</A> - The family table is found and is empty.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3942.html">ProSolidMassPropertyGet</A> ( <A HREF="proobjects_h.html#ProSolid">ProSolid</A> solid,
+                                          <A HREF="prosizeconst_h.html#ProName">ProName</A>  csys_name,
+                                          <A HREF="prosolid_h.html#ProMassProperty">ProMassProperty</A>* mass_prop );
+/*
+    Purpose: Calculates the mass properties of a part or an assembly in the 
+             specified coordinate system.
+
+    Input Arguments:
+        solid - The handle to a part or an assembly.
+        csys_name - The name of the coordinate system. If this is NULL, the 
+                    function uses the default coordinate system.
+
+    Output Arguments:
+        mass_prop - The mass property.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The solid handle is invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - The specified coordinate system was not found.
+        PRO_TK_GENREAL_ERROR - A general error occurred and the function 
+                               failed.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3943.html">ProSolidFailedFeatsList</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>    solid,
+                                         int   **r_failed_feat_ids);
+/*
+    Purpose: Retrieves the list of failed features in the specified part or 
+             assembly. 
+             &lt;p&gt;&lt;b&gt; NOTE: &lt;/b&gt;
+             &lt;p&gt; This function is deprecated. Use <A HREF="3956.html">ProSolidFailedfeaturesList</A>() 
+             to get the list of failed, child of failed and child of external 
+             failed feature ids. In Resolve mode pass NULL each for 
+             "co_failed_ids" and "co_x_failed_ids" arguments.
+
+    Input Arguments:
+        solid - The part or assembly.
+
+    Output Arguments:
+        r_failed_feat_ids - An array of failed feature identifiers. You must 
+                            preallocate this array using the function 
+                            &lt;b&gt;<A HREF="139.html">ProArrayAlloc</A>()&lt;/b&gt;.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The failed features were found and returned.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - No failed feature was found.
+        Other - The input was invalid.
+
+    See Also:
+        <A HREF="139.html">ProArrayAlloc</A>()
+*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3944.html">ProSolidRegeneratePreAction</A>) (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>    solid_handle,
+                                                 <A HREF="proobjects_h.html#ProFeature">ProFeature</A> *feat_handle);
+/*
+    Purpose: This is the notification function called before regenerating a 
+             solid.
+             &lt;p&gt; This function is to be supplied by the user by calling 
+             &lt;b&gt;<A HREF="3348.html">ProNotificationSet</A>()&lt;/b&gt; with the notify type 
+             <A HREF="pronotify_h.html#PRO_SOLID_REGEN_PRE">PRO_SOLID_REGEN_PRE.</A>
+
+    Input Arguments:
+        solid_handle - The handle to the solid about to be regenerated
+        feat_handle - The start feature for regeneration
+
+    Output Arguments:
+        none
+
+    Return Values:
+        Return values are not interpreted by Creo Parametric.
+
+    See Also:
+        <A HREF="3348.html">ProNotificationSet</A>()
+*/
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3945.html">ProSolidRegeneratePostAction</A>) (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>    solid_handle,
+                                                  <A HREF="proobjects_h.html#ProFeature">ProFeature</A> *feat_handle,
+                                                  <A HREF="protoolkiterrors_h.html#ProError">ProError</A>    status);
+/*
+    Purpose: This is the notification function called after regeneration of a 
+             solid.
+             &lt;p&gt; This function is to be supplied by the user by calling 
+             &lt;b&gt;<A HREF="3348.html">ProNotificationSet</A>()&lt;/b&gt; with the notify type 
+             <A HREF="pronotify_h.html#PRO_SOLID_REGEN_POST">PRO_SOLID_REGEN_POST.</A>
+
+    Input Arguments:
+        solid_handle - The handle to the solid that was regenerated
+        feat_handle - The feature where regeneration started
+        status - The internal status generated as a result of regeneration
+
+    Output Arguments:
+        none
+
+    Return Values:
+        Return values are not interpreted by Creo Parametric.
+
+    See Also:
+        <A HREF="3348.html">ProNotificationSet</A>()
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3946.html">ProSolidProjectPoint</A> ( <A HREF="proobjects_h.html#ProSolid">ProSolid</A>     p_handle,
+                                       <A HREF="proobjects_h.html#Pro3dPnt">Pro3dPnt</A>     xyz,
+                                       double       tolerance,
+                                       <A HREF="proobjects_h.html#ProSurface">ProSurface</A>   *p_surface,
+                                       <A HREF="proobjects_h.html#ProUvParam">ProUvParam</A>   uv_point );
+/*
+    Purpose: Given a solid, a point, and a maximum distance, this function 
+             finds a surface from the solid within the maximum distance, and 
+             returns the UV point of the projection of the point to that 
+             surface. This does not necessarily find the nearest surface on the 
+             solid; any surface within the tolerance could be returned.
+             &lt;p&gt;&lt;b&gt; NOTE: &lt;/b&gt;
+             &lt;p&gt; This function supports parts only, not assemblies.
+
+    Input Arguments:
+        p_handle - Solid handle.
+        xyz - The point to project.
+        tolerance - Maximum allowed distance from the point to the solid.
+
+    Output Arguments:
+        p_surface - Surface where the point is projected.
+        uv_point - The corresponding UV point on the surface.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function found a point on a surface within the 
+                          tolerance.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NOT_EXIST">PRO_TK_NOT_EXIST</A> - The function failed to find a point on a surface 
+                           within the tolerance.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the Input arguments being invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3947.html">ProSolidToleranceGet</A> ( <A HREF="proobjects_h.html#ProSolid">ProSolid</A>         solid,
+                                       <A HREF="prodimension_h.html#ProToleranceType">ProToleranceType</A> type,
+                                       int              n_decimals,
+                                       double           *tolerance);
+/*
+    Purpose: Retreives the tolerance value for the specified solid, for the 
+             specified number of decimal places.
+
+    Input Arguments:
+        solid - The solid handle.
+        type - The tolerance type.
+        n_decimals - The number of decimal places used to identify the 
+                     tolerance.
+
+    Output Arguments:
+        tolerance - The tolerance, at the specified number of decimal places.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The solid handle is invalid.
+        PRO_TK_GENREAL_ERROR - A general error occurred and the function 
+                               failed.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3948.html">ProSolidToleranceSet</A> ( <A HREF="proobjects_h.html#ProSolid">ProSolid</A>         solid,
+                                       <A HREF="prodimension_h.html#ProToleranceType">ProToleranceType</A> type,
+                                       int              n_decimals,
+                                       double           tolerance);
+/*
+    Purpose: Sets the solid's tolerance, at the specified number of decimal 
+             places, to the specified value.
+
+    Input Arguments:
+        solid - The solid handle.
+        type - The tolerance type.
+        n_decimals - The number of decimal places used to identify the 
+                     tolerance.
+        tolerance - The tolerance, at the specified number of decimal places.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully set the tolerance.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The solid handle is invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - A general error occurred and the function 
+                               failed.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3949.html">ProSolidTolclassLoad</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A> p_model, <A HREF="prosizeconst_h.html#ProName">ProName</A> name);
+/*
+    Purpose: This will load a tolerance class for Hole or Shaft ISO tols.
+
+    Input Arguments:
+        p_model - The model for which the tolerance should be loaded.
+        name - The letter(s) indicating the tolerance class, with Hole 
+               tolerances CAPITALIZED and Shaft tolerances in lowercase.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The tolerance table loaded successfully.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid. 
+                            <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A>- Creo Parametric TOOLKIT could 
+                            not find the table.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3950.html">ProSolidModelclassGet</A>(<A HREF="proobjects_h.html#ProSolid">ProSolid</A> solid,
+                                      <A HREF="prosolid_h.html#ProModelClass">ProModelClass</A> *model_class);
+/*
+    Purpose: Gets the ISO/DIN model class type for a solid model.
+
+    Input Arguments:
+        solid - The solid model.
+
+    Output Arguments:
+        model_class - The model class.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The class was retrieved successfully.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The solid was invalid or the class was NULL.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_CONTEXT">PRO_TK_BAD_CONTEXT</A> - The solid was not using ISO/DIN tolerance tables.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3951.html">ProSolidModelclassSet</A>(<A HREF="proobjects_h.html#ProSolid">ProSolid</A> solid,
+                                      <A HREF="prosolid_h.html#ProModelClass">ProModelClass</A> model_class);
+/*
+    Purpose: Sets the ISO/DIN model class type for a solid model.
+
+    Input Arguments:
+        solid - The solid model.
+        model_class - The model class.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The class was set successfully.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The solid or class was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_CANT_MODIFY">PRO_TK_CANT_MODIFY</A> - The model was locked.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_CONTEXT">PRO_TK_BAD_CONTEXT</A> - The model was not using ISO/DIN tolerance tables.
+
+*/
+
+<A name="ProSolidretrievalerrs"></A>typedef struct pro_solid_retr_errs*  <A HREF="prosolid_h.html#ProSolidretrievalerrs">ProSolidretrievalerrs</A>;
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A>  <A HREF="3952.html">ProSolidRetrievalErrorsGet</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A> solid,
+                                             <A HREF="prosolid_h.html#ProSolidretrievalerrs">ProSolidretrievalerrs</A>* errs);
+/*
+    Purpose: Returns the data structure containing errors that occurred during 
+             retrieval. 
+             &lt;p&gt;&lt;b&gt; Notes: 
+             &lt;p&gt;&lt;/b&gt; The retrieval error information is not persistent and 
+             should be accessed immediately after the call to <A HREF="1871.html">ProMdlRetrieve</A> or 
+             an equivalent retrieval function. 
+             &lt;p&gt; Creo Parametric TOOLKIT currently does not return specific 
+             information from the retrieval errors structure - this is 
+             reserved for future expansion.
+
+    Input Arguments:
+        solid - The top-level solid model that was retrieved.
+
+    Output Arguments:
+        errs - Pointer to the retrieval errors.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Errors were found for this model.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - Errors were not found for this model.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The inpurt argument is invalid.
+
+    See Also:
+        <A HREF="1871.html">ProMdlRetrieve</A>()
+        <A HREF="1874.html">ProMdlMultipleRetrieve</A>()
+        <A HREF="3864.html">ProAssemblySimprepRetrieve</A>()
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A>  <A HREF="3953.html">ProSolidRetrievalerrsCount</A> (<A HREF="prosolid_h.html#ProSolidretrievalerrs">ProSolidretrievalerrs</A> errs,
+                                             int* count);
+/*
+    Purpose: Returns the number of errors that occurred during retrieval.
+
+    Input Arguments:
+        errs - The retrieval errors structure.
+
+    Output Arguments:
+        count - The number of errors found.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully returned the data.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3954.html">ProSolidDefaulttextheightGet</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A> solid,
+                                              double* default_text_height);
+/*
+    Purpose: Obtains the default text height used for text in annotations and 
+             dimensions in the solid model.
+
+    Input Arguments:
+        solid - The solid model.
+
+    Output Arguments:
+        default_text_height - The default text height.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+*/
+
+
+<A name="ProSolidRegenerationStatus"></A>typedef enum
+{
+<A name="PRO_SOLID_REGENERATED"></A>     PRO_SOLID_REGENERATED,
+<A name="PRO_SOLID_NEEDS_REGENERATION"></A>     PRO_SOLID_NEEDS_REGENERATION,
+<A name="PRO_SOLID_FAILED_REGENERATION"></A>     PRO_SOLID_FAILED_REGENERATION,
+<A name="PRO_SOLID_CONNECT_FAILED"></A>     PRO_SOLID_CONNECT_FAILED     /* The model has been successfully 
+                                     regenerated, but the mechanism connect of 
+                                     the model has failed. This status is 
+                                     applicable only for assemblies with movable
+                                     components. */
+} <A HREF="prosolid_h.html#ProSolidRegenerationStatus">ProSolidRegenerationStatus</A>;
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3955.html">ProSolidRegenerationstatusGet</A> (
+                                      <A HREF="proobjects_h.html#ProSolid">ProSolid</A>                    solid,
+                                      <A HREF="prosolid_h.html#ProSolidRegenerationStatus">ProSolidRegenerationStatus</A>* regen_status);
+/*
+    Purpose: Returns the regeneration status of the solid model. This is 
+             analogous to the regen status indicator 
+             (Green/Disconnected/Yellow/Red) in the Creo Parametric UI. 
+             &lt;P&gt; &lt;B&gt;Note:&lt;/B&gt; Models with certain contents, like circular 
+             references or assembly analysis features, will never return a 
+             <A HREF="prosolid_h.html#PRO_SOLID_REGENERATED">PRO_SOLID_REGENERATED</A> status. So this flag should not provide an 
+             absolute restriction; if the flag remains at the 
+             <A HREF="prosolid_h.html#PRO_SOLID_NEEDS_REGENERATION">PRO_SOLID_NEEDS_REGENERATION</A> status through two successful 
+             regenerations, the model could be considered up to date.
+
+    Input Arguments:
+        solid - The solid model.
+
+    Output Arguments:
+        regen_status - The current regeneration status for the solid model.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more input arguments was invalid.
+
+    See Also:
+        <A HREF="3909.html">ProSolidRegenerate</A>()
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3956.html">ProSolidFailedfeaturesList</A> (<A HREF="proobjects_h.html#ProSolid">ProSolid</A>    solid,
+                                            int       **failed_ids,
+                                            int       **co_failed_ids,
+                                            int       **co_x_failed_ids);
+/*
+    Purpose: Retrieves the list of failed and/or child of failed and/or child 
+             of external failed features in the specified part or assembly.
+
+    Input Arguments:
+        solid - The part or assembly.
+
+    Output Arguments:
+        failed_ids - An array of failed feature identifiers. The function 
+                     allocates the memory for this argument. Free this array 
+                     using &lt;b&gt;<A HREF="140.html">ProArrayFree</A>()&lt;/b&gt;. Pass NULL if not requesting 
+                     this type.
+        co_failed_ids - An array of child of failed feature identifiers. The 
+                        function allocates the memory for this argument. Free 
+                        this array using &lt;b&gt;<A HREF="140.html">ProArrayFree</A>()&lt;/b&gt;. Pass NULL if 
+                        not requesting this type.
+        co_x_failed_ids - An array of child of external failed feature 
+                          identifiers. The function allocates the memory for 
+                          this argument. Free this array using 
+                          &lt;b&gt;<A HREF="140.html">ProArrayFree</A>()&lt;/b&gt;. Pass NULL if not requesting 
+                          this type.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - No feature of requested type(s) was found.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - The function failed.
+
+    See Also:
+        <A HREF="139.html">ProArrayAlloc</A>()
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3957.html">ProSolidToleranceStandardGet</A>(<A HREF="proobjects_h.html#ProSolid">ProSolid</A> p_solid,
+                                             <A HREF="proobjects_h.html#ProStandard">ProStandard</A> *p_standard);
+/*
+    Purpose: Get the assigned tolerance standard of a solid.
+
+    Input Arguments:
+        p_solid - The &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt; to get the tol standard for.
+
+    Output Arguments:
+        p_standard - The tolerance standard, NULL not allowed.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Success
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - p_solid or p_standard was invalid
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3958.html">ProSolidToleranceStandardSet</A>(<A HREF="proobjects_h.html#ProSolid">ProSolid</A> p_solid,
+                                             <A HREF="proobjects_h.html#ProStandard">ProStandard</A> new_standard);
+/*
+    Purpose: Set the assigned tolerance standard of a solid. Note that in the 
+             regular UI, this operation asks whether to regenerate the solid. 
+             This function will not itself perform regeneration.
+
+    Input Arguments:
+        p_solid - The &lt;i&gt;<A HREF="proobjects_h.html#ProSolid">ProSolid</A>&lt;/i&gt; to set the tol standard for.
+        new_standard - The tolerance standard to set.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Success
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - p_solid or new_standard was invalid
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - An error occurred trying to set the standard.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3959.html">ProSolidRegenerationIsNoresolvemode</A> (
+                        <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A> *is_no_resolve);
+/*
+    Purpose: Check the current Creo Parametric regeneration mode.
+
+    Input Arguments:
+        none
+
+    Output Arguments:
+        is_no_resolve - <A HREF="protoolkit_h.html#PRO_B_TRUE">PRO_B_TRUE</A> if the current Creo Parametric regeneration 
+                        mode is No Resolve Mode; <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE</A> if it is Resolve 
+                        Mode.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more arguments are invalid.
+
+*/
+
+<A HREF="proansi_h.html#PRO_END_C_DECLS">PRO_END_C_DECLS</A>
+
+#endif  /* <A HREF="prosolid_h.html#PROSOLID_H">PROSOLID_H</A> */
+
+
+
+
+</PRE>
+</BODY>
+</HTML>

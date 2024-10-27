@@ -1,0 +1,466 @@
+<html>
+<head>
+<title>UgMfgHoleElemAdd.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMfg.h>
+#include &lt;ProSolid.h>
+#include &lt;ProSelection.h>
+#include &lt;ProAsmcomppath.h>
+<a name="anchor-2"></a>#include &lt;ProElement.h>
+#include &lt;ProMfgOptions.h>
+#include &lt;ProTKRunTime.h>
+
+#include &lt;TestError.h>
+<a name="anchor-3"></a>#include &lt;UgMfg.h>
+
+/*====================================================================*\
+FUNCTION : UserHolesetStartSet
+PURPOSE  : Add a holeset start element
+<a name="anchor-4"></a>\*====================================================================*/
+ProError UserHolesetStartSet (
+/*--------------------------------------------------------------------*/
+ProDrillStartType	start_type,
+ProSelection		sel_start,
+<a name="anchor-5"></a>ProElement		start_elem 
+
+)
+/*--------------------------------------------------------------------*/
+{
+<a name="anchor-6"></a> ProError		err = PRO_TK_NO_ERROR;
+ ProValueData		value_data;
+ ProValue		value = NULL;
+ ProElement		elem;
+ ProReference		reference;
+<a name="anchor-7"></a> int			ii = 0, size = 0;
+ static ElemTable	start_elem_table[] = 
+ { 
+   { PRO_E_HOLESET_START_TYPE,      PRO_VALUE_TYPE_INT       },
+   { PRO_E_HOLESET_START_SURFACE,   PRO_VALUE_TYPE_SELECTION }
+<a name="anchor-8"></a> };
+
+ size = sizeof( start_elem_table )/ sizeof( ElemTable );
+
+ for ( ii = 0 ; ii &lt; size; ii++ )
+<a name="anchor-9"></a> {
+   if ( start_elem_table[ii].elem_type == PRO_E_HOLESET_START_SURFACE &amp;&amp;
+        start_type == PRO_DRILL_AUTO_START )
+   {
+     continue;
+<a name="anchor-10"></a>   }
+
+   err = ProElementAlloc( start_elem_table[ii].elem_type, &amp;elem );
+   ERROR_CHECK( &quot;UserHolesetStartSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+<a name="anchor-11"></a>   switch ( start_elem_table[ii].elem_type )
+   {
+     case PRO_E_HOLESET_START_TYPE:
+        value_data.v.i = start_type;
+        break;
+<a name="anchor-12"></a>
+     case PRO_E_HOLESET_START_SURFACE:
+        break;
+
+     default:
+<a name="anchor-13"></a>        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserHolesetStartSet&quot;, &quot;UserHolesetStartSet()&quot;, err );
+        break;
+   }
+<a name="anchor-14"></a>
+   if ( start_elem_table[ii].val_type == PRO_VALUE_TYPE_INT )
+   {
+	 err = ProElementIntegerSet(elem,start_type );
+     ERROR_CHECK( &quot;UserHolesetStartSet&quot;, &quot; ProElementIntegerSet()&quot;, err );
+<a name="anchor-15"></a>   }
+   else if ( start_elem_table[ii].val_type == PRO_VALUE_TYPE_SELECTION )
+   {
+     err = ProSelectionToReference( sel_start, &amp;reference );
+     ERROR_CHECK( &quot;UserHolesetStartSet()&quot;, &quot;ProSelectionToReference&quot;, err );
+<a name="anchor-16"></a>
+     err = ProElementReferenceSet( elem, reference );
+     ERROR_CHECK( &quot;UserHolesetStartSet()&quot;, &quot;ProElementReferenceSet&quot;, err );
+   }
+
+<a name="anchor-17"></a>   err = ProElemtreeElementAdd( start_elem, NULL, elem );
+   ERROR_CHECK( &quot;UserHolesetStartSet&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+ }
+
+ return ( err );
+<a name="anchor-18"></a>}
+
+/*====================================================================*\
+FUNCTION : UserHolesetEndSet
+PURPOSE  : Add a holeset end to element
+<a name="anchor-19"></a>\*====================================================================*/
+ProError UserHolesetEndSet (
+/*--------------------------------------------------------------------*/
+ProDrillEndType	end_type,
+double 		depth,
+<a name="anchor-20"></a>ProElement	end_elem 
+
+)
+/*--------------------------------------------------------------------*/
+{
+<a name="anchor-21"></a> ProError		err = PRO_TK_NO_ERROR;
+ ProValueData		value_data;
+ ProValue		value = NULL;
+ ProElement		elem;
+ int			ii = 0, size = 0;
+<a name="anchor-22"></a> static ElemTable	end_elem_table[] = 
+ { 
+   { PRO_E_HOLESET_END_TYPE,      PRO_VALUE_TYPE_INT    },
+   { PRO_E_HOLESET_DEPTH_VALUE,   PRO_VALUE_TYPE_DOUBLE }
+ };
+<a name="anchor-23"></a>
+ size = sizeof( end_elem_table )/ sizeof( ElemTable );
+
+ for ( ii = 0 ; ii &lt; size; ii++ )
+ {
+<a name="anchor-24"></a>   if ( end_elem_table[ii].elem_type == PRO_E_HOLESET_DEPTH_VALUE &amp;&amp;
+        end_type == PRO_DRILL_AUTO_END )
+   {
+     continue;
+   }
+<a name="anchor-25"></a>
+   err = ProElementAlloc( end_elem_table[ii].elem_type, &amp;elem );
+   ERROR_CHECK( &quot;UserHolesetEndSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( end_elem_table[ii].elem_type )
+<a name="anchor-26"></a>   {
+     case PRO_E_HOLESET_END_TYPE:
+        err = ProElementIntegerSet(elem, end_type);
+        ERROR_CHECK( &quot;UserHolesetEndSet&quot;,&quot; ProElementIntegerSet()&quot;,err );
+        break;
+<a name="anchor-27"></a>
+     case PRO_E_HOLESET_DEPTH_VALUE:
+        err=ProElementDoubleSet(elem,depth);
+        ERROR_CHECK(&quot;UserHolesetEndSet&quot;,&quot; ProElementDoubleSet()&quot;,err);
+        break;
+<a name="anchor-28"></a>
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserHolesetEndSet&quot;,&quot;UserHolesetEndSet()&quot;, err );
+<a name="anchor-29"></a>        break;
+   }
+
+   err = ProElemtreeElementAdd( end_elem, NULL, elem );
+   ERROR_CHECK( &quot;UserHolesetEndSet&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+<a name="anchor-30"></a> }
+
+ return ( err );
+}
+
+<a name="anchor-31"></a>/*====================================================================*\
+FUNCTION : UserCsinkHolesetEndSet
+PURPOSE  : Add a countersink diameter to holeset end element
+\*====================================================================*/
+ProError UserCsinkHolesetEndSet (
+<a name="anchor-32"></a>/*--------------------------------------------------------------------*/
+double 		csink_diam,
+ProElement	end_elem 
+
+)
+<a name="anchor-33"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProValueData		value_data;
+ ProValue		value = NULL;
+<a name="anchor-34"></a> ProElement		elem;
+ int			ii = 0, size = 0;
+ static ElemTable	end_elem_table[] = 
+ { 
+   { PRO_E_HOLESET_CSINK_DIAM,  PRO_VALUE_TYPE_DOUBLE }
+<a name="anchor-35"></a> };
+
+ size = sizeof( end_elem_table )/ sizeof( ElemTable );
+
+ for ( ii = 0 ; ii &lt; size; ii++ )
+<a name="anchor-36"></a> {
+   err = ProElementAlloc( end_elem_table[ii].elem_type, &amp;elem );
+   ERROR_CHECK( &quot;UserCsinkHolesetEndSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( end_elem_table[ii].elem_type )
+<a name="anchor-37"></a>   {
+     case PRO_E_HOLESET_CSINK_DIAM:
+	    err=ProElementDoubleSet(elem,csink_diam);
+		ERROR_CHECK(&quot;UserCsinkHolesetEndSet&quot;, &quot;ProElementDoubleSet()&quot;, err);
+        break;
+<a name="anchor-38"></a>
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserCsinkHolesetEndSet&quot;,&quot;UserHolesetEndSet()&quot;, err );
+<a name="anchor-39"></a>        break;
+   }
+
+   err = ProElemtreeElementAdd( end_elem, NULL, elem );
+   ERROR_CHECK( &quot;UserCsinkHolesetEndSet&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+<a name="anchor-40"></a> }
+
+ return ( err );
+}
+
+<a name="anchor-41"></a>/*====================================================================*\
+FUNCTION : UserHolesetRulesSet
+PURPOSE  : Add individual axes selection to holeset rules
+\*====================================================================*/
+ProError UserHolesetRulesSet (
+<a name="anchor-42"></a>/*--------------------------------------------------------------------*/
+ProSelection	*sel_axes,
+ProElement	rules_elem 
+
+)
+<a name="anchor-43"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		elem = NULL;
+ ProReference		*refs = NULL;
+<a name="anchor-44"></a>
+ err = ProElementAlloc( PRO_E_HOLESET_SEL_INDIV_AXES, &amp;elem );
+ ERROR_CHECK( &quot;UserHolesetRulesSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+ err = ProSelectionarrayToReferences( sel_axes, &amp;refs );
+<a name="anchor-45"></a> ERROR_CHECK( &quot;UserHolesetRulesSet()&quot;, &quot;ProSelectionToReference&quot;, err );
+
+ err = ProElementReferencesSet( elem, refs );
+ ERROR_CHECK( &quot;UserHolesetRulesSet()&quot;, &quot;ProElementReferenceSet&quot;, err );
+
+<a name="anchor-46"></a> err = ProElemtreeElementAdd( rules_elem, NULL, elem );
+ ERROR_CHECK( &quot;UserHolesetRulesSet&quot;, &quot;ProElemtreeElementAdd()&quot;, err );
+
+ return ( err );
+}
+<a name="anchor-47"></a>
+/*====================================================================*\
+FUNCTION : UserCsinkAutoChamferHolesetRulesSet
+PURPOSE  : Add auto-chamfer flag to rules
+\*====================================================================*/
+<a name="anchor-48"></a>ProError UserCsinkAutoChamferHolesetRulesSet (
+/*--------------------------------------------------------------------*/
+ProElement	rules_elem 
+
+)
+<a name="anchor-49"></a>/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element = NULL;
+
+<a name="anchor-50"></a> err = ProElementAlloc( PRO_E_HOLESET_SEL_AUTO_CHAMFER, &amp;element );
+ ERROR_CHECK( &quot;UserCsinkAutoChamferHolesetRulesSet&quot;,
+              &quot;ProElementAlloc()&quot;, err );
+
+  err = ProElementIntegerSet(element, PRO_B_TRUE);
+<a name="anchor-51"></a>  ERROR_CHECK( &quot;UserCsinkAutoChamferHolesetRulesSet&quot;,&quot; ProElementIntegerSet()&quot;,err );
+  
+ err = ProElemtreeElementAdd( rules_elem, NULL, element );
+ ERROR_CHECK( &quot;UserCsinkAutoChamferHolesetRulesSet&quot;, 
+              &quot;ProElemtreeElementAdd()&quot;, err );
+<a name="anchor-52"></a>
+ return ( err );
+}
+
+/*====================================================================*\
+<a name="anchor-53"></a>FUNCTION : UserHolesetSet
+PURPOSE  : Create PRO_E_HOLESET element 
+\*====================================================================*/
+ProError UserHolesetSet( 
+/*--------------------------------------------------------------------*/
+<a name="anchor-54"></a>ProSelection	*axes,
+ProElement	holeset_elem
+
+)
+/*--------------------------------------------------------------------*/
+<a name="anchor-55"></a>{
+ ProError		err = PRO_TK_NO_ERROR;
+ ProElement		element = NULL;
+ ProSelection		selection;
+ ProReference		reference;
+<a name="anchor-56"></a> int			ii = 0, table_size = 0;
+ static ElemTable	elem_table[] = 
+ {
+   { PRO_E_HOLESET_TYPE,            PRO_VALUE_TYPE_INT },
+   { PRO_E_HOLESET_START,           COMPOUND           },
+<a name="anchor-57"></a>   { PRO_E_HOLESET_END,             COMPOUND           },
+   { PRO_E_HOLESET_SELECTION_RULES, COMPOUND           }
+ };
+
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+<a name="anchor-58"></a>
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserHolesetSet&quot;,&quot;ProElementAlloc()&quot;, err );
+<a name="anchor-59"></a>
+   switch ( elem_table[ii].elem_type )
+   {
+     case PRO_E_HOLESET_TYPE:
+	      err = ProElementIntegerSet(element, PRO_HOLESET_DRILL_AXES);
+<a name="anchor-60"></a>          ERROR_CHECK(&quot;UserHolesetSet&quot;, &quot; ProElementIntegerSet&quot;,err );
+        break;
+
+     case PRO_E_HOLESET_START:
+        err = UserHolesetStartSet( PRO_DRILL_AUTO_START, NULL, element );
+<a name="anchor-61"></a>        ERROR_CHECK( &quot;UserHolesetSet&quot;,&quot;UserHolesetStartSet()&quot;, err );
+        break;
+
+     case PRO_E_HOLESET_END:
+        err = UserHolesetEndSet( PRO_DRILL_AUTO_END, 0.0, element );
+<a name="anchor-62"></a>        ERROR_CHECK( &quot;UserHolesetSet&quot;,&quot;UserHolesetEndSet()&quot;, err );
+        break;
+
+     case PRO_E_HOLESET_SELECTION_RULES:
+        err = UserHolesetRulesSet( axes, element );
+<a name="anchor-63"></a>        ERROR_CHECK( &quot;UserHolesetSet&quot;,&quot;UserHolesetRulesSet()&quot;, err );
+        break;
+
+     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+<a name="anchor-64"></a>        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserHolesetSet&quot;,&quot;UserHolesetSet()&quot;, err );
+        break;
+   }
+
+<a name="anchor-65"></a>   err = ProElemtreeElementAdd( holeset_elem, NULL, element );
+   ERROR_CHECK( &quot;UserHolesetSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+ return ( err );
+<a name="anchor-66"></a>}
+
+/*====================================================================*\
+FUNCTION : UserCsinkHolesetSet
+PURPOSE  : Create PRO_E_HOLESET element for countersink holemaking
+<a name="anchor-67"></a>\*====================================================================*/
+ProError UserCsinkHolesetSet( 
+/*--------------------------------------------------------------------*/
+double		csink_diam,
+ProElement	holeset_elem
+<a name="anchor-68"></a>
+)
+/*--------------------------------------------------------------------*/
+{
+ ProError		err = PRO_TK_NO_ERROR;
+<a name="anchor-69"></a> ProElement		element = NULL;
+ ProValueData		value_data;
+ ProValue		value;
+ int			ii = 0, table_size = 0;
+ static ElemTable	elem_table[] = 
+<a name="anchor-70"></a> {
+   { PRO_E_HOLESET_TYPE,            PRO_VALUE_TYPE_INT },
+   { PRO_E_HOLESET_END,             COMPOUND           },
+   { PRO_E_HOLESET_SELECTION_RULES, COMPOUND           }
+ };
+<a name="anchor-71"></a>
+ table_size = sizeof( elem_table ) / sizeof( ElemTable );
+
+ for ( ii = 0; ii &lt; table_size; ii++ )
+ {
+<a name="anchor-72"></a>   err = ProElementAlloc( elem_table[ii].elem_type, &amp;element );
+   ERROR_CHECK( &quot;UserCsinkHolesetSet&quot;,&quot;ProElementAlloc()&quot;, err );
+
+   switch ( elem_table[ii].elem_type )
+   {
+<a name="anchor-73"></a>     case PRO_E_HOLESET_TYPE:  
+	      err = ProElementIntegerSet(element,PRO_HOLESET_DRILL_AXES );
+          ERROR_CHECK( &quot;UserCsinkHolesetSet&quot;,&quot; ProElementIntegerSet()&quot;,err);
+		  break;
+		  
+<a name="anchor-74"></a>     case PRO_E_HOLESET_END:
+        err = UserCsinkHolesetEndSet( csink_diam, element );
+        ERROR_CHECK( &quot;UserCsinkHolesetSet&quot;,&quot;UserCsinkHolesetEndSet()&quot;, err );
+        break;
+
+<a name="anchor-75"></a>     case PRO_E_HOLESET_SELECTION_RULES:
+        err = UserCsinkAutoChamferHolesetRulesSet( element );
+        ERROR_CHECK( &quot;UserHolesetSet&quot;,&quot;UserHolesetRulesSet()&quot;, err );
+        break;
+
+<a name="anchor-76"></a>     default:
+        ProTKFprintf( stderr, &quot;Error setting element type\n&quot; );
+        err = PRO_TK_GENERAL_ERROR;
+        ERROR_CHECK( &quot;UserCsinkHolesetSet&quot;,&quot;UserCsinkHolesetSet()&quot;, err );
+        break;
+<a name="anchor-77"></a>   }
+
+   err = ProElemtreeElementAdd( holeset_elem, NULL, element );
+   ERROR_CHECK( &quot;UserCsinkHolesetSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+<a name="anchor-78"></a>
+ return ( err );
+}
+
+/*====================================================================*\
+<a name="anchor-79"></a>FUNCTION : UserHolesetArrSet
+PURPOSE  : Create holesets array element
+\*====================================================================*/
+ProError UserDrillHolesetArrSet(
+/*--------------------------------------------------------------------*/
+<a name="anchor-80"></a>ProSelection    *axes,
+ProElement      holesets_elem
+
+)
+/*--------------------------------------------------------------------*/
+<a name="anchor-81"></a>{
+ ProError               err = PRO_TK_NO_ERROR;
+ ProElement             element = NULL;
+ int                    ii;
+ int                    num_holesets = 1; /* can be more if needed */
+<a name="anchor-82"></a>
+ for ( ii = 0; ii &lt; num_holesets; ii++ )
+ {
+   err = ProElementAlloc( PRO_E_HOLESET, &amp;element );
+   ERROR_CHECK( &quot;UserHolesetArrSet&quot;, &quot;ProElementAlloc&quot;, err );
+<a name="anchor-83"></a>
+   err = UserHolesetSet( axes, element );
+   ERROR_CHECK( &quot;UserHolesetArrSet&quot;, &quot;UserHolesetSet&quot;, err );
+
+   err = ProElemtreeElementAdd( holesets_elem, NULL, element );
+<a name="anchor-84"></a>   ERROR_CHECK( &quot;UserHolesetArrSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+ return ( err );
+}
+<a name="anchor-85"></a>
+/*====================================================================*\
+FUNCTION : UserCsinkHolesetArrSet
+PURPOSE  : Create holesets array element
+\*====================================================================*/
+<a name="anchor-86"></a>ProError UserCsinkHolesetArrSet(
+/*--------------------------------------------------------------------*/
+double		csink_diam,
+ProElement      holesets_elem
+
+<a name="anchor-87"></a>)
+/*--------------------------------------------------------------------*/
+{
+ ProError               err = PRO_TK_NO_ERROR;
+ ProElement             element = NULL;
+<a name="anchor-88"></a> int                    ii;
+ int                    num_holesets = 1; /* can be more if needed */
+
+ for ( ii = 0; ii &lt; num_holesets; ii++ )
+ {
+<a name="anchor-89"></a>   err = ProElementAlloc( PRO_E_HOLESET, &amp;element );
+   ERROR_CHECK( &quot;UserCsinkHolesetArrSet&quot;, &quot;ProElementAlloc&quot;, err );
+
+   err = UserCsinkHolesetSet( csink_diam, element );
+   ERROR_CHECK( &quot;UserCsinkHolesetArrSet&quot;, &quot;UserHolesetSet&quot;, err );
+<a name="anchor-90"></a>
+   err = ProElemtreeElementAdd( holesets_elem, NULL, element );
+   ERROR_CHECK( &quot;UserCsinkHolesetArrSet&quot;,&quot;ProElemtreeElementAdd&quot;, err );
+ }
+
+<a name="anchor-91"></a> return ( err );
+}
+
+</pre>
+</body>
+</html>

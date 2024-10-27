@@ -1,0 +1,338 @@
+<html>
+<head>
+<title>UtilRoute.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProNcseq.h>
+<a name="anchor-2"></a>#include &lt;ProModelitem.h>
+#include &lt;ProMfg.h>
+#include &lt;ProSolid.h>
+#include &lt;UtilCollect.h>
+#include &lt;ProUtil.h>
+<a name="anchor-3"></a>#include &lt;ProMenu.h>
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;UtilMfgNew.h&quot;
+<a name="anchor-4"></a>#include &quot;TestMfgNew.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilGeom.h&quot;
+#include &quot;TestError.h&quot;
+
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+Function prototypes
+\*--------------------------------------------------------------------*/
+ProNcseq* ProUtilNcseqChoose(ProSolid *p_mfg_solid);
+ProError  ProUtilNCseqGetAll(ProSolid *p_mfg_solid, Pro_Test_Ncseq *p_ncseq_array);
+<a name="anchor-6"></a>ProError  ProTestFeatFilterNcseq(ProModelitem *p_feat, ProAppData tmp_p_nc_seq);
+ProError  ProTestNCseqVisit(ProModelitem *p_feat, ProError err, ProAppData tmp_p_nc_seq);
+ProNcseq* ProUtilGetNcptr(wchar_t *ncseq_name, Pro_Test_Ncseq *p_nc_seq_array);
+ProError  ProUtilToolChoose(ProMfg *p_mfg, ProTool *p_sel_tool);
+int       ProUtilToolsGetAll( ProMfg *p_mfg, Pro_Test_Tool *p_all_tools);
+<a name="anchor-7"></a>ProError  ProTestToolCount( PRO_CONST_ARG ProTool *p_tool, void *num_tool);
+ProError  ProTestToolsGet( PRO_CONST_ARG ProTool *p_tool, void *p_tools);
+ProError  ProUtilGetToolPtr( wchar_t *tool_id, ProMfg *p_mfg, ProTool *p_tool);
+
+
+<a name="anchor-8"></a>/*====================================================================*\
+FUNCTION : ProUtilNcseqChoose()
+PURPOSE  : Choose Nc sequence out of all in manufacturing model
+\*====================================================================*/
+ProNcseq* ProUtilNcseqChoose(ProSolid *p_mfg_solid)
+<a name="anchor-9"></a>{
+    wchar_t title[PRO_NAME_SIZE];
+    wchar_t **selected;
+    ProNcseq* p_sel_ncseq;
+    ProError status;
+<a name="anchor-10"></a>    int	n_sel;
+    ProFeature *features;
+    int features_num, i, made_sel = 0;
+    wchar_t **names;
+    
+<a name="anchor-11"></a>    status = ProUtilCollectNCSeqFeat (*p_mfg_solid, &amp;features);
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)features, &amp;features_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProUtilNcseqChoose()&quot;, 
+<a name="anchor-12"></a>            status, status != PRO_TK_NO_ERROR );
+        names = (wchar_t **)calloc (features_num + 1, sizeof(wchar_t*));
+        for (i = 0; i &lt; features_num; i++)
+        {
+            names[i] = (wchar_t *)calloc (PRO_NAME_SIZE, sizeof(wchar_t));
+<a name="anchor-13"></a>            status = ProModelitemNameGet(features+i, names[i]);
+            TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;,
+                &quot;ProUtilNcseqChoose()&quot;, status, (status != PRO_TK_NO_ERROR));  
+        }
+        names[i] = (wchar_t *)calloc (1, sizeof(wchar_t));
+<a name="anchor-14"></a>        ProStringToWstring (names[i], (char*)&quot;&quot;);
+        ProStringToWstring(title, (char*)&quot;Select NCsequence&quot;);
+   	status = ProMenuStringsSelect( title, names,
+		1, NULL, &amp;selected, &amp;n_sel );
+	if( status == PRO_TK_NO_ERROR &amp;&amp; n_sel > 0 )
+<a name="anchor-15"></a>	{
+	    for (i = 0; i &lt; features_num; i++)
+	    {
+	        if (ProUtilWstrCmp(selected[0], names[i]) == 0)
+	        {
+<a name="anchor-16"></a>	            p_sel_ncseq = (ProNcseq*) calloc(1, sizeof(ProNcseq));
+                    p_sel_ncseq->id = features[i].id;
+                    p_sel_ncseq->owner = features[i].owner;
+                    p_sel_ncseq->type = features[i].type;    
+                    made_sel = 1;
+<a name="anchor-17"></a>	        }
+	        free (names[i]);
+	    }
+	    free (names[i]);
+	    free (names);
+<a name="anchor-18"></a>	}
+	if (!made_sel)
+	    p_sel_ncseq = NULL;
+        status = ProArrayFree ((ProArray*)&amp;features);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProUtilNcseqChoose()&quot;, 
+<a name="anchor-19"></a>            status, status != PRO_TK_NO_ERROR );
+    }
+    return p_sel_ncseq;
+}
+
+<a name="anchor-20"></a>/*====================================================================*\
+FUNCTION : ProTestFeatFilterNcseq()
+PURPOSE  : Filter out Nc sequences of the features 
+\*====================================================================*/
+#if 0
+<a name="anchor-21"></a>ProError ProTestFeatFilterNcseq(ProModelitem *p_feat, ProAppData tmp_p_nc_seq) 
+{
+    ProError status;
+    ProBoolean is_nc_seq;
+    Pro_Test_Ncseq *p_nc_seq = (Pro_Test_Ncseq *) tmp_p_nc_seq;
+<a name="anchor-22"></a>
+    status = ProFeatureIsNcseq(p_feat, &amp;is_nc_seq);
+    TEST_CALL_REPORT(&quot;ProFeatureIsNcseq()&quot;,
+                        &quot;ProTestFeatFilterNcseq()&quot;, status,
+                        (status != PRO_TK_NO_ERROR));
+<a name="anchor-23"></a>
+    if (is_nc_seq == PRO_B_TRUE)
+      (p_nc_seq->num_ncseq)++ ;
+
+    return (is_nc_seq == PRO_B_TRUE? PRO_TK_NO_ERROR : PRO_TK_CONTINUE);
+<a name="anchor-24"></a>
+}
+#endif
+
+/*====================================================================*\
+<a name="anchor-25"></a>FUNCTION : ProTestNCseqVisit()
+PURPOSE  : Records Nc seq name and pointer into structure ProTestNcseq
+\*====================================================================*/
+ProError ProTestNCseqVisit(ProModelitem *p_feat, ProError err,
+                                              ProAppData tmp_p_nc_seq)
+<a name="anchor-26"></a>{
+    ProError status;
+    Pro_Test_Ncseq *p_nc_seq = (Pro_Test_Ncseq *) tmp_p_nc_seq;
+
+    (p_nc_seq->p_ncseq_names)[p_nc_seq->num_ncseq-1] = (wchar_t *) 
+<a name="anchor-27"></a>                                     calloc(PRO_NAME_SIZE, sizeof(wchar_t));
+
+    status = ProModelitemNameGet(p_feat, 
+                (p_nc_seq->p_ncseq_names)[p_nc_seq->num_ncseq-1]);
+    TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;,
+<a name="anchor-28"></a>                        &quot;ProTestNCseqVisit()&quot;, status,
+                        (status != PRO_TK_NO_ERROR));
+
+    p_nc_seq->p_ncseqptr_array[p_nc_seq->num_ncseq-1] = (ProNcseq*) 
+                                                   calloc(1, sizeof(ProNcseq));
+<a name="anchor-29"></a>   *p_nc_seq->p_ncseqptr_array[p_nc_seq->num_ncseq-1] = * (ProNcseq*)p_feat;
+
+    return PRO_TK_NO_ERROR;
+  
+}
+<a name="anchor-30"></a>
+/*====================================================================*\
+FUNCTION : ProUtilGetNcptr()
+PURPOSE  : Gets handle to Nc sequence from struct Pro_Test_Ncseq having its name 
+\*====================================================================*/
+<a name="anchor-31"></a>ProNcseq* ProUtilGetNcptr(wchar_t *ncseq_name, Pro_Test_Ncseq *p_nc_seq_array)
+{
+    ProNcseq* p_ncseq=NULL;
+    int i;
+    
+<a name="anchor-32"></a>    for (i=0; i&lt;p_nc_seq_array->num_ncseq; i++)
+     {
+      if (ProUtilWstrCmp(ncseq_name, p_nc_seq_array->p_ncseq_names[i]) == 0)
+        {
+         p_ncseq = (ProNcseq*) calloc(1, sizeof(ProNcseq));
+<a name="anchor-33"></a>         *p_ncseq = *(p_nc_seq_array->p_ncseqptr_array[i]); 
+         break;
+        }
+     }
+/*====================================================================*\
+<a name="anchor-34"></a>      Deallocate structure Pro_Test_Ncseq
+\*====================================================================*/
+      for (i=0; i&lt;p_nc_seq_array->num_ncseq; i++)
+       {
+        free (p_nc_seq_array->p_ncseq_names[i]);
+<a name="anchor-35"></a>        free (p_nc_seq_array->p_ncseqptr_array[i]);
+       }
+       free (p_nc_seq_array->p_ncseq_names[p_nc_seq_array->num_ncseq]);
+       free (p_nc_seq_array->p_ncseq_names);
+       free (p_nc_seq_array->p_ncseqptr_array);
+<a name="anchor-36"></a>
+   return p_ncseq; 
+}
+
+/*====================================================================*\
+<a name="anchor-37"></a>FUNCTION : ProUtilToolChoose()
+PURPOSE  : Let user choose a tool in a mfg model
+\*====================================================================*/
+ProError ProUtilToolChoose(ProMfg *p_mfg, ProTool *p_sel_tool)
+{
+<a name="anchor-38"></a>     ProError status;
+     int num_tools;
+     wchar_t **selected;
+     Pro_Test_Tool ProTestTool;
+     wchar_t title[PRO_NAME_SIZE];
+<a name="anchor-39"></a>     int	n_sel;
+
+     num_tools =  ProUtilToolsGetAll(p_mfg, &amp;ProTestTool);
+     if (num_tools > 0)
+        {
+<a name="anchor-40"></a>          ProStringToWstring(title, (char*)&quot;Select Tools&quot;);
+	  status = ProMenuStringsSelect( title , ProTestTool.tool_ids, 
+		 1, NULL, &amp;selected, &amp;n_sel );
+	  if( status == PRO_TK_NO_ERROR &amp;&amp; n_sel > 0 )
+          {
+<a name="anchor-41"></a>              status = ProUtilGetToolPtr(selected[0], p_mfg, p_sel_tool);
+              return PRO_TK_NO_ERROR;
+          }
+          else
+              return PRO_TK_E_NOT_FOUND;
+<a name="anchor-42"></a>        }
+      else
+        return PRO_TK_E_NOT_FOUND;
+}
+
+<a name="anchor-43"></a>
+/*====================================================================*\
+FUNCTION : ProUtilToolsGetAll()
+PURPOSE  : Traverse mfg model for the tools present
+\*====================================================================*/
+<a name="anchor-44"></a>int ProUtilToolsGetAll(
+     ProMfg *p_mfg,
+     Pro_Test_Tool *p_all_tools)
+{
+     ProError status;
+<a name="anchor-45"></a>     int num_tools = 0, i;
+     ProTool	    *tools;
+     
+/*-----------------------------------------------------------*\
+ First, count how many tools are in the mfg model
+<a name="anchor-46"></a>\*-----------------------------------------------------------*/
+                        
+     status = ProUtilCollectMfgTools (*p_mfg, &amp;tools);
+     if (status == PRO_TK_NO_ERROR)
+     {
+<a name="anchor-47"></a>         status = ProArraySizeGet ((ProArray)tools, &amp;num_tools);
+         TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProUtilToolChoose()&quot;, 
+             status, status != PRO_TK_NO_ERROR );
+
+         status = ProArrayFree ((ProArray*)&amp;tools);
+<a name="anchor-48"></a>         TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProUtilToolChoose()&quot;, 
+             status, status != PRO_TK_NO_ERROR );
+     }
+
+     if (num_tools > 0)
+<a name="anchor-49"></a>       {
+/*-----------------------------------------------------------*\
+ Initialize Pro_Test_Tool structure
+\*-----------------------------------------------------------*/
+         p_all_tools->tool_ids = (wchar_t **)
+<a name="anchor-50"></a>                          calloc(num_tools + 1, sizeof(wchar_t *));
+
+         p_all_tools->num_tools = 0;
+
+/*----------------------------------------------------------*\
+<a name="anchor-51"></a> Get all tools
+\*----------------------------------------------------------*/
+         status = ProUtilCollectMfgTools (*p_mfg, &amp;tools);
+         if (status == PRO_TK_NO_ERROR)
+         {
+<a name="anchor-52"></a>             status = ProArraySizeGet ((ProArray)tools, &amp;num_tools);
+             TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProUtilToolChoose()&quot;, 
+                 status, status != PRO_TK_NO_ERROR );
+             for (i = 0; i &lt; num_tools; i++)
+             {
+<a name="anchor-53"></a>                 status = ProTestToolsGet (tools+i,
+ 	            (ProAppData)p_all_tools);
+             }
+             status = ProArrayFree ((ProArray*)&amp;tools);
+             TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProUtilToolChoose()&quot;, 
+<a name="anchor-54"></a>                 status, status != PRO_TK_NO_ERROR );
+         }
+
+         p_all_tools->tool_ids[num_tools] = (wchar_t *)calloc(3, sizeof(wchar_t));
+         ProStringToWstring(p_all_tools->tool_ids[num_tools], (char*)&quot;&quot;);
+<a name="anchor-55"></a>
+      }
+  return num_tools;
+}
+
+<a name="anchor-56"></a>
+/*====================================================================*\
+FUNCTION : ProTestToolCount()
+PURPOSE  : action function that counts num of tools
+\*====================================================================*/
+<a name="anchor-57"></a>ProError ProTestToolCount(
+        PRO_CONST_ARG ProTool *p_tool,
+        void *num_tool)
+{
+        (* (int *)num_tool)++;
+<a name="anchor-58"></a>     return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+FUNCTION : ProTestToolsGet()
+<a name="anchor-59"></a>PURPOSE  : action function that fills out Pro_Test_Tool structure
+\*====================================================================*/
+ProError ProTestToolsGet(
+         PRO_CONST_ARG ProTool *p_tool,
+         void *p_tools)
+<a name="anchor-60"></a>{
+         Pro_Test_Tool *p_tools_array = (Pro_Test_Tool *)p_tools;
+         
+         p_tools_array->num_tools ++;
+
+<a name="anchor-61"></a>         p_tools_array->tool_ids[p_tools_array->num_tools-1] =
+                           (wchar_t *) calloc(PRO_LINE_SIZE, sizeof(wchar_t));
+                           
+         ProUtilWstrcpy( p_tools_array->tool_ids[p_tools_array->num_tools-1],
+                                           (wchar_t *) p_tool->tool_id);
+<a name="anchor-62"></a>
+         return PRO_TK_NO_ERROR;
+}
+
+
+<a name="anchor-63"></a>/*====================================================================*\
+FUNCTION : ProUtilGetToolPtr()
+PURPOSE  : Gets handle to a tool from Pro_Test_Tools having its name
+\*====================================================================*/
+ProError  ProUtilGetToolPtr(
+<a name="anchor-64"></a>         wchar_t *tool_id,
+         ProMfg *p_mfg,
+         ProTool *p_tool)
+{
+             ProUtilWstrcpy(p_tool->tool_id, tool_id);
+<a name="anchor-65"></a>             p_tool->owner_mfg = *p_mfg;
+
+         return PRO_TK_NO_ERROR;
+
+}
+</pre>
+</body>
+</html>

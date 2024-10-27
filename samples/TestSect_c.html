@@ -1,0 +1,1905 @@
+<html>
+<head>
+<title>TestSect.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMenu.h>
+#include &lt;ProSecdim.h>
+#include &lt;ProSecerror.h>
+<a name="anchor-3"></a>#include &lt;ProSection.h>
+#include &lt;ProUtil.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+<a name="anchor-4"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestSect.h&quot;
+#include &quot;TestFeat.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;TestError.h&quot;
+<a name="anchor-5"></a>#include &quot;UtilMath.h&quot;
+#include &lt;PTApplsUnicodeUtils.h>
+#include &quot;UtilString.h&quot;
+/*====================================================================*\
+    FUNCTION :	ProTestSectionMenuAction
+<a name="anchor-6"></a>    PURPOSE  :	Menu for section action            
+\*====================================================================*/
+int ProTestSectionMenuAction()
+{
+    int id;
+<a name="anchor-7"></a>    ProError status;
+    status = ProMenuFileRegister((char *)&quot;TK SECT ACT&quot;,(char *)&quot;tk_secact.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestSectionMenuAction&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char *)&quot;TK SECT ACT&quot;,(char *)&quot;-Create&quot;,
+<a name="anchor-8"></a>        (ProMenubuttonAction)ProTestSectionCreate, NULL,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionMenuAction&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char *)&quot;TK SECT ACT&quot;,(char *)&quot;-Retrieve&quot;,
+        (ProMenubuttonAction)ProTestSectionRetrieve, NULL,0);
+<a name="anchor-9"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionMenuAction&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char *)&quot;TK SECT ACT&quot;,(char *)&quot;-Info&quot;,
+	(ProMenubuttonAction)ProTestSectionInfoGet, NULL,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionMenuAction&quot;,
+<a name="anchor-10"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char *)&quot;TK SECT ACT&quot;,(char *)&quot;TK SECT ACT&quot;,
+		      ( ProMenubuttonAction)ProMenuDelete,  NULL,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionMenuAction&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-11"></a>    status = ProMenuCreate(PROMENUTYPE_MAIN,(char *)&quot;TK SECT ACT&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate&quot;, &quot;ProTestSectionMenuAction&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess((char *)&quot;TK SECT ACT&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProTestSectionMenuAction&quot;,
+<a name="anchor-12"></a>        status, status != PRO_TK_NO_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-13"></a>/*====================================================================*\
+    FUNCTION :	ProTestSectionSolveRegen
+    PURPOSE  :	Solve and regenerate a section     
+\*====================================================================*/
+ProError ProTestSectionSolveRegen(ProSection section)
+<a name="anchor-14"></a>{
+    ProError status;
+    ProWSecerror sec_errors;
+    ProLine w_message;
+
+<a name="anchor-15"></a>/*--------------------------------------------------------------------*\
+    Solve and regenerate the section
+\*--------------------------------------------------------------------*/
+
+    ProTestSecerrAlloc(&amp;sec_errors);
+<a name="anchor-16"></a>    ProStringToWstring(w_message, (char *)&quot;ProSectionSolve() errors.&quot;);
+    status = ProSecerrorAdd(&amp;sec_errors, 0, w_message, 0, -1, 0);
+    status = ProSectionSolve(section,&amp;sec_errors);
+    TEST_CALL_REPORT(&quot;ProSectionSolve()&quot;, &quot;ProTestSectionSolveRegen()&quot;,
+	          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-17"></a>    ProTestSecerrShow(sec_errors);
+    ProTestSecerrFree(&amp;sec_errors);
+    if (status != PRO_TK_NO_ERROR)
+	return(PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-18"></a>    ProTestSecerrAlloc(&amp;sec_errors);
+    status = ProSectionRegenerate(section,&amp;sec_errors);
+    TEST_CALL_REPORT(&quot;ProSectionRegenerate()&quot;, &quot;ProTestSectionSolveRegen()&quot;,
+		           status, status != PRO_TK_NO_ERROR);
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-19"></a>    {
+	ProTestSecerrShow(sec_errors);
+	return(PRO_TK_GENERAL_ERROR);
+    }
+    ProTestSecerrFree(&amp;sec_errors);
+<a name="anchor-20"></a>    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestSectionCreate
+<a name="anchor-21"></a>    PURPOSE  :	Creates a pre-defined 2D section
+\*====================================================================*/
+int ProTestSectionCreate()
+{
+    ProSection section;
+<a name="anchor-22"></a>    ProError status;
+    wchar_t sec_name[PRO_NAME_SIZE];
+    Sect_types sect_type;
+
+    status = ProSection2DAlloc(&amp;section);
+<a name="anchor-23"></a>    TEST_CALL_REPORT(&quot;ProSection2DAlloc()&quot;, &quot;ProTestSectionCreate()&quot;,
+		     status, status != PRO_TK_NO_ERROR);
+
+    status = ProTestSectionBuild(section,PRO_2DSECTION,NULL,
+						NULL,&amp;sect_type);
+<a name="anchor-24"></a>
+    ProTestSectionNameGet(sect_type, sec_name);
+    status = ProSectionNameSet(section,sec_name);
+    TEST_CALL_REPORT(&quot;ProSectionNameSet()&quot;, &quot;ProTestSectionCreate()&quot;,
+		     status, status != PRO_TK_NO_ERROR);
+<a name="anchor-25"></a>
+    ProUtilSectionSave(section);
+    status = ProSectionFree(&amp;section);
+    TEST_CALL_REPORT(&quot;ProSectionFree()&quot;, &quot;ProTestSectionCreate()&quot;,
+		     status, status != PRO_TK_NO_ERROR);
+<a name="anchor-26"></a>
+    return(0);
+}
+
+/*====================================================================*\
+<a name="anchor-27"></a>    FUNCTION :	ProTestSectionRetrieve
+    PURPOSE  :	Retrieves a section   
+\*====================================================================*/
+int ProTestSectionRetrieve()
+{
+<a name="anchor-28"></a>    ProSection section;
+    ProError status;
+
+    status = ProUtilSectionRetrieve(&amp;section);
+
+<a name="anchor-29"></a>    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestSectionInfoGet
+<a name="anchor-30"></a>    PURPOSE  :	Dumps section entity data to a file
+\*====================================================================*/
+int ProTestSectionInfoGet()
+{
+    ProSection section;
+<a name="anchor-31"></a>    ProError status;
+    FILE *fp;
+    ProName wname;
+    char name[PRO_LINE_SIZE];
+    wchar_t wfname[PRO_LINE_SIZE];
+<a name="anchor-32"></a>
+    status = ProUtilSectionRetrieve(&amp;section);
+
+    status = ProSectionNameGet(section,wname);
+    TEST_CALL_REPORT(&quot;ProSectionNameGet()&quot;, &quot;ProTestSectionInfoGet()&quot;,
+<a name="anchor-33"></a>		     status, status != PRO_TK_NO_ERROR);
+    ProWstringToString(name,wname);
+    ProUtilstrcat(name,&quot;_sec.inf&quot;);
+    fp = PTApplsUnicodeFopen(name,&quot;w&quot;);
+
+<a name="anchor-34"></a>    status = ProUtilSectionInfoGet(fp,section);
+
+    fclose(fp);
+
+    ProInfoWindowDisplay(ProStringToWstring(wfname,name), NULL, NULL);
+<a name="anchor-35"></a>    return(0);
+}
+/*====================================================================*\
+    FUNCTION :  ProTestSectionNameGet
+    PURPOSE  :  Gets the default name of a 2D section
+<a name="anchor-36"></a>\*====================================================================*/
+void ProTestSectionNameGet(Sect_types sect_type, ProName sec_name)
+{
+    switch (sect_type)
+    {
+<a name="anchor-37"></a>        case SEC_BOX:
+            ProStringToWstring(sec_name, (char*)&quot;BOX&quot;);
+            break;
+        case SEC_CIRCLE:
+            ProStringToWstring(sec_name, (char*)&quot;CIRCLE&quot;);
+<a name="anchor-38"></a>            break;
+        case SEC_SLOT:
+            ProStringToWstring(sec_name, (char*)&quot;SLOT&quot;);
+            break;
+        case SEC_SPLINE:
+<a name="anchor-39"></a>            ProStringToWstring(sec_name, (char*)&quot;SPLINE&quot;);
+            break;
+        case SEC_WIDGET:
+            ProStringToWstring(sec_name, (char*)&quot;WIDGET&quot;);
+            break;
+<a name="anchor-40"></a>        case SEC_ANGLE:
+            ProStringToWstring(sec_name, (char*)&quot;ANGLE&quot;);
+            break;
+        case SEC_DIAM:
+            ProStringToWstring(sec_name, (char*)&quot;DAMETER&quot;);
+<a name="anchor-41"></a>            break;
+        default:
+            ProStringToWstring(sec_name, (char*)&quot;Unknown&quot;);
+            break;
+    }
+<a name="anchor-42"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestSectionBuild
+    PURPOSE  :	Builds a specific section for smoke testing
+<a name="anchor-43"></a>\*====================================================================*/
+ProError ProTestSectionBuild(
+    ProSection section, /* In: Pre-Allocated Workspace section handle */
+    ProType sec_type, /* 2D or 3D section */
+    ProTestSectionInfo *p_sketch_refs, /* In: sketch pln info for 3D sec */
+<a name="anchor-44"></a>    void *dummy, 
+    Sect_types *sect_type)    /* Out: Type of section to create */
+{
+    ProError status = PRO_TK_GENERAL_ERROR;
+    int id;
+<a name="anchor-45"></a>    int ProUtilUseEdge(ProAppData app_dt, int act);
+    
+    status = ProMenuFileRegister((char*)&quot;TkSects&quot;,(char*)&quot;tksects.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestSectionBuild&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-46"></a>    status = ProMenubuttonActionSet((char*)&quot;TkSects&quot;,(char*)&quot;-Box&quot;,
+        (ProMenubuttonAction)ProUtilMenuAction, NULL, SEC_BOX);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionBuild&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkSects&quot;,(char*)&quot;-Circle&quot;,
+<a name="anchor-47"></a>        (ProMenubuttonAction)ProUtilMenuAction, NULL, SEC_CIRCLE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionBuild&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkSects&quot;,(char*)&quot;-Slot&quot;,
+        (ProMenubuttonAction)ProUtilMenuAction, NULL, SEC_SLOT);
+<a name="anchor-48"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionBuild&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkSects&quot;,(char*)&quot;-Spline&quot;,
+        (ProMenubuttonAction)ProUtilMenuAction, NULL, SEC_SPLINE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionBuild&quot;,
+<a name="anchor-49"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkSects&quot;,(char*)&quot;-Widget&quot;,
+        (ProMenubuttonAction)ProUtilMenuAction, NULL, SEC_WIDGET);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionBuild&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-50"></a>    status = ProMenubuttonActionSet((char*)&quot;TkSects&quot;,(char*)&quot;-Angle&quot;,
+        (ProMenubuttonAction)ProUtilMenuAction, NULL, SEC_ANGLE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionBuild&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkSects&quot;,(char*)&quot;-Diameter&quot;,
+<a name="anchor-51"></a>        (ProMenubuttonAction)ProUtilMenuAction, NULL, SEC_DIAM);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionBuild&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkSects&quot;,(char*)&quot;-Use Existing&quot;,
+        (ProMenubuttonAction)ProUtilMenuAction, NULL, SEC_EXISTING);
+<a name="anchor-52"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionBuild&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkSects&quot;,(char*)&quot;-Use Edge&quot;,
+	(ProMenubuttonAction)ProUtilMenuAction,  NULL, SEC_USE_EDGE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestSectionBuild&quot;,
+<a name="anchor-53"></a>	status, status != PRO_TK_NO_ERROR);
+
+    status = ProMenubuttonActionSet((char*)&quot;TkSects&quot;,(char*)&quot;TkSects&quot;, 
+        (ProMenubuttonAction)ProUtilMenuAction,NULL, -1);
+
+<a name="anchor-54"></a>    status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkSects&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate&quot;, &quot;ProTestSectionBuild&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess((char*)&quot;TkSects&quot;, (int*)sect_type);
+    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProTestSectionBuild&quot;,
+<a name="anchor-55"></a>        status, status != PRO_TK_NO_ERROR);
+
+    status = ProUtilSectionClean(section);
+
+    switch (*sect_type)
+<a name="anchor-56"></a>    {
+         case SEC_BOX:
+              status = ProTestBoxSectBuild(section,sec_type,p_sketch_refs);
+              break;
+         case SEC_CIRCLE:
+<a name="anchor-57"></a>              status = ProTestCircleSectBuild(section,sec_type,p_sketch_refs);
+              break;
+         case SEC_SLOT:
+              status = ProTestSlotSectBuild(section,sec_type,p_sketch_refs);
+              break;
+<a name="anchor-58"></a>         case SEC_SPLINE:
+	      status = ProTestSplineSectBuild(section,sec_type,p_sketch_refs);
+	      break;
+         case SEC_WIDGET:
+	      status = ProTestWidgetSectBuild(section,sec_type,p_sketch_refs);
+<a name="anchor-59"></a>              break;
+         case SEC_ANGLE:
+	      status = ProTestAngleSectBuild(section,sec_type,p_sketch_refs);
+              break;
+         case SEC_DIAM:
+<a name="anchor-60"></a>              status = ProTestDiamSectBuild(section,sec_type,p_sketch_refs);
+              break;
+         case SEC_EXISTING:
+	      status = ProUtilSectionUseExisting(section,p_sketch_refs);
+	      break;
+<a name="anchor-61"></a>         case SEC_USE_EDGE:
+            status = (ProError)ProUtilUseEdge (section,  -1);
+            break;
+         default:
+	      status = PRO_TK_GENERAL_ERROR;
+<a name="anchor-62"></a>         
+    }
+
+
+    return(status);
+<a name="anchor-63"></a>}
+
+static int ProUtilMenuAction(
+    char *dummy,
+    int action)
+<a name="anchor-64"></a>{
+    ProError status;
+
+    status = ProMenuDeleteWithStatus(action);
+    TEST_CALL_REPORT (&quot;ProMenuDeleteWithStatus&quot;, &quot;ProUtilMenuAction&quot;,
+<a name="anchor-65"></a>       status, status != PRO_TK_NO_ERROR);
+    
+    return (0);
+}
+
+<a name="anchor-66"></a>/*====================================================================*\
+    FUNCTION :  ProTestBoxSectBuild()
+    PURPOSE  :  Create a box section
+\*====================================================================*/
+ProError ProTestBoxSectBuild(
+<a name="anchor-67"></a>    ProSection section,
+    ProType sec_type,
+    ProTestSectionInfo *p_sketch_refs)
+{
+    ProError status;
+<a name="anchor-68"></a>    Pro2dLinedef line;
+    int ent_ids[7];
+    double width,height,offset;
+    Pro2dPnt dim_pnt;
+    int entdim_ids[2];
+<a name="anchor-69"></a>    int dim_ids[5];
+    double edge1[2][3],edge2[2][3],offsets[2];
+    double sk_transf[4][4];
+    double transform[4][4];
+    double angle = 0.0;
+<a name="anchor-70"></a>    ProSectionPointType pnt_types[2];
+    ProLine w_message;
+    ProWSecerror sec_errors;
+
+    width = 12.0;
+<a name="anchor-71"></a>    height = 10.0;
+
+    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Box width [%0(6.2)f]: &quot;,&amp;width);
+    ProUtilDoubleGet(NULL,&amp;width,&amp;width);
+    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Box height [%0(6.2)f]: &quot;,&amp;height);
+<a name="anchor-72"></a>    ProUtilDoubleGet(NULL,&amp;height,&amp;height);
+
+    offset = width/2.0;
+    offsets[0] = offsets[1] = offset;
+
+<a name="anchor-73"></a>    ProUtilSectEpsModify(section);
+
+    if (p_sketch_refs != NULL)
+    {
+        status = ProUtilTwoOrthogEdgesOnPlaneGet(section,&amp;ent_ids[5],
+<a name="anchor-74"></a>                                                 edge1,edge2);
+        if ( status != PRO_TK_NO_ERROR )
+            return(PRO_TK_GENERAL_ERROR);
+
+        ProUtilXyOffsetsGet(offsets);
+<a name="anchor-75"></a>
+        ProUtilSketchCsysGet(p_sketch_refs,sk_transf);
+
+        ProUtilSectCsysTransformGet(p_sketch_refs,sk_transf,edge1,
+                                    edge2,transform,&amp;angle);
+<a name="anchor-76"></a>        if ((fabs(transform[0][0])>1e-3) ^
+            (!(fabs(edge1[0][0]-edge1[1][0])>1e-3)))
+        {
+            offset = offsets[0];offsets[0]=offsets[1];offsets[1]=offset;
+        }
+<a name="anchor-77"></a>    }
+
+/*--------------------------------------------------------------------*\
+    Define the lines of the box
+\*--------------------------------------------------------------------*/
+<a name="anchor-78"></a>    line.type = PRO_2D_CENTER_LINE;
+    line.end1[0] = 0.0;
+    line.end1[1] = 0.0;
+    line.end2[0] = 0.0;
+    line.end2[1] = 1.0;
+<a name="anchor-79"></a>    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,line.end1,line.end1);
+        ProUtil2DPointTrans(transform,line.end2,line.end2);
+
+<a name="anchor-80"></a>    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,&amp;ent_ids[0]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestBoxSectBuild()&quot;,
+                           status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-81"></a>    line.type = PRO_2D_LINE;
+    line.end1[0] = offsets[0];
+    line.end1[1] = offsets[1];
+    line.end2[0] = offsets[0];
+    line.end2[1] = offsets[1] + height;
+<a name="anchor-82"></a>    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,line.end1,line.end1);
+        ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+<a name="anchor-83"></a>    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,  &amp;ent_ids[1]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestBoxSectBuild()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+
+    line.type = PRO_2D_LINE;
+<a name="anchor-84"></a>    line.end1[0] = offsets[0];
+    line.end1[1] = offsets[1] + height;
+    line.end2[0] = offsets[0] + width;
+    line.end2[1] = offsets[1] + height;
+    if (p_sketch_refs != NULL)
+<a name="anchor-85"></a>    {
+        ProUtil2DPointTrans(transform,line.end1,line.end1);
+        ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,  &amp;ent_ids[2]);
+<a name="anchor-86"></a>    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestBoxSectBuild()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offsets[0] + width;
+<a name="anchor-87"></a>    line.end1[1] = offsets[1] + height;
+    line.end2[0] = offsets[0] + width;
+    line.end2[1] = offsets[1];
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-88"></a>        ProUtil2DPointTrans(transform,line.end1,line.end1);
+        ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,  &amp;ent_ids[3]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestBoxSectBuild()&quot;,
+<a name="anchor-89"></a>                          status, status != PRO_TK_NO_ERROR);
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offsets[0] + width;
+    line.end1[1] = offsets[1];
+    line.end2[0] = offsets[0];
+<a name="anchor-90"></a>    line.end2[1] = offsets[1];
+    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,line.end1,line.end1);
+        ProUtil2DPointTrans(transform,line.end2,line.end2);
+<a name="anchor-91"></a>    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,
+                                      &amp;ent_ids[4]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestBoxSectBuild()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-92"></a>
+/*--------------------------------------------------------------------*\
+    Dimension the box
+\*--------------------------------------------------------------------*/
+    dim_pnt[0] = offsets[0] -1;
+<a name="anchor-93"></a>    dim_pnt[1] = offsets[1] + height/2;
+    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+    }
+<a name="anchor-94"></a>    entdim_ids[0] = ent_ids[2];
+    entdim_ids[1] = ent_ids[4];
+    pnt_types[0] = PRO_ENT_WHOLE;
+    pnt_types[1] = PRO_ENT_WHOLE;
+    status = ProSecdimCreate(section, entdim_ids, pnt_types, 2,
+<a name="anchor-95"></a>                        PRO_TK_DIM_LINE_LINE,dim_pnt,&amp;dim_ids[0]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;,
+                &quot;ProTestBoxSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+
+    dim_pnt[0] = offsets[0] - width/2;
+<a name="anchor-96"></a>    dim_pnt[1] = offsets[1] + 1.0;
+    entdim_ids[0] = ent_ids[2];
+    pnt_types[0] = PRO_ENT_WHOLE;
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-97"></a>        ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+    }
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,1,
+                                    PRO_TK_DIM_LINE, dim_pnt, &amp;dim_ids[1]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;,
+<a name="anchor-98"></a>                &quot;ProTestBoxSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+/*--------------------------------------------------------------------*\
+    Autodim section
+\*--------------------------------------------------------------------*/
+    ProTestSecerrAlloc(&amp;sec_errors);
+<a name="anchor-99"></a>    ProStringToWstring(w_message, (char *)&quot;ProSectionAutodim() errors.&quot;);
+    status = ProSecerrorAdd(&amp;sec_errors, 0, w_message, 0, -1, 0);
+    TEST_CALL_REPORT(&quot;ProSecerrorAdd()&quot;,
+            &quot;ProTestBoxSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+    status = ProSectionAutodim(section, &amp;sec_errors);
+<a name="anchor-100"></a>    TEST_CALL_REPORT(&quot;ProSectionAutodim()&quot;,
+            &quot;ProTestBoxSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+    if (status != PRO_TK_NO_ERROR)
+        ProTestSecerrShow(sec_errors);
+    ProTestSecerrFree(&amp;sec_errors);
+<a name="anchor-101"></a>
+/*--------------------------------------------------------------------*\
+    Solve and regenerate the section
+\*--------------------------------------------------------------------*/
+    ProTestSecerrAlloc(&amp;sec_errors);
+<a name="anchor-102"></a>    status = ProSectionRegenerate(section,&amp;sec_errors);
+    TEST_CALL_REPORT(&quot;ProSectionRegenerate()&quot;,
+                &quot;ProTestBoxSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+    if (status != PRO_TK_NO_ERROR)
+    {
+<a name="anchor-103"></a>        ProTestSecerrShow(sec_errors);
+        return(PRO_TK_GENERAL_ERROR);
+    }
+    ProTestSecerrFree(&amp;sec_errors);
+
+<a name="anchor-104"></a>    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestDiamSectBuild()
+<a name="anchor-105"></a>    PURPOSE  :	Test SecdimDiameter functions
+\*====================================================================*/
+ProError ProTestDiamSectBuild(
+    ProSection section,
+    ProType sec_type,
+<a name="anchor-106"></a>    ProTestSectionInfo *p_sketch_refs)
+{
+    ProError status;
+    Pro2dLinedef line;
+    int ent_ids[7];
+<a name="anchor-107"></a>    double width,height,offset;
+    Pro2dPnt dim_pnt;
+    int entdim_ids[2];
+    int dim_ids[5];
+    double edge1[2][3],edge2[2][3],offsets[2];
+<a name="anchor-108"></a>    double sk_transf[4][4];
+    double transform[4][4];
+    double angle = 0.0;
+    ProSectionPointType pnt_types[2];
+    ProLine w_message;
+<a name="anchor-109"></a>    ProWSecerror sec_errors;
+    ProBoolean dim_is_diameter;
+
+    width = 12.0;
+    height = 10.0;
+<a name="anchor-110"></a>
+    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Box width [%0(6.2)f]: &quot;,&amp;width);
+    ProUtilDoubleGet(NULL,&amp;width,&amp;width);
+    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Box height [%0(6.2)f]: &quot;,&amp;height);
+    ProUtilDoubleGet(NULL,&amp;height,&amp;height);
+<a name="anchor-111"></a>
+    offset = width/2.0;
+    offsets[0] = offsets[1] = offset;
+
+    ProUtilSectEpsModify(section);
+<a name="anchor-112"></a>
+    if (p_sketch_refs != NULL)
+    {
+	status = ProUtilTwoOrthogEdgesOnPlaneGet(section,&amp;ent_ids[5],
+						 edge1,edge2);
+<a name="anchor-113"></a>        if ( status != PRO_TK_NO_ERROR )
+	    return(PRO_TK_GENERAL_ERROR);
+
+        ProUtilXyOffsetsGet(offsets);
+
+<a name="anchor-114"></a>	ProUtilSketchCsysGet(p_sketch_refs,sk_transf);
+
+	ProUtilSectCsysTransformGet(p_sketch_refs,sk_transf,edge1,
+				    edge2,transform,&amp;angle);
+	if ((fabs(transform[0][0])>1e-3) ^ 
+<a name="anchor-115"></a>	    (!(fabs(edge1[0][0]-edge1[1][0])>1e-3)))
+	{
+	    offset = offsets[0];offsets[0]=offsets[1];offsets[1]=offset;
+	}
+    }
+<a name="anchor-116"></a>
+/*--------------------------------------------------------------------*\
+    Define the lines of the box	
+\*--------------------------------------------------------------------*/
+    line.type = PRO_2D_CENTER_LINE;
+<a name="anchor-117"></a>    line.end1[0] = 0.0;
+    line.end1[1] = 0.0;
+    line.end2[0] = 0.0;
+    line.end2[1] = 1.0;
+    if (p_sketch_refs != NULL)
+<a name="anchor-118"></a>    {
+	ProUtil2DPointTrans(transform,line.end1,line.end1);
+	ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,&amp;ent_ids[0]);
+<a name="anchor-119"></a>    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestDiamSectBuild()&quot;,
+		           status, status != PRO_TK_NO_ERROR);
+       
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offsets[0];
+<a name="anchor-120"></a>    line.end1[1] = offsets[1];
+    line.end2[0] = offsets[0];
+    line.end2[1] = offsets[1] + height;
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-121"></a>	ProUtil2DPointTrans(transform,line.end1,line.end1);
+	ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,  &amp;ent_ids[1]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestDiamSectBuild()&quot;,
+<a name="anchor-122"></a>		          status, status != PRO_TK_NO_ERROR);
+              
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offsets[0];
+    line.end1[1] = offsets[1] + height;
+<a name="anchor-123"></a>    line.end2[0] = offsets[0] + width;
+    line.end2[1] = offsets[1] + height;
+    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,line.end1,line.end1);
+<a name="anchor-124"></a>	ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,  &amp;ent_ids[2]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestDiamSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-125"></a>              
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offsets[0] + width;
+    line.end1[1] = offsets[1] + height;
+    line.end2[0] = offsets[0] + width;
+<a name="anchor-126"></a>    line.end2[1] = offsets[1];
+    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,line.end1,line.end1);
+	ProUtil2DPointTrans(transform,line.end2,line.end2);
+<a name="anchor-127"></a>    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,  &amp;ent_ids[3]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestDiamSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+              
+<a name="anchor-128"></a>    line.type = PRO_2D_LINE;
+    line.end1[0] = offsets[0] + width;
+    line.end1[1] = offsets[1];
+    line.end2[0] = offsets[0];
+    line.end2[1] = offsets[1];
+<a name="anchor-129"></a>    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,line.end1,line.end1);
+	ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+<a name="anchor-130"></a>    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,
+				      &amp;ent_ids[4]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestDiamSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+              
+<a name="anchor-131"></a>/*--------------------------------------------------------------------*\
+    Dimension the box
+\*--------------------------------------------------------------------*/
+    dim_pnt[0] = offsets[0] -1;
+    dim_pnt[1] = offsets[1] + height/2;
+<a name="anchor-132"></a>    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+    }
+    entdim_ids[0] = ent_ids[2];
+<a name="anchor-133"></a>    entdim_ids[1] = ent_ids[4];
+    pnt_types[0] = PRO_ENT_WHOLE;
+    pnt_types[1] = PRO_ENT_WHOLE;
+    status = ProSecdimCreate(section, entdim_ids, pnt_types, 2,
+			PRO_TK_DIM_LINE_LINE,dim_pnt,&amp;dim_ids[0]);
+<a name="anchor-134"></a>    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, 
+		&quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+
+    dim_pnt[0] = offsets[0] - width/2;
+    dim_pnt[1] = offsets[1] + 1.0;
+<a name="anchor-135"></a>    entdim_ids[0] = ent_ids[2];
+    pnt_types[0] = PRO_ENT_WHOLE;
+    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+<a name="anchor-136"></a>    }
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,1,
+				    PRO_TK_DIM_LINE, dim_pnt, &amp;dim_ids[1]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, 
+		&quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-137"></a>
+    dim_pnt[0] = offsets[0] - width/4;
+    dim_pnt[1] = offsets[1] + height/2;
+    entdim_ids[0] = ent_ids[0];
+    entdim_ids[1] = ent_ids[1];
+<a name="anchor-138"></a>    pnt_types[0] = PRO_ENT_WHOLE;
+    pnt_types[1] = PRO_ENT_WHOLE;
+    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+<a name="anchor-139"></a>    }
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+        PRO_TK_DIM_LINE_LINE, dim_pnt, &amp;dim_ids[2]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;,
+                &quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-140"></a>
+#ifndef PT_PRODUCTS_BUILD
+    status = ProSecdimDiameterInquire (section, dim_ids[2], &amp;dim_is_diameter);
+    TEST_CALL_REPORT (&quot;ProSecdimDiameterInquire()&quot;, 
+        &quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-141"></a>    ProTKPrintf (&quot;dim_is_diameter %d\n&quot;, dim_is_diameter);
+
+    if (dim_is_diameter != PRO_B_TRUE)
+    {
+        status = ProSecdimDiameterSet (section, dim_ids[2]);
+<a name="anchor-142"></a>        TEST_CALL_REPORT (&quot;ProSecdimDiameterSet()&quot;, 
+            &quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+        status = ProSecdimDiameterInquire (section, dim_ids[2],
+            &amp;dim_is_diameter);
+        TEST_CALL_REPORT (&quot;ProSecdimDiameterInquire()&quot;,
+<a name="anchor-143"></a>            &quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+        ProTKPrintf (&quot;dim_is_diameter %d\n&quot;, dim_is_diameter);
+
+        if (dim_is_diameter == PRO_B_TRUE) 
+        {
+<a name="anchor-144"></a>            status = ProSecdimDiameterClear (section, dim_ids[2]);
+            TEST_CALL_REPORT (&quot;ProSecdimDiameterClear()&quot;,
+                &quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+            status = ProSecdimDiameterInquire (section, dim_ids[2],
+                &amp;dim_is_diameter);
+<a name="anchor-145"></a>            TEST_CALL_REPORT (&quot;ProSecdimDiameterInquire()&quot;,
+                &quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+            ProTKPrintf (&quot;dim_is_diameter %d\n&quot;, dim_is_diameter);
+        }
+    }
+<a name="anchor-146"></a>#endif
+
+/*--------------------------------------------------------------------*\
+    Autodim section
+\*--------------------------------------------------------------------*/
+<a name="anchor-147"></a>    ProTestSecerrAlloc(&amp;sec_errors);
+    ProStringToWstring(w_message, (char*)&quot;ProSectionAutodim() errors.&quot;);
+    status = ProSecerrorAdd(&amp;sec_errors, 0, w_message, 0, -1, 0);
+    TEST_CALL_REPORT(&quot;ProSecerrorAdd()&quot;, 
+	    &quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-148"></a>    status = ProSectionAutodim(section, &amp;sec_errors);
+    TEST_CALL_REPORT(&quot;ProSectionAutodim()&quot;, 
+	    &quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-149"></a>	ProTestSecerrShow(sec_errors);
+    ProTestSecerrFree(&amp;sec_errors);
+
+/*--------------------------------------------------------------------*\
+    Solve and regenerate the section
+<a name="anchor-150"></a>\*--------------------------------------------------------------------*/
+    ProTestSecerrAlloc(&amp;sec_errors);
+    status = ProSectionRegenerate(section,&amp;sec_errors);
+    TEST_CALL_REPORT(&quot;ProSectionRegenerate()&quot;,
+		&quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-151"></a>    if (status != PRO_TK_NO_ERROR)
+    {
+	ProTestSecerrShow(sec_errors);
+	return(PRO_TK_GENERAL_ERROR);
+    }
+<a name="anchor-152"></a>    ProTestSecerrFree(&amp;sec_errors);
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-153"></a>/*====================================================================*\
+    FUNCTION :	ProTestCircleSectBuild()
+    PURPOSE  :	Create a circle section
+\*====================================================================*/
+ProError ProTestCircleSectBuild(
+<a name="anchor-154"></a>    ProSection section,
+    ProType sec_type,
+    ProTestSectionInfo *p_sketch_refs)
+{
+    ProError status;
+<a name="anchor-155"></a>    Pro2dClinedef cline;
+    Pro2dCircledef circle;
+    int ent_ids[4];
+    double diameter, offset;
+    Pro2dPnt dim_pnt;
+<a name="anchor-156"></a>    int entdim_ids[2];
+    int dim_ids[4];
+    double edge1[2][3],edge2[2][3],cln[2][3];
+    double sk_transf[4][4];
+    double transform[4][4],offsets[2];
+<a name="anchor-157"></a>    double angle = 0.0;
+    ProSectionPointType pnt_types[2];
+    int par_idx,oth_idx; 
+    int test_dim;
+
+<a name="anchor-158"></a>    diameter = 100.0;
+
+    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Circle diameter [%0(6.2)f]: &quot;,&amp;diameter);
+    ProUtilDoubleGet(NULL,&amp;diameter,&amp;diameter);
+
+<a name="anchor-159"></a>    offset = diameter;
+    offsets[0] = offsets[1] = offset;
+
+    ProUtilSectEpsModify(section);
+
+<a name="anchor-160"></a>    if (p_sketch_refs != NULL)
+    {
+	status = ProUtilTwoOrthogEdgesOnPlaneGet(section,&amp;ent_ids[2],
+						 edge1,edge2);
+        if ( status != PRO_TK_NO_ERROR )
+<a name="anchor-161"></a>	    return(PRO_TK_GENERAL_ERROR);
+
+        ProUtilXyOffsetsGet(offsets);
+	ProUtilSketchCsysGet(p_sketch_refs,sk_transf);
+	ProUtilSectCsysTransformGet(p_sketch_refs,sk_transf,edge1,
+<a name="anchor-162"></a>				    edge2,transform,&amp;angle);
+    }
+
+/*--------------------------------------------------------------------*\
+    Define the circle sketch    
+<a name="anchor-163"></a>\*--------------------------------------------------------------------*/
+
+    cline.type = PRO_2D_CENTER_LINE;
+    cline.end1[0] = 0.0;
+    cline.end1[1] = 0.0;
+<a name="anchor-164"></a>    cline.end2[0] = 0.0;
+    cline.end2[1] = 1.0;
+    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,cline.end1,cline.end1);
+<a name="anchor-165"></a>	ProUtil2DPointTrans(transform,cline.end2,cline.end2);
+    }
+    cln[0][0] = cline.end1[0];
+    cln[0][1] = cline.end1[1];
+    cln[0][2] = 0.0;
+<a name="anchor-166"></a>    cln[1][0] = cline.end2[0];
+    cln[1][1] = cline.end2[1];
+    cln[1][2] = 0.0;
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;cline,&amp;ent_ids[0]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+<a name="anchor-167"></a>		           status, status != PRO_TK_NO_ERROR);
+       
+    circle.type = PRO_2D_CIRCLE;
+    circle.center[0] = offset;
+    circle.center[1] = diameter/2 + 1.0;
+<a name="anchor-168"></a>    circle.radius = diameter/2;
+    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,circle.center,circle.center);
+    }
+<a name="anchor-169"></a>    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;circle,&amp;ent_ids[1]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-170"></a>    Dimension the circle
+\*--------------------------------------------------------------------*/
+    dim_pnt[0] = offset/2;
+    dim_pnt[1] = diameter/2;
+    if (p_sketch_refs != NULL)
+<a name="anchor-171"></a>    {
+	ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+    }
+    entdim_ids[0] = ent_ids[0];
+    entdim_ids[1] = ent_ids[1];
+<a name="anchor-172"></a>    pnt_types[0] = PRO_ENT_WHOLE;
+    pnt_types[1] = PRO_ENT_CENTER;
+
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+			PRO_TK_DIM_LINE_POINT,dim_pnt,&amp;dim_ids[0]);
+<a name="anchor-173"></a>    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+    status = ProSecdimValueSet(section,dim_ids[0],offsets[0]);
+    TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+		       status, status != PRO_TK_NO_ERROR);
+<a name="anchor-174"></a>
+    dim_pnt[0] = (offset+diameter+1.0)/2;
+    dim_pnt[1] = diameter/2.0;
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-175"></a>	ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+    }
+    entdim_ids[0] = ent_ids[1];
+    pnt_types[0] = PRO_ENT_WHOLE;
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,1,
+<a name="anchor-176"></a>		             PRO_TK_DIM_DIA,dim_pnt,&amp;dim_ids[1]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+		              status, status != PRO_TK_NO_ERROR);
+
+    status = ProSecdimValueSet(section,dim_ids[1],diameter);
+<a name="anchor-177"></a>    TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+		       status, status != PRO_TK_NO_ERROR);
+
+/* Dim not germane to sketch - specifically to test delete func */
+    dim_pnt[0] = (offset+diameter+1.0);
+<a name="anchor-178"></a>    dim_pnt[1] = diameter/2.0;
+    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+    }
+<a name="anchor-179"></a>    entdim_ids[0] = ent_ids[1];
+    pnt_types[0] = PRO_ENT_WHOLE;
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,1,
+		             PRO_TK_DIM_RAD,dim_pnt,&amp;test_dim);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+<a name="anchor-180"></a>		              status, status != PRO_TK_NO_ERROR);
+    status = ProSecdimDelete(section,test_dim);
+    TEST_CALL_REPORT(&quot;ProSecdimDelete()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+		              status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-181"></a>/*--------------------------------------------------------------------*\
+    Position the circle on the sketch plane if 3d section
+\*--------------------------------------------------------------------*/
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-182"></a>        dim_pnt[0] = -offset/2;
+        dim_pnt[1] = diameter/2;
+        if (p_sketch_refs != NULL)
+        {
+	    ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+<a name="anchor-183"></a>        }
+	entdim_ids[0] = ent_ids[0];
+        status = ProUtilParallelLineEntityGet(section,ent_ids[0],
+					      &amp;ent_ids[2],2,&amp;par_idx);
+        entdim_ids[1] = ent_ids[2+par_idx];
+<a name="anchor-184"></a>	pnt_types[0] = PRO_ENT_WHOLE;
+	pnt_types[1] = PRO_ENT_WHOLE;
+	status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+		                 PRO_TK_DIM_LINE_LINE,dim_pnt,&amp;dim_ids[2]);
+	TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+<a name="anchor-185"></a>		      status, status != PRO_TK_NO_ERROR);
+
+        dim_pnt[0] = offset+diameter/2;
+        dim_pnt[1] = diameter/2;
+        if (p_sketch_refs != NULL)
+<a name="anchor-186"></a>        {
+	    ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+        }
+	entdim_ids[1] = ent_ids[1];
+	if ((2+par_idx)==2) oth_idx = 3;
+<a name="anchor-187"></a>	    else oth_idx =2;
+        entdim_ids[0] = ent_ids[oth_idx];
+	pnt_types[1] = PRO_ENT_CENTER;
+	pnt_types[0] = PRO_ENT_WHOLE;
+	status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+<a name="anchor-188"></a>		              PRO_TK_DIM_LINE_POINT,dim_pnt,&amp;dim_ids[3]);
+	TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+		      status, status != PRO_TK_NO_ERROR);
+
+        status = ProSecdimValueSet(section,dim_ids[2],0.0);
+<a name="anchor-189"></a>        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+         
+        status = ProSecdimValueSet(section,dim_ids[3],offsets[oth_idx-2]);
+        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+<a name="anchor-190"></a>		          status, status != PRO_TK_NO_ERROR);
+        status = ProSecdimValueSet(section,dim_ids[0],offsets[par_idx]);
+        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestCircleSectBuild()&quot;,
+		       status, status != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-191"></a>     
+/*--------------------------------------------------------------------*\
+    Solve and regenerate the section
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-192"></a>    status = ProTestSectionSolveRegen(section);
+    if (status != PRO_TK_NO_ERROR)
+	return(PRO_TK_GENERAL_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-193"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestSlotSectBuild()
+    PURPOSE  :	Create a slot section
+<a name="anchor-194"></a>\*====================================================================*/
+ProError ProTestSlotSectBuild(
+    ProSection section,
+    ProType sec_type,
+    ProTestSectionInfo *p_sketch_refs)
+<a name="anchor-195"></a>{
+    ProError status;
+    Pro2dClinedef cline;
+    Pro2dLinedef line;
+    Pro2dArcdef arc;
+<a name="anchor-196"></a>    int ent_ids[8];
+    double offset,width,height;
+    Pro2dPnt dim_pnt;
+    int entdim_ids[2];
+    int dim_ids[5];
+<a name="anchor-197"></a>    double edge1[2][3],edge2[2][3],cln[2][3];
+    double sk_transf[4][4];
+    double transform[4][4],offsets[2];
+    double angle = 0.0;
+    ProSectionPointType pnt_types[2];
+<a name="anchor-198"></a>    int par_idx,oth_idx; 
+    int test_dim;
+
+    height = 50.0;
+    width = 100.0;
+<a name="anchor-199"></a>
+    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Slot width [%0(6.2)f]: &quot;,&amp;width);
+    ProUtilDoubleGet(NULL,&amp;width,&amp;width);
+    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Slot height [%0(6.2)f]: &quot;,&amp;height);
+    ProUtilDoubleGet(NULL,&amp;height,&amp;height);
+<a name="anchor-200"></a>
+    offset = width/2.0 + 1.0;
+    offsets[0] = offsets[1] = offset;
+
+    ProUtilSectEpsModify(section);
+<a name="anchor-201"></a>
+    if (p_sketch_refs != NULL)
+    {
+	status = ProUtilTwoOrthogEdgesOnPlaneGet(section,&amp;ent_ids[6],
+						 edge1,edge2);
+<a name="anchor-202"></a>        if ( status != PRO_TK_NO_ERROR )
+	    return(PRO_TK_GENERAL_ERROR);
+
+        ProUtilXyOffsetsGet(offsets);
+
+<a name="anchor-203"></a>	ProUtilSketchCsysGet(p_sketch_refs,sk_transf);
+
+	ProUtilSectCsysTransformGet(p_sketch_refs,sk_transf,edge1,
+			        edge2,transform,&amp;angle);
+    }
+<a name="anchor-204"></a>
+/*--------------------------------------------------------------------*\
+    Define the Slot sketch    
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-205"></a>    cline.type = PRO_2D_CENTER_LINE;
+    cline.end1[0] = 0.0;
+    cline.end1[1] = 0.0;
+    cline.end2[0] = 0.0;
+    cline.end2[1] = 1.0;
+<a name="anchor-206"></a>    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,cline.end1,cline.end1);
+	ProUtil2DPointTrans(transform,cline.end2,cline.end2);
+    }
+<a name="anchor-207"></a>    cln[0][0] = cline.end1[0];
+    cln[0][1] = cline.end1[1];
+    cln[0][2] = 0.0;
+    cln[1][0] = cline.end2[0];
+    cln[1][1] = cline.end2[1];
+<a name="anchor-208"></a>    cln[1][2] = 0.0;
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;cline,&amp;ent_ids[0]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		           status, status != PRO_TK_NO_ERROR);
+       
+<a name="anchor-209"></a>    cline.type = PRO_2D_CENTER_LINE;
+    cline.end1[0] = offset;
+    cline.end1[1] = 0.0;
+    cline.end2[0] = offset;
+    cline.end2[1] = 1.0;
+<a name="anchor-210"></a>    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,cline.end1,cline.end1);
+	ProUtil2DPointTrans(transform,cline.end2,cline.end2);
+    }
+<a name="anchor-211"></a>    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;cline,&amp;ent_ids[1]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		           status, status != PRO_TK_NO_ERROR);
+
+    line.type = PRO_2D_LINE;
+<a name="anchor-212"></a>    line.end1[0] = offset - (width-height)/2.0;
+    line.end1[1] = offset;
+    line.end2[0] = offset + (width-height)/2.0;
+    line.end2[1] = offset;
+    if (p_sketch_refs != NULL)
+<a name="anchor-213"></a>    {
+	ProUtil2DPointTrans(transform,line.end1,line.end1);
+	ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,&amp;ent_ids[2]);
+<a name="anchor-214"></a>    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		           status, status != PRO_TK_NO_ERROR);
+
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offset - (width-height)/2.0;
+<a name="anchor-215"></a>    line.end1[1] = offset+height;
+    line.end2[0] = offset + (width-height)/2.0;
+    line.end2[1] = offset+height;
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-216"></a>	ProUtil2DPointTrans(transform,line.end1,line.end1);
+	ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,&amp;ent_ids[3]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+<a name="anchor-217"></a>		           status, status != PRO_TK_NO_ERROR);
+
+    arc.type = PRO_2D_ARC;
+    arc.center[0] = offset - (width-height)/2.0;
+    arc.center[1] = offset+height/2.0;
+<a name="anchor-218"></a>    arc.radius = height/2.0;
+    arc.start_angle = PI/2.0;
+    arc.end_angle = 3.0*PI/2.0;
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-219"></a>        ProUtil2DPointTrans(transform,arc.center,arc.center);
+	arc.start_angle += angle;
+	arc.end_angle += angle;
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;arc,&amp;ent_ids[4]);
+<a name="anchor-220"></a>    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+              
+    arc.type = PRO_2D_ARC;
+    arc.center[0] = offset + (width-height)/2.0;
+<a name="anchor-221"></a>    arc.center[1] = offset+height/2.0;
+    arc.radius = height/2.0;
+    arc.start_angle = 3.0*PI/2.0;
+    arc.end_angle = PI/2.0;
+    if (p_sketch_refs != NULL)
+<a name="anchor-222"></a>    {
+	ProUtil2DPointTrans(transform,arc.center,arc.center);
+	arc.start_angle += angle;
+	arc.end_angle += angle;
+    }
+<a name="anchor-223"></a>    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;arc,&amp;ent_ids[5]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-224"></a>    Dimension the Slot   
+\*--------------------------------------------------------------------*/
+    dim_pnt[0] = offset/2;
+    dim_pnt[1] = offset;
+    if (p_sketch_refs != NULL)
+<a name="anchor-225"></a>    {
+	ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+    }
+    entdim_ids[0] = ent_ids[0];
+    entdim_ids[1] = ent_ids[1];
+<a name="anchor-226"></a>    pnt_types[0] = PRO_ENT_WHOLE;
+    pnt_types[1] = PRO_ENT_WHOLE;
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+			PRO_TK_DIM_LINE_LINE,dim_pnt,&amp;dim_ids[0]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+<a name="anchor-227"></a>		          status, status != PRO_TK_NO_ERROR);
+    status = ProSecdimValueSet(section,dim_ids[0],offsets[0]);
+    TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-228"></a>    dim_pnt[0] = offset;
+    dim_pnt[1] = offset+height+1.0;
+    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+<a name="anchor-229"></a>    }
+    entdim_ids[0] = ent_ids[3];
+    pnt_types[0] = PRO_ENT_WHOLE;
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,1,
+		       PRO_TK_DIM_LINE,dim_pnt,&amp;dim_ids[1]);
+<a name="anchor-230"></a>    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		              status, status != PRO_TK_NO_ERROR);
+
+    dim_pnt[0] = offset + height;
+    dim_pnt[1] = offset+height/2.0;
+<a name="anchor-231"></a>    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+    }
+    entdim_ids[0] = ent_ids[2];
+<a name="anchor-232"></a>    entdim_ids[1] = ent_ids[3];
+    pnt_types[0] = PRO_ENT_END;
+    pnt_types[1] = PRO_ENT_END;
+
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+<a name="anchor-233"></a>		       PRO_TK_DIM_PNT_PNT,dim_pnt,&amp;dim_ids[2]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		              status, status != PRO_TK_NO_ERROR);
+
+/* Dim not germane to sketch - specifically to test delete func */
+<a name="anchor-234"></a>    dim_pnt[0] = offset+width/2;
+    dim_pnt[1] = offset-1.0;
+    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+<a name="anchor-235"></a>    }
+    entdim_ids[0] = ent_ids[4];
+    entdim_ids[1] = ent_ids[5];
+    pnt_types[0] = PRO_ENT_LEFT_TANGENT;
+    pnt_types[1] = PRO_ENT_RIGHT_TANGENT;
+<a name="anchor-236"></a>    status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+			PRO_TK_DIM_AOC_AOC_TAN_HORIZ,dim_pnt,&amp;test_dim);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		              status, status != PRO_TK_NO_ERROR);
+    status = ProSecdimDelete(section,test_dim);
+<a name="anchor-237"></a>    TEST_CALL_REPORT(&quot;ProSecdimDelete()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		              status, status != PRO_TK_NO_ERROR);
+/*--------------------------------------------------------------------*\
+    Position the slot on the sketch plane if 3d section
+\*--------------------------------------------------------------------*/
+<a name="anchor-238"></a>    if (p_sketch_refs != NULL)
+    {
+	entdim_ids[0] = ent_ids[0];
+	status = ProUtilParallelLineEntityGet(section,ent_ids[0],
+                                              &amp;ent_ids[6],2,&amp;par_idx);
+<a name="anchor-239"></a>        entdim_ids[1] = ent_ids[6+par_idx];
+	pnt_types[0] = PRO_ENT_WHOLE;
+	pnt_types[1] = PRO_ENT_WHOLE;
+	dim_pnt[0] = (-offset/2.0);
+	dim_pnt[1] = height/2.0;
+<a name="anchor-240"></a>	if (p_sketch_refs != NULL)
+	{
+	    ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+        }
+	status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+<a name="anchor-241"></a>		             PRO_TK_DIM_LINE_LINE,dim_pnt,&amp;dim_ids[3]);
+	TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		      status, status != PRO_TK_NO_ERROR);
+
+        if ((6+par_idx) == 6) oth_idx = 7;
+<a name="anchor-242"></a>	    else oth_idx = 6;
+	entdim_ids[0] = ent_ids[oth_idx];
+        entdim_ids[1] = ent_ids[4];
+	pnt_types[0] = PRO_ENT_WHOLE;
+	pnt_types[1] = PRO_ENT_CENTER;
+<a name="anchor-243"></a>	dim_pnt[0] = offset+width/2.0;
+	dim_pnt[1] = -height/2.0;
+	if (p_sketch_refs != NULL)
+	{
+	    ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+<a name="anchor-244"></a>        }
+        
+	status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+		             PRO_TK_DIM_LINE_POINT,dim_pnt,&amp;dim_ids[4]);
+	TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+<a name="anchor-245"></a>		      status, status != PRO_TK_NO_ERROR);
+
+        status = ProSecdimValueSet(section,dim_ids[3],0.0);
+        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-246"></a>         
+        status = ProSecdimValueSet(section,dim_ids[4],offsets[oth_idx-6]);
+        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+        status = ProSecdimValueSet(section,dim_ids[0],offsets[par_idx]);
+<a name="anchor-247"></a>        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestSlotSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+    }
+     
+/*--------------------------------------------------------------------*\
+<a name="anchor-248"></a>    Solve and regenerate the section
+\*--------------------------------------------------------------------*/
+
+    status = ProTestSectionSolveRegen(section);
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-249"></a>	return(PRO_TK_GENERAL_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-250"></a>/*====================================================================*\
+    FUNCTION :	ProTestSplineSectBuild()
+    PURPOSE  :	Create a spline section
+\*====================================================================*/
+ProError ProTestSplineSectBuild(
+<a name="anchor-251"></a>    ProSection section,
+    ProType sec_type,
+    ProTestSectionInfo *p_sketch_refs)
+{
+    ProError status;
+<a name="anchor-252"></a>    Pro2dClinedef cline;
+    Pro2dSplinedef spline;
+    Pro2dPnt spln_pnts[5];
+    Pro2dPointdef point;
+    int ent_ids[5];
+<a name="anchor-253"></a>    double diameter,offset;
+    Pro2dPnt dim_pnt;
+    int entdim_ids[2];
+    int dim_ids[3];
+    double edge1[2][3],edge2[2][3],cln[2][3];
+<a name="anchor-254"></a>    double sk_transf[4][4];
+    double transform[4][4],offsets[2];
+    double angle = 0.0;
+    ProSectionPointType pnt_types[2];
+    int par_idx,oth_idx; 
+<a name="anchor-255"></a>    int test_id;
+
+    diameter = 100.0;
+
+    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Spline diameter [%0(6.2)f]: &quot;,&amp;diameter);
+<a name="anchor-256"></a>    ProUtilDoubleGet(NULL,&amp;diameter,&amp;diameter);
+
+    offset = diameter;
+    offsets[0] = offsets[1] = offset;
+
+<a name="anchor-257"></a>    ProUtilSectEpsModify(section);
+
+    if (p_sketch_refs != NULL)
+    {
+	status = ProUtilTwoOrthogEdgesOnPlaneGet(section,&amp;ent_ids[3],
+<a name="anchor-258"></a>		                                 edge1,edge2);
+        if ( status != PRO_TK_NO_ERROR )
+	    return(PRO_TK_GENERAL_ERROR);
+
+        ProUtilXyOffsetsGet(offsets);
+<a name="anchor-259"></a>
+        ProUtilSketchCsysGet(p_sketch_refs,sk_transf);
+        ProUtilSectCsysTransformGet(p_sketch_refs,sk_transf,edge1,
+                                edge2,transform,&amp;angle);
+    }
+<a name="anchor-260"></a>
+/*--------------------------------------------------------------------*\
+    Define the Spline sketch    
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-261"></a>    cline.type = PRO_2D_CENTER_LINE;
+    cline.end1[0] = 1.0;
+    cline.end1[1] = 0.0;
+    cline.end2[0] = 1.0;
+    cline.end2[1] = 1.0;
+<a name="anchor-262"></a>    if (p_sketch_refs != NULL)
+    {
+	ProUtil2DPointTrans(transform,cline.end1,cline.end1);
+	ProUtil2DPointTrans(transform,cline.end2,cline.end2);
+    }
+<a name="anchor-263"></a>    cln[0][0] = cline.end1[0];
+    cln[0][1] = cline.end1[1];
+    cln[0][2] = 0.0;
+    cln[1][0] = cline.end2[0];
+    cln[1][1] = cline.end2[1];
+<a name="anchor-264"></a>    cln[1][2] = 0.0;
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;cline,&amp;ent_ids[0]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+		           status, status != PRO_TK_NO_ERROR);
+       
+<a name="anchor-265"></a>    point.type = PRO_2D_POINT;
+    point.pnt[0] = offset;
+    point.pnt[1] = diameter;
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-266"></a>	ProUtil2DPointTrans(transform,point.pnt,point.pnt);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;point,&amp;ent_ids[1]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-267"></a>              
+    spline.type = PRO_2D_SPLINE;
+    spline.tangency_type = PRO_2D_SPLINE_TAN_NONE;
+    spline.n_points = 5;
+    spln_pnts[0][0] = offset;
+<a name="anchor-268"></a>    spln_pnts[0][1] = diameter;
+    spln_pnts[1][0] = offset + diameter/2.0;
+    spln_pnts[1][1] = diameter/2.0;
+    spln_pnts[2][0] = offset;
+    spln_pnts[2][1] = 0.0;
+<a name="anchor-269"></a>    spln_pnts[3][0] = offset - diameter/2.0;
+    spln_pnts[3][1] = diameter/2.0;
+    spln_pnts[4][0] = offset;
+    spln_pnts[4][1] = diameter;
+    if (p_sketch_refs != NULL)
+<a name="anchor-270"></a>    {
+	ProUtil2DPointTrans(transform,spln_pnts[0],spln_pnts[0]);
+	ProUtil2DPointTrans(transform,spln_pnts[1],spln_pnts[1]);
+	ProUtil2DPointTrans(transform,spln_pnts[2],spln_pnts[2]);
+	ProUtil2DPointTrans(transform,spln_pnts[3],spln_pnts[3]);
+<a name="anchor-271"></a>	ProUtil2DPointTrans(transform,spln_pnts[4],spln_pnts[4]);
+    }
+    spline.point_arr = spln_pnts;
+    spline.start_tang_angle = 0.0;
+    spline.end_tang_angle = 0.0;
+<a name="anchor-272"></a>    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;spline,&amp;ent_ids[2]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+
+/* Entity not germane to sketch - specifically to test delete func */
+<a name="anchor-273"></a>    spline.type = PRO_2D_SPLINE;
+    spline.tangency_type = PRO_2D_SPLINE_TAN_NONE;
+    spline.n_points = 2;
+    spln_pnts[0][0] = -offset;
+    spln_pnts[0][1] = -diameter;
+<a name="anchor-274"></a>    spln_pnts[1][0] = -(offset + diameter/2.0);
+    spln_pnts[1][1] = -(diameter/2.0);
+    spline.point_arr = spln_pnts;
+    spline.start_tang_angle = 0.0;
+    spline.end_tang_angle = 0.0;
+<a name="anchor-275"></a>    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;spline,&amp;test_id);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+    status = ProSectionEntityDelete(section,test_id);
+    TEST_CALL_REPORT(&quot;ProSectionEntityDelete()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+<a name="anchor-276"></a>		          status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Dimension the spline
+\*--------------------------------------------------------------------*/
+<a name="anchor-277"></a>    dim_pnt[0] = offset/2;
+    dim_pnt[1] = diameter;
+    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+<a name="anchor-278"></a>    }
+    entdim_ids[0] = ent_ids[0];
+    entdim_ids[1] = ent_ids[2];
+    pnt_types[0] = PRO_ENT_WHOLE;
+    pnt_types[1] = PRO_ENT_START;
+<a name="anchor-279"></a>
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+			PRO_TK_DIM_LINE_POINT,dim_pnt,&amp;dim_ids[0]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-280"></a>    status = ProSecdimValueSet(section,dim_ids[0],offsets[0]);
+    TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-281"></a>    Position the spline on the sketch plane if 3d section
+\*--------------------------------------------------------------------*/
+    if (p_sketch_refs != NULL)
+    {
+	entdim_ids[0] = ent_ids[0];
+<a name="anchor-282"></a>	status = ProUtilParallelLineEntityGet(section,ent_ids[0],
+                                              &amp;ent_ids[3],2,&amp;par_idx);
+        entdim_ids[1] = ent_ids[3+par_idx];
+	pnt_types[0] = PRO_ENT_WHOLE;
+	pnt_types[1] = PRO_ENT_WHOLE;
+<a name="anchor-283"></a>	dim_pnt[0] = (-offset/2.0);
+	dim_pnt[1] = diameter/2.0;
+        if (p_sketch_refs != NULL)
+        {
+           ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+<a name="anchor-284"></a>        }
+	status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+		          PRO_TK_DIM_LINE_LINE,dim_pnt,&amp;dim_ids[1]);
+	TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-285"></a>         
+        if ((3+par_idx) == 3) oth_idx = 4;
+	    else oth_idx = 3;
+	entdim_ids[1] = ent_ids[2];
+        entdim_ids[0] = ent_ids[oth_idx];
+<a name="anchor-286"></a>	pnt_types[0] = PRO_ENT_WHOLE;
+	pnt_types[1] = PRO_ENT_END;
+	dim_pnt[1] = offset+diameter/2.0;
+	dim_pnt[0] = diameter/2.0;
+        if (p_sketch_refs != NULL)
+<a name="anchor-287"></a>        {
+           ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+        }
+
+	status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+<a name="anchor-288"></a>		    PRO_TK_DIM_LINE_POINT,dim_pnt,&amp;dim_ids[2]);
+	TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+		      status, status != PRO_TK_NO_ERROR);
+
+        status = ProSecdimValueSet(section,dim_ids[1],0.0);
+<a name="anchor-289"></a>        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+        status = ProSecdimValueSet(section,dim_ids[2],offsets[oth_idx-3]);
+        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-290"></a>        status = ProSecdimValueSet(section,dim_ids[0],offsets[par_idx]);
+        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestSplineSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+    }
+     
+<a name="anchor-291"></a>/*--------------------------------------------------------------------*\
+    Solve and regenerate the section
+\*--------------------------------------------------------------------*/
+
+    status = ProTestSectionSolveRegen(section);
+<a name="anchor-292"></a>    if (status != PRO_TK_NO_ERROR)
+	return(PRO_TK_GENERAL_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-293"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestWidgetSectBuild()
+    PURPOSE  :	Create a Widget section
+\*====================================================================*/
+<a name="anchor-294"></a>ProError ProTestWidgetSectBuild(
+    ProSection section,
+    ProType sec_type,
+    ProTestSectionInfo *p_sketch_refs)
+{
+<a name="anchor-295"></a>    ProError status;
+    Pro2dLinedef line;
+    Pro2dClinedef cline;
+    Pro2dArcdef arc;
+    int ent_ids[8];
+<a name="anchor-296"></a>    double width,height,offset,radius;
+    Pro2dPnt dim_pnt;
+    int entdim_ids[2];
+    int dim_ids[7];
+    double edge1[2][3],edge2[2][3],cln[2][3];
+<a name="anchor-297"></a>    double sk_transf[4][4];
+    double transform[4][4],offsets[2];
+    double angle = 0.0;
+    ProSectionPointType pnt_types[2];
+    int par_idx,oth_idx; 
+<a name="anchor-298"></a>
+    width = 125.0;
+    height = 100.0;
+
+    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Widget width [%0(6.2)f]: &quot;,&amp;width);
+<a name="anchor-299"></a>    ProUtilDoubleGet(NULL,&amp;width,&amp;width);
+    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Widget height [%0(6.2)f]: &quot;,&amp;height);
+    ProUtilDoubleGet(NULL,&amp;height,&amp;height);
+
+    radius = height/10.0;
+<a name="anchor-300"></a>    offset = height;
+    offsets[0] = offsets[1] = offset;
+
+    ProUtilSectEpsModify(section);
+
+<a name="anchor-301"></a>    if (p_sketch_refs != NULL)
+    {
+	status = ProUtilTwoOrthogEdgesOnPlaneGet(section,&amp;ent_ids[6],
+		                                 edge1,edge2);
+        if ( status != PRO_TK_NO_ERROR )
+<a name="anchor-302"></a>	    return(PRO_TK_GENERAL_ERROR);
+
+        ProUtilXyOffsetsGet(offsets);
+
+        ProUtilSketchCsysGet(p_sketch_refs,sk_transf);
+<a name="anchor-303"></a>        ProUtilSectCsysTransformGet(p_sketch_refs,sk_transf,edge1,
+                                   edge2,transform,&amp;angle);
+    }
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-304"></a>    Define the sketch of the widget
+\*--------------------------------------------------------------------*/
+
+    cline.type = PRO_2D_CENTER_LINE;
+    cline.end1[0] = 0.0;
+<a name="anchor-305"></a>    cline.end1[1] = 0.0;
+    cline.end2[0] = 0.0;
+    cline.end2[1] = 1.0;
+
+    if (p_sketch_refs != NULL)
+<a name="anchor-306"></a>    {
+        ProUtil2DPointTrans(transform,cline.end1,cline.end1);
+        ProUtil2DPointTrans(transform,cline.end2,cline.end2);
+    }
+    cln[0][0] = cline.end1[0];
+<a name="anchor-307"></a>    cln[0][1] = cline.end1[1];
+    cln[0][2] = 0.0;
+    cln[1][0] = cline.end2[0];
+    cln[1][1] = cline.end2[1];
+    cln[1][2] = 0.0;
+<a name="anchor-308"></a>    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;cline,&amp;ent_ids[0]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		           status, status != PRO_TK_NO_ERROR);
+       
+    line.type = PRO_2D_LINE;
+<a name="anchor-309"></a>    line.end1[0] = offset + width;
+    line.end1[1] = offset;
+    line.end2[0] = offset;
+    line.end2[1] = offset;
+    if (p_sketch_refs != NULL)
+<a name="anchor-310"></a>    {
+        ProUtil2DPointTrans(transform,line.end1,line.end1);
+        ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,&amp;ent_ids[1]);
+<a name="anchor-311"></a>    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+              
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offset;
+<a name="anchor-312"></a>    line.end1[1] = offset;
+    line.end2[0] = offset;
+    line.end2[1] = offset + height - radius;
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-313"></a>        ProUtil2DPointTrans(transform,line.end1,line.end1);
+        ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,&amp;ent_ids[2]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+<a name="anchor-314"></a>		          status, status != PRO_TK_NO_ERROR);
+              
+    arc.type = PRO_2D_ARC;
+    arc.center[0] = offset+radius;
+    arc.center[1] = offset + height - radius;
+<a name="anchor-315"></a>    arc.start_angle = PI/2.0;
+    arc.end_angle = PI;
+    arc.radius = radius;
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-316"></a>        ProUtil2DPointTrans(transform,arc.center,arc.center);
+	arc.start_angle += angle;
+	arc.end_angle += angle;
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;arc,&amp;ent_ids[3]);
+<a name="anchor-317"></a>    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+              
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offset+radius;
+<a name="anchor-318"></a>    line.end1[1] = offset+height;
+    line.end2[0] = offset + width/2.0;
+    line.end2[1] = offset+height;
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-319"></a>        ProUtil2DPointTrans(transform,line.end1,line.end1);
+        ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,&amp;ent_ids[4]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+<a name="anchor-320"></a>		          status, status != PRO_TK_NO_ERROR);
+              
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offset+width/2.0;
+    line.end1[1] = offset+height;
+<a name="anchor-321"></a>    line.end2[0] = offset + width;
+    line.end2[1] = offset;
+    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,line.end1,line.end1);
+<a name="anchor-322"></a>        ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,&amp;ent_ids[5]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-323"></a>
+/*--------------------------------------------------------------------*\
+    Dimension the widget
+\*--------------------------------------------------------------------*/
+    dim_pnt[0] = offset/2;
+<a name="anchor-324"></a>    dim_pnt[1] = offset;
+    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+    }
+<a name="anchor-325"></a>    entdim_ids[0] = ent_ids[0];
+    entdim_ids[1] = ent_ids[2];
+    pnt_types[0] = PRO_ENT_WHOLE;
+    pnt_types[1] = PRO_ENT_WHOLE;
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+<a name="anchor-326"></a>			PRO_TK_DIM_LINE_LINE,dim_pnt,&amp;dim_ids[0]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+    status = ProSecdimValueSet(section,dim_ids[0],offsets[0]);
+    TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+<a name="anchor-327"></a>		          status, status != PRO_TK_NO_ERROR);
+
+    dim_pnt[0] = offset/2.0;
+    dim_pnt[1] = offset+height+1.0;;
+    if (p_sketch_refs != NULL)
+<a name="anchor-328"></a>    {
+        ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+    }
+    entdim_ids[0] = ent_ids[3];
+    pnt_types[0] = PRO_ENT_WHOLE;
+<a name="anchor-329"></a>    status = ProSecdimCreate(section,entdim_ids,pnt_types,1,
+			PRO_TK_DIM_RAD,dim_pnt,&amp;dim_ids[1]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		              status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-330"></a>    dim_pnt[0] = (offset+width) + 1.0;
+    dim_pnt[1] = offset+(height)/2;
+    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+<a name="anchor-331"></a>    }
+    entdim_ids[0] = ent_ids[1];
+    entdim_ids[1] = ent_ids[4];
+    pnt_types[0] = PRO_ENT_START;
+    pnt_types[1] = PRO_ENT_END;
+<a name="anchor-332"></a>    status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+			PRO_TK_DIM_PNT_PNT_VERT,dim_pnt,&amp;dim_ids[2]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		           status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-333"></a>    dim_pnt[0] = offset+width/2.0;
+    dim_pnt[1] = offset+height/2;
+    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+<a name="anchor-334"></a>    }
+    entdim_ids[0] = ent_ids[1];
+    entdim_ids[1] = ent_ids[5];
+    pnt_types[0] = PRO_ENT_WHOLE;
+    pnt_types[1] = PRO_ENT_WHOLE;
+<a name="anchor-335"></a>    status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+			PRO_TK_DIM_LINES_ANGLE,dim_pnt,&amp;dim_ids[3]);
+    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		           status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-336"></a>    dim_pnt[0] = offset+width/2.0;
+    dim_pnt[1] = offset-1.0;
+    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+<a name="anchor-337"></a>    }
+    entdim_ids[0] = ent_ids[1];
+    pnt_types[0] = PRO_ENT_WHOLE;
+    status = ProSecdimCreate(section,entdim_ids,pnt_types,1,
+			PRO_TK_DIM_LINE,dim_pnt,&amp;dim_ids[4]);
+<a name="anchor-338"></a>    TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		           status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Position the widget on the sketch plane if 3d section
+<a name="anchor-339"></a>\*--------------------------------------------------------------------*/
+    if (p_sketch_refs != NULL)
+    {
+	entdim_ids[0] = ent_ids[0];
+	status = ProUtilParallelLineEntityGet(section,ent_ids[0],
+<a name="anchor-340"></a>                                              &amp;ent_ids[6],2,&amp;par_idx);
+        entdim_ids[1] = ent_ids[6+par_idx];
+	pnt_types[0] = PRO_ENT_WHOLE;
+	pnt_types[1] = PRO_ENT_WHOLE;
+	dim_pnt[0] = (-offset/2.0);
+<a name="anchor-341"></a>	dim_pnt[1] = height/2.0;
+        if (p_sketch_refs != NULL)
+        {
+           ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+        }
+<a name="anchor-342"></a>	status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+		    PRO_TK_DIM_LINE_LINE,dim_pnt,&amp;dim_ids[5]);
+	TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		      status, status != PRO_TK_NO_ERROR);
+         
+<a name="anchor-343"></a>	entdim_ids[1] = ent_ids[1];
+        if ((6+par_idx) == 6) oth_idx = 7;
+	    else oth_idx = 6;
+        entdim_ids[0] = ent_ids[oth_idx];
+	pnt_types[1] = PRO_ENT_START;
+<a name="anchor-344"></a>	pnt_types[0] = PRO_ENT_WHOLE;
+	dim_pnt[1] = offset+width/2.0;
+	dim_pnt[0] = -height/2.0;
+        if (p_sketch_refs != NULL)
+        {
+<a name="anchor-345"></a>           ProUtil2DPointTrans(transform,dim_pnt,dim_pnt);
+        }
+
+	status = ProSecdimCreate(section,entdim_ids,pnt_types,2,
+		    PRO_TK_DIM_LINE_POINT,dim_pnt,&amp;dim_ids[6]);
+<a name="anchor-346"></a>	TEST_CALL_REPORT(&quot;ProSecdimCreate()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		      status, status != PRO_TK_NO_ERROR);
+
+        status = ProSecdimValueSet(section,dim_ids[5],0.0);
+        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+<a name="anchor-347"></a>		          status, status != PRO_TK_NO_ERROR);
+        status = ProSecdimValueSet(section,dim_ids[6],offsets[oth_idx-6]);
+        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+        status = ProSecdimValueSet(section,dim_ids[0],offsets[par_idx]);
+<a name="anchor-348"></a>        TEST_CALL_REPORT(&quot;ProSecdimValueSet()&quot;, &quot;ProTestWidgetSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+    }
+     
+/*--------------------------------------------------------------------*\
+<a name="anchor-349"></a>    Solve and regenerate the section
+\*--------------------------------------------------------------------*/
+
+    status = ProTestSectionSolveRegen(section);
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-350"></a>	return(PRO_TK_GENERAL_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-351"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestAngleSectBuild()
+    PURPOSE  :	Create a Widget section
+\*====================================================================*/
+<a name="anchor-352"></a>ProError ProTestAngleSectBuild(
+    ProSection section,
+    ProType sec_type,
+    ProTestSectionInfo *p_sketch_refs)
+{
+<a name="anchor-353"></a>    ProError status;
+    Pro2dLinedef line;
+    Pro2dCoordSysdef coord;
+    int ent_ids[8];
+    double width,height,offset,radius;
+<a name="anchor-354"></a>    double edge1[2][3],edge2[2][3];
+    double sk_transf[4][4];
+    double transform[4][4],offsets[2];
+    double angle = 0.0;
+    ProLine w_message;
+<a name="anchor-355"></a>    ProWSecerror sec_errors;
+
+    width = 125.0;
+    height = 100.0;
+
+<a name="anchor-356"></a>    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Box width [%0(6.2)f]: &quot;,&amp;width);
+    ProUtilDoubleGet(NULL,&amp;width,&amp;width);
+    ProUtilMsgPrint((char*)&quot;sec&quot;,(char*)&quot;TEST Enter Box height [%0(6.2)f]: &quot;,&amp;height);
+    ProUtilDoubleGet(NULL,&amp;height,&amp;height);
+
+<a name="anchor-357"></a>    radius = height/10.0;
+    offset = height;
+    offsets[0] = offsets[1] = offset;
+
+    ProUtilSectEpsModify(section);
+<a name="anchor-358"></a>
+    if (p_sketch_refs != NULL)
+    {
+	status = ProUtilTwoOrthogEdgesOnPlaneGet(section,&amp;ent_ids[6],
+		                                 edge1,edge2);
+<a name="anchor-359"></a>        if ( status != PRO_TK_NO_ERROR )
+	    return(PRO_TK_GENERAL_ERROR);
+
+        ProUtilXyOffsetsGet(offsets);
+
+<a name="anchor-360"></a>        ProUtilSketchCsysGet(p_sketch_refs,sk_transf);
+        ProUtilSectCsysTransformGet(p_sketch_refs,sk_transf,edge1,
+                                   edge2,transform,&amp;angle);
+	if ((fabs(transform[0][0])>1e-3) ^ 
+	    (!(fabs(edge1[0][0]-edge1[1][0])>1e-3)))
+<a name="anchor-361"></a>	{
+	    /* First edge x */
+	    offset = offsets[0];offsets[0]=offsets[1];offsets[1]=offset;
+	}
+    }
+<a name="anchor-362"></a>
+/*--------------------------------------------------------------------*\
+    Define the sketch of the widget
+\*--------------------------------------------------------------------*/
+    coord.type = PRO_2D_COORD_SYS;
+<a name="anchor-363"></a>    coord.pnt[0] = 0;
+    coord.pnt[1] = 0;
+    if (p_sketch_refs != NULL)
+	ProUtil2DPointTrans(transform, coord.pnt, coord.pnt);
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;coord, &amp;ent_ids[0]);
+<a name="anchor-364"></a>    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestDiamSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offsets[0] + width;
+<a name="anchor-365"></a>    line.end1[1] = offsets[1];
+    line.end2[0] = offsets[0];
+    line.end2[1] = offsets[1];
+    if (p_sketch_refs != NULL)
+    {
+<a name="anchor-366"></a>        ProUtil2DPointTrans(transform,line.end1,line.end1);
+        ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,&amp;ent_ids[1]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestAngleSectBuild()&quot;,
+<a name="anchor-367"></a>		          status, status != PRO_TK_NO_ERROR);
+              
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offsets[0];
+    line.end1[1] = offsets[1];
+<a name="anchor-368"></a>    line.end2[0] = offsets[0];
+    line.end2[1] = offsets[1] + height;
+    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,line.end1,line.end1);
+<a name="anchor-369"></a>        ProUtil2DPointTrans(transform,line.end2,line.end2);
+    }
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,&amp;ent_ids[2]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestAngleSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-370"></a>              
+    line.type = PRO_2D_LINE;
+    line.end1[0] = offsets[0];
+    line.end1[1] = offsets[1] + height;
+    line.end2[0] = offsets[0] + width;
+<a name="anchor-371"></a>    line.end2[1] = offsets[1];
+    if (p_sketch_refs != NULL)
+    {
+        ProUtil2DPointTrans(transform,line.end1,line.end1);
+        ProUtil2DPointTrans(transform,line.end2,line.end2);
+<a name="anchor-372"></a>    }
+
+    status = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;line,&amp;ent_ids[3]);
+    TEST_CALL_REPORT(&quot;ProSectionEntityAdd()&quot;, &quot;ProTestAngleSectBuild()&quot;,
+		          status, status != PRO_TK_NO_ERROR);
+<a name="anchor-373"></a>
+/*--------------------------------------------------------------------*\
+    Solve and regenerate the section
+\*--------------------------------------------------------------------*/
+    ProTestSecerrAlloc(&amp;sec_errors);
+<a name="anchor-374"></a>    ProStringToWstring(w_message, (char*)&quot;ProSectionSolveRigid() errors.&quot;);
+    status = ProSecerrorAdd(&amp;sec_errors, 0, w_message, 0, -1, 0);
+    TEST_CALL_REPORT(&quot;ProSecerrorAdd()&quot;, 
+		&quot;ProTestDiamSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-375"></a>    status = ProSectionSolveRigid(section, &amp;sec_errors);
+    TEST_CALL_REPORT(&quot;ProSectionSolveRigid()&quot;, 
+	    &quot;ProTestAngleSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+    if (status != PRO_TK_NO_ERROR)
+    {
+<a name="anchor-376"></a>	ProTestSecerrShow(sec_errors);
+	return(PRO_TK_GENERAL_ERROR);
+    }
+    ProTestSecerrFree(&amp;sec_errors);
+
+<a name="anchor-377"></a>    ProTestSecerrAlloc(&amp;sec_errors);
+    status = ProSectionRegenerate(section,&amp;sec_errors);
+    TEST_CALL_REPORT(&quot;ProSectionRegenerate()&quot;, 
+	    &quot;ProTestAngleSectBuild()&quot;, status, status != PRO_TK_NO_ERROR);
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-378"></a>    {
+	ProTestSecerrShow(sec_errors);
+	return(PRO_TK_GENERAL_ERROR);
+    }
+    ProTestSecerrFree(&amp;sec_errors);
+<a name="anchor-379"></a>    return(PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

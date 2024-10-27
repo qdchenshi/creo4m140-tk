@@ -1,0 +1,253 @@
+<html>
+<head>
+<title>UgExtobjCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProSelection.h>
+#include &lt;ProObjects.h>
+#include &lt;ProSolid.h>
+#include &lt;ProGeomitem.h>
+#include &lt;ProModelitem.h>
+<a name="anchor-3"></a>#include &lt;ProMdl.h>
+#include &lt;ProExtobj.h>
+#include &lt;ProExtobjDisp.h>
+#include &lt;ProMessage.h>
+#include &lt;ProSurface.h>
+<a name="anchor-4"></a>
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;ProUtil.h&quot;
+<a name="anchor-5"></a>#include &quot;TestError.h&quot;
+#include &quot;UtilMath.h&quot;
+#include &quot;math.h&quot;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-6"></a>Application data
+\*--------------------------------------------------------------------*/
+static ProExtobjClass User_arrow_class ; 
+
+/*====================================================================*\
+<a name="anchor-7"></a>FUNCTION : UserExtobjCreate()
+PURPOSE  : Example of external object creation.
+\*====================================================================*/
+int UserExtobjCreate() 
+{
+<a name="anchor-8"></a>    static int calls = 0 ; 		/* number of calls to this func. */
+    static int extobjid = 1 ;           /* ids for external objects */
+    
+    int UserMakeSelections(ProSurface *, ProModelitem *, Pro3dPnt ) ; 
+    					/* function to get user selections */
+<a name="anchor-9"></a>					
+    ProMdl model ; 			/* current model */
+    ProName msg_file ;                  /* message file */
+    ProSurface surf ;  			/* target surface to get arrow */
+    ProModelitem surf_mdlitem ;   	/* target surface ProModelitem */
+<a name="anchor-10"></a>    ProModelitem surf_owner_mdlitem ;  	/* ProModelitem for surface owner */
+    int status ; 			/* return value */
+    ProUvParam surf_uv ;  	 	/* surface point in uv*/
+    ProVector surf_xyz ; 		/* surface point in xyz */
+    ProVector deriv1[2], deriv2[3] ;   	/* derivatives at point on surf */
+<a name="anchor-11"></a>    ProVector surf_norm; 		/* surface normal */
+    ProExtobj arrow_obj ; 		/* ext. object to be created */
+    ProWExtobjdata arrow_disp_data = NULL ;  
+                                        /* display data for the ext. object */
+    double scale ;        		/* scale factor for ext. object */
+<a name="anchor-12"></a>    Pro3dPnt outline_points[2] ; 	/* points delimiting solid */
+    ProCurvedata curvedata[10] ; 	/* array of curves to be drawn */
+    int i, j ; 				/* counters */
+    ProMatrix transform ; 		/* arrow transformation */
+    int num_box;    /* number of selection boxes */
+<a name="anchor-13"></a>    ProWExtobjdata	sel_data = NULL; /* selection data */
+    ProSelbox  sel_box[16], *sel_box_ptr; /* list of selection boxes */
+
+/*--------------------------------------------------------------------*\
+    Unit arrow to be transformed and scaled.
+<a name="anchor-14"></a>\*--------------------------------------------------------------------*/
+    #define ARROW_COLOR PRO_COLOR_SHEETMETAL       /* Green. */
+    #define ARROW_LINESTYLE PRO_LINESTYLE_SOLID    /* Solid lines. */
+    #define ARROW_SCALE 0.1 	/* Scale factor (fraction of model size). */
+    #define ARROW_NUM_SEG 9 	/* Number of segments in arrow. */
+<a name="anchor-15"></a>    #define HW 0.2              /* Head width. */
+    #define HL 0.2  		/* Head length. */
+    ProLinedata unit_arrow[ARROW_NUM_SEG] = {
+        { PRO_ENT_LINE, {HL,0.0,0.0}, {1.0,0.0,0.0} },  /* arrow &quot;shaft&quot; */
+        { PRO_ENT_LINE, {0.0,0.0,0.0}, {HL,HW,0.0} }, 
+<a name="anchor-16"></a>        { PRO_ENT_LINE, {0.0,0.0,0.0}, {HL,0.0,HW} }, 
+        { PRO_ENT_LINE, {0.0,0.0,0.0}, {HL,-HW,0.0} }, 
+        { PRO_ENT_LINE, {0.0,0.0,0.0}, {HL,0.0,-HW} }, 
+        { PRO_ENT_LINE, {HL,HW,0.0}, {HL,0.0,HW} }, 
+        { PRO_ENT_LINE, {HL,0.0,HW}, {HL,-HW,0.0} }, 
+<a name="anchor-17"></a>        { PRO_ENT_LINE, {HL,-HW,0.0}, {HL,0.0,-HW} }, 
+        { PRO_ENT_LINE, {HL,0.0,-HW}, {HL,HW,0.0} } 
+	} ; 
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-18"></a>    Get current model.
+\*--------------------------------------------------------------------*/
+    status = ProMdlCurrentGet(&amp;model);
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProMdlCurrentGet()&quot;, status); 
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-19"></a>    {
+       ProStringToWstring(msg_file, &quot;msg_ugfund.txt&quot;) ; 
+       ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, &quot;Error getting current model.&quot;); 
+       return(status) ; 
+    }
+<a name="anchor-20"></a>       
+/*--------------------------------------------------------------------*\
+    Create the external object class. 
+\*--------------------------------------------------------------------*/
+    if (calls == 0) 
+<a name="anchor-21"></a>    {
+	ProStringToWstring(User_arrow_class.name, &quot;Arrows&quot;);
+	User_arrow_class.type = 0;
+
+        status = ProExtobjClassCreate(&amp;User_arrow_class) ; 
+<a name="anchor-22"></a>	ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProExtobjClassCreate()&quot;, status); 
+    }
+    ++calls ; 
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-23"></a>    Use model size to get the scale.  
+\*--------------------------------------------------------------------*/
+    status = ProSolidOutlineGet( (ProSolid) model, outline_points) ; 
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProSolidOutlineGet()&quot;, status); 
+    scale = ARROW_SCALE * ProUtilPointsDist (outline_points[1], 
+<a name="anchor-24"></a>        outline_points[0]);
+
+/*--------------------------------------------------------------------*\
+    Get ProSurface and ProModelitem from user selection.   Also get the 
+    xyz point that is selected.
+<a name="anchor-25"></a>\*--------------------------------------------------------------------*/
+    status = UserMakeSelections(&amp;surf, &amp;surf_mdlitem, surf_xyz) ; 
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;UserMakeSelections()&quot;, status); 
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-26"></a>    Get the ProModelitem for the surface owner.
+\*--------------------------------------------------------------------*/
+    status = ProMdlToModelitem(surf_mdlitem.owner, &amp;surf_owner_mdlitem) ; 
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-27"></a>    Determine the uv parameters from the xyz point.
+\*--------------------------------------------------------------------*/
+    status = ProSurfaceParamEval( (ProSolid) surf_mdlitem.owner, surf, 
+        surf_xyz, surf_uv) ; 
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProSurfaceParamEval()&quot;, status); 
+<a name="anchor-28"></a>
+/*--------------------------------------------------------------------*\
+    Evaluate surface data (normal, gradient, ...) at the uv point.
+\*--------------------------------------------------------------------*/
+    status = ProSurfaceXyzdataEval(surf, surf_uv, surf_xyz, 
+<a name="anchor-29"></a>        deriv1, deriv2, surf_norm); 
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProSurfaceXyzdataEval()&quot;, status); 
+
+/*--------------------------------------------------------------------*\
+    Get transformation for the arrow.
+<a name="anchor-30"></a>\*--------------------------------------------------------------------*/
+    ProUtilVectorNormalize(surf_norm, surf_norm) ; 
+    ProUtilVectorNormalize(deriv1[0], deriv1[0]) ; 
+    ProUtilVectorNormalize(deriv1[1], deriv1[1]) ; 
+    status =  ProUtilVectorsToTransf(surf_norm, deriv1[0], deriv1[1], 
+<a name="anchor-31"></a>        surf_xyz, transform) ; 
+
+/*--------------------------------------------------------------------*\
+    Create the arrow object.
+\*--------------------------------------------------------------------*/
+<a name="anchor-32"></a>    status = ProExtobjCreate(&amp;User_arrow_class, &amp;surf_owner_mdlitem, 
+        &amp;arrow_obj) ; 
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProExtobjCreate()&quot;, status); 
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-33"></a>    Set object identifiers to be reusable.
+\*--------------------------------------------------------------------*/
+    status = ProExtobjReusableSet(&amp;arrow_obj) ; 
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProExtobjReusableSet()&quot;, status); 
+
+<a name="anchor-34"></a>/*--------------------------------------------------------------------*\
+    Initialize the display data structure.
+\*--------------------------------------------------------------------*/
+    status = ProDispdatAlloc(&amp;arrow_disp_data) ; 
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProDispdatAlloc()&quot;, status); 
+<a name="anchor-35"></a>
+/*--------------------------------------------------------------------*\
+    Set the display scale, color, linetype, and display properties. 
+\*--------------------------------------------------------------------*/
+    status = ProDispdatScaleSet(arrow_disp_data, scale) ; 
+<a name="anchor-36"></a>    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProDispdatScaleSet()&quot;, status); 
+		
+    status = ProDispdatColorSet(arrow_disp_data, ARROW_COLOR) ; 
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProDispdatColorSet()&quot;, status); 
+		
+<a name="anchor-37"></a>    status = ProDispdatLinestyleSet(arrow_disp_data, ARROW_LINESTYLE) ; 
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProDispdatLinestyleSet()&quot;, status); 
+
+/*--------------------------------------------------------------------*\
+    Set the line segments (the &quot;entities&quot;) in the display data.
+<a name="anchor-38"></a>\*--------------------------------------------------------------------*/
+    for (i = 0; i &lt; ARROW_NUM_SEG; ++i) 
+    {
+        curvedata[i].line.type = unit_arrow[i].type ;  
+	for (j = 0; j&lt;3 ; ++j)
+<a name="anchor-39"></a>	{
+	    curvedata[i].line.end1[j] = unit_arrow[i].end1[j] ; 
+	    curvedata[i].line.end2[j] = unit_arrow[i].end2[j] ; 
+	}
+    }
+<a name="anchor-40"></a>
+    status = ProDispdatEntsSet(arrow_disp_data, &amp;curvedata[0], ARROW_NUM_SEG) ; 
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProDispdatEntsSet()&quot;, status); 
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-41"></a>    Set arrow transformation.
+\*--------------------------------------------------------------------*/
+    status = ProDispdatTrfSet(arrow_disp_data, transform) ; 
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProDispdatTrfSet()&quot;, status); 
+
+<a name="anchor-42"></a>/*--------------------------------------------------------------------*\
+    Add the display data to the object.  
+\*--------------------------------------------------------------------*/
+    status = ProExtobjdataAdd(&amp;arrow_obj, &amp;User_arrow_class, 
+        arrow_disp_data) ; 
+<a name="anchor-43"></a>    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProExtobjdataAdd()&quot;, status); 
+
+    status = ProSeldatAlloc (&amp;sel_data);
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProSeldatAlloc()&quot;, status); 
+
+<a name="anchor-44"></a>    sel_box_ptr = &amp;sel_box[0];
+    (*sel_box_ptr)[0][0] = 0.0;
+    (*sel_box_ptr)[0][1] = 0.0;
+    (*sel_box_ptr)[0][2] = 0.0;
+    (*sel_box_ptr)[1][0] = 0.5;
+<a name="anchor-45"></a>    (*sel_box_ptr)[1][1] = 0.5;
+    (*sel_box_ptr)[1][2] = 0.5;
+    num_box = 1;
+
+    status = ProSeldatSelboxesSet (sel_data, sel_box, num_box);
+<a name="anchor-46"></a>    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProSeldatSelboxesSet()&quot;, status); 
+
+    status = ProExtobjdataAdd (&amp;arrow_obj, &amp;User_arrow_class, sel_data);
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProExtobjdataAdd()&quot;, status); 
+
+<a name="anchor-47"></a>    status = ProExtobjdataFree (&amp;sel_data);
+    ERROR_CHECK(&quot;UserExtobjCreate()&quot;, &quot;ProExtobjdataFree()&quot;, status); 
+
+/*--------------------------------------------------------------------*\
+    Repaint the window so the object is displayed.
+<a name="anchor-48"></a>\*--------------------------------------------------------------------*/
+    ProWindowRepaint(PRO_VALUE_UNUSED) ; 
+
+    return(PRO_TK_NO_ERROR) ; 
+}
+</pre>
+</body>
+</html>

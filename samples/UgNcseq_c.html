@@ -1,0 +1,269 @@
+<html>
+<head>
+<title>UgNcseq.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProElement.h>
+#include &lt;ProMfg.h>
+#include &lt;ProFeature.h>
+
+<a name="anchor-2"></a>typedef struct st_user_data
+{
+   int dummy;
+} UserData;
+
+<a name="anchor-3"></a>typedef struct st_user_elem_table
+{
+    int   elem_type;
+    int   value_type;
+} UserElemTable;
+<a name="anchor-4"></a>
+ProError UserAuxNcseqCreate(
+    ProMfg         mfg,          
+    ProName        feat_name,   
+    int            oper_id,     
+<a name="anchor-5"></a>    int            retract_id, 
+    ProSelection   ncseq_csys,  
+    ProName        tool_name,  
+    ProFeature    *p_ncseq);
+
+<a name="anchor-6"></a>/*================================================================*\
+FUNCTION:  UserClcmdCreate()
+PURPOSE:   Create a customized, manufacturing CL command.
+\*================================================================*/
+ProError UserClcmdCreate(
+<a name="anchor-7"></a>    ProMfg        mfg,           /* manufacturing model */
+    int           oper_id,       /* operation identifier */
+    int           retract_id,    /* retraction plane identifier */
+    ProSelection  ncseq_csys,    /* NC sequence csys */
+    ProName       tool_name      /* name of the tool */
+<a name="anchor-8"></a>)
+{
+    ProError   status;
+    UserData   data;
+    ProFeature ncseq;
+<a name="anchor-9"></a>    ProName    aux_name;
+
+/*----------------------------------------------------------------*\
+  Set up the user data required for the CL command creation.
+\*----------------------------------------------------------------*/
+<a name="anchor-10"></a>
+/*----------------------------------------------------------------*\
+  Create the auxiliary NC sequence.
+\*----------------------------------------------------------------*/
+  status = UserAuxNcseqCreate (mfg, aux_name, oper_id, retract_id,
+<a name="anchor-11"></a>      ncseq_csys, tool_name, &amp;ncseq);
+
+/*----------------------------------------------------------------*\
+  Create the custom NC sequence.
+\*----------------------------------------------------------------*/
+<a name="anchor-12"></a>  if (status == PRO_TK_NO_ERROR)
+      status = UserCustomNcseqCreate (mfg, ncseq.id, data);
+
+  return (status);
+}
+<a name="anchor-13"></a>
+/*================================================================*\
+FUNCTION:  UserAuxNcseqCreate()
+PURPOSE:   Create an auxiliary NC sequence.
+\*================================================================*/
+<a name="anchor-14"></a>ProError UserAuxNcseqCreate(
+    ProMfg         mfg,          /* manufacturing model */
+    ProName        feat_name,    /* auxiliary NC sequence name */
+    int            oper_id,      /* operation identifier */
+    int            retract_id,   /* retraction plane identifier */
+<a name="anchor-15"></a>    ProSelection   ncseq_csys,   /* NC sequence coordinate system */
+    ProName        tool_name,    /* tool name */
+    ProFeature    *p_ncseq)      /* auxiliary NC sequence feature */
+{
+    ProError       status;
+<a name="anchor-16"></a>    ProErrorlist   errors;       /* error list */
+    ProSelection   sel;          /* selection for workpiece */
+    ProFeatureCreateOptions *opts = 0;
+
+static UserElemTable elem_tab[] =
+<a name="anchor-17"></a>    {{PRO_E_FEATURE_TYPE,  PRO_VALUE_TYPE_INT       },
+      {PRO_E_FEAT_NAME,    PRO_VALUE_TYPE_WSTRING   },
+      {PRO_E_OPERATION,    PRO_VALUE_TYPE_INT       },
+      {PRO_E_RETRACT,      PRO_VALUE_TYPE_INT       },
+      {PRO_E_CSYS,         PRO_VALUE_TYPE_SELECTION },
+<a name="anchor-18"></a>      {PRO_E_TOOL,         PRO_VALUE_TYPE_WSTRING   }};
+
+/*----------------------------------------------------------------*\
+  Allocate the elements, set the values, and add them to the
+  element tree.
+<a name="anchor-19"></a>\*----------------------------------------------------------------*/
+
+/*----------------------------------------------------------------*\
+  Get the ProSelection for the workpiece.
+\*----------------------------------------------------------------*/
+<a name="anchor-20"></a>  if (status == PRO_TK_NO_ERROR)
+      status = UserWpieceSelCreate (mfg, PRO_TK_NOT_USED,
+          PRO_TK_NOT_USED, &amp;sel);
+
+/*----------------------------------------------------------------*\
+<a name="anchor-21"></a>  Create the auxiliary NC sequence.
+\*----------------------------------------------------------------*/
+  if (status == PRO_TK_NO_ERROR)
+  	{
+      status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+<a name="anchor-22"></a>            1, (ProArray*)&amp;opts);
+
+      opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+      status = ProFeatureWithoptionsCreate (sel, elem_tree,
+<a name="anchor-23"></a>            opts, PRO_REGEN_NO_FLAGS, p_ncseq, &amp;errors);
+
+      status = ProArrayFree((ProArray*)&amp;opts);
+     } 
+    return (status);
+<a name="anchor-24"></a>}
+
+/*====================================================================*\
+FUNCTION:  UserCustomNcseqCreate()
+PURPOSE:   Create a custom NC sequence.
+<a name="anchor-25"></a>\*====================================================================*/
+
+ProError UserCustomNcseqCreate(
+    ProMfg      mfg_model,       /* manufacturing model */
+    int         ref_ncseq_id,    /* feature identifier of the
+<a name="anchor-26"></a>                                    referenced NC sequence */
+    UserData   *data)            /* user application data */
+{
+    ProError      status = PRO_TK_NO_ERROR;
+    ProElement    elem, elem_tree;
+<a name="anchor-27"></a>    ProErrorlist  errors;
+    ProSelection  sel;
+    ProFeature    custom_feat;
+    int           ii;
+    ProFeatureCreateOptions *opts = 0;
+<a name="anchor-28"></a>
+  static  UserElemTable elem_tab[] = {
+     {PRO_E_FEATURE_TYPE,    PRO_VALUE_TYPE_INT   },
+     {PRO_E_REF_NCSEQ,       PRO_VALUE_TYPE_INT   },
+     {PRO_E_NCL_COMMANDS,    ARRAY                }};
+<a name="anchor-29"></a>
+  int elem_type_size = sizeof(elem_tab)/sizeof(UserElemTable);
+
+/*----------------------------------------------------------------*\
+  Allocate the feature tree.
+<a name="anchor-30"></a>\*----------------------------------------------------------------*/
+  status = ProElementAlloc (PRO_E_FEATURE_TREE, &amp;elem_tree);
+
+/*----------------------------------------------------------------*\
+  Go through the entire element table.
+<a name="anchor-31"></a>\*----------------------------------------------------------------*/
+  for (ii = 0; ii &lt; elem_type_size; ii++)
+  {
+      status = ProElementAlloc (elem_tab[ii].elem_type, &amp;elem);
+      switch (elem_tab[ii].elem_type)
+<a name="anchor-32"></a>      {
+          case PRO_E_FEATURE_TYPE:
+               value_data.v.i = PRO_FEAT_BLD_PATH;
+               break;
+          case PRO_E_REF_NCSEQ:
+<a name="anchor-33"></a>               value_data.v.i = ref_ncseq_id;
+               break;
+          case PRO_E_NCL_COMMANDS:
+               status = UserClcmdSet (elem, UserCheckClInput, data);
+               break;
+<a name="anchor-34"></a>          default:
+               return PRO_TK_GENERAL_ERROR;
+               break;
+  }
+
+<a name="anchor-35"></a>/*----------------------------------------------------------------*\
+  Set the value to the element and add it to the element tree.
+\*----------------------------------------------------------------*/
+
+}
+<a name="anchor-36"></a>
+/*----------------------------------------------------------------*\
+  Get the workpiece selection handle.
+\*----------------------------------------------------------------*/
+
+<a name="anchor-37"></a>/*----------------------------------------------------------------*\
+  Create the custom NC sequence.
+\*----------------------------------------------------------------*/
+  if (status == PRO_TK_NO_ERROR)
+  	{
+<a name="anchor-38"></a>      status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+            1, (ProArray*)&amp;opts);
+
+      opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+<a name="anchor-39"></a>      status = ProFeatureWithoptionsCreate (sel, elem_tree,
+            opts, PRO_REGEN_NO_FLAGS, &amp;custom_feat, &amp;errors);
+      status = ProArrayFree((ProArray*)&amp;opts);      
+     }
+
+<a name="anchor-40"></a>    return (status);
+}
+
+/*================================================================*\
+FUNCTION:  UserClcmdSet()
+<a name="anchor-41"></a>PURPOSE:   Set up the CL command element.
+\*================================================================*/
+
+ProError UserClcmdSet(
+  ProElement   ncseq_elem,      /* NC sequence element */
+<a name="anchor-42"></a>  ProFunction  UserCheckFunc,   /* user-supplied check function */
+  UserData    *data)            /* user data */
+{
+    char c     md[80];
+    wchar_t    wcmd[80], *wlines[2];
+<a name="anchor-43"></a>    ProElement cl_cmd_elem;
+    double     pos[3], axis[3];
+    ProError   status;
+
+/*----------------------------------------------------------------*\
+<a name="anchor-44"></a>  Set the CL command location and axis.
+\*----------------------------------------------------------------*/
+
+/*----------------------------------------------------------------*\
+  Prepare the CL command string.
+<a name="anchor-45"></a>\*----------------------------------------------------------------*/
+  ProTKSprintf (cmd, ``MOVETO/ %f,%f,%f'', ...);
+  ProStringToWstring  (wcmd, cmd);
+
+/*----------------------------------------------------------------*\
+<a name="anchor-46"></a>  Check the data.
+\*----------------------------------------------------------------*/
+  if (UserCheckFunc == NULL || UserCheckFunc (data, pos))
+  {
+      wlines[0] = wcmd; wlines[1] = NULL;
+<a name="anchor-47"></a>
+/*----------------------------------------------------------------*\
+  Set up the CL command element and add it to element tree.
+\*----------------------------------------------------------------*/
+      status = ProClcmdElemCreate (wlines, 1, pos, axis, &amp;cl_cmd_elem);
+<a name="anchor-48"></a>
+      if (status == PRO_TK_NO_ERROR)
+          status = ProElemtreeElementAdd (ncseq_elem, NULL, cl_cmd_elem);
+
+  }
+<a name="anchor-49"></a>
+/*----------------------------------------------------------------*\
+  Set notifications, if necessary.
+\*----------------------------------------------------------------*/
+  if (status == PRO_TK_NO_ERROR)
+<a name="anchor-50"></a>  {
+      ProNotificationSet (PRO_NCL_COMMAND_EXPAND,
+          UserClcmdInterpretFunc);
+
+      ProNotificationSet (PRO_NCL_COMMAND_EXPAND,
+<a name="anchor-51"></a>          UserClcmdLocationGetFunc);
+  }
+
+  return (status);
+
+<a name="anchor-52"></a>}
+</pre>
+</body>
+</html>

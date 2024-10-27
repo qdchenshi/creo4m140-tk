@@ -1,0 +1,1193 @@
+<html>
+<head>
+<title>TestInterface.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProIntfData.h>
+#include &lt;ProGeomitemdata.h>
+#include &lt;ProMessage.h>
+#include &lt;ProMenu.h>
+#include &lt;ProSelection.h>
+<a name="anchor-3"></a>#include &lt;ProSolid.h>
+#include &lt;ProUtil.h>
+#include &lt;ProMode.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-4"></a>Pro/DEVELOP includes
+\*--------------------------------------------------------------------*/
+
+#include &quot;TestError.h&quot;
+#include &quot;UtilMenu.h&quot;
+<a name="anchor-5"></a>#include &quot;UtilMessage.h&quot;
+#include &quot;UtilMatrix.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;UtilString.h&quot;
+#include &lt;ProTKRunTime.h>
+<a name="anchor-6"></a>#include &lt;ProImportfeat.h>
+#include &lt;TestDbms.h>
+
+/*--------------------------------------------------------------------*\
+C System includes
+<a name="anchor-7"></a>\*--------------------------------------------------------------------*/
+
+
+/*--------------------------------------------------------------------*\
+Application macros
+<a name="anchor-8"></a>\*--------------------------------------------------------------------*/
+#define DEFAULT_ANGLE_CONTROL	0.5	
+#define DEFAULT_CHORD_HEIGHT	0.05
+#define DEFAULT_STEP_SIZE       0.5
+
+<a name="anchor-9"></a>#define CHORD_HEIGHT 0
+#define ANGLE_CONTROL 1
+
+#define JOIN_SURFACES 1
+#define MAKE_SOLID    2
+<a name="anchor-10"></a>#define ADD_SOLID     4
+
+/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+<a name="anchor-11"></a>typedef struct slice_types {
+    ProImportExportFile type;
+    char *button_name;
+    char *file_extension;
+} SliceTypes;
+<a name="anchor-12"></a>
+typedef struct raster_settings {
+    ProRasterDepth depth;
+    ProRasterType type;
+    ProDotsPerInch inch;
+<a name="anchor-13"></a>    double  size[2];
+} RasterSettings;
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-14"></a>Application global/external data
+\*--------------------------------------------------------------------*/
+
+
+int ProTestImport(ProAppData p_appdata);
+<a name="anchor-15"></a>int ProTestExport(ProAppData p_appdata);
+int ProTestExportSlice(ProAppData p_appdata);
+int ProTestExportFileTypeSet(ProImportExportFile *p_type,
+                             ProImportExportFile type_value);
+ProError ProTestSelectExportType( ProImportExportFile *p_type );
+<a name="anchor-16"></a>ProError ProTestSelectImportType( ProImportExportFile *p_type );
+int ProTestPlotfileWrite ( ProAppData p_appdata);
+int ProTestExportVRML (ProAppData p_appdata);
+int ProTestRasterMenu();
+int ProTestRedefImpfeat(ProMdl *mdl);
+<a name="anchor-17"></a>ProError ProUtilImportfeatFilter(ProFeature *p_feature);
+
+extern ProError ProUtilCollectSolidFeaturesWithFilter(
+    ProSolid        p_solid,        /* In:  The solid handle */
+    ProFeatureFilterAction     filter,  /* In:  Filter function */
+<a name="anchor-18"></a>    ProFeature      **p_features );
+
+
+static SliceTypes sl_types[] =
+{
+<a name="anchor-19"></a>    {PRO_SLA_ASCII_FILE, (char *)&quot;STL ASCII&quot;, (char *)&quot;stl&quot;},
+    {PRO_SLA_BINARY_FILE, (char *)&quot;STL Binary&quot;, (char *)&quot;stl&quot;},
+    {PRO_RENDER_FILE, (char *)&quot;Render&quot;, (char *)&quot;slp&quot;},
+    {PRO_INVENTOR_FILE, (char *)&quot;Inventor&quot;, (char *)&quot;iv&quot;}
+};
+<a name="anchor-20"></a>
+/*============================================================================*\
+ Function:	ProTestInterface
+ Purpose:       
+\*============================================================================*/
+<a name="anchor-21"></a>int ProTestInterface(
+    ProAppData		p_appdata)
+{
+    ProError		status;
+    int			menu_id;
+<a name="anchor-22"></a>    int 		action;
+    int                 ProTestImportfeat();
+
+    status = ProMenuPush();
+    TEST_CALL_REPORT( &quot;ProMenuPush()&quot;, &quot;ProTestInterface()&quot;,
+<a name="anchor-23"></a>        status,  status != PRO_TK_NO_ERROR );
+
+    status = ProMenuFileRegister( (char*)&quot;TkInterface&quot;, (char*)&quot;tkinterface.mnu&quot;, 
+	&amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestInterface()&quot;,
+<a name="anchor-24"></a>    	status,  status != PRO_TK_NO_ERROR );
+
+    ProMenubuttonActionSet( (char*)&quot;TkInterface&quot;, (char*)&quot;Import&quot;,
+        (ProMenubuttonAction)ProTestImport, p_appdata,  0 );
+    ProMenubuttonActionSet( (char*)&quot;TkInterface&quot;, (char*)&quot;Export&quot;,
+<a name="anchor-25"></a>        (ProMenubuttonAction)ProTestExport, p_appdata,  0 );
+    ProMenubuttonActionSet( (char*)&quot;TkInterface&quot;, (char*)&quot;Export PS&quot;,
+        (ProMenubuttonAction)ProTestPlotfileWrite, p_appdata,  0 );
+    ProMenubuttonActionSet( (char*)&quot;TkInterface&quot;, (char*)&quot;Export Slice&quot;,
+        (ProMenubuttonAction)ProTestExportSlice, p_appdata,  0 );
+<a name="anchor-26"></a>    ProMenubuttonActionSet( (char*)&quot;TkInterface&quot;, (char*)&quot;Import feat&quot;,
+        (ProMenubuttonAction)ProTestImportfeat, p_appdata,  0 );
+    ProMenubuttonActionSet( (char*)&quot;TkInterface&quot;, (char*)&quot;Redef Impfeat&quot;,
+        (ProMenubuttonAction)ProTestRedefImpfeat, p_appdata,  0 );
+    ProMenubuttonActionSet( (char*)&quot;TkInterface&quot;, (char*)&quot;Export VRML&quot;,
+<a name="anchor-27"></a>        (ProMenubuttonAction)ProTestExportVRML, p_appdata,  0 );
+    ProMenubuttonActionSet( (char*)&quot;TkInterface&quot;, (char*)&quot;Export Raster&quot;,
+        (ProMenubuttonAction)ProTestRasterMenu, NULL,  0 );
+    ProMenubuttonActionSet( (char*)&quot;TkInterface&quot;, (char*)&quot;TkInterface Done&quot;,
+        (ProMenubuttonAction)ProMenuDelete, p_appdata,  0 );
+<a name="anchor-28"></a>    ProMenubuttonActionSet( (char*)&quot;TkInterface&quot;, (char*)&quot;TkInterface&quot;,
+    	(ProMenubuttonAction)ProMenuDelete, p_appdata,  0 );
+
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkInterface&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestInterface()&quot;,
+<a name="anchor-29"></a>        status,  status != PRO_TK_NO_ERROR );
+
+    if( status == PRO_TK_NO_ERROR )
+    {
+    	status = ProMenuProcess( (char*)&quot;TkInterface&quot;, &amp;action );
+<a name="anchor-30"></a>    	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestInterface()&quot;,
+            status,  status != PRO_TK_NO_ERROR );
+    }
+
+    status = ProMenuPop();
+<a name="anchor-31"></a>    TEST_CALL_REPORT( &quot;ProMenuPop()&quot;, &quot;ProTestInterface()&quot;,
+        status,  status != PRO_TK_NO_ERROR );
+
+
+    return 0;
+<a name="anchor-32"></a>}
+
+
+
+/*============================================================================*\
+<a name="anchor-33"></a> Function:      ProTestImport
+ Purpose:       Import current model to the foreign format 
+\*============================================================================*/
+int ProTestImport(
+    ProAppData          p_appdata)
+<a name="anchor-34"></a>{
+    ProError            status;
+    ProMdl		p_model;
+    ProName             wfilename;
+    ProMode		mode;
+<a name="anchor-35"></a>    ProImportExportFile import_type;
+
+
+    p_model = *((ProMdl*)p_appdata);    
+
+<a name="anchor-36"></a>    /* Get Pro/E mode */
+    status = ProModeCurrentGet( &amp;mode );
+    TEST_CALL_REPORT( &quot;ProModeCurrentGet()&quot;, &quot;ProTestImport()&quot;,
+    	status,  status != PRO_TK_NO_ERROR );
+
+<a name="anchor-37"></a>    ProTestSelectImportType( &amp;import_type );
+
+    switch( import_type )
+    {
+      case PRO_DWG_SETUP_FILE:
+<a name="anchor-38"></a>        if( mode != PRO_MODE_DRAWING )
+	{
+            status = PRO_TK_GENERAL_ERROR;
+            ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Drawing mode is required&quot; );
+        }
+<a name="anchor-39"></a>	break;
+
+      /*
+      case PRO_RELATION_FILE:
+      case PRO_PROGRAM_FILE:
+<a name="anchor-40"></a>      case PRO_IGES_SECTION:
+      */
+    }
+
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-41"></a>    {
+        ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter import file name [QUIT]:&quot; ); 
+    	status = ProMessageStringRead( PRO_NAME_SIZE, wfilename );
+    	TEST_CALL_REPORT( &quot;ProMessageStringRead()&quot;, &quot;ProTestImport()&quot;,
+        	status,  status != PRO_TK_NO_ERROR );
+<a name="anchor-42"></a>    	if( status != PRO_TK_NO_ERROR )	
+	    return -1;
+
+    	status = ProInputFileRead( p_model, wfilename, import_type, NULL,
+		NULL, NULL, NULL );
+<a name="anchor-43"></a>    	TEST_CALL_REPORT( &quot;ProInputFileRead()&quot;, &quot;ProTestImport()&quot;,
+        	status,  status != PRO_TK_NO_ERROR );
+
+	status = ProSolidRegenerate( (ProSolid)p_model, PRO_REGEN_NO_FLAGS );
+        TEST_CALL_REPORT( &quot;ProSolidRegenerate()&quot;, &quot;ProTestImport()&quot;,
+<a name="anchor-44"></a>                status,  status != PRO_TK_NO_ERROR );
+    }
+    else
+    {
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Invalid import type&quot; );
+<a name="anchor-45"></a>    }
+
+
+    return 0;
+}
+<a name="anchor-46"></a>
+
+
+/*============================================================================*\
+ Function:      ProTestSelectImportType
+<a name="anchor-47"></a> Purpose:       Select the type of file to import
+\*============================================================================*/
+ProError ProTestSelectImportType(
+    ProImportExportFile	*p_type
+)
+<a name="anchor-48"></a>{
+    ProError		status;
+    int			menu_id;
+    int			action;
+ 
+<a name="anchor-49"></a>
+    if( p_type == NULL )
+	return PRO_TK_BAD_INPUTS;
+
+    *p_type = PRO_UNDEFINED_FILE;
+<a name="anchor-50"></a>
+    status = ProMenuFileRegister( (char*)&quot;TkImport&quot;, (char*)&quot;tkimport.mnu&quot;,
+        &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestSelectImportType()&quot;,
+        status,  status != PRO_TK_NO_ERROR );
+<a name="anchor-51"></a>
+    ProMenubuttonActionSet( (char*)&quot;TkImport&quot;, (char*)&quot;RELATION_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+	p_type, PRO_RELATION_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkImport&quot;, (char*)&quot;IGES_SECTION&quot;,
+<a name="anchor-52"></a>        (ProMenubuttonAction)ProTestExportFileTypeSet,
+        p_type, PRO_IGES_SECTION );
+    ProMenubuttonActionSet( (char*)&quot;TkImport&quot;, (char*)&quot;PROGRAM_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_PROGRAM_FILE );
+<a name="anchor-53"></a>    ProMenubuttonActionSet( (char*)&quot;TkImport&quot;, (char*)&quot;CONFIG_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_CONFIG_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkImport&quot;, (char*)&quot;DWG_SETUP_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+<a name="anchor-54"></a>        p_type, PRO_DWG_SETUP_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkImport&quot;, (char*)&quot;SPOOL_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet,
+        p_type, PRO_SPOOL_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkImport&quot; , (char*)&quot;TkImport&quot;,
+<a name="anchor-55"></a>        (ProMenubuttonAction)ProMenuDelete, 
+	p_type, -1 );
+
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkImport&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestSelectImportType()&quot;,
+<a name="anchor-56"></a>        status,  status != PRO_TK_NO_ERROR );
+
+    if( status == PRO_TK_NO_ERROR )
+    {
+        status = ProMenuProcess( (char*)&quot;TkImport&quot;, &amp;action );
+<a name="anchor-57"></a>        TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSelectImportType()&quot;,
+            status,  status != PRO_TK_NO_ERROR );
+    }
+
+    if( *p_type == PRO_UNDEFINED_FILE )
+<a name="anchor-58"></a>	status = PRO_TK_GENERAL_ERROR;
+
+
+    return status;
+}
+<a name="anchor-59"></a>
+
+    
+/*============================================================================*\
+ Function:      ProTestExport
+<a name="anchor-60"></a> Purpose:       Export current model from the foreign format
+\*============================================================================*/
+int ProTestExport(
+    ProAppData          p_appdata)
+{
+<a name="anchor-61"></a>    ProError            status;
+    ProMdl		p_model;
+    ProMdlFileName      wfilename;
+    ProMode		mode;
+    ProAppData		p_arg2;
+<a name="anchor-62"></a>    ProAppData		p_arg3;
+    ProFeature		feature;
+    ProSelection	*p_sel;
+    int			n_sel;
+    ProImportExportFile export_type;
+<a name="anchor-63"></a>    double              quality[ 2 ];
+    ProCGMType			cgm_option_1;
+    ProCGMType          cgm_option_2;
+
+
+<a name="anchor-64"></a>    p_model = *((ProMdl*)p_appdata);    
+
+    /* User's input must be here */
+    ProStringToWstring( wfilename, (char*)&quot;output&quot; );
+
+<a name="anchor-65"></a>    /* Get Pro/E mode */
+    status = ProModeCurrentGet( &amp;mode );
+    TEST_CALL_REPORT( &quot;ProModeCurrentGet()&quot;, &quot;ProTestExport()&quot;,
+    	status,  status != PRO_TK_NO_ERROR );
+
+<a name="anchor-66"></a>    ProTestSelectExportType( &amp;export_type );
+
+    p_arg2 = NULL;
+    p_arg3 = NULL;
+
+<a name="anchor-67"></a>    switch( export_type )
+    {
+      case PRO_IGES_FILE:
+      case PRO_DXF_FILE:
+      case PRO_DWG_SETUP_FILE:
+<a name="anchor-68"></a>        if( mode != PRO_MODE_DRAWING )
+	{
+            status = PRO_TK_GENERAL_ERROR;
+            ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Drawing mode is required&quot; );
+        }
+<a name="anchor-69"></a>	break;
+
+      case PRO_RENDER_FILE:
+      case PRO_SLA_ASCII_FILE:
+      case PRO_SLA_BINARY_FILE:
+<a name="anchor-70"></a>      case PRO_INVENTOR_FILE:
+	quality[0] = DEFAULT_CHORD_HEIGHT;
+	quality[1] = DEFAULT_ANGLE_CONTROL;
+	p_arg3 = (ProAppData)quality;
+        break;
+<a name="anchor-71"></a>
+      case PRO_FEAT_INFO:
+      case PRO_FEATURE_INFO:
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select the feature&quot; );
+	status = ProSelect( (char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, 
+<a name="anchor-72"></a>		&amp;p_sel, &amp;n_sel ); 
+     	if( (status != PRO_TK_NO_ERROR) || (n_sel &lt; 1) )
+            break;
+
+	status = ProSelectionModelitemGet( p_sel[0], &amp;feature );
+<a name="anchor-73"></a>    	TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, &quot;ProTestExport()&quot;,
+        	status,  status != PRO_TK_NO_ERROR );
+
+	p_arg2 = (ProAppData)&amp;(feature.id);
+	break;
+<a name="anchor-74"></a>
+      case PRO_MFG_OPER_CL:
+      case PRO_MFG_FEAT_CL:
+        if( mode != PRO_MODE_MANUFACTURE )
+	{
+<a name="anchor-75"></a>            status = PRO_TK_GENERAL_ERROR;
+            ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, 
+		&quot;Manufacturing mode is required&quot; );
+	    break;
+	}
+<a name="anchor-76"></a>
+        ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select the feature&quot; );
+        status = ProSelect( (char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL,
+                &amp;p_sel, &amp;n_sel );
+        if( (status != PRO_TK_NO_ERROR) || (n_sel &lt; 1) )
+<a name="anchor-77"></a>            break;
+
+        status = ProSelectionModelitemGet( p_sel[0], &amp;feature );
+        TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, &quot;ProTestExport()&quot;,
+                status,  status != PRO_TK_NO_ERROR );
+<a name="anchor-78"></a>
+        p_arg2 = (ProAppData)&amp;(feature.id);
+	break;
+
+	  case PRO_CGM_FILE:
+<a name="anchor-79"></a>
+		  cgm_option_1 = PROCGMTYPE_CLEAR_TEXT;
+		  cgm_option_2 = PROCGMTYPE_ABSTRACT;
+
+		  p_arg2 = &amp;cgm_option_1;
+<a name="anchor-80"></a>		  p_arg3 = &amp;cgm_option_2;
+		  break;
+    }
+
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-81"></a>    {
+        ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter export file name [QUIT]:&quot; );
+    	status = ProMessageStringRead( PRO_LINE_SIZE, wfilename );
+    	TEST_CALL_REPORT( &quot;ProMessageStringRead()&quot;, &quot;ProTestImport()&quot;,
+        	status,  status != PRO_TK_NO_ERROR );
+<a name="anchor-82"></a>    	if( status != PRO_TK_NO_ERROR )	
+	    return -1;
+
+    	status = ProOutputFileMdlnameWrite( p_model, wfilename, export_type, NULL,
+		p_arg2, p_arg3, NULL );
+<a name="anchor-83"></a>    	TEST_CALL_REPORT( &quot;ProOutputFileMdlnameWrite()&quot;, &quot;ProTestExport()&quot;,
+        	status,  status != PRO_TK_NO_ERROR );
+    }
+    else
+    {
+<a name="anchor-84"></a>	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Invalid export type&quot; );
+    }
+
+    return 0;
+}
+<a name="anchor-85"></a>
+/*============================================================================*\
+ Function:      ProUtilSliceParamInput
+ Purpose:       Input Slice export param
+\*============================================================================*/
+<a name="anchor-86"></a>int ProUtilSliceParamInput(
+    double *dptr,
+    int	    action)
+{
+    ProCharLine line;
+<a name="anchor-87"></a>    double drange[2], d;
+    ProError err;
+
+    d = dptr[0];
+    if (action == CHORD_HEIGHT)
+<a name="anchor-88"></a>    {
+	ProTKSprintf(line, &quot;Enter maximum hord height [%.4f]:&quot;, d);
+	drange[0] = 0.0001;
+	drange[1] = 100.0;
+    }    
+<a name="anchor-89"></a>    else
+    {
+	ProTKSprintf(line, &quot;Enter angle control factor ( 0.0 - 1.0 ) [%.4f]:&quot;, d);
+	drange[0] = 0.0;
+	drange[1] = 1.0;
+<a name="anchor-90"></a>    }
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+    err = ProMessageDoubleRead(drange, &amp;d);
+    if (err == PRO_TK_NO_ERROR)
+<a name="anchor-91"></a>    {
+	dptr[0] = d;
+    }
+    return (0);
+}
+<a name="anchor-92"></a>
+/*============================================================================*\
+ Function:      ProUtilSliceSelectCsys
+ Purpose:       Select Slice export Csys matr
+\*============================================================================*/
+<a name="anchor-93"></a>int ProUtilSliceSelectCsys(
+    ProMatrix matr)
+{
+    ProSelection *p_sel;
+    int n_sel;
+<a name="anchor-94"></a>    ProError err;
+    ProModelitem modelitem;
+    ProAsmcomppath path;
+    ProMatrix asm_matr, prod_matr;
+    ProGeomitemdata *p_data;
+<a name="anchor-95"></a>
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select coordinate system.&quot;);
+    err = ProSelect((char*)&quot;csys&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel ); 
+    if (err != PRO_TK_NO_ERROR || n_sel != 1)
+	return (0);
+<a name="anchor-96"></a>
+    err = ProSelectionModelitemGet(p_sel[0], &amp;modelitem);
+    TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;,
+			&quot;ProTestExport()&quot;, err,  err != PRO_TK_NO_ERROR );
+    err = ProGeomitemdataGet((ProGeomitem*)&amp;modelitem, &amp;p_data);
+<a name="anchor-97"></a>    TEST_CALL_REPORT( &quot;ProGeomitemdataGet()&quot;,
+			&quot;ProTestExport()&quot;, err,  err != PRO_TK_NO_ERROR );
+    err = ProMatrixInit(p_data->data.p_csys_data->x_vector,
+	p_data->data.p_csys_data->y_vector, p_data->data.p_csys_data->z_vector,
+	p_data->data.p_csys_data->origin, matr);
+<a name="anchor-98"></a>    TEST_CALL_REPORT( &quot;ProMatrixInit()&quot;,
+			&quot;ProTestExport()&quot;, err,  err != PRO_TK_NO_ERROR );
+    err = ProGeomitemdataFree(&amp;p_data);
+    TEST_CALL_REPORT( &quot;ProGeomitemdataFree()&quot;,
+			&quot;ProTestExport()&quot;, err,  err != PRO_TK_NO_ERROR );
+<a name="anchor-99"></a>    err = ProSelectionAsmcomppathGet(p_sel[0], &amp;path);
+    TEST_CALL_REPORT( &quot;ProSelectionAsmcomppathGet()&quot;,
+			&quot;ProTestExport()&quot;, err,  err != PRO_TK_NO_ERROR );
+    if (err == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-100"></a>	/* Csys from an assembly component, produce transformation matrix from
+	   csys matrix and component matrix */ 
+	err = ProAsmcomppathTrfGet(&amp;path, PRO_B_FALSE, asm_matr);
+	TEST_CALL_REPORT( &quot;ProAsmcomppathTrfGet()&quot;,
+			&quot;ProTestExport()&quot;, err,  err != PRO_TK_NO_ERROR );
+<a name="anchor-101"></a>	ProUtilMatrixProduct(asm_matr, matr, prod_matr);
+	ProUtilMatrixCopy(prod_matr, matr);
+    }
+
+    err = ProMenuDeleteWithStatus(0);
+<a name="anchor-102"></a>    
+    return(PRO_TK_NO_ERROR);
+}
+
+/*============================================================================*\
+<a name="anchor-103"></a> Function:      ProUtilSliceParamInput
+ Purpose:       Make Slice export Csys matr
+\*============================================================================*/
+int ProUtilSliceCsysGet(
+    ProMatrix matr)
+<a name="anchor-104"></a>{
+    int action;
+    ProError err;
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Create or select coordinate system.&quot;);
+<a name="anchor-105"></a>    ProMenuFileRegister( (char*)&quot;TkGet Csys&quot;, (char*)&quot;tkgetcsys.mnu&quot;, NULL );
+    ProMenubuttonActionSet( (char*)&quot;TkGet Csys&quot;, (char*)&quot;Select&quot;, 
+	(ProMenubuttonAction)ProUtilSliceSelectCsys, matr, 0);
+    ProMenubuttonActionSet( (char*)&quot;TkGet Csys&quot;, (char*)&quot;Default&quot;, 
+	(ProMenubuttonAction)ProUtilMenubuttonDeleteWithStatus, NULL, 0);
+<a name="anchor-106"></a>    ProMenubuttonActionSet( (char*)&quot;TkGet Csys&quot;, (char*)&quot;Quit&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    ProMenubuttonActionSet( (char*)&quot;TkGet Csys&quot;, (char*)&quot;TkGet Csys&quot;, 
+	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+
+<a name="anchor-107"></a>    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkGet Csys&quot;, NULL);
+
+    err = ProMenuProcess((char*)&quot;TkGet Csys&quot;, &amp;action);
+    if (err == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-108"></a>	ProMenuDeleteWithStatus(0);
+	ProMenuDeleteWithStatus(0);
+    }
+    return (0);
+}
+<a name="anchor-109"></a>
+/*============================================================================*\
+ Function:      ProUtilSliceCompSelect
+ Purpose:       Select an assembly component
+\*============================================================================*/
+<a name="anchor-110"></a>int ProUtilSliceCompSelect(
+    ProAsmcomppath **p_path)
+{
+    ProSelection *p_sel;
+    int n_sel;
+<a name="anchor-111"></a>    ProError err;
+    ProAsmcomppath path;
+
+    err = ProSelect((char*)&quot;prt_or_asm&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel );
+    if (err == PRO_TK_NO_ERROR &amp;&amp; n_sel == 1)
+<a name="anchor-112"></a>    {
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select an assembly component.&quot;);
+	err = ProSelectionAsmcomppathGet(p_sel[0], &amp;path);
+	TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;,
+		    &quot;ProUtilSliceCompSelect()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-113"></a>	if (err == PRO_TK_NO_ERROR)
+	{
+	    if (*p_path == NULL)
+		*p_path = (ProAsmcomppath*)calloc(1, sizeof(ProAsmcomppath));
+	    p_path[0][0] = path;
+<a name="anchor-114"></a>	}
+	ProUtilMenubuttonActivate((char*)&quot;TkExportSliceComp&quot;, (char*)&quot;Include&quot;, 0);
+    }
+    return (0);
+}
+<a name="anchor-115"></a>
+/*============================================================================*\
+ Function:      ProTestExportSlice
+ Purpose:       Export current model to the one of slice formats
+\*============================================================================*/
+<a name="anchor-116"></a>int ProTestExportSlice(
+    ProAppData          p_appdata)
+{
+    ProMdl		p_model;
+    ProMdlName             w_name;
+<a name="anchor-117"></a>    ProMdlFileName		w_file_name;
+    char		name[PRO_MDLNAME_SIZE];
+    ProCharLine		line;
+    char		file_name[PRO_FILE_MDLNAME_SIZE];
+    ProMatrix		matrix;
+<a name="anchor-118"></a>    ProAsmcomppath	*p_path = NULL;
+    ProError		err;
+    ProMdlType		mdl_type;
+    int			i, n_menus, action;
+    ProImportExportFile	type;
+<a name="anchor-119"></a>    char *compound[] = {&quot;TkExportSlice&quot;, &quot;TkExportSliceComp&quot;,  &quot;&quot;};
+    double *quality;
+	int flags = PRO_FACET_STEP_SIZE_DEFAULT | PRO_FACET_CHORD_HEIGHT_DEFAULT | PRO_FACET_ANGLE_CONTROL_DEFAULT;
+
+	ProArrayAlloc(3, sizeof(double), 1, (ProArray*)&amp;quality);
+<a name="anchor-120"></a>	quality[0] = DEFAULT_CHORD_HEIGHT;
+	quality[1] = DEFAULT_ANGLE_CONTROL;
+	quality[2] = DEFAULT_STEP_SIZE;
+
+    p_model = *((ProMdl*)p_appdata);    
+<a name="anchor-121"></a>    err = ProMdlTypeGet(p_model, &amp;mdl_type);
+
+    ProMenuFileRegister( (char*)&quot;TkSlice Type&quot;, (char*)&quot;tkslicetype.mnu&quot;, NULL );
+    for (i=0; i&lt;sizeof(sl_types)/sizeof(sl_types[0]); i++)
+    {
+<a name="anchor-122"></a>	ProMenubuttonActionSet( (char*)&quot;TkSlice Type&quot;, sl_types[i].button_name, 
+	    (ProMenubuttonAction)ProUtilMenubuttonDeleteWithStatus, NULL,
+	    sl_types[i].type);
+    }
+    ProMenubuttonActionSet( (char*)&quot;TkSlice Type&quot;, (char*)&quot;TkSlice Type&quot;, 
+<a name="anchor-123"></a>	(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkSlice Type&quot;, NULL);
+
+    err = ProMenuProcess((char*)&quot;TkSlice Type&quot;, (int*)&amp;type);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-124"></a>	return (-1);
+
+    ProUtilMatrixCopy(NULL, matrix);
+
+    ProMenuFileRegister( (char*)&quot;TkExportSlice&quot;, (char*)&quot;tkexportsl.mnu&quot;, NULL);
+<a name="anchor-125"></a>    ProMenubuttonActionSet( (char*)&quot;TkExportSlice&quot;, (char*)&quot;Chord Height&quot;,
+        (ProMenubuttonAction)ProUtilSliceParamInput, &amp;quality[0], CHORD_HEIGHT);
+    ProMenubuttonActionSet( (char*)&quot;TkExportSlice&quot;, (char*)&quot;Angle Control&quot;,
+        (ProMenubuttonAction)ProUtilSliceParamInput, &amp;quality[1], ANGLE_CONTROL);
+    ProMenubuttonActionSet( (char*)&quot;TkExportSlice&quot;, (char*)&quot;Output&quot;,
+<a name="anchor-126"></a>        (ProMenubuttonAction)ProUtilSliceCsysGet, matrix, 0);
+    ProMenubuttonActionSet( (char*)&quot;TkExportSlice&quot;, (char*)&quot;TkExportSlice&quot;,
+        (ProMenubuttonAction)ProUtilMenuKill, NULL, 2);
+
+    ProMenuFileRegister( (char*)&quot;TkExportSliceComp&quot;, (char*)&quot;tkexportslc.mnu&quot;,  NULL);
+<a name="anchor-127"></a>    ProMenubuttonActionSet( (char*)&quot;TkExportSliceComp&quot;, (char*)&quot;Include&quot;,
+        (ProMenubuttonAction)ProUtilSliceCompSelect, &amp;p_path, 0);
+    ProMenubuttonActionSet( (char*)&quot;TkExportSliceComp&quot;, (char*)&quot;TkExportSliceComp&quot;,
+        (ProMenubuttonAction)ProUtilMenuKill, NULL, 2);
+    
+<a name="anchor-128"></a>    err = ProCompoundmenuCreate(compound, &amp;n_menus);
+    TEST_CALL_REPORT(&quot;ProCompoundmenuCreate()&quot;,
+			&quot;ProTestExportSlice()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    ProUtilMenubuttonActivate((char*)&quot;TkExportSliceComp&quot;, (char*)&quot;Include&quot;, 
+<a name="anchor-129"></a>	mdl_type != PRO_MDL_PART);
+
+    err = ProMenuProcess((char*)&quot;TkExportSlice&quot;, &amp;action);
+    if (err != PRO_TK_NO_ERROR)
+	return (0);
+<a name="anchor-130"></a>
+    err = ProMdlMdlnameGet(p_model, w_name);
+    ProWstringToString(name, w_name);
+
+    ProTKSprintf(line, &quot;Enter output file name [%s] : &quot;, name);
+<a name="anchor-131"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+    err = ProMessageStringRead(PRO_LINE_SIZE, w_file_name);
+    if (err != PRO_TK_NO_ERROR)
+	ProStringToWstring(w_file_name, name);
+    ProWstringToString(file_name, w_file_name);
+<a name="anchor-132"></a>    ProUtilstrcat(file_name, &quot;.&quot;);
+    for (i=0; i&lt;sizeof(sl_types)/sizeof(sl_types[0]); i++)
+    {
+	if (sl_types[i].type == type)
+	{
+<a name="anchor-133"></a>	    ProUtilstrcat(file_name, (const char*)sl_types[i].file_extension);
+	    break;
+	}
+    }
+    ProStringToWstring(w_file_name, file_name);
+<a name="anchor-134"></a>
+	err = ProIntfSliceFileWithOptionsMdlnameExport(p_model, w_file_name, type, quality, 
+		   flags, matrix, p_path);
+    TEST_CALL_REPORT( &quot;ProIntfSliceFileWithOptionsMdlnameExport()&quot;, 
+		    &quot;ProTestExportSlice()&quot;, err,  err != PRO_TK_NO_ERROR );
+<a name="anchor-135"></a>
+    if (err == PRO_TK_NO_ERROR)
+    {
+	ProTKSprintf(line, &quot;File %s has written successfully.&quot;, file_name);
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, line);
+<a name="anchor-136"></a>	
+    }
+
+    if (p_path != NULL)
+	free(p_path);
+<a name="anchor-137"></a>    return 0;
+}
+
+
+/*============================================================================*\
+<a name="anchor-138"></a> Function:      ProTestSelectExportType
+ Purpose:       Select file format to export
+\*============================================================================*/
+ProError ProTestSelectExportType(
+    ProImportExportFile	*p_type
+<a name="anchor-139"></a>)
+{
+    ProError		status;
+    int			menu_id;
+    int			action;
+<a name="anchor-140"></a> 
+
+    if( p_type == NULL )
+	return PRO_TK_BAD_INPUTS;
+
+<a name="anchor-141"></a>    *p_type = PRO_UNDEFINED_FILE;
+
+    status = ProMenuFileRegister( (char*)&quot;TkExport&quot;, (char*)&quot;tkexport.mnu&quot;,
+        &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestSelectExportType()&quot;,
+<a name="anchor-142"></a>        status,  status != PRO_TK_NO_ERROR );
+
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;RELATION_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+	p_type, PRO_RELATION_FILE );
+<a name="anchor-143"></a>    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;MODEL_INFO&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_MODEL_INFO );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;PROGRAM_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+<a name="anchor-144"></a>        p_type, PRO_PROGRAM_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;IGES_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_IGES_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;DXF_FILE&quot;,
+<a name="anchor-145"></a>        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_DXF_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;RENDER_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_RENDER_FILE );
+<a name="anchor-146"></a>    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;SLA_ASCII_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_SLA_ASCII_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;SLA_BINARY_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+<a name="anchor-147"></a>        p_type, PRO_SLA_BINARY_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;BOM_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_BOM_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;DWG_SETUP_FILE&quot;,
+<a name="anchor-148"></a>        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_DWG_SETUP_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;FEAT_INFO&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_FEAT_INFO );
+<a name="anchor-149"></a>    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;MFG_OPER_CL&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_MFG_OPER_CL );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;MFG_FEAT_CL&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+<a name="anchor-150"></a>        p_type, PRO_MFG_FEAT_CL );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;MATERIAL_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_MATERIAL_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;IGES_3D_FILE&quot;,
+<a name="anchor-151"></a>        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_IGES_3D_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;STEP_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_STEP_FILE );
+<a name="anchor-152"></a>    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;VDA_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+        p_type, PRO_VDA_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;CGM_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet, 
+<a name="anchor-153"></a>        p_type, PRO_CGM_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;INVENTOR_FILE&quot;,
+        (ProMenubuttonAction)ProTestExportFileTypeSet,
+        p_type, PRO_INVENTOR_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot;, (char*)&quot;FIAT_FILE&quot;,
+<a name="anchor-154"></a>        (ProMenubuttonAction)ProTestExportFileTypeSet,
+        p_type, PRO_FIAT_FILE );
+    ProMenubuttonActionSet( (char*)&quot;TkExport&quot; , (char*)&quot;TkExport&quot;,
+        (ProMenubuttonAction)ProMenuDelete, 
+	p_type, -1 );
+<a name="anchor-155"></a>
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char*)&quot;TkExport&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestSelectExportType()&quot;,
+        status,  status != PRO_TK_NO_ERROR );
+
+<a name="anchor-156"></a>    if( status == PRO_TK_NO_ERROR )
+    {
+        status = ProMenuProcess( (char*)&quot;TkExport&quot;, &amp;action );
+        TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestSelectExportType()&quot;,
+            status,  status != PRO_TK_NO_ERROR );
+<a name="anchor-157"></a>    }
+
+    if( *p_type == PRO_UNDEFINED_FILE )
+	status = PRO_TK_GENERAL_ERROR;
+
+<a name="anchor-158"></a>
+    return status;
+}
+
+
+<a name="anchor-159"></a>    
+/*============================================================================*\
+ Function:      ProTestExportFileTypeSet
+ Purpose:       
+\*============================================================================*/
+<a name="anchor-160"></a>int ProTestExportFileTypeSet(
+    ProImportExportFile	*p_type,
+    ProImportExportFile	type_value
+)
+{
+<a name="anchor-161"></a>    ProError		status;
+
+
+    *p_type = type_value;
+
+<a name="anchor-162"></a>    status = ProMenuDelete();
+    TEST_CALL_REPORT( &quot;ProMenuDelete()&quot;, &quot;ProTestExportFileTypeSet()&quot;,
+        status,  status != PRO_TK_NO_ERROR );
+
+
+<a name="anchor-163"></a>    return 0;
+}
+
+#define PRO_YES_TYPE 1
+#define PRO_NO_TYPE 0
+<a name="anchor-164"></a>/*============================================================================*\
+ Function:      ProTestPlotfileWrite
+ Purpose:       
+\*============================================================================*/
+int ProTestPlotfileWrite (
+<a name="anchor-165"></a>    ProAppData          p_appdata)
+{
+    static ProPlotOptions poPlotOpt = 
+    {
+	&quot;postscript&quot;,	/* plotter name */
+<a name="anchor-166"></a>	A4_SIZE_PLOT,	/* paper size, not used really */
+	{0,0},		/* not used */
+	3,              /* ouput quality */
+	1,              /* user scale */
+	1,              /* Pen Slew */
+<a name="anchor-167"></a>	{0,0},		/* Pen Velocity */
+	2,		/* Current page */
+	{0,0},		/* not used */
+	PRO_NO_TYPE,	/* Segmented output */
+	PRO_YES_TYPE,	/* Label */
+<a name="anchor-168"></a>	PRO_NO_TYPE     /* not used */
+    };
+ 
+    ProError		status;
+    ProName             wfilename;
+<a name="anchor-169"></a>
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter export file name [QUIT]:&quot; );
+    status = ProMessageStringRead( PRO_NAME_SIZE, wfilename );
+    TEST_CALL_REPORT( &quot;ProMessageStringRead()&quot;, &quot;ProTestPlotfileWrite()&quot;,
+		      status,  status != PRO_TK_NO_ERROR );
+<a name="anchor-170"></a>    if( status != PRO_TK_NO_ERROR )	
+	    return -1;
+    status = ProPlotfileWrite(*((ProMdl*)p_appdata), wfilename, &amp;poPlotOpt);
+    TEST_CALL_REPORT( &quot;ProPlotfileWrite()&quot;, &quot;ProTestPlotfileWrite()&quot;,
+		      status,  status != PRO_TK_NO_ERROR );
+<a name="anchor-171"></a>    return (0);
+    
+}
+/*============================================================================*\
+ Function: ProTestExportVRML     
+<a name="anchor-172"></a> Purpose:  Export to VRML format     
+\*============================================================================*/
+int ProTestExportVRML(
+     ProAppData          p_appdata)
+{
+<a name="anchor-173"></a>    ProError err;
+    ProBoolean direct = PRO_B_FALSE;
+    ProPath input_file;
+    ProPath output_path;
+    int     act = 0;
+<a name="anchor-174"></a>    char file_name[PRO_PATH_SIZE];
+    static ProUtilMenuButtons export_act[] = { 
+        {&quot;VRML&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Current&quot;,0 , 0},
+        {&quot;Input file&quot;,1 ,0},
+<a name="anchor-175"></a>        {&quot;&quot;,0,0}
+    };
+    ProError ProUtilFileOpen(char *,char *);
+    
+    err = ProUtilMenuIntValueSelect(export_act, &amp;act);
+<a name="anchor-176"></a>    TEST_CALL_REPORT(&quot;ProUtilMenuIntValueSelect()&quot;,&quot;ProTestExportVRML()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+    if(act)
+    {
+<a name="anchor-177"></a>        direct = PRO_B_TRUE;
+        err = ProUtilFileOpen((char*)&quot;*.*&quot;, file_name);
+        TEST_CALL_REPORT(&quot; ProUtilFileOpen()&quot;,&quot;ProTestExport()&quot;,
+            err, err != PRO_TK_NO_ERROR);
+        if (err != PRO_TK_NO_ERROR)
+<a name="anchor-178"></a>        {
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Unable open file.&quot;);
+            return -1;
+        }   
+    
+<a name="anchor-179"></a>    }
+    ProStringToWstring(input_file, file_name);    
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter output path :&quot;);
+    if( !ProUtilStringGet((wchar_t*)&amp;output_path, NULL, PRO_LINE_SIZE))
+        return -1;
+<a name="anchor-180"></a>        
+    err = ProExportVRML(direct, *((ProMdl*)p_appdata), input_file, output_path);
+    TEST_CALL_REPORT (&quot;ProExportVRML()&quot;, &quot;ProTestExport()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-181"></a>    return(0);
+}
+/*============================================================================*\
+ Function: ProTestRasterMenu     
+ Purpose:  Setup compound menu for choice export options     
+<a name="anchor-182"></a>\*============================================================================*/
+int ProTestRasterMenu()
+{
+    RasterSettings set;
+    ProError err;
+<a name="anchor-183"></a>    int menu_id;
+    static char  *menu[]={&quot;Raster&quot;,&quot;Type&quot;,&quot;Inch&quot;,&quot;Size&quot;, &quot;ExportRaster&quot;,&quot;&quot;};
+    int ProTestDepthOpt();
+    int ProTestTypeOpt();
+    int ProTestInchOpt();
+<a name="anchor-184"></a>    int ProTestSizeOpt();
+    int ProTestExportRaster();
+    
+    /* default settings */
+    set.depth = PRORASTERDEPTH_8;
+<a name="anchor-185"></a>    set.type = PRORASTERTYPE_TIFF;
+    set.inch = PRORASTERDPI_100;
+    set.size[0] = 4;
+    set.size[1] = 5;
+    
+<a name="anchor-186"></a>    err = ProMenuFileRegister((char*)&quot;Raster&quot;, (char*)&quot;tkraster.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;Raster&quot;, (char*)&quot;Raster&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;Raster&quot;, (char*)&quot;DEPTH_8&quot;,
+        (ProMenubuttonAction)ProTestDepthOpt, &amp;set, PRORASTERDEPTH_8);
+<a name="anchor-187"></a>    err = ProMenubuttonActionSet((char*)&quot;Raster&quot;, (char*)&quot;DEPTH_24&quot;,
+        (ProMenubuttonAction)ProTestDepthOpt, &amp;set, PRORASTERDEPTH_24); 
+   
+    err = ProMenuFileRegister((char*)&quot;Type&quot;, (char*)&quot;tktype.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;Type&quot;, (char*)&quot;Type&quot;,
+<a name="anchor-188"></a>        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;Type&quot;, (char*)&quot;TYPE_BMP&quot;,
+        (ProMenubuttonAction)ProTestTypeOpt, &amp;set, PRORASTERTYPE_BMP);
+    err = ProMenubuttonActionSet((char*)&quot;Type&quot;, (char*)&quot;TYPE_TIFF&quot;,
+        (ProMenubuttonAction)ProTestTypeOpt, &amp;set, PRORASTERTYPE_TIFF); 
+<a name="anchor-189"></a>    err = ProMenubuttonActionSet((char*)&quot;Type&quot;, (char*)&quot;TYPE_EPS&quot;,
+        (ProMenubuttonAction)ProTestTypeOpt, &amp;set, PRORASTERTYPE_EPS); 
+    err = ProMenubuttonActionSet((char*)&quot;Type&quot;, (char*)&quot;TYPE_JPEG&quot;,
+        (ProMenubuttonAction)ProTestTypeOpt, &amp;set, PRORASTERTYPE_JPEG); 
+
+<a name="anchor-190"></a>    err = ProMenuFileRegister((char*)&quot;Inch&quot;, (char*)&quot;tkinch.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;Inch&quot;, (char*)&quot;Inch&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;Inch&quot;, (char*)&quot;DPI_100&quot;,
+        (ProMenubuttonAction)ProTestInchOpt, &amp;set, PRORASTERDPI_100);
+<a name="anchor-191"></a>    err = ProMenubuttonActionSet((char*)&quot;Inch&quot;, (char*)&quot;DPI_200&quot;,
+        (ProMenubuttonAction)ProTestInchOpt, &amp;set, PRORASTERDPI_200); 
+    err = ProMenubuttonActionSet((char*)&quot;Inch&quot;, (char*)&quot;DPI_300&quot;,
+        (ProMenubuttonAction)ProTestInchOpt, &amp;set, PRORASTERDPI_300); 
+    err = ProMenubuttonActionSet((char*)&quot;Inch&quot;, (char*)&quot;DPI_400&quot;,
+<a name="anchor-192"></a>        (ProMenubuttonAction)ProTestInchOpt, &amp;set, PRORASTERDPI_400);
+        
+    err = ProMenuFileRegister((char*)&quot;Size&quot;, (char*)&quot;tksize.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;Size&quot;, (char*)&quot;Size&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-193"></a>    err = ProMenubuttonActionSet((char*)&quot;Size&quot;, (char*)&quot;A&quot;,
+        (ProMenubuttonAction)ProTestSizeOpt, &amp;set, A_SIZE_PLOT);
+    err = ProMenubuttonActionSet((char*)&quot;Size&quot;, (char*)&quot;B&quot;,
+        (ProMenubuttonAction)ProTestSizeOpt, &amp;set, B_SIZE_PLOT); 
+    err = ProMenubuttonActionSet((char*)&quot;Size&quot;, (char*)&quot;C&quot;,
+<a name="anchor-194"></a>        (ProMenubuttonAction)ProTestSizeOpt, &amp;set, C_SIZE_PLOT); 
+    err = ProMenubuttonActionSet((char*)&quot;Size&quot;, (char*)&quot;D&quot;,
+        (ProMenubuttonAction)ProTestSizeOpt, &amp;set, D_SIZE_PLOT);
+    err = ProMenubuttonActionSet((char*)&quot;Size&quot;, (char*)&quot;E&quot;,
+        (ProMenubuttonAction)ProTestSizeOpt, &amp;set, E_SIZE_PLOT);
+<a name="anchor-195"></a>    err = ProMenubuttonActionSet((char*)&quot;Size&quot;, (char*)&quot;VARIABLE&quot;,
+        (ProMenubuttonAction)ProTestSizeOpt, &amp;set, VARIABLE_SIZE_PLOT); 
+         
+    err = ProMenuFileRegister((char*)&quot;ExportRaster&quot;, (char*)&quot;tkexportraster.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;ExportRaster&quot;, (char*)&quot;ExportRaster&quot;, 
+<a name="anchor-196"></a>        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonGenactionSet((char*)&quot;ExportRaster&quot;, (char*)&quot;Export&quot;,   
+        (ProMenubuttonGenaction)ProTestExportRaster, &amp;set, NULL, NULL,
+        NULL, NULL, NULL);
+         
+<a name="anchor-197"></a>    err = ProCompoundmenuCreate(menu, &amp;menu_id);
+    
+    ProMenubuttonHighlight((char*)&quot;Type&quot;, (char*)&quot;TYPE_BMP&quot;);
+    ProMenubuttonHighlight((char*)&quot;Raster&quot;, (char*)&quot;DEPTH_8&quot;);
+    ProMenubuttonHighlight((char*)&quot;Inch&quot;, (char*)&quot;DPI_100&quot;);
+<a name="anchor-198"></a>    ProMenubuttonHighlight((char*)&quot;Size&quot;, (char*)&quot;A&quot;);
+    
+    err = ProMenuProcess(menu[0], &amp;menu_id);
+    
+    return(0);
+<a name="anchor-199"></a>}
+
+/*============================================================================*\
+ Function: ProTestTypeOpt     
+ Purpose:  Get type options     
+<a name="anchor-200"></a>\*============================================================================*/
+int ProTestTypeOpt(RasterSettings *set, int opt)
+{
+    set->type = (ProRasterType)opt;
+    return(0);    
+<a name="anchor-201"></a>}
+
+/*============================================================================*\
+ Function: ProTestDepthOpt     
+ Purpose:  Get depth options     
+<a name="anchor-202"></a>\*============================================================================*/
+int ProTestDepthOpt(RasterSettings *set, int opt)
+{
+    set->depth = (ProRasterDepth)opt;
+    return(0);
+<a name="anchor-203"></a>}
+
+/*============================================================================*\
+ Function: ProTestInchOpt     
+ Purpose:  Get inch options     
+<a name="anchor-204"></a>\*============================================================================*/
+int ProTestInchOpt(RasterSettings *set, int opt)
+{
+    set->inch = (ProDotsPerInch)opt;
+    return(0);
+<a name="anchor-205"></a>}
+
+/*============================================================================*\
+ Function: ProTestSizeOpt     
+ Purpose:  Get size options     
+<a name="anchor-206"></a>\*============================================================================*/
+int ProTestSizeOpt(RasterSettings *set, int opt)
+{
+    ProError err;
+    
+<a name="anchor-207"></a>    switch(opt)
+    {
+    case A_SIZE_PLOT :
+        set->size[0] = 1.7;
+        set->size[1] = 2.2;
+<a name="anchor-208"></a>        break;
+    case B_SIZE_PLOT :
+        set->size[0] = 2.2;
+        set->size[1] = 3.4;
+        break;
+<a name="anchor-209"></a>    case C_SIZE_PLOT :
+        set->size[0] = 3.4;
+        set->size[1] = 4.4;
+        break;
+     case D_SIZE_PLOT :
+<a name="anchor-210"></a>        set->size[0] = 4.4;
+        set->size[1] = 6.8;
+        break;
+    case E_SIZE_PLOT :
+        set->size[0] = 6.8;
+<a name="anchor-211"></a>        set->size[1] = 8.8;
+        break;
+    case F_SIZE_PLOT :
+        set->size[0] = 5.6;
+        set->size[1] = 8;
+<a name="anchor-212"></a>        break;
+    case VARIABLE_SIZE_PLOT :
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter width:&quot;);
+        err = ProMessageDoubleRead (NULL, &amp;(set->size[0]));
+        if(err != PRO_TK_NO_ERROR)
+<a name="anchor-213"></a>            return -1;
+            
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter height:&quot;);
+        err = ProMessageDoubleRead (NULL, &amp;(set->size[1]));
+        if(err != PRO_TK_NO_ERROR)
+<a name="anchor-214"></a>            return -1;
+        break;  
+    }
+    return(0);
+}
+<a name="anchor-215"></a>
+/*============================================================================*\
+ Function: ProTestExportRaster     
+ Purpose:  Export to raster formats     
+\*============================================================================*/
+<a name="anchor-216"></a>int ProTestExportRaster(RasterSettings *set)
+{
+    ProError err;
+    int            window_id;
+    ProPath        output_file;
+<a name="anchor-217"></a>    
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter output filename:&quot;);
+    if( !ProUtilStringGet((wchar_t*)&amp;output_file, NULL, PRO_LINE_SIZE)) 
+        return -1;   
+ 
+<a name="anchor-218"></a>    err = ProWindowCurrentGet(&amp;window_id);
+    TEST_CALL_REPORT(&quot;ProWindowCurrentGet()&quot;,&quot;ProTestPrint()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+            
+    err = ProRasterFileWrite(window_id, set->depth, set->size[0], set->size[1],
+<a name="anchor-219"></a>        set->inch, set->type, output_file);
+    TEST_CALL_REPORT (&quot;ProRasterFileWrite()&quot;, &quot;ProTestExport()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+    return(0);
+<a name="anchor-220"></a>}
+
+/*====================================================================*\
+    FUNCTION :  ProTestRedefImpfeat()
+    PURPOSE  :  Commands for testing import feature in Pro/TOOLKIT
+<a name="anchor-221"></a>\*====================================================================*/
+int ProTestRedefImpfeat(ProMdl *mdl)
+{
+  ProError err;
+  ProFeature *p_feats;
+<a name="anchor-222"></a>  ProImportfeatRedefSource redef_source;
+  int menu_id, action;    
+  static char *cmpnd_menu[] = {&quot;TkImpfeatAttr&quot;,&quot;DONE&quot;,&quot;&quot;};
+  static ProImportfeatAttr impfeatattr = { 1, 1, 0 };
+  
+<a name="anchor-223"></a>  err = ProUtilCollectSolidFeaturesWithFilter((ProSolid)*mdl,
+    (ProFeatureFilterAction)ProUtilImportfeatFilter, &amp;p_feats);
+  if (err != PRO_TK_NO_ERROR)
+  {
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;No Import feats found.&quot;);
+<a name="anchor-224"></a>    return (0);
+  }
+  
+  err = ProMenuFileRegister( (char*)&quot;TkImpfeatAttr&quot;, (char*)&quot;tkimpfeatattr.mnu&quot;, 
+    &amp;menu_id );
+<a name="anchor-225"></a>  TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, 
+    &quot;ProTestRedefImpfeate()&quot;, err,  err != PRO_TK_NO_ERROR );
+  
+  ProMenubuttonActionSet( (char*)&quot;TkImpfeatAttr&quot;, (char*)&quot;TkImpfeatAttr&quot;,
+    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-226"></a>  ProMenubuttonActionSet( (char*)&quot;TkImpfeatAttr&quot;, (char*)&quot;Join Surfaces&quot;,
+    (ProMenubuttonAction)ProTestImpfeatAttrMenuAction, 
+    (ProAppData)&amp;impfeatattr, JOIN_SURFACES );
+  ProMenubuttonActionSet( (char*)&quot;TkImpfeatAttr&quot;, (char*)&quot;Make Solid&quot;,
+    (ProMenubuttonAction)ProTestImpfeatAttrMenuAction, 
+<a name="anchor-227"></a>    (ProAppData)&amp;impfeatattr, MAKE_SOLID);
+  ProMenubuttonActionSet( (char*)&quot;TkImpfeatAttr&quot;, (char*)&quot;Add Solid&quot;,
+    (ProMenubuttonAction)ProTestImpfeatAttrMenuAction, 
+    (ProAppData)&amp;impfeatattr, ADD_SOLID);
+  
+<a name="anchor-228"></a>  
+  err = ProMenuModeSet ((char*)&quot;TkImpfeatAttr&quot;, PROMENUMODE_DATA);
+  TEST_CALL_REPORT( &quot;ProMenuModeSet()&quot;, 
+    &quot;ProTestRedefImpfeate()&quot;, err,  err != PRO_TK_NO_ERROR );
+  err = ProMenuDatamodeSet ((char*)&quot;TkImpfeatAttr&quot;, PRO_B_TRUE);
+<a name="anchor-229"></a>  TEST_CALL_REPORT( &quot;ProMenuDatamodeSet()&quot;,
+    &quot;ProTestRedefImpfeat()&quot;, err,  err != PRO_TK_NO_ERROR );
+  
+  err = ProMenuFileRegister((char*)&quot;DONE&quot;,(char*)&quot;tketdone.mnu&quot;, &amp;menu_id);
+  err = ProMenubuttonActionSet((char*)&quot;DONE&quot;,(char*)&quot;-Done&quot;,
+<a name="anchor-230"></a>    (ProMenubuttonAction)ProUtilMenuKill, NULL, 2);    
+  err = ProMenubuttonActionSet((char*)&quot;DONE&quot;,(char*)&quot;DONE&quot;,
+    (ProMenubuttonAction)ProMenuHold,NULL,0);
+  
+  err = ProCompoundmenuCreate(cmpnd_menu, &amp;menu_id);
+<a name="anchor-231"></a>  TEST_CALL_REPORT(&quot;ProCompoundmenuCreate()&quot;,
+    &quot;ProTestRedefImpfeat()&quot;, err,  err != PRO_TK_NO_ERROR );
+  
+  ProUtilMenubuttonHighlight ((char*)&quot;TkImpfeatAttr&quot;, (char*)&quot;Join Surfaces&quot;,
+    impfeatattr.join_surfaces);
+<a name="anchor-232"></a>  ProUtilMenubuttonHighlight ((char*)&quot;TkImpfeatAttr&quot;, (char*)&quot;Make Solid&quot;,
+    impfeatattr.attempt_make_solid);
+  ProUtilMenubuttonHighlight ((char*)&quot;TkImpfeatAttr&quot;, (char*)&quot;Add Solid&quot;,
+    impfeatattr.cut_or_add);
+  
+<a name="anchor-233"></a>  err = ProMenuProcess( (char*)&quot;TkImpfeatAttr&quot;, &amp;action );
+  TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;,
+    &quot;ProTestRedefImpfeat()&quot;, err,  err != PRO_TK_NO_ERROR );
+  
+  err = ProImportfeatRedefSourceInit(PRO_IMPORT_FEAT_REDEF_CHANGE_ATTR,
+<a name="anchor-234"></a>    (void*)&amp;impfeatattr, &amp;redef_source);
+  TEST_CALL_REPORT(&quot;ProImportfeatRedefSourceInit()&quot;,
+    &quot;ProTestRedefImpfeat()&quot;, err,  err != PRO_TK_NO_ERROR );
+  
+  err = ProImportfeatRedefine(p_feats, &amp;redef_source); 
+<a name="anchor-235"></a>  TEST_CALL_REPORT(&quot;ProImportfeatRedefine()&quot;,
+    &quot;ProTestRedefImpfeat()&quot;, err,  (err != PRO_TK_NO_ERROR)&amp;&amp;
+    (err !=PRO_TK_NOT_IMPLEMENTED));
+  
+  err = ProArrayFree((ProArray*)&amp;p_feats);
+<a name="anchor-236"></a>  TEST_CALL_REPORT(&quot;ProArrayFree()&quot;,
+    &quot;ProTestRedefImpfeat()&quot;, err,  err != PRO_TK_NO_ERROR );
+  
+  return (0);    
+}
+</pre>
+</body>
+</html>

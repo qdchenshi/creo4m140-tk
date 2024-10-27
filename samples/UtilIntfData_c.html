@@ -1,0 +1,579 @@
+<html>
+<head>
+<title>UtilIntfData.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*----------------------------------------------------------*\
+    Headers
+\*----------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProEdgedata.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProFeature.h>
+#include &lt;ProIntfData.h>
+<a name="anchor-3"></a>#include &lt;ProImportfeat.h>
+#include &lt;ProQuiltdata.h>
+#include &lt;ProSolid.h>
+#include &lt;ProSurfacedata.h>
+#include &lt;ProMenu.h>
+<a name="anchor-4"></a>#include &lt;ProMessage.h>
+#include &lt;ProUtil.h>
+
+#include &lt;UtilMath.h>
+#include &lt;TestError.h>
+<a name="anchor-5"></a>#include &quot;UtilString.h&quot;
+#include &lt;ProTKRunTime.h>
+/*----------------------------------------------------------*\
+    Macros
+\*----------------------------------------------------------*/
+<a name="anchor-6"></a>#define VECTOR(a) a[0], a[1], a[2]
+
+/*=========================================================================*\
+    Function:	ProUtilDoubleArrayPrint()
+    Purpose:	Prints double array to file
+<a name="anchor-7"></a>\*=========================================================================*/
+
+void ProUtilDoubleArrayPrint(
+    FILE    *file,          /* In : file */
+    char    *str,           /* In : the line prefix */
+<a name="anchor-8"></a>    double  *p_double,      /* In : the double array */
+    int	    n_double)       /* In : the number of values in the array */
+{
+    int i;
+    ProCharLine buf, line;
+<a name="anchor-9"></a>
+    ProUtilstrcpy(line, (const char *)str);
+    for (i=0; i&lt;n_double; i++)
+    {
+	/* This trick in sprintf is necessary because on some platforms
+<a name="anchor-10"></a>	   close-to-zero values could be printfed out as -0.000 */
+	ProTKSprintf(buf, &quot;%.5f&quot;, fabs(p_double[i])&lt;EPSM6 ? 0.0 : p_double[i]);
+	if (i &lt;  n_double -1)
+	    ProUtilstrcat(buf, &quot;,&quot;);
+	ProUtilstrcat(line, (const char *)buf);
+<a name="anchor-11"></a>	if (strlen(line) > 70 || (i == n_double -1))
+	{
+	    ProTKFprintf(file, &quot;%s\n&quot;, line);
+	    ProUtilstrcpy(line, (const char *)str);
+	}
+<a name="anchor-12"></a>	else
+	{
+	    ProUtilstrcat(line, &quot; &quot;);
+	}
+    }
+<a name="anchor-13"></a>}
+
+/*=========================================================================*\
+    Function:	ProUtilCurvedataPrint()
+    Purpose:	Prints curve data to file
+<a name="anchor-14"></a>\*=========================================================================*/
+ProError ProUtilCurvedataPrint(
+    FILE *file,
+    char *str,
+    ProCurvedata *p_curve_data)
+<a name="anchor-15"></a>{
+    ProError err;
+    ProEnttype c_type;
+    ProCharLine next_line, next_line2;
+    int                     i, n_point, n_knots, degree, n_comp;
+<a name="anchor-16"></a>    double                  *p_par_arr, *p_weight_arr, st_a, en_a, rad;
+    double                  start_ang, end_ang;
+    double                  d1, d2; 
+    Pro3dPnt                p1, p2;
+    ProVector               v1, v2;
+<a name="anchor-17"></a>    ProPoint3d              *p_pnt_arr, *p_tan_arr;
+    ProComponentCurvedata   *p_comp_arr;
+    ProCurvedata	    curve_data;
+    ProCurveDir		    dir;
+
+<a name="anchor-18"></a>    ProUtilstrcpy(next_line, (const char *)str);
+    ProUtilstrcat(next_line, &quot;    &quot;);
+    ProUtilstrcpy(next_line2, (const char *)next_line);
+    ProUtilstrcat(next_line2, &quot;    &quot;);
+
+<a name="anchor-19"></a>    err = ProCurvedataTypeGet(p_curve_data, &amp;c_type);
+    TEST_CALL_REPORT(&quot;ProCurvedataTypeGet()&quot;,
+			&quot;ProUtilCurvedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+    switch(c_type)
+    {
+<a name="anchor-20"></a>    case PRO_ENT_POINT:
+	err = ProPointdataGet(p_curve_data, p1);
+    	TEST_CALL_REPORT(&quot;ProPointdataGet()&quot;, 
+	           &quot;ProUtilCurvedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+	ProTKFprintf(file, &quot;%sType Point\n&quot;, str);
+<a name="anchor-21"></a>	ProTKFprintf(file, &quot;%spos ( %.5f, %.5f, %.5f)\n&quot;, next_line, VECTOR(p1));
+	break;
+    case PRO_ENT_LINE:
+	err = ProLinedataGet(p_curve_data, p1, p2);
+    	TEST_CALL_REPORT(&quot;ProLinedataGet()&quot;, 
+<a name="anchor-22"></a>	           &quot;ProUtilCurvedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+	ProTKFprintf(file,&quot;%sType Line \n&quot;, str);
+	ProTKFprintf(file,&quot;%send1 ( %.5f, %.5f, %.5f)\n&quot;, next_line, VECTOR(p1));
+	ProTKFprintf(file,&quot;%send2 ( %.5f, %.5f, %.5f)\n&quot;, next_line, VECTOR(p2));
+	break;
+<a name="anchor-23"></a>    case PRO_ENT_ARC:
+	err = ProArcdataGet(p_curve_data, v1, v2, p1, &amp;st_a, &amp;en_a, &amp;rad);
+    	TEST_CALL_REPORT(&quot;ProArcdataGet()&quot;, 
+	           &quot;ProUtilCurvedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+	ProTKFprintf(file,&quot;%sType Arc\n&quot;, str);
+<a name="anchor-24"></a>	ProTKFprintf(file,&quot;%svec1 ( %.5f, %.5f, %.5f)\n&quot;, next_line, VECTOR(v1));
+	ProTKFprintf(file,&quot;%svec2 ( %.5f, %.5f, %.5f)\n&quot;, next_line, VECTOR(v2));
+	ProTKFprintf(file,&quot;%sorigin ( %.5f, %.5f, %.5f)\n&quot;, next_line, VECTOR(p1));
+	ProTKFprintf(file,&quot;%sstart_angle %.5f\n&quot;, next_line, st_a);
+	ProTKFprintf(file,&quot;%send_angle %.5f\n&quot;, next_line, en_a);
+<a name="anchor-25"></a>	ProTKFprintf(file,&quot;%sradius %.5f\n&quot;, next_line, rad);
+	break;
+    case PRO_ENT_SPLINE:
+	err = ProSplinedataGet(p_curve_data, &amp;p_par_arr, &amp;p_pnt_arr,
+	    &amp;p_tan_arr, &amp;n_point);
+<a name="anchor-26"></a>    	TEST_CALL_REPORT(&quot;ProSplinedataGet()&quot;, 
+	           &quot;ProUtilCurvedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+	ProTKFprintf(file,&quot;%sType Spline\n&quot;, str);
+ 	ProTKFprintf(file,&quot;%sParameters\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, p_par_arr, n_point);
+<a name="anchor-27"></a> 	ProTKFprintf(file,&quot;%sPoints\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, (double*)p_pnt_arr,
+	    n_point * 3);
+ 	ProTKFprintf(file,&quot;%sTangent Vectors\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, (double*)p_tan_arr,
+<a name="anchor-28"></a>	    n_point * 3);
+	break;
+    case PRO_ENT_B_SPLINE:
+	err = ProBsplinedataGet(p_curve_data, &amp;degree, &amp;p_par_arr,
+	    &amp;p_weight_arr, &amp;p_pnt_arr, &amp;n_knots, &amp;n_point);
+<a name="anchor-29"></a>    	TEST_CALL_REPORT(&quot;ProBsplinedataGet()&quot;, 
+	           &quot;ProUtilCurvedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+	ProTKFprintf(file,&quot;%sType B_spline\n&quot;, str);
+	ProTKFprintf(file,&quot;%sDegree %d\n&quot;, str, degree);
+ 	ProTKFprintf(file,&quot;%sParameters\n&quot;, str);
+<a name="anchor-30"></a>	ProUtilDoubleArrayPrint(file, next_line, p_par_arr, n_knots);
+	if (p_weight_arr != NULL)
+	{
+ 	    ProTKFprintf(file,&quot;%sWeights\n&quot;, str);
+	    ProUtilDoubleArrayPrint(file, next_line, p_weight_arr, n_point);
+<a name="anchor-31"></a>	}
+ 	ProTKFprintf(file,&quot;%sPoints\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, (double*)p_pnt_arr,
+            n_point * 3);
+	break;
+<a name="anchor-32"></a>    case PRO_ENT_CMP_CRV:
+	err = ProCompositeCurvedataGet(p_curve_data, &amp;p_comp_arr);
+    	TEST_CALL_REPORT(&quot;ProCompositeCurvedataGet()&quot;, 
+	           &quot;ProUtilCurvedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProArraySizeGet((ProArray)p_comp_arr, &amp;n_comp);    
+<a name="anchor-33"></a>	if (err != PRO_TK_NO_ERROR)
+	    break;
+	ProTKFprintf(file,&quot;%sType Composite\n&quot;, str);
+	ProTKFprintf(file,&quot;%sComponents [%d]\n&quot;, str, n_comp);
+	for (i=0; i&lt;n_comp; i++)
+<a name="anchor-34"></a>	{
+	    err = ProComponentCurvedataGet(p_comp_arr+i, &amp;curve_data, &amp;dir);
+	    TEST_CALL_REPORT(&quot;ProComponentCurvedataGet()&quot;, 
+	           &quot;ProUtilCurvedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+	    ProTKFprintf(file,&quot;%sComponent %d\n&quot;, next_line, i);
+<a name="anchor-35"></a>	    ProTKFprintf(file,&quot;%sDirection %d\n&quot;, next_line, dir);
+	    ProUtilCurvedataPrint(file, next_line, &amp;curve_data);
+	}
+	break;
+    case PRO_ENT_ELLIPSE:
+<a name="anchor-36"></a>        err = ProEllipsedataGet (p_curve_data, p1, v1, v2, &amp;d1, &amp;d2, &amp;st_a,
+	    &amp;en_a);
+        TEST_CALL_REPORT(&quot;ProEllipsedataGet()&quot;, 
+	           &quot;ProUtilCurvedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+	start_ang = atan2(d2*sin(st_a), d1*cos(st_a));
+<a name="anchor-37"></a>	end_ang = atan2(d2*sin(en_a), d1*cos(en_a));
+	ProTKFprintf(file,&quot;%sType Ellipse\n&quot;, str);
+	ProTKFprintf(file,&quot;%sorigin ( %.5f, %.5f, %.5f)\n&quot;, next_line, VECTOR(p1));
+	ProTKFprintf(file,&quot;%sx axis ( %.5f, %.5f, %.5f)\n&quot;, next_line, VECTOR(v1));
+	ProTKFprintf(file,&quot;%sy axis ( %.5f, %.5f, %.5f)\n&quot;, next_line, VECTOR(v2));
+<a name="anchor-38"></a>	ProTKFprintf(file,&quot;%sx axis length %.5f\n&quot;, next_line, d1);
+	ProTKFprintf(file,&quot;%sy axis length %.5f\n&quot;, next_line, d2);
+	ProTKFprintf(file,&quot;%sstart_angle parameter %.5f\n&quot;, next_line, st_a);
+	ProTKFprintf(file,&quot;%send_angle parameter %.5f\n&quot;, next_line, en_a);
+	ProTKFprintf(file,&quot;%sstart_angle %.5f\n&quot;, next_line, start_ang);
+<a name="anchor-39"></a>	ProTKFprintf(file,&quot;%send_angle %.5f\n&quot;, next_line, end_ang);
+        break;
+    default:
+	ProTKFprintf(file,&quot;%sType Unsupported (%d)\n&quot;, str, c_type);
+ 	break;
+<a name="anchor-40"></a>    }
+    return (err);
+}
+
+/*=========================================================================*\
+<a name="anchor-41"></a>    Function:	ProUtilSurfacedataPrint()
+    Purpose:	Prints surface data to file
+\*=========================================================================*/
+ProError ProUtilSurfacedataPrint(
+    FILE *file,
+<a name="anchor-42"></a>    char *str,
+    ProSurfacedata *p_surface_data)
+{
+    ProCharLine next_line, next_line2;
+    ProError err;
+<a name="anchor-43"></a>    ProSrftype srftype;
+    ProUvParam uv_min, uv_max;
+    ProSurfaceOrient s_orient; 
+    ProSurfaceshapedata s_shapedata;
+    int i, j, s_id, num_u, num_v, num_point, n_conts, n_edges, deg[2];
+<a name="anchor-44"></a>    int  *p_edge_arr;
+    double rad1, rad2, alpha, *p_u_arr, *p_v_arr, *p_wg_arr;
+    ProContourdata *p_cont_arr;
+    ProContourTraversal trav;
+    ProVector e1, e2, e3, *p_u_t_arr, *p_v_t_arr, *p_uvd_arr;
+<a name="anchor-45"></a>    Pro3dPnt origin, *p_arr;
+    ProCurvedata cur1, cur2;
+    ProSplinedata pnt_spline, ctr_spline, tan_spline;
+    ProSplinesrfdata  splsrf;
+        
+<a name="anchor-46"></a>    ProUtilstrcpy(next_line, (const char *)str);
+    ProUtilstrcat(next_line, &quot;    &quot;);
+    ProUtilstrcpy(next_line2, (const char *)next_line);
+    ProUtilstrcat(next_line2, &quot;    &quot;);
+    err = ProSurfacedataGet(p_surface_data, &amp;srftype, uv_min, uv_max,
+<a name="anchor-47"></a>	&amp;s_orient, &amp;s_shapedata, &amp;s_id);
+    TEST_CALL_REPORT(&quot;ProSurfacedataGet()&quot;, 
+	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+    ProTKFprintf(file,&quot;%sId  %d\n&quot;, str, s_id);
+    ProTKFprintf(file,&quot;%sUv min ( %.5f, %.5f)\n&quot;, str, uv_min[0], uv_min[1]);
+<a name="anchor-48"></a>    ProTKFprintf(file,&quot;%sUv max ( %.5f, %.5f)\n&quot;, str, uv_max[0], uv_max[1]);
+    ProTKFprintf(file,&quot;%sOrient %d\n&quot;, str, s_orient);
+
+    err = ProSurfacedataContourArrayGet( p_surface_data, &amp;p_cont_arr);
+    TEST_CALL_REPORT(&quot;ProSurfacedataContourArrayGet()&quot;, 
+<a name="anchor-49"></a>	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProArraySizeGet((ProArray)p_cont_arr, &amp;n_conts);
+    ProTKFprintf(file,&quot;%sContours [%d]\n&quot;, str, n_conts);
+    for (i=0; i&lt;n_conts; i++)
+    {
+<a name="anchor-50"></a>        err = ProContourdataGet(p_cont_arr+i, &amp;trav);
+    	TEST_CALL_REPORT(&quot;ProContourdataGet()&quot;, 
+	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProContourdataEdgeIdArrayGet(p_cont_arr+i, &amp;p_edge_arr);
+<a name="anchor-51"></a>    	TEST_CALL_REPORT(&quot;ProContourdataEdgeIdArrayGet()&quot;, 
+	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	ProTKFprintf(file,&quot;%sContour %d\n&quot;, str, i+1);
+	ProTKFprintf(file,&quot;%sTraversal %s\n&quot;, next_line, 
+<a name="anchor-52"></a>            trav == PRO_CONTOUR_TRAV_NONE ? &quot;none&quot; :
+	    trav == PRO_CONTOUR_TRAV_INTERNAL ? &quot;internal&quot; : &quot;external&quot; );
+	
+	err = ProArraySizeGet((ProArray)p_edge_arr, &amp;n_edges);
+	ProTKFprintf(file,&quot;%sEdge Id Array [%d]\n&quot;, next_line,  n_edges); 
+<a name="anchor-53"></a>	ProTKFprintf(file,&quot;%s&quot;, next_line2); 
+	for (j=0; j&lt;n_edges; j++)
+	{
+	    ProTKFprintf(file,&quot;%d&quot;, p_edge_arr[j]);
+	    if (j &lt; n_edges-1)
+<a name="anchor-54"></a>		ProTKFprintf(file, &quot;,&quot;);
+	}
+	ProTKFprintf(file, &quot;\n&quot;);
+    }
+
+<a name="anchor-55"></a>    switch (srftype)
+    {
+    case  PRO_SRF_PLANE:
+        err = ProPlanedataGet( &amp;s_shapedata, e1, e2, e3, origin);
+        TEST_CALL_REPORT(&quot;ProPlanedataGet()&quot;,
+<a name="anchor-56"></a>	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+	ProTKFprintf(file,&quot;%sType Plane\n&quot;, str);
+	ProTKFprintf(file,&quot;%se1 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e1));
+	ProTKFprintf(file,&quot;%se2 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e2));
+	ProTKFprintf(file,&quot;%se3 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e3));
+<a name="anchor-57"></a>	ProTKFprintf(file,&quot;%sorigin ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(origin));
+	break;
+    case PRO_SRF_CYL:
+        err = ProCylinderdataGet( &amp;s_shapedata, e1, e2, e3, origin, &amp;rad1);
+        TEST_CALL_REPORT(&quot;ProCylinderdataGet()&quot;, 
+<a name="anchor-58"></a>	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+	ProTKFprintf(file,&quot;%sType Cylinder\n&quot;, str);
+	ProTKFprintf(file,&quot;%se1 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e1));
+	ProTKFprintf(file,&quot;%se2 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e2));
+	ProTKFprintf(file,&quot;%se3 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e3));
+<a name="anchor-59"></a>	ProTKFprintf(file,&quot;%sorigin ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(origin));
+	ProTKFprintf(file,&quot;%sradius %.5f\n&quot;, str, rad1);
+	break;
+    case PRO_SRF_CONE:
+        err = ProConedataGet( &amp;s_shapedata, e1, e2, e3, origin, &amp;alpha);
+<a name="anchor-60"></a>        TEST_CALL_REPORT(&quot;ProConedataGet()&quot;, 
+	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+ 	ProTKFprintf(file,&quot;%sType Cone\n&quot;, str);
+	ProTKFprintf(file,&quot;%se1 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e1));
+	ProTKFprintf(file,&quot;%se2 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e2));
+<a name="anchor-61"></a>	ProTKFprintf(file,&quot;%se3 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e3));
+	ProTKFprintf(file,&quot;%sorigin ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(origin));
+	ProTKFprintf(file,&quot;%salpha %.5f\n&quot;, str, alpha);
+	break;
+    case PRO_SRF_TORUS:
+<a name="anchor-62"></a>        err = ProTorusdataGet( &amp;s_shapedata, e1, e2, e3, origin, &amp;rad1, &amp;rad2);
+        TEST_CALL_REPORT(&quot;ProTorusdataGet()&quot;, 
+	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+ 	ProTKFprintf(file,&quot;%sType Torus\n&quot;, str);
+	ProTKFprintf(file,&quot;%se1 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e1));
+<a name="anchor-63"></a>	ProTKFprintf(file,&quot;%se2 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e2));
+	ProTKFprintf(file,&quot;%se3 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e3));
+	ProTKFprintf(file,&quot;%sorigin ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(origin));
+	ProTKFprintf(file,&quot;%sradius1 %.5f\n&quot;, str, rad1);
+	ProTKFprintf(file,&quot;%sradius2 %.5f\n&quot;, str, rad2);
+<a name="anchor-64"></a>	break;
+    case PRO_SRF_FIL:
+        err = ProFilsrfdataGet( &amp;s_shapedata, &amp;pnt_spline, &amp;ctr_spline,
+	    &amp;tan_spline);
+        TEST_CALL_REPORT(&quot;ProFilsrfdataGet()&quot;, 
+<a name="anchor-65"></a>	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+ 	ProTKFprintf(file,&quot;%sType Fillet\n&quot;, str);
+ 	ProTKFprintf(file,&quot;%sPnt Spline\n&quot;, str);
+	ProUtilCurvedataPrint(file, next_line, (ProCurvedata*)&amp;pnt_spline);
+ 	ProTKFprintf(file,&quot;%sCtr Spline\n&quot;, str);
+<a name="anchor-66"></a>	ProUtilCurvedataPrint(file, next_line, (ProCurvedata*)&amp;ctr_spline);
+ 	ProTKFprintf(file,&quot;%sTan Spline\n&quot;, str);
+	ProUtilCurvedataPrint(file, next_line, (ProCurvedata*)&amp;tan_spline);
+	break;
+    case PRO_SRF_RUL:
+<a name="anchor-67"></a>        err = ProRulsrfdataGet( &amp;s_shapedata, e1, e2, e3, origin, &amp;cur1,
+	    &amp;cur2);
+        TEST_CALL_REPORT(&quot;ProRulsrfdataGet()&quot;, 
+	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+ 	ProTKFprintf(file,&quot;%sType Ruled\n&quot;, str);
+<a name="anchor-68"></a>	ProTKFprintf(file,&quot;%se1 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e1));
+	ProTKFprintf(file,&quot;%se2 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e2));
+	ProTKFprintf(file,&quot;%se3 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e3));
+	ProTKFprintf(file,&quot;%sorigin ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(origin));
+ 	ProTKFprintf(file,&quot;%sCurve_1\n&quot;, str);
+<a name="anchor-69"></a>	ProUtilCurvedataPrint(file, next_line, &amp;cur1);
+ 	ProTKFprintf(file,&quot;%sCurve_2\n&quot;, str);
+	ProUtilCurvedataPrint(file, next_line, &amp;cur2);
+	break;
+    case PRO_SRF_REV:
+<a name="anchor-70"></a>        err = ProSrfrevdataGet( &amp;s_shapedata, e1, e2, e3, origin, &amp;cur1);
+        TEST_CALL_REPORT(&quot;ProSrfrevdataGet()&quot;, 
+	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+ 	ProTKFprintf(file,&quot;%sType Rev\n&quot;, str);
+	ProTKFprintf(file,&quot;%se1 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e1));
+<a name="anchor-71"></a>	ProTKFprintf(file,&quot;%se2 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e2));
+	ProTKFprintf(file,&quot;%se3 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e3));
+	ProTKFprintf(file,&quot;%sorigin ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(origin));
+ 	ProTKFprintf(file,&quot;%sCurve\n&quot;, str);
+	ProUtilCurvedataPrint(file, next_line, &amp;cur1);
+<a name="anchor-72"></a>	break;
+    case PRO_SRF_TABCYL:
+        err = ProTabcyldataGet( &amp;s_shapedata, e1, e2, e3, origin, &amp;cur1);
+        TEST_CALL_REPORT(&quot;ProTabcyldataGet()&quot;, 
+	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-73"></a> 	ProTKFprintf(file,&quot;%sType Tabcyl\n&quot;, str);
+	ProTKFprintf(file,&quot;%se1 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e1));
+	ProTKFprintf(file,&quot;%se2 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e2));
+	ProTKFprintf(file,&quot;%se3 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e3));
+	ProTKFprintf(file,&quot;%sorigin ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(origin));
+<a name="anchor-74"></a> 	ProTKFprintf(file,&quot;%sCurve\n&quot;, str);
+	ProUtilCurvedataPrint(file, next_line, &amp;cur1);
+	break;
+    case PRO_SRF_B_SPL:
+        err = ProBsplinesrfdataGet( &amp;s_shapedata, deg, &amp;p_u_arr, &amp;p_v_arr,
+<a name="anchor-75"></a>	    &amp;p_wg_arr, &amp;p_arr, &amp;num_u, &amp;num_v, &amp;num_point);
+        TEST_CALL_REPORT(&quot;ProBsplinesrfdataGet()&quot;, 
+	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+ 	ProTKFprintf(file,&quot;%sType B_spline\n&quot;, str);
+ 	ProTKFprintf(file,&quot;%sdegree %d, %d\n&quot;, str, deg[0], deg[1]);
+<a name="anchor-76"></a> 	ProTKFprintf(file,&quot;%sU Param Array\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, p_u_arr, num_u);
+ 	ProTKFprintf(file,&quot;%sV Param Array\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, p_v_arr, num_v);
+	if (p_wg_arr != NULL)
+<a name="anchor-77"></a>	{
+ 	    ProTKFprintf(file,&quot;%sWeights Array\n&quot;, str);
+	    ProUtilDoubleArrayPrint(file, next_line, p_wg_arr, num_point);
+	}
+ 	ProTKFprintf(file,&quot;%sPoint Array\n&quot;, str);
+<a name="anchor-78"></a>	ProUtilDoubleArrayPrint(file, next_line,  (double*)p_arr,
+	    num_point * 3);
+	break;
+    case PRO_SRF_CYL_SPL:
+        err = ProCylsplsrfdataGet( &amp;s_shapedata, e1, e2, e3, origin, &amp;splsrf);
+<a name="anchor-79"></a>        TEST_CALL_REPORT(&quot;ProCylsplsrfdataGet()&quot;, 
+	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+ 	ProTKFprintf(file,&quot;%sType Cyl Spl\n&quot;, str);
+	ProTKFprintf(file,&quot;%se1 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e1));
+	ProTKFprintf(file,&quot;%se2 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e2));
+<a name="anchor-80"></a>	ProTKFprintf(file,&quot;%se3 ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(e3));
+	ProTKFprintf(file,&quot;%sorigin ( %.5f, %.5f, %.5f)\n&quot;, str, VECTOR(origin));
+	ProTKFprintf(file,&quot;%sSpline Srf\n&quot;, str);
+
+        err = ProSplinesrfdataGet( (ProSurfaceshapedata*)&amp;splsrf, &amp;p_u_arr,
+<a name="anchor-81"></a>	    &amp;p_v_arr, &amp;p_arr, &amp;p_u_t_arr, &amp;p_v_t_arr, &amp;p_uvd_arr, &amp;num_u,
+	    &amp;num_v);
+        TEST_CALL_REPORT(&quot;ProSplinesrfdataGet()&quot;, 
+	    &quot;ProUtilSurfaceshapedataCopy()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-82"></a> 	ProTKFprintf(file,&quot;%sU Param Array\n&quot;, str);
+	num_point = num_u * num_v;
+	ProUtilDoubleArrayPrint(file, next_line, p_u_arr, num_u);
+ 	ProTKFprintf(file,&quot;%sV Param Array\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, p_v_arr, num_v);
+<a name="anchor-83"></a> 	ProTKFprintf(file,&quot;%sPoint Array\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, (double*)p_arr,
+	    num_point * 3);
+ 	ProTKFprintf(file,&quot;%sU Der Array\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, (double*)p_u_t_arr,
+<a name="anchor-84"></a>	    num_point * 3);
+ 	ProTKFprintf(file,&quot;%sV Der Array\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, (double*)p_v_t_arr,
+	    num_point * 3);
+ 	ProTKFprintf(file,&quot;%sUV Der Array\n&quot;, str);
+<a name="anchor-85"></a>	ProUtilDoubleArrayPrint(file, next_line, (double*)p_uvd_arr,
+	    num_point * 3);
+	break;
+    case PRO_SRF_SPL:
+        err = ProSplinesrfdataGet( &amp;s_shapedata, &amp;p_u_arr, &amp;p_v_arr, &amp;p_arr,
+<a name="anchor-86"></a>	    &amp;p_u_t_arr, &amp;p_v_t_arr, &amp;p_uvd_arr, &amp;num_u, &amp;num_v);
+        TEST_CALL_REPORT(&quot;ProSplinesrfdataGet()&quot;, 
+	           &quot;ProUtilSurfacedataPrint()&quot;, err, err != PRO_TK_NO_ERROR);
+ 	ProTKFprintf(file,&quot;%sType Spline\n&quot;, str);
+ 	ProTKFprintf(file,&quot;%sU Param Array\n&quot;, str);
+<a name="anchor-87"></a>	num_point = num_u * num_v;
+	ProUtilDoubleArrayPrint(file, next_line, p_u_arr, num_u);
+ 	ProTKFprintf(file,&quot;%sV Param Array\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, p_v_arr, num_v);
+ 	ProTKFprintf(file,&quot;%sPoint Array\n&quot;, str);
+<a name="anchor-88"></a>	ProUtilDoubleArrayPrint(file, next_line, (double*)p_arr,
+	    num_point * 3);
+ 	ProTKFprintf(file,&quot;%sU Der Array\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, (double*)p_u_t_arr,
+	    num_point * 3);
+<a name="anchor-89"></a> 	ProTKFprintf(file,&quot;%sV Der Array\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, (double*)p_v_t_arr,
+	    num_point * 3);
+ 	ProTKFprintf(file,&quot;%sUV Der Array\n&quot;, str);
+	ProUtilDoubleArrayPrint(file, next_line, (double*)p_uvd_arr,
+<a name="anchor-90"></a>	    num_point * 3);
+	break;
+    case PRO_SRF_FOREIGN :
+ 	ProTKFprintf(file,&quot;%sType Foreign\n&quot;, str);
+	ProTKFprintf(file,&quot;%se1 ( %.5f, %.5f, %.5f)\n&quot;, str,
+<a name="anchor-91"></a>	    VECTOR(s_shapedata.frgnsrf.e1));
+	ProTKFprintf(file,&quot;%se2 ( %.5f, %.5f, %.5f)\n&quot;, str,
+	    VECTOR(s_shapedata.frgnsrf.e2));
+	ProTKFprintf(file,&quot;%se3 ( %.5f, %.5f, %.5f)\n&quot;, str,
+	    VECTOR(s_shapedata.frgnsrf.e3));
+<a name="anchor-92"></a>	ProTKFprintf(file,&quot;%sorigin ( %.5f, %.5f, %.5f)\n&quot;, str,
+	    VECTOR(s_shapedata.frgnsrf.origin));
+	ProTKFprintf(file,&quot;%sForein Id %d\n&quot;, str, s_shapedata.frgnsrf.foreign_id);
+	break;
+    default:
+<a name="anchor-93"></a> 	ProTKFprintf(file,&quot;%sType Unsupported (%d)\n&quot;, str, srftype);
+	break;	
+    }
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-94"></a>
+/*=========================================================================*\
+    Function:	ProUtilIntfDataPrint()
+    Purpose:	Prints intf data to file
+\*=========================================================================*/
+<a name="anchor-95"></a>ProError ProUtilIntfDataPrint(
+    FILE *file,
+    ProIntfData *p_intf_data)
+{
+    ProAccuracytype accuracy_type;
+<a name="anchor-96"></a>    ProOutline outline;
+    double accuracy;
+    int i, j, n_edges, n_surfaces, id, edge_surf_id[2], n_uv_points;
+    int n_quilts;
+    ProError err;
+<a name="anchor-97"></a>    ProEdgeDir	edge_dirs[2];
+    ProUvParam	(*p_edge_uv_point_arr)[2];
+    ProEdgedata *p_edge_data;
+    ProSurfacedata *p_surface_data, **p_surf_arr;	
+    ProCurvedata edge_curve_data, *p_edge_uv_curve_data[2];
+<a name="anchor-98"></a>    ProCurvedata edge_uv_curve_0, edge_uv_curve_1;
+    ProQuiltdata *p_quilt_data;
+
+    p_edge_uv_curve_data[0] = &amp;edge_uv_curve_0;
+    p_edge_uv_curve_data[1] = &amp;edge_uv_curve_1;
+<a name="anchor-99"></a>
+    err = ProIntfDataAccuracyGet(p_intf_data, &amp;accuracy);
+    err = ProIntfDataAccuracytypeGet(p_intf_data, &amp;accuracy_type);
+    err = ProIntfDataOutlineGet(p_intf_data, outline);
+
+<a name="anchor-100"></a>    ProTKFprintf(file, &quot;Accuracy %.5f\n&quot;, accuracy);
+    ProTKFprintf(file, &quot;Accuracy type %d\n&quot;, accuracy_type);;
+    ProTKFprintf(file, &quot;Outline ( %.5f, %.5f, %.5f) - ( %.5f, %.5f, %.5f)\n&quot;, 
+	outline[0][0], outline[0][1], outline[0][2], 
+	outline[1][0], outline[1][1], outline[1][2]);
+<a name="anchor-101"></a>
+    err = ProIntfDataSurfaceCount(p_intf_data, &amp;n_surfaces);
+    ProTKFprintf(file, &quot;Surfaces [%d]\n&quot;, n_surfaces);
+    for (i=0; i&lt;n_surfaces; i++)
+    {
+<a name="anchor-102"></a>	err = ProIntfDataSurfaceGet(p_intf_data, i, &amp;p_surface_data);
+	ProTKFprintf(file, &quot;Surface  %d\n&quot;, i + 1);
+	ProUtilSurfacedataPrint(file, (char *)&quot;    &quot;, p_surface_data);
+	err = ProSurfacedataMemoryFree(p_surface_data);
+    }
+<a name="anchor-103"></a>
+    err = ProIntfDataEdgeCount(p_intf_data, &amp;n_edges);
+    ProTKFprintf(file, &quot;Edges [%d]\n&quot;, n_edges);
+    for (i=0; i&lt;n_edges; i++)
+    {
+<a name="anchor-104"></a>	
+	err = ProIntfDataEdgeGet(p_intf_data, i, &amp;p_edge_data);
+	err = ProEdgedataGet(p_edge_data, &amp;id, edge_surf_id, edge_dirs,
+	    &amp;p_edge_uv_point_arr, p_edge_uv_curve_data, &amp;edge_curve_data);
+        
+<a name="anchor-105"></a>	err = ProEdgedataMemoryFree(p_edge_data);        
+
+	ProTKFprintf(file, &quot;Edge %d\n&quot;, i + 1);
+	ProTKFprintf(file, &quot;    Id %d\n&quot;, id);
+	ProTKFprintf(file, &quot;    Surfaces Ids %d %d\n&quot;, edge_surf_id[0],
+<a name="anchor-106"></a>	    edge_surf_id[1]);
+	ProTKFprintf(file, &quot;    Edge dirs %d %d\n&quot;, edge_dirs[0], edge_dirs[1]);
+	ProTKFprintf(file, &quot;    Edge curve\n&quot;);
+	ProUtilCurvedataPrint(file, (char *)&quot;    &quot;, &amp;edge_curve_data);
+	
+<a name="anchor-107"></a>	ProTKFprintf(file, &quot;    Edge uv curve[0]\n&quot;);
+	ProUtilCurvedataPrint(file, (char *)&quot;        &quot;, p_edge_uv_curve_data[0]);
+	
+	ProTKFprintf(file, &quot;    Edge uv curve[1]\n&quot;);
+	ProUtilCurvedataPrint(file, (char *)&quot;        &quot;, p_edge_uv_curve_data[1]);
+<a name="anchor-108"></a>
+	ProTKFprintf(file, &quot;    Edge uv point array\n&quot;);
+	err = ProArraySizeGet((ProArray)p_edge_uv_point_arr, &amp;n_uv_points);
+	ProUtilDoubleArrayPrint(file, (char *)&quot;        &quot;,
+            (double*)p_edge_uv_point_arr, n_uv_points * 4);
+<a name="anchor-109"></a>    }
+
+    err = ProIntfDataQuiltCount(p_intf_data, &amp;n_quilts);
+    ProTKFprintf(file, &quot;Quits [%d]\n&quot;, n_quilts);
+    for (i=0; i&lt;n_quilts; i++)
+<a name="anchor-110"></a>    {
+	err = ProIntfDataQuiltGet(p_intf_data, i, &amp;p_quilt_data);
+	ProTKFprintf(file, &quot;Quit %d\n&quot;, i + 1);
+	err = ProQuiltdataGet(p_quilt_data, &amp;id);
+	ProTKFprintf(file, &quot;    Id %d\n&quot;, id);
+<a name="anchor-111"></a>	err = ProQuiltdataSurfArrayGet(p_quilt_data, &amp;p_surf_arr);
+	err = ProArraySizeGet((ProArray)p_surf_arr, &amp;n_surfaces);
+
+	ProTKFprintf(file, &quot;    Quit surfaces %d\n&quot;, n_surfaces);
+	for (j=0; j&lt;n_surfaces; j++)
+<a name="anchor-112"></a>	{
+	    ProTKFprintf(file, &quot;    Quit surface  %d\n&quot;, i + 1);
+	    ProUtilSurfacedataPrint(file, (char *)&quot;        &quot;, p_surf_arr[j]);
+	}
+	err = ProQuiltdataMemoryFree(p_quilt_data);
+<a name="anchor-113"></a>    }
+    return ( PRO_TK_NO_ERROR);
+}
+
+#undef VECTOR
+<a name="anchor-114"></a>
+</pre>
+</body>
+</html>

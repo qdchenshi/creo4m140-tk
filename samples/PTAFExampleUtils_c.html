@@ -1,0 +1,352 @@
+<html>
+<head>
+<title>PTAFExampleUtils.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProObjects.h>
+#include &lt;ProParameter.h>
+#include &lt;ProSelbuffer.h>
+#include &lt;ProFeature.h>
+<a name="anchor-2"></a>#include &lt;ProAnnotationFeat.h>
+#include &lt;ProAnnotationElem.h>
+
+#include &lt;PTAFExamples.h>
+
+<a name="anchor-3"></a>static int AE_Feat_Type = -1;
+static double AE_Param_Value = -1;
+static ProBoolean is_AE_Layer_Created = PRO_B_FALSE;
+
+/*====================================================================*\
+<a name="anchor-4"></a>    FUNCTION :	 PTAFExTestforSelectionsInBuffer()
+    PURPOSE  :   Test for number of selections in the buffer	
+\*====================================================================*/
+ProError PTAFExTestforSelectionsInBuffer ()
+{
+<a name="anchor-5"></a>  ProSelection *sel_array=NULL;
+  int sel_size;
+  
+/*---------------------------------------------------------------------*\
+Get the ProSelections from the Selection buffer
+<a name="anchor-6"></a>\*---------------------------------------------------------------------*/
+  status = ProSelbufferSelectionsGet(&amp;sel_array);
+  
+  PT_TEST_LOG_SUCC(&quot; ProSelbufferSelectionsGet &quot;);
+
+<a name="anchor-7"></a>/*---------------------------------------------------------------------*\
+If no items in the Selection buffer
+\*---------------------------------------------------------------------*/
+  if (status == PRO_TK_E_NOT_FOUND) {
+    return status;
+<a name="anchor-8"></a>  }
+
+/*---------------------------------------------------------------------*\
+If the Array of ProSelections contains more than one ProSelection, then that is not valid
+\*---------------------------------------------------------------------*/
+<a name="anchor-9"></a>  status = ProArraySizeGet((ProArray) sel_array, &amp;sel_size);
+	
+/*---------------------------------------------------------------------*\
+If more than 1 item in the selection buffer
+\*---------------------------------------------------------------------*/
+<a name="anchor-10"></a>  if (sel_size != 1) return PRO_TK_GENERAL_ERROR;
+  
+  ProSelectionarrayFree(sel_array); 
+  
+  return PRO_TK_NO_ERROR;
+<a name="anchor-11"></a>}
+
+/*====================================================================*\
+    FUNCTION :	 PTAFExAEParameterFilterAction()
+    PURPOSE  :   Filter function for visit to check for &quot;FTYPE&quot; parameter
+<a name="anchor-12"></a>\*====================================================================*/
+ProError PTAFExAEParameterFilterAction(ProParameter *param, ProAppData dummy)
+{
+  ProCharName param_name;
+  
+<a name="anchor-13"></a>/*---------------------------------------------------------------------*\
+Get the name of the parameter
+\*---------------------------------------------------------------------*/
+  ProWstringToString(param_name, param->id);
+  
+<a name="anchor-14"></a>  if (strcmp(&quot;FTYPE&quot;, param_name) == 0) return PRO_TK_NO_ERROR;
+  else return PRO_TK_CONTINUE;
+}
+	
+
+<a name="anchor-15"></a>/*====================================================================*\
+    FUNCTION :	 PTAFExAEParameterValueFilterAction()
+    PURPOSE  :   Filter function for visit to check for &quot;VALUE&quot; parameter
+\*====================================================================*/
+ProError PTAFExAEParameterValueFilterAction(ProParameter *param, ProAppData dummy)
+<a name="anchor-16"></a>{
+  ProCharName param_name;
+  
+/*---------------------------------------------------------------------*\
+Get the name of the parameter
+<a name="anchor-17"></a>\*---------------------------------------------------------------------*/
+  ProWstringToString(param_name, param->id);
+  
+  if (strcmp(&quot;VALUE&quot;, param_name) == 0) return PRO_TK_NO_ERROR;
+  else return PRO_TK_CONTINUE;
+<a name="anchor-18"></a>}
+	
+/*====================================================================*\
+    FUNCTION :	 PTAFExAEParameterVisitAction()
+    PURPOSE  :   Visit function for &quot;FTYPE&quot; parameter	
+<a name="anchor-19"></a>\*====================================================================*/
+ProError PTAFExAEParameterVisitAction (ProParameter *param, 
+				       ProError err, 
+				       ProAppData dummy)
+{
+<a name="anchor-20"></a>  ProCharLine str_param_val;
+  ProParamvalue param_val;
+  ProParamvalueType param_type;
+  ProCharName param_name;
+  ProLine w_str_param_val;
+<a name="anchor-21"></a>
+/*---------------------------------------------------------------------*\
+Get the name of the parameter
+\*---------------------------------------------------------------------*/
+  ProWstringToString(param_name, param->id);
+<a name="anchor-22"></a>  
+  
+  if (strcmp(&quot;FTYPE&quot;, param_name) != 0) return PRO_TK_NO_ERROR;
+  
+/*---------------------------------------------------------------------*\
+<a name="anchor-23"></a>Get the value of the parameter
+\*---------------------------------------------------------------------*/
+  status = ProParameterValueGet(param, &amp;param_val);
+  PT_TEST_LOG_SUCC(&quot;PTAFExAEParameterVisitAction::ProParameterValueGet&quot;);
+
+<a name="anchor-24"></a>/*---------------------------------------------------------------------*\
+Get the type of the ParameterValue
+\*---------------------------------------------------------------------*/
+  status = ProParamvalueTypeGet(&amp;param_val, &amp;param_type);
+  PT_TEST_LOG_SUCC(&quot;PTAFExAEParameterVisitAction::ProParamvalueTypeGet&quot;);
+<a name="anchor-25"></a>
+/*---------------------------------------------------------------------*\
+Get the value of the ParameterValue
+\*---------------------------------------------------------------------*/
+  status = ProParamvalueValueGet(&amp;param_val, param_type, w_str_param_val);
+<a name="anchor-26"></a>  PT_TEST_LOG_SUCC(&quot;PTAFExAEParameterVisitAction::ProParamvalueValueGet&quot;);
+  
+  ProWstringToString(str_param_val, w_str_param_val);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-27"></a>Compare the parametervalue 
+\*---------------------------------------------------------------------*/
+  if (strcmp(str_param_val, &quot;round&quot;) == 0) {
+    AE_Feat_Type = PTAFEX_PRO_FEAT_ROUND;
+    return PRO_TK_CONTINUE;
+<a name="anchor-28"></a>  }
+  
+  else if (strcmp(str_param_val, &quot;chamfer&quot;) == 0) {
+    
+    AE_Feat_Type = PTAFEX_PRO_FEAT_CHAMFER;
+<a name="anchor-29"></a>    return PRO_TK_CONTINUE;
+  }
+  
+  else if (strcmp(str_param_val, &quot;draft&quot;) == 0) {
+    
+<a name="anchor-30"></a>    AE_Feat_Type = PTAFEX_PRO_FEAT_DRAFT;
+    return PRO_TK_CONTINUE;
+  }
+  
+  AE_Feat_Type = PTAFEX_PRO_FEAT_NONE;
+<a name="anchor-31"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+  FUNCTION :	 PTAFExAEParameterValueVisitAction()
+<a name="anchor-32"></a>  PURPOSE  :   Visit function for &quot;VALUE&quot; parameter	
+\*====================================================================*/
+ProError PTAFExAEParameterValueVisitAction (ProParameter *param, 
+					    ProError status, 
+					    ProAppData dummy)
+<a name="anchor-33"></a>{
+  double value=-1;
+  ProParamvalue param_val;
+  ProError err;
+  ProParamvalueType param_type;
+<a name="anchor-34"></a>  ProCharName param_name;
+	
+/*---------------------------------------------------------------------*\
+Get the name of the parameter
+\*---------------------------------------------------------------------*/
+<a name="anchor-35"></a>  ProWstringToString(param_name, param->id);
+  if (strcmp(&quot;VALUE&quot;, param_name) != 0) return PRO_TK_NO_ERROR;
+  
+/*---------------------------------------------------------------------*\
+Get the value of the parameter
+<a name="anchor-36"></a>\*---------------------------------------------------------------------*/
+  ProParameterValueGet(param, &amp;param_val);
+  
+/*---------------------------------------------------------------------*\
+Get the type of the ParameterValue
+<a name="anchor-37"></a>\*---------------------------------------------------------------------*/
+  ProParamvalueTypeGet(&amp;param_val, &amp;param_type);
+
+/*---------------------------------------------------------------------*\
+Get the value of the ParameterValue
+<a name="anchor-38"></a>\*---------------------------------------------------------------------*/
+  err = ProParamvalueValueGet(&amp;param_val, param_type, &amp;value);
+  
+  AE_Param_Value = value;
+  
+<a name="anchor-39"></a>  return PRO_TK_NO_ERROR;
+}
+
+
+/*====================================================================*\
+<a name="anchor-40"></a>  FUNCTION :	 PTAFExGetAEFromSelectionbuffer()
+  PURPOSE  :   Get the Annotation Element from the Selection buffer	
+\*====================================================================*/
+ProError PTAFExGetAEFromSelectionbuffer(ProAnnotationElem *annot_elem)
+{
+<a name="anchor-41"></a>  ProError err;
+  ProSelection *sel_array=NULL;
+  int sel_size;
+  ProType annot_elem_type = PRO_ANNOTATION_ELEM;
+
+<a name="anchor-42"></a>/*---------------------------------------------------------------------*\
+Get the ProSelections from the Selection buffer
+\*---------------------------------------------------------------------*/
+  err = ProSelbufferSelectionsGet(&amp;sel_array);
+  
+<a name="anchor-43"></a>  if (err == PRO_TK_E_NOT_FOUND) return PRO_TK_E_NOT_FOUND;
+
+/*---------------------------------------------------------------------*\
+If the Array of ProSelections contains more than one ProSelection, then that is not valid
+\*---------------------------------------------------------------------*/
+<a name="anchor-44"></a>  err = ProArraySizeGet((ProArray*) sel_array, &amp;sel_size);
+  
+  if (sel_size != 1) {
+/*---------------------------------------------------------------------*\
+Too many objects in the selection buffer	
+<a name="anchor-45"></a>\*---------------------------------------------------------------------*/
+    return PRO_TK_GENERAL_ERROR;
+  }
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-46"></a>Get the ProModelItem from the ProSelection
+\*---------------------------------------------------------------------*/
+  err = ProSelectionModelitemGet(sel_array[0], annot_elem);
+  
+  if (annot_elem->type != annot_elem_type) {
+<a name="anchor-47"></a>
+/*---------------------------------------------------------------------*\
+The object in the buffer is not suitable for this operation, since it is not an AE
+\*---------------------------------------------------------------------*/
+    return PRO_TK_GENERAL_ERROR;  
+<a name="anchor-48"></a>  }
+
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-49"></a>/*====================================================================*\
+  FUNCTION :	 PTAFExGetFeatureValue()
+  PURPOSE  :   Get the value from the parameter &quot;VALUE&quot; in the
+				 Annotation Element	
+\*====================================================================*/
+<a name="anchor-50"></a>ProError PTAFExGetFeatureValue(ProAnnotationElem *annot_elem, double *value)
+{
+  ProError err;
+  int dummy=0;
+
+<a name="anchor-51"></a>/*---------------------------------------------------------------------*\
+Visit all the parameters in the annotation element
+Looking for the value
+\*---------------------------------------------------------------------*/
+  err = ProParameterVisit(annot_elem, NULL, (ProParameterAction)PTAFExAEParameterValueVisitAction, (ProAppData)dummy);	
+<a name="anchor-52"></a>  *value = AE_Param_Value;
+  
+  return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-53"></a>/*====================================================================*\
+  FUNCTION : PTAFExGetFeatureType()
+  PURPOSE : Get the value from the parameter &quot;FTYPE&quot; in the Annotation Element	
+\*====================================================================*/
+ProError PTAFExGetFeatureType(ProAnnotationElem *annot_elem, int *feat_type)
+<a name="anchor-54"></a>{
+  int dummy=0;
+  
+/*---------------------------------------------------------------------*\
+Visit all the parameters in the annotation element
+<a name="anchor-55"></a>\*---------------------------------------------------------------------*/
+  status = ProParameterVisit(annot_elem, NULL, (ProParameterAction)PTAFExAEParameterVisitAction, (ProAppData)dummy);
+  PT_TEST_LOG_SUCC(&quot;PTAFExGetFeatureType::ProParameterVisit&quot;);
+  *feat_type = AE_Feat_Type;
+  
+<a name="anchor-56"></a>  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+  FUNCTION :   PTContourAction()
+<a name="anchor-57"></a>  PURPOSE  :   Callback to visiting surface contours
+\*====================================================================*/
+static ProError PTContourAction (ProContour  p_contour,
+                             ProError    status,
+			  ProAppData  app_data)
+<a name="anchor-58"></a>{
+  return PRO_TK_NO_ERROR;
+}
+
+
+<a name="anchor-59"></a>/*====================================================================*\
+  FUNCTION : PTAFSurfaceIsDatum()
+  PURPOSE : Determine if a surface is a datum surface or not.
+\*====================================================================*/
+ProBoolean PTAFSurfaceIsDatum(ProGeomitem* item)
+<a name="anchor-60"></a>{
+  ProSurface surf;
+  
+  ProGeomitemToSurface (item, &amp;surf);
+  status = ProSurfaceContourVisit (surf, PTContourAction,
+<a name="anchor-61"></a>				   PRO_NO_FUNCTION, NULL);
+  
+  if (status == PRO_TK_E_NOT_FOUND)
+    return PRO_B_TRUE;
+  else
+<a name="anchor-62"></a>    return PRO_B_FALSE;
+}
+
+
+
+<a name="anchor-63"></a>/*====================================================================*\
+  FUNCTION : PTTestFeatureCreate_low()
+  PURPOSE : Create a feature using a given element tree	
+\*====================================================================*/
+ProError PTTestFeatureCreate_low ( ProMdl model , ProElement elemtree  )
+<a name="anchor-64"></a>{
+
+  ProModelitem model_item; 
+  ProSelection model_selection;
+  ProFeatureCreateOptions complete_options[] 
+<a name="anchor-65"></a>    = { PRO_FEAT_CR_DEFINE_MISS_ELEMS }; 
+  ProFeature created_feature; 
+  ProErrorlist p_errors; 
+
+  status = ProMdlToModelitem ( model, &amp;model_item ); 
+<a name="anchor-66"></a>  PT_TEST_LOG_SUCC (&quot; ProMdlToModelitem&quot;); 
+
+  status = ProSelectionAlloc ( NULL, &amp;model_item, &amp;model_selection ); 
+  PT_TEST_LOG_SUCC (&quot; ProSelectionAlloc&quot;); 
+
+<a name="anchor-67"></a>  status = ProFeatureCreate ( model_selection, elemtree, 
+				  complete_options, 1,
+				  &amp;created_feature, &amp;p_errors ); 
+  PT_TEST_LOG_SUCC (&quot; ProFeatureCreate&quot;); 
+ 
+<a name="anchor-68"></a>  return status; 
+}
+ 
+
+</pre>
+</body>
+</html>

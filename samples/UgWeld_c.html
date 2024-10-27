@@ -1,0 +1,147 @@
+<html>
+<head>
+<title>UgWeld.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &quot;ProToolkit.h&quot;
+#include &quot;ProParameter.h&quot;
+#include &quot;ProUtil.h&quot;
+#include &quot;ProNotify.h&quot;
+#include &quot;ProParamval.h&quot;
+<a name="anchor-2"></a>#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProWeld.h>
+
+#include &quot;TestError.h&quot;
+#include &quot;UtilString.h&quot;
+<a name="anchor-3"></a>
+
+int UsrWeldNotificationSet()
+{
+int status;
+<a name="anchor-4"></a>ProError ptk_get_text_func(); 
+ProError ptk_get_path_func(); 
+
+    status = ProNotificationSet( PRO_DRAWING_WELD_SYMPATH_GET,
+ptk_get_path_func );
+<a name="anchor-5"></a>
+    status = ProNotificationSet( PRO_DRAWING_WELD_SYMTEXT_GET,
+ptk_get_text_func );
+
+    return(0);
+<a name="anchor-6"></a>} 
+
+/*=====================================================*\
+
+FUNCTION: ptk_get_path_func
+<a name="anchor-7"></a>
+PURPOSE: Set path of a user defined symbol for features containing 
+parameter named &quot;SYMBOL&quot;
+
+\*====================================================*/
+<a name="anchor-8"></a>
+ProError ptk_get_path_func( ProDrawing p_draw, ProMdl p_model,
+                int feat_id, ProPath sym_def_file_path, 
+ProPath ptk_sym_def_path)
+{
+<a name="anchor-9"></a>ProError status;
+ProParameter param;
+ProName name;
+ProParamvalue value;
+char filename[PRO_FILE_NAME_SIZE];
+<a name="anchor-10"></a>char unitname[PRO_LINE_SIZE];
+char path[PRO_PATH_SIZE];
+char unitpath[PRO_PATH_SIZE];
+ProFeature afeat;
+ProUnititem units;
+<a name="anchor-11"></a>/*---------------------------------------------------------------------*\
+  Check if feature being passed in contains a parameter named &quot;SYMBOL&quot;
+\*---------------------------------------------------------------------*/
+    ProStringToWstring(name,&quot;SYMBOL&quot;);
+    status=ProFeatureInit((ProSolid)p_model,feat_id,&amp;afeat);
+<a name="anchor-12"></a>    status = ProParameterInit((ProModelitem*)&amp;afeat,name,&amp;param);
+
+/*---------------------------------------------------------------------*\
+Build new path using value of parameter string and return PRO_TK_NO_ERROR
+to flag Pro/E to use this path instead of input path (sym_def_file_path)
+<a name="anchor-13"></a>\*---------------------------------------------------------------------*/
+
+    if(status == PRO_TK_NO_ERROR)
+    {
+        status = ProParameterValueWithUnitsGet(&amp;param,&amp;value,&amp;units);
+<a name="anchor-14"></a>        ProWstringToString(filename,value.value.s_val);
+        strcpy(path,&quot;/whole_path/user_symlib/&quot;);
+        strcat(path,filename);
+        ProWstringToString(unitname,units.name);
+        strcpy(unitpath,&quot;/whole_path/user_symlib/&quot;);
+<a name="anchor-15"></a>        strcat(unitpath,unitname);
+        ProStringToWstring( ptk_sym_def_path, path);
+        ProStringToWstring( ptk_sym_def_path, unitpath);
+        return PRO_TK_NO_ERROR;
+    }
+<a name="anchor-16"></a>
+    return PRO_TK_E_NOT_FOUND;
+}
+
+/*=====================================================================*\
+<a name="anchor-17"></a>FUNCTION: ptk_get_text_func
+PURPOSE: Modify symbol instance text based on sym_prompt_name values
+\*=====================================================================*/
+ProError ptk_get_text_func(ProDrawing p_draw,ProMdl p_model,int feat_id,
+int sym_def_id,wchar_t sym_prompt_name[],
+<a name="anchor-18"></a>int sym_prompt_nm_idx, ProParamvalue* p_text,
+ProParamvalue* p_ptk_text )
+
+{
+char tmp[PRO_LINE_SIZE],s_id[PRO_LINE_SIZE];
+<a name="anchor-19"></a>char name[PRO_LINE_SIZE], text_val[PRO_LINE_SIZE];
+wchar_t ws_id[PRO_LINE_SIZE],text[PRO_LINE_SIZE];
+ProFeature weld_fea;
+int sequence_id;
+ProError status;
+<a name="anchor-20"></a>ProParameter param;
+ProParamvalue value;
+ProUnititem units;
+
+ProWstringToString(name,sym_prompt_name);
+<a name="anchor-21"></a>
+/*---------------------------------------------------------------------*\
+  Set sequence number  
+\*---------------------------------------------------------------------*/
+    if(strcmp(name,&quot;seq_var&quot;)==0)
+<a name="anchor-22"></a>    {
+        ProFeatureInit((ProSolid)p_model,feat_id,&amp;weld_fea);
+        ProWeldSequenceIdGet(&amp;weld_fea,&amp;sequence_id);
+        ProTKSprintf(s_id,&quot;%d&quot;,sequence_id);
+        ProStringToWstring(ws_id, s_id);
+<a name="anchor-23"></a>        status = ProParamvalueSet(p_ptk_text,ws_id,PRO_PARAM_STRING);
+        return PRO_TK_NO_ERROR;
+    }
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-24"></a>  Set sample text string from parameter value
+\*---------------------------------------------------------------------*/
+    if(strcmp(name,&quot;text&quot;)==0)
+    {
+        ProFeatureInit((ProSolid)p_model,feat_id,&amp;weld_fea);
+<a name="anchor-25"></a>        ProStringToWstring(text,&quot;TESTING&quot;);
+        status = ProParameterInit((ProModelitem*)&amp;weld_fea,text,&amp;param);
+        if(status == PRO_TK_NO_ERROR)
+        {
+            status =ProParameterValueWithUnitsGet(&amp;param,&amp;value,&amp;units);
+<a name="anchor-26"></a>            ProWstringToString(text_val,value.value.s_val);
+            status = ProParamvalueSet(p_ptk_text,value.value.s_val,
+PRO_PARAM_STRING);
+             return PRO_TK_NO_ERROR;
+        }
+<a name="anchor-27"></a>    }
+
+    return PRO_TK_E_NOT_FOUND;
+}
+</pre>
+</body>
+</html>

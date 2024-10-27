@@ -1,0 +1,181 @@
+<html>
+<head>
+<title>UtilArcEndPoints.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+
+/*--------------------------------------------------------------------*\
+    Pro/TOOLKIT includes
+<a name="anchor-2"></a>\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;UtilMath.h&quot;
+
+
+<a name="anchor-3"></a>/*--------------------------------------------------------------------*\
+    Pro/DEVELOP includes
+\*--------------------------------------------------------------------*/
+
+
+<a name="anchor-4"></a>/*--------------------------------------------------------------------*\
+    C System includes
+\*--------------------------------------------------------------------*/
+#include &lt;math.h>
+
+<a name="anchor-5"></a>
+/*--------------------------------------------------------------------*\
+    Application includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-6"></a>
+/*--------------------------------------------------------------------*\
+    Macros
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-7"></a>
+/*--------------------------------------------------------------------*\
+    Data types
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-8"></a>
+/*--------------------------------------------------------------------*\
+    Application global/external data
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-9"></a>
+/*---------------------------------------------------------------------*\
+    Functions declaration
+\*---------------------------------------------------------------------*/
+
+<a name="anchor-10"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProUtilArc3Points()	( former user_arc_3pts() )
+    Purpose:	Create an arc from 3 points
+<a name="anchor-11"></a>    Returns:	1 - success; 0 - error.
+\*---------------------------------------------------------------------*/
+int ProUtilArc3Points(
+    double pnt1[3],
+    double pnt2[3], 
+<a name="anchor-12"></a>    double pnt3[3], 
+    double *p_rad, 
+    double center[3])
+{
+double	vec_a[3], vec_b[3], vec_c[3];
+<a name="anchor-13"></a>double	len_a, len_b, unit_a[3], unit_b[3];
+double  a_dot_b, a_x_b_sq, a_x_b[3];
+double  radius, c0, c1;
+
+		/*  Form unit vector a  */
+<a name="anchor-14"></a>	ProUtilVectorDiff(pnt3, pnt2, vec_a);
+	len_a = ProUtilVectorLength(vec_a);
+	ProUtilVectorNormalize(vec_a, unit_a);
+
+		/*  Form unit vector b  */
+<a name="anchor-15"></a>	ProUtilVectorDiff(pnt1, pnt2, vec_b);
+	len_b = ProUtilVectorLength(vec_b);
+	ProUtilVectorNormalize(vec_b, unit_b);
+
+	if( len_a != 0.0 &amp;&amp; len_b != 0.0 )
+<a name="anchor-16"></a>	  {
+		ProUtilVectorCross(unit_a, unit_b, a_x_b);
+		a_x_b_sq = ProUtilVectorDot(a_x_b, a_x_b);
+		a_dot_b  = ProUtilVectorDot(unit_a, unit_b);
+	  }
+<a name="anchor-17"></a>	else
+		a_dot_b = 0.0;
+
+
+		/*  Check for a straight line  */
+<a name="anchor-18"></a>	if( len_a == 0.0 || len_b == 0.0 || a_x_b_sq &lt; 1.0e-10 )	
+	{
+	*p_rad = radius = 10e+10;
+	return(0);
+	}
+<a name="anchor-19"></a>
+		/*  Arc radius  */
+	c0 = sqrt(a_x_b_sq);
+	ProUtilVectorDiff(vec_a,vec_b,vec_c);
+	radius = ProUtilVectorLength(vec_c) / (2.0 * c0);
+<a name="anchor-20"></a>	*p_rad = radius;
+
+		/*  Arc center  */
+	c0 = 0.5 * (1.0 - a_dot_b * len_b / len_a) / a_x_b_sq;
+	c1 = 0.5 * (1.0 - a_dot_b * len_a / len_b) / a_x_b_sq;
+<a name="anchor-21"></a>	ProUtilVectorsLincom(c0, vec_a, c1, vec_b, vec_c);
+	ProUtilVectorSum(pnt2, vec_c, center);
+
+	return(1);
+}
+<a name="anchor-22"></a>
+
+
+/*---------------------------------------------------------------------*\
+    Function:	ProUtilArcEndPoints() (former user_arc_endpts() )
+<a name="anchor-23"></a>    Purpose:	Arc is drawn CCW, from end1 to end2
+    Returns:	1 - success; 0 - error.
+\*---------------------------------------------------------------------*/
+int ProUtilArcEndPoints(
+    double x1, double y1, double z1, 
+<a name="anchor-24"></a>    double x2, double y2, double z2, 
+    double x3, double y3, double z3, 
+    double cx, double cy, double cz, 
+    double end1[3], double end2[3])
+{
+<a name="anchor-25"></a>     double tw1 = 0.0, tw3 = 0.0, tw2 = 0.0;
+
+		/*  Check if point 1 is on center  */
+	if (y1 != cy || x1 != cx)
+	   tw1 = atan2(y1-cy,x1-cx);
+<a name="anchor-26"></a>    		if (tw1 &lt; 0.0) tw1 += TWOPI;
+
+		/*  Check if point 2 is on center  */
+	if (y2 != cy || x2 != cx)
+	   tw2 = atan2(y2-cy,x2-cx);
+<a name="anchor-27"></a>    		if (tw2 &lt; 0.0) tw2 += TWOPI;
+ 
+		/*  Check if point 3 is on center  */
+	if (y3 != cy || x3 != cx)
+	   tw3 = atan2(y3-cy,x3-cx);
+<a name="anchor-28"></a>    		if (tw3 &lt; 0.0) tw3 += TWOPI;
+
+
+   if ( ((tw3 > tw1) &amp;&amp; (tw3 > tw2)) || ((tw3 &lt; tw1) &amp;&amp; (tw3 &lt; tw2)) )
+      {
+<a name="anchor-29"></a>       if (tw2 > tw1)			/*  Switch endpoints  */
+	 {
+	end1[0] = x2;   end1[1] = y2;   end1[2] = z2;
+	end2[0] = x1;   end2[1] = y1;   end2[2] = z1;
+	 }
+<a name="anchor-30"></a>       else				/*  Same endpoints  */
+	 {
+	end1[0] = x1;   end1[1] = y1;   end1[2] = z1;
+	end2[0] = x2;   end2[1] = y2;   end2[2] = z2;
+	 }
+<a name="anchor-31"></a>      }
+
+   else
+     {
+      if (tw2 > tw1)			/*  Same endpoints  */
+<a name="anchor-32"></a>	{
+	end1[0] = x1;   end1[1] = y1;   end1[2] = z1;
+	end2[0] = x2;   end2[1] = y2;   end2[2] = z2;
+	}
+      else				/*  Switch endpoints  */
+<a name="anchor-33"></a>	{
+	end1[0] = x2;   end1[1] = y2;   end1[2] = z2;
+	end2[0] = x1;   end2[1] = y1;   end2[2] = z1;
+	}
+     }
+<a name="anchor-34"></a>
+	return(0);
+}
+</pre>
+</body>
+</html>

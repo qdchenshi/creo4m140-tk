@@ -1,0 +1,172 @@
+<html>
+<head>
+<title>UgRelsEdit.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProRelSet.h&quot;
+#include &quot;ProModelitem.h&quot;
+#include &quot;ProSelection.h&quot;
+<a name="anchor-2"></a>#include &quot;ProMessage.h&quot;
+#include &quot;ProUtil.h&quot;
+#include &quot;ProSolid.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;TestError.h&quot;
+<a name="anchor-3"></a>
+#define RELSFILE &quot;rels.txt&quot;
+#define MSGFILE &quot;msg_ugutils.txt&quot;
+
+/*--------------------------------------------------------------------------*\
+<a name="anchor-4"></a>FUNCTION : UserRelsEdit()
+PURPOSE  : Top Level of this example : initializes data, gets the relsets,
+                invokes the edition function.
+\*--------------------------------------------------------------------------*/
+ProError UserRelsEdit()
+<a name="anchor-5"></a>{
+  int 			status, status2;
+  int			n_sel;
+  int 			xar_size;
+  ProSelection * 	p_sel_arr;  
+<a name="anchor-6"></a>  ProModelitem		mdlitem;
+  ProRelset		relset;
+  ProWstring *		rels_xar;
+  ProWstring *		rels_xar2;
+  ProPath		wrels_file;
+<a name="anchor-7"></a>  ProFileName		wmsgfile;
+  ProSolid		solid;
+
+  ProStringToWstring(wmsgfile, MSGFILE); 
+
+<a name="anchor-8"></a>/*--------------------------------------------------------------------------*\
+  Ask for selecting an item that contains relations to edit
+\*--------------------------------------------------------------------------*/
+  status = ProSelect(&quot;part,asm,datum,feature,edge&quot;, 
+		1, NULL,NULL,NULL,NULL, &amp;p_sel_arr, &amp;n_sel);
+<a name="anchor-9"></a>  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProSelect&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+
+/*--------------------------------------------------------------------------*\
+  Extract the relations out of the selected modelitem
+<a name="anchor-10"></a>\*--------------------------------------------------------------------------*/
+  status = ProSelectionModelitemGet(*p_sel_arr, &amp;mdlitem);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProSelectionModelitemGet&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+
+<a name="anchor-11"></a>  status = ProModelitemToRelset(&amp;mdlitem, &amp;relset);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProModelitemToRelset&quot;,status);
+  if (status != PRO_TK_NO_ERROR) 
+  {
+    /* If the selection doesn't contain relations, notify and quit */ 
+<a name="anchor-12"></a>    status2 = ProMessageDisplay (wmsgfile, 
+	&quot;USER Selected item does not contain any relation&quot;);
+    ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProMessageDisplay&quot;,status2);
+    if (status2 != PRO_TK_NO_ERROR) return (status2);
+    
+<a name="anchor-13"></a>    return (status);
+  }
+ 
+  status = ProArrayAlloc (0, sizeof(ProWstring), 1, (ProArray*)&amp;rels_xar);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProArrayAlloc&quot;, status);
+<a name="anchor-14"></a>  if (status != PRO_TK_NO_ERROR) return status;
+
+  status = ProRelsetRelationsGet(&amp;relset, &amp;rels_xar);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProRelsetRelationsGet&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return status;
+<a name="anchor-15"></a>
+/*--------------------------------------------------------------------------*\
+  Write the relations to a file, edit that file, and reload the new relations
+\*--------------------------------------------------------------------------*/
+  ProStringToWstring(wrels_file, RELSFILE);
+<a name="anchor-16"></a>  status = ProUtilWstringArrayToFile(rels_xar, wrels_file);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProUtilWstringArrayToFile&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+
+  status = ProFileEdit(wrels_file);
+<a name="anchor-17"></a>  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProFileEdut&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+
+  status = ProArrayAlloc(0, sizeof(ProWstring), 1, (ProArray*)&amp;rels_xar2);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProArrayAlloc&quot;,status);
+<a name="anchor-18"></a>  if (status != PRO_TK_NO_ERROR) return (status);
+
+  status = ProUtilFileToWstringArray(wrels_file, &amp;rels_xar2);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProUtilFileToWstringArray&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+<a name="anchor-19"></a>
+  status = ProArraySizeGet(rels_xar2, &amp;xar_size);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProArraySizeGet&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+
+<a name="anchor-20"></a>  status = ProRelsetRelationsSet(&amp;relset, rels_xar2, xar_size);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProRelsetRelationsSet&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+
+/*--------------------------------------------------------------------------*\
+<a name="anchor-21"></a>  Try to regenerate the relations set. If it fails, restore the 
+	initial relations and regenerate again
+\*--------------------------------------------------------------------------*/
+  status = ProRelsetRegenerate(&amp;relset);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProRelsetRegenerate&quot;,status);
+<a name="anchor-22"></a>  if (status != PRO_TK_NO_ERROR) 
+  {
+      status2 = ProMessageDisplay(wmsgfile, 
+	&quot;USER New relations are not valid. Replacing with old ones.&quot;);
+      ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProMessageDisplay&quot;,status2);
+<a name="anchor-23"></a>      if (status2 != PRO_TK_NO_ERROR) return (status2);
+
+      status2 = ProRelsetRelationsSet(&amp;relset, rels_xar, xar_size);
+      ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProRelsetRelationsSet&quot;,status2);
+      if (status2 != PRO_TK_NO_ERROR) return (status2);
+<a name="anchor-24"></a>
+      status2 = ProRelsetRegenerate(&amp;relset);
+      ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProRelsetRegenerate&quot;,status2);
+      if (status2 != PRO_TK_NO_ERROR) return (status2); 
+ 
+<a name="anchor-25"></a>      return (status);
+  }
+ 
+/*--------------------------------------------------------------------------*\
+  Regenerate and repaint the solid so we can see the changes
+<a name="anchor-26"></a>\*--------------------------------------------------------------------------*/
+  status = ProMdlCurrentGet((ProMdl*)&amp;solid);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProMdlCurrentGet&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+
+<a name="anchor-27"></a>  status = ProSolidRegenerate(solid, PRO_B_TRUE);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProSolidRegenerate&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+
+  status = ProWindowRepaint(PRO_VALUE_UNUSED);
+<a name="anchor-28"></a>  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProWindowRepaint&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+
+/*--------------------------------------------------------------------------*\
+  Deallocate the memory used by the temporary arrays
+<a name="anchor-29"></a>\*--------------------------------------------------------------------------*/
+  status = ProArrayFree((ProArray *)&amp;rels_xar);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProArrayFree&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+
+<a name="anchor-30"></a>  status = ProArrayFree((ProArray *)&amp;rels_xar2);
+  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProArrayFree&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+  
+  status = ProMessageDisplay(wmsgfile, &quot;USER Relations replaced successfully.&quot;);
+<a name="anchor-31"></a>  ERROR_CHECK(&quot;UserRelsEdit&quot;,&quot;ProMessageDisplay&quot;,status);
+  if (status != PRO_TK_NO_ERROR) return (status);
+
+  return (PRO_TK_NO_ERROR);
+} 
+<a name="anchor-32"></a>
+  
+   
+  
+</pre>
+</body>
+</html>

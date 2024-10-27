@@ -1,0 +1,769 @@
+<html>
+<head>
+<title>SketchFeatureCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMenu.h>
+#include &lt;ProObjects.h>
+<a name="anchor-2"></a>#include &lt;ProMdl.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProGeomitem.h>
+#include &lt;ProElement.h>
+#include &lt;ProValue.h>
+<a name="anchor-3"></a>#include &lt;ProFeatType.h>
+#include &lt;ProFeatForm.h>
+#include &lt;ProFeature.h>
+#include &lt;ProSection.h>
+#include &lt;ProSelection.h>
+<a name="anchor-4"></a>#include &lt;ProHole.h>
+#include &lt;ProGeomitem.h>
+#include &lt;ProCurvedata.h>
+#include &lt;ProDtmCrv.h>
+#include &lt;ProSurfacedata.h>
+<a name="anchor-5"></a>#include &lt;ProEdge.h>
+#include &lt;ProSolid.h>
+
+#include &quot;TestSect.h&quot;
+#include &quot;TestSelect.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilTree.h&quot;
+#include &quot;UtilMessage.h&quot;
+ 
+/*---------------------- Pro/Develop Includes ------------------------*/
+
+<a name="anchor-7"></a>/*---------------------- Application Includes ------------------------*/
+#include &lt;TestError.h>
+
+#define msgfil			&quot;feat&quot; 
+
+<a name="anchor-8"></a>/*---------------------- Application Typedefs ------------------------*/
+
+typedef enum feat_create_type
+{
+    AUTO_MODE = 1,
+<a name="anchor-9"></a>    USER_MODE,
+    EDGE_SEL_MODE 
+}FeatCreateMode;
+
+/*---------------------- Prototypes ----------------------------------*/
+<a name="anchor-10"></a>ProError CreateSectionFeature(FeatCreateMode mode); 
+ProError CreateSectionCopyAutoMode(); 
+ProError CreateSectionCopyUserMode(); 
+ProError CreateSectionCreateFromEdges(); 
+ProError SectionInfoCollectUserMode(SketchInfo *sketch_info, ProSection *section); 
+<a name="anchor-11"></a>ProError SectionInfoCollectAutoMode(SketchInfo *sketch_info, ProSection *section);
+ProError SectionInfoCollectFromEdges(SketchInfo *sketch_info);
+ProError PromptFeatureWithSection(ProFeature *feat, ProSection *section);
+ProError PromptSketchProjectionIds (SketchInfo *sketch_info);
+ProError GetSectionProjectionReference(ProSection *section, SketchInfo *sketch_info);
+<a name="anchor-12"></a>ProError CreateSketchFeatures(SketchInfo *sketch_info, ProFeature *feature);
+extern void* calloc ( size_t num, size_t size );
+
+/*---------------------- Code ----------------------------------*/
+
+<a name="anchor-13"></a>
+/*===============================================================*\
+FUNCTION: SectionInfoCollectAutoMode
+PURPOSE:  Fills the sketch information from the section's information 
+\*===============================================================*/
+<a name="anchor-14"></a>ProError SectionInfoCollectAutoMode(SketchInfo *sketch_info, ProSection *section)
+{
+    ProError status;
+    ProFeature feat;
+    ProGeomitem geom_item;
+<a name="anchor-15"></a>    ProSurface place_surface, orient_surface;
+    UtilElemData   elem_data;
+    ProElemId name_id;
+
+    status = PromptFeatureWithSection(&amp;feat, section); 
+<a name="anchor-16"></a>    if(status != PRO_TK_NO_ERROR)
+        return status;
+        
+    status = ProUtilElementFeatTypeGet(&amp;feat, &amp;name_id);
+    if(name_id != PRO_FEAT_CURVE)
+<a name="anchor-17"></a>        return PRO_TK_BAD_CONTEXT;
+        
+    sketch_info->solid = (ProSolid)feat.owner;	    
+
+    /* The surface on which the sketch is to be placed */
+<a name="anchor-18"></a>    if (status == PRO_TK_NO_ERROR)
+	{
+        ProElempathItem path_items_surface [] =
+                   {{ PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SECTION},
+                    { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_SETUP_PLANE},
+<a name="anchor-19"></a>                    { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_PLANE}};
+        status = ProUtilElementFeatDataGet(feat, path_items_surface, 3, &amp;elem_data);
+        if(PRO_TK_NO_ERROR == status)
+        {
+            status = ProSelectionModelitemGet((ProSelection)elem_data.val.p, 
+<a name="anchor-20"></a>                                        (ProModelitem *)&amp;geom_item);
+            TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;, &quot;SectionInfoCollectAutoMode&quot;, 
+			        status, status != PRO_TK_NO_ERROR );
+            status = ProGeomitemToSurface (&amp;geom_item, &amp;place_surface);		
+            TEST_CALL_REPORT(&quot;ProGeomitemToSurface&quot;, &quot;SectionInfoCollectAutoMode&quot;, 
+<a name="anchor-21"></a>			        status, status != PRO_TK_NO_ERROR );
+            sketch_info->prim_surface = place_surface;	               
+        }
+    }
+	
+<a name="anchor-22"></a>    if (status == PRO_TK_NO_ERROR)
+	{
+        ProElempathItem path_items_orient_ref [] =
+                   {{ PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SECTION},
+                    { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_SETUP_PLANE},
+<a name="anchor-23"></a>                    { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_PLANE_ORIENT_REF}};
+        status = ProUtilElementFeatDataGet(feat, path_items_orient_ref, 3, &amp;elem_data);                    
+        if(PRO_TK_NO_ERROR == status)
+        {
+            status = ProSelectionModelitemGet((ProSelection)elem_data.val.p,
+<a name="anchor-24"></a>                                          (ProModelitem *)&amp;geom_item);
+            TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;, &quot;SectionInfoCollectAutoMode&quot;, 
+		    	status, status != PRO_TK_NO_ERROR );                                         
+            status = ProGeomitemToSurface (&amp;geom_item, &amp;orient_surface);		
+            TEST_CALL_REPORT(&quot;ProGeomitemToSurface&quot;, &quot;SectionInfoCollectAutoMode&quot;, 
+<a name="anchor-25"></a>			    status, status != PRO_TK_NO_ERROR );            
+            sketch_info->orient_surface = orient_surface;	       
+        }
+	}
+	
+<a name="anchor-26"></a>    if (status == PRO_TK_NO_ERROR )
+	{
+        ProElempathItem path_items_orient_dir [] =
+                   {{ PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SECTION},
+                    { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_SETUP_PLANE},
+<a name="anchor-27"></a>                    { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_PLANE_ORIENT_DIR}};
+                    
+        ProElempathItem path_items_orient_view_dir [] =
+                   {{ PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SECTION},
+                    { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_SETUP_PLANE},
+<a name="anchor-28"></a>                    { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_PLANE_VIEW_DIR}};                                        
+
+        status = ProUtilElementFeatDataGet(feat, path_items_orient_dir, 3, &amp;elem_data);                     
+        if(PRO_TK_NO_ERROR == status)
+        {
+<a name="anchor-29"></a>            sketch_info->orient_dir = elem_data.val.i;
+        }
+        
+        status = ProUtilElementFeatDataGet(feat, path_items_orient_view_dir, 3, &amp;elem_data);             
+        if(PRO_TK_NO_ERROR == status)
+<a name="anchor-30"></a>        {
+            sketch_info->orient_view_dir = elem_data.val.i;
+	    }
+    }
+	/* Get the section from the feature */
+<a name="anchor-31"></a>	/*if(PRO_TK_NO_ERROR == status)
+	    status = ProUtilFeatureSectionGet(feat, &amp;section);*/
+    if(PRO_TK_NO_ERROR == status)	    
+	    status = ProSectionEpsilonGet(*section, &amp;sketch_info->eps_val);
+    if(PRO_TK_NO_ERROR == status)	  	    
+<a name="anchor-32"></a>	    status = ProUtilCopySectionEntities(section, sketch_info);
+    if(PRO_TK_NO_ERROR == status)	  	    	    
+        status = GetSectionProjectionReference(section, sketch_info);
+	return status;
+}
+<a name="anchor-33"></a>
+/*===============================================================*\
+FUNCTION: SectionInfoCollectUserMode
+PURPOSE:  Fills the sketch information from user's information
+\*===============================================================*/
+<a name="anchor-34"></a>ProError SectionInfoCollectUserMode(SketchInfo *sketch_info, ProSection *section)
+{
+    ProError status;
+    ProSelection *sel = NULL;
+    int n_sel;
+<a name="anchor-35"></a>    ProFeature feat;
+    ProGeomitem geom_item;
+    ProSurface place_surface, orient_surface;
+    UtilElemData   elem_data;
+    ProElemId name_id;
+<a name="anchor-36"></a>
+    ProElempathItem path_items_orient_dir [] =
+               {{ PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SECTION},
+                { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_SETUP_PLANE},
+                { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_PLANE_ORIENT_DIR}};
+<a name="anchor-37"></a>                
+    ProElempathItem path_items_orient_view_dir [] =
+               {{ PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SECTION},
+                { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_SETUP_PLANE},
+                { PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_STD_SEC_PLANE_VIEW_DIR}};                                        
+<a name="anchor-38"></a>
+    
+    status = PromptFeatureWithSection(&amp;feat, section);
+    if(PRO_TK_NO_ERROR != status)
+       return status;
+<a name="anchor-39"></a>
+    status = ProUtilElementFeatTypeGet(&amp;feat, &amp;name_id);
+    if(name_id != PRO_FEAT_CURVE)
+        return PRO_TK_BAD_CONTEXT;
+
+<a name="anchor-40"></a>       
+    sketch_info->solid = (ProSolid)feat.owner;	    
+	/*status = ProUtilFeatureSectionGet(feat, section);*/
+	status = ProUtilCopySectionEntities(section, sketch_info);
+
+<a name="anchor-41"></a>
+    /* select the surface on which the sketch is to be placed */
+    ProUtilMsgPrint(msgfil, (char *)&quot;USER Select the placement of sketch or cancel :&quot; );     
+    n_sel = 0; 
+    status = ProSelect((char *)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+<a name="anchor-42"></a>    TEST_CALL_REPORT(&quot;ProSelect&quot;, &quot;SectionInfoCollectUserMode&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if (status != PRO_TK_NO_ERROR || n_sel != 1)
+        return status;
+
+<a name="anchor-43"></a>    status = ProSelectionModelitemGet(sel[0], (ProFeature *)&amp;geom_item);
+    if(geom_item.type != PRO_SURFACE)
+        return status;
+    status = ProGeomitemToSurface(&amp;geom_item, &amp;place_surface);	        
+    sketch_info->prim_surface = place_surface;	   
+<a name="anchor-44"></a>
+    ProUtilMsgPrint(msgfil, (char *)&quot;USER Select the orientation of sketch or cancel :&quot; );     
+    n_sel = 0;     
+    status = ProSelect((char *)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+    TEST_CALL_REPORT(&quot;ProSelect&quot;, &quot;SectionInfoCollectUserMode&quot;, 
+<a name="anchor-45"></a>			status, status != PRO_TK_NO_ERROR );
+    if (status != PRO_TK_NO_ERROR || n_sel != 1)
+        return status;
+        
+    status = ProSelectionModelitemGet(sel[0], (ProFeature *)&amp;geom_item);
+<a name="anchor-46"></a>    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;, &quot;SectionInfoCollectUserMode&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    
+    if(geom_item.type != PRO_SURFACE)
+        return status;
+<a name="anchor-47"></a>    status = ProGeomitemToSurface(&amp;geom_item, &amp;orient_surface);	    
+    TEST_CALL_REPORT(&quot;ProGeomitemToSurface&quot;, &quot;SectionInfoCollectUserMode&quot;, 
+			status, status != PRO_TK_NO_ERROR );          
+    sketch_info->orient_surface = orient_surface;	   
+
+<a name="anchor-48"></a>    status = PromptSketchProjectionIds (sketch_info);
+    if(PRO_TK_NO_ERROR != status)	    
+        return status;
+
+    status = ProUtilElementFeatDataGet(feat, path_items_orient_dir, 3, &amp;elem_data);                     
+<a name="anchor-49"></a>    if(PRO_TK_NO_ERROR == status)
+    {
+        sketch_info->orient_dir = elem_data.val.i;
+    }
+    
+<a name="anchor-50"></a>    status = ProUtilElementFeatDataGet(feat, path_items_orient_view_dir, 3, &amp;elem_data);             
+    if(PRO_TK_NO_ERROR == status)
+    {
+        sketch_info->orient_view_dir = elem_data.val.i;
+    }
+<a name="anchor-51"></a>    sketch_info->eps_val = 0.001;
+        
+	/* Get the section from the feature */
+	return status;
+}
+<a name="anchor-52"></a>
+/*===============================================================*\
+FUNCTION: SectionInfoCollectFromEdges
+PURPOSE:  Fills the sketch information from edge 
+          and section information
+<a name="anchor-53"></a>\*===============================================================*/
+ProError SectionInfoCollectFromEdges(SketchInfo *sketch_info)
+{
+    ProError status;
+    ProSelection *sel = NULL;
+<a name="anchor-54"></a>    int n_sel;
+    ProGeomitem geom_item;
+    ProSurface place_surface, orient_surface;
+    ProEdge    edge;
+    int i;
+<a name="anchor-55"></a>    
+    ProUtilMsgPrint(msgfil,
+            (char *)&quot;USER Select the edges to be projected as the sketch feature:&quot; );     
+    n_sel = 0; 
+    status = ProSelect((char *)&quot;edge&quot;, -1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+<a name="anchor-56"></a>    TEST_CALL_REPORT(&quot;ProSelect&quot;, &quot;SectionInfoCollectFromEdges&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if (status != PRO_TK_NO_ERROR || n_sel &lt; 1)
+        return status;
+
+<a name="anchor-57"></a>    status = ProSelectionModelitemGet(sel[0], (ProModelitem *)&amp;geom_item);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;, &quot;SectionInfoCollectFromEdges&quot;, 
+			status, status != PRO_TK_NO_ERROR );  
+    if (status != PRO_TK_NO_ERROR)
+        return status;
+<a name="anchor-58"></a>    sketch_info->solid = (ProSolid)geom_item.owner;	
+        
+    for(i = 0; i&lt;n_sel; i++)
+    {
+        status = ProSelectionModelitemGet(sel[i], (ProModelitem *)&amp;geom_item);
+<a name="anchor-59"></a>        status = ProEdgeInit((ProSolid)geom_item.owner, geom_item.id, &amp;edge);
+        TEST_CALL_REPORT(&quot;ProEdgeInit&quot;, &quot;SectionInfoCollectFromEdges&quot;,
+			status, status != PRO_TK_NO_ERROR );
+        status = ProArrayObjectAdd((ProArray*)&amp;sketch_info->edges,
+              PRO_VALUE_UNUSED, 1, &amp;edge);
+<a name="anchor-60"></a>    }
+    
+    /* select the surface on which the sketch is to be placed */
+    ProUtilMsgPrint(msgfil, (char *)&quot;USER Select the placement of sketch or cancel :&quot; );     
+    n_sel = 0; 
+<a name="anchor-61"></a>    status = ProSelect((char *)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+    TEST_CALL_REPORT(&quot;ProSelect&quot;, &quot;SectionInfoCollectFromEdges&quot;,
+			status, status != PRO_TK_NO_ERROR );  
+    if (status != PRO_TK_NO_ERROR || n_sel != 1)
+        return status;
+<a name="anchor-62"></a>
+    status = ProSelectionModelitemGet(sel[0], (ProFeature *)&amp;geom_item);
+    if(geom_item.type != PRO_SURFACE)
+        return status;
+    status = ProGeomitemToSurface(&amp;geom_item, &amp;place_surface);	        
+<a name="anchor-63"></a>    sketch_info->prim_surface = place_surface;	   
+
+    ProUtilMsgPrint(msgfil, (char *)&quot;USER Select the orientation of sketch or cancel :&quot; );     
+    n_sel = 0;     
+    status = ProSelect((char *)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+<a name="anchor-64"></a>    TEST_CALL_REPORT(&quot;ProSelect&quot;, &quot;SectionInfoCollectFromEdges&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if (status != PRO_TK_NO_ERROR || n_sel != 1)
+        return status;
+        
+<a name="anchor-65"></a>    status = ProSelectionModelitemGet(sel[0], (ProFeature *)&amp;geom_item);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;, &quot;SectionInfoCollectFromEdges&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if(geom_item.type != PRO_SURFACE)
+        return status;
+<a name="anchor-66"></a>
+    status = ProGeomitemToSurface(&amp;geom_item, &amp;orient_surface);	    
+    TEST_CALL_REPORT(&quot;ProGeomitemToSurface&quot;, &quot;SectionInfoCollectFromEdges&quot;,
+			status, status != PRO_TK_NO_ERROR );             
+    sketch_info->orient_surface = orient_surface;	   
+<a name="anchor-67"></a>
+    status = PromptSketchProjectionIds (sketch_info);
+    if(PRO_TK_NO_ERROR != status)	    
+        return status;
+
+<a name="anchor-68"></a>    sketch_info->orient_dir = PRO_SEC_ORIENT_DIR_UP; /* 1 */ 
+    sketch_info->orient_view_dir = PRO_SEC_VIEW_DIR_SIDE_ONE; /* 1 */
+    sketch_info->eps_val = 0.001;
+        
+	/* Get the section from the feature */
+<a name="anchor-69"></a>	return status;
+}
+
+/*===============================================================*\
+FUNCTION: GetSectionProjectionReference
+<a name="anchor-70"></a>PURPOSE:  Fills the projection of sketch information
+          from the section information
+\*===============================================================*/
+ProError GetSectionProjectionReference(ProSection *section, SketchInfo *sketch_info)
+{
+<a name="anchor-71"></a>    ProError status;
+    int i = 0, n_ids = 0;
+    ProIntlist      p_id_list;
+    Pro2dEntdef *p_ent;
+    ProBoolean is_proj;
+<a name="anchor-72"></a>    ProGeomitem geom_item;
+    ProSelection sel;
+ 
+    status = ProSectionEntityIdsGet(*section, &amp;p_id_list, &amp;n_ids);
+    TEST_CALL_REPORT(&quot;ProSectionEntityIdsGet&quot;, &quot;GetSectionProjectionReference&quot;, 
+<a name="anchor-73"></a>			status, status != PRO_TK_NO_ERROR );    
+    if(status != PRO_TK_NO_ERROR)
+        return status;
+    
+    for(i=0; i&lt;2; i++) 
+<a name="anchor-74"></a>    {
+        status = ProSectionEntityGet(*section, p_id_list[i], (Pro2dEntdef**)&amp;p_ent);    
+        TEST_CALL_REPORT(&quot;ProSectionEntityIdsGet&quot;, &quot;GetSectionProjectionReference&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+        status = ProSectionEntityIsProjection(*section, p_id_list[i], &amp;is_proj);
+<a name="anchor-75"></a>        if (PRO_TK_NO_ERROR != status || is_proj != PRO_B_TRUE)
+            return PRO_TK_GENERAL_ERROR;
+        status = ProSectionEntityReferenceGet ( *section, p_id_list[i], &amp;sel);
+        if (status == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-76"></a>            status = ProSelectionModelitemGet (sel, (ProModelitem *)&amp;geom_item);
+            TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;, &quot;GetSectionProjectionReference&quot;,
+			        status, status != PRO_TK_NO_ERROR ); 
+            if(i == 0)
+                status = ProUtilGetGeomItemToRef(&amp;geom_item, &amp;sketch_info->ref1);
+<a name="anchor-77"></a>            if(i == 1)
+                status = ProUtilGetGeomItemToRef(&amp;geom_item, &amp;sketch_info->ref2);
+            if(PRO_TK_NO_ERROR != status)
+                return PRO_TK_GENERAL_ERROR;
+        }
+<a name="anchor-78"></a>    }
+    return status;
+}
+
+/*===============================================================*\
+<a name="anchor-79"></a>FUNCTION: PromptFeatureWithSection
+PURPOSE:  Prompt the user to select a sketch feature
+\*===============================================================*/
+ProError PromptFeatureWithSection(ProFeature *feat, ProSection *section)
+{
+<a name="anchor-80"></a>    ProError status;
+    ProSelection *sel = NULL;
+    int n_sel, n, n_sections;
+    int range[2];
+    
+<a name="anchor-81"></a>    /* select the 3D-section */
+    ProUtilMsgPrint(msgfil,  (char *)&quot;USER Select a 3-D sketch:&quot; );     
+    n_sel = 0; 
+    status = ProSelect((char *)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);    
+    TEST_CALL_REPORT(&quot;ProSelect&quot;, &quot;PromptFeatureWithSection&quot;, 
+<a name="anchor-82"></a>			status, status != PRO_TK_NO_ERROR );
+    if (status != PRO_TK_NO_ERROR || n_sel != 1)
+	     return status;
+	     
+    status = ProSelectionModelitemGet(sel[0], feat);
+<a name="anchor-83"></a>    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;, &quot;PromptFeatureWithSection&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    status = ProFeatureNumSectionsGet(feat, &amp;n_sections);
+    TEST_CALL_REPORT(&quot;ProFeatureNumSectionsGet&quot;, &quot;PromptFeatureWithSection&quot;, 
+			status, status != PRO_TK_NO_ERROR );     
+<a name="anchor-84"></a>        
+    if (n_sections &lt; 1)
+    {
+	    return(PRO_TK_GENERAL_ERROR);
+    }
+<a name="anchor-85"></a>
+    range[0] = 0; range[1] = n_sections-1;
+    n = 0;
+    if ( range[0] != range[1] )
+    {
+<a name="anchor-86"></a>	ProUtilMsgPrint((char *)&quot;gen&quot;,(char *)&quot;TEST %0s&quot;, (char *)&quot;Specify section number to retrieve.&quot;);
+    ProUtilIntGet(range,&amp;range[0],&amp;n);
+    }
+    status = ProFeatureSectionCopy(feat, n, section); 
+    TEST_CALL_REPORT(&quot;ProFeatureSectionCopy&quot;, &quot;PromptFeatureWithSection&quot;, 
+<a name="anchor-87"></a>			status, status != PRO_TK_NO_ERROR );    
+    return status;
+}
+
+ProError CreateSectionCopyAutoMode()
+<a name="anchor-88"></a>{
+    return CreateSectionFeature(AUTO_MODE);
+}
+
+ProError CreateSectionCopyUserMode()
+<a name="anchor-89"></a>{
+    return CreateSectionFeature(USER_MODE);
+}
+
+ProError CreateSectionCreateFromEdges()
+<a name="anchor-90"></a>{
+    return CreateSectionFeature(EDGE_SEL_MODE);
+}
+
+/*===============================================================*\
+<a name="anchor-91"></a>FUNCTION: CreateSectionFeature
+PURPOSE:  Creates a sketch feature from the different types of
+          input from the user
+\*===============================================================*/
+ProError CreateSectionFeature(FeatCreateMode mode)
+<a name="anchor-92"></a>{
+    ProError status;
+    SketchInfo sketch_info;
+    ProFeature copy_feat;
+    ProSection section;
+<a name="anchor-93"></a>    status = ProUtilInitializeSketch(&amp;sketch_info);
+    if(PRO_TK_NO_ERROR != status)
+        return status;
+    switch (mode)
+    {
+<a name="anchor-94"></a>        case AUTO_MODE:
+            status = SectionInfoCollectAutoMode(&amp;sketch_info, &amp;section);
+            break;
+        case USER_MODE: 
+            status = SectionInfoCollectUserMode(&amp;sketch_info, &amp;section);
+<a name="anchor-95"></a>            break;
+        case EDGE_SEL_MODE: 
+            status = SectionInfoCollectFromEdges(&amp;sketch_info);
+            break;        
+    }
+<a name="anchor-96"></a>    
+    if(PRO_TK_BAD_CONTEXT == status)
+        ProUtilMsgPrint(msgfil,
+                     (char *)&quot;USER Not supported in the selected type of feature&quot;);
+    
+<a name="anchor-97"></a>    if(PRO_TK_NO_ERROR == status)       
+        status = CreateSketchFeatures(&amp;sketch_info, &amp;copy_feat);
+    
+    if(PRO_TK_NO_ERROR == status)       
+       status = ProFeatureSectionCopy(&amp;copy_feat, 0, &amp;sketch_info.section); 
+<a name="anchor-98"></a>                  
+    if((AUTO_MODE == mode || USER_MODE == mode) &amp;&amp; PRO_TK_NO_ERROR == status)        
+        status = ProUtilCopySectionConstraints(&amp;sketch_info, &amp;copy_feat, &amp;section);
+        
+    status = ProUtilInitializeSketch(&amp;sketch_info);        
+<a name="anchor-99"></a>    return status; 
+}
+
+/*====================================================================*\
+FUNCTION : CreateSketchFeatures()
+<a name="anchor-100"></a>PURPOSE  : Creates sketch feature from sketch information 
+\*====================================================================*/
+ProError CreateSketchFeatures(SketchInfo *sketch_info, ProFeature *feature)
+{
+  ProError 	status;
+<a name="anchor-101"></a>  ProErrorlist            errors;
+  ProModelitem            model_item;
+  ProSelection            model_sel;
+  ProFeatureCreateOptions *opts = 0;
+  ProSection              section;
+<a name="anchor-102"></a>  ProAsmcomppath          comp_path;
+  ProAsmcomppath          *p_comp_path = NULL;
+
+  ProElement created_elemtree; 
+  ProElement pro_e_feature_tree;
+<a name="anchor-103"></a>  ProElement pro_e_std_section;
+  ProElement pro_e_std_sec_setup_plane;
+
+  ProSelection *sketch_refs;
+  ProValueData 	value_data;
+<a name="anchor-104"></a>  UtilElemData elem_data;
+  ProElempathItem path_items [] = {{ PRO_ELEM_PATH_ITEM_TYPE_ID, 
+                                       PRO_E_STD_SECTION},
+                                     { PRO_ELEM_PATH_ITEM_TYPE_ID, 
+                                       PRO_E_SKETCHER}}; 
+<a name="anchor-105"></a>  /*---------------------------------------------------------------*\
+    Populating root element PRO_E_FEATURE_TREE 
+  \*---------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;pro_e_feature_tree ); 
+  
+<a name="anchor-106"></a>  /*---------------------------------------------------------------*\
+    Populating element PRO_E_FEATURE_TYPE 
+  \*---------------------------------------------------------------*/
+  value_data.v.i = PRO_FEAT_CURVE; /* 949 */ 
+  status = ProUtilElemtreeElementAdd( pro_e_feature_tree, PRO_E_FEATURE_TYPE,
+<a name="anchor-107"></a>                                 ELEM_VALUE_TYPE_INT, &amp;value_data.v.i);
+                                   
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_CURVE_TYPE
+  \*---------------------------------------------------------------*/
+<a name="anchor-108"></a>  value_data.v.i = PRO_CURVE_TYPE_SKETCHED; /* 0 */ 
+  status = ProUtilElemtreeElementAdd( pro_e_feature_tree, PRO_E_CURVE_TYPE,
+                                 ELEM_VALUE_TYPE_INT, &amp;value_data.v.i);
+  
+  /*---------------------------------------------------------------*\
+<a name="anchor-109"></a>    Populating  element PRO_E_STD_SECTION
+  \*---------------------------------------------------------------*/
+  status = ProElementAlloc ( PRO_E_STD_SECTION, &amp;pro_e_std_section );
+  status = ProElemtreeElementAdd ( pro_e_feature_tree, NULL, 
+		pro_e_std_section  );
+<a name="anchor-110"></a>
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_STD_SECTION 
+			-> PRO_E_STD_SEC_SETUP_PLANE
+  \*---------------------------------------------------------------*/
+<a name="anchor-111"></a>  status = ProElementAlloc ( PRO_E_STD_SEC_SETUP_PLANE, 
+		&amp;pro_e_std_sec_setup_plane );
+  status = ProElemtreeElementAdd ( pro_e_std_section, NULL, 
+		pro_e_std_sec_setup_plane  );
+
+<a name="anchor-112"></a>  sketch_refs = ( ProSelection *) calloc ( 2, sizeof ( ProSelection ));
+
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_STD_SECTION 
+			-> PRO_E_STD_SEC_SETUP_PLANE
+<a name="anchor-113"></a>			   -> PRO_E_STD_SEC_PLANE
+  \*---------------------------------------------------------------*/
+  status = ProUtilCopySelectionSurf((ProSolid)sketch_info->solid,
+            sketch_info->prim_surface, &amp;(value_data.v.r));
+  status = ProSelectionCopy( value_data.v.r, &amp;sketch_refs[0]);
+<a name="anchor-114"></a>  TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;, &quot;CreateSketchFeatures&quot;, 
+			status, status != PRO_TK_NO_ERROR );   
+  if(PRO_TK_NO_ERROR != status)
+      return status;
+  status = ProUtilElemtreeElementAdd( pro_e_std_sec_setup_plane, PRO_E_STD_SEC_PLANE,
+<a name="anchor-115"></a>                                 ELEM_VALUE_TYPE_SELECTION, value_data.v.r);  
+
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_STD_SECTION 
+			-> PRO_E_STD_SEC_SETUP_PLANE
+<a name="anchor-116"></a>			   -> PRO_E_STD_SEC_PLANE_VIEW_DIR
+  \*---------------------------------------------------------------*/
+  value_data.v.i = sketch_info->orient_view_dir; /*PRO_SEC_VIEW_DIR_SIDE_ONE  1 */ 
+  status = ProUtilElemtreeElementAdd( pro_e_std_sec_setup_plane, PRO_E_STD_SEC_PLANE_VIEW_DIR,
+                                 ELEM_VALUE_TYPE_INT, &amp;value_data.v.i);  
+<a name="anchor-117"></a>
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_STD_SECTION 
+			-> PRO_E_STD_SEC_SETUP_PLANE
+			   -> PRO_E_STD_SEC_PLANE_ORIENT_DIR
+<a name="anchor-118"></a>  \*---------------------------------------------------------------*/
+  value_data.v.i = sketch_info->orient_dir; /* PRO_SEC_ORIENT_DIR_UP 1*/
+  status = ProUtilElemtreeElementAdd( pro_e_std_sec_setup_plane, PRO_E_STD_SEC_PLANE_ORIENT_DIR,
+                                 ELEM_VALUE_TYPE_INT, &amp;value_data.v.i);  
+
+<a name="anchor-119"></a>
+  /*---------------------------------------------------------------*\
+    Populating element PRO_E_STD_SECTION 
+			-> PRO_E_STD_SEC_SETUP_PLANE
+			   -> PRO_E_STD_SEC_PLANE_ORIENT_REF
+<a name="anchor-120"></a>  \*---------------------------------------------------------------*/
+  status = ProUtilCopySelectionSurf((ProSolid)sketch_info->solid,
+         sketch_info->orient_surface, &amp;(value_data.v.r));
+  status = ProSelectionCopy( value_data.v.r, &amp;sketch_refs[1]);
+  TEST_CALL_REPORT(&quot;ProSelectionCopy&quot;, &quot;CreateSketchFeatures&quot;, 
+<a name="anchor-121"></a>			status, status != PRO_TK_NO_ERROR );
+  if(PRO_TK_NO_ERROR != status)
+      return status;
+  status = ProUtilElemtreeElementAdd( pro_e_std_sec_setup_plane, PRO_E_STD_SEC_PLANE_ORIENT_REF,
+                                 ELEM_VALUE_TYPE_SELECTION, value_data.v.r);  
+<a name="anchor-122"></a>  
+  /*---------------------------------------------------------------*\
+    Creating incomplete feature in the current model.
+  \*---------------------------------------------------------------*/
+  status = ProMdlToModelitem( sketch_info->solid, &amp;model_item ); 
+<a name="anchor-123"></a>  TEST_CALL_REPORT(&quot;ProMdlToModelitem&quot;, &quot;CreateSketchFeatures&quot;,
+			status, status != PRO_TK_NO_ERROR ); 
+  status = ProSelectionAlloc (p_comp_path, &amp;model_item,
+			   &amp;model_sel);
+  TEST_CALL_REPORT(&quot;ProSelectionAlloc&quot;, &quot;CreateSketchFeatures&quot;, 
+<a name="anchor-124"></a>			status, status != PRO_TK_NO_ERROR );
+  
+
+  status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+    1, (ProArray*)&amp;opts);
+<a name="anchor-125"></a>
+  opts[0]= PRO_FEAT_CR_INCOMPLETE_FEAT;
+
+  status = ProFeatureWithoptionsCreate (model_sel, pro_e_feature_tree,
+    opts, PRO_REGEN_NO_FLAGS, feature, &amp;errors);
+<a name="anchor-126"></a>  TEST_CALL_REPORT(&quot;ProFeatureWithoptionsCreate&quot;, &quot;CreateSketchFeatures&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+  status = ProArrayFree((ProArray*)&amp;opts);
+    			  
+<a name="anchor-127"></a>  /* Using the element tree from created feature */ 
+  status = ProFeatureElemtreeExtract ( feature, p_comp_path, 
+    PRO_FEAT_EXTRACT_NO_OPTS, &amp;created_elemtree ); 
+  TEST_CALL_REPORT(&quot;ProFeatureElemtreeExtract&quot;, &quot;CreateSketchFeatures&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-128"></a>  
+  status = ProUtilElementTreeDataGet(created_elemtree, path_items, 2, &amp;elem_data);
+  section = (ProSection)elem_data.val.p;  
+  sketch_info->section = section;
+/*---------------------------------------------------------------*\
+<a name="anchor-129"></a>   Creating a 3-D section 
+\*---------------------------------------------------------------*/
+  status = ProUtilSketchSectionBuild (section, sketch_info, sketch_refs );   
+
+/*---------------------------------------------------------------*\
+<a name="anchor-130"></a>   Redefining the feature to make it complete.
+\*---------------------------------------------------------------*/
+
+    if(PRO_TK_NO_ERROR == status)
+    {
+<a name="anchor-131"></a>        status = ProSelectionAsmcomppathGet (model_sel, &amp;comp_path);  
+        TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet&quot;, &quot;CreateSketchFeatures&quot;, 
+			status, status != PRO_TK_NO_ERROR );  
+        status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+                1, (ProArray*)&amp;opts);
+<a name="anchor-132"></a>
+        opts[0]= PRO_FEAT_CR_DEFINE_MISS_ELEMS;
+
+        status = ProFeatureWithoptionsRedefine (&amp;comp_path, feature, created_elemtree,
+                opts, PRO_REGEN_NO_FLAGS, &amp;errors);
+<a name="anchor-133"></a>        TEST_CALL_REPORT(&quot;ProFeatureWithoptionsRedefine&quot;, &quot;CreateSketchFeatures&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+        status = ProArrayFree((ProArray*)&amp;opts);
+	}		            
+<a name="anchor-134"></a>/*---------------------------------------------------------------*\
+    Free up the allocated memory.
+\*---------------------------------------------------------------*/
+  status = ProFeatureElemtreeFree (feature, created_elemtree ); 
+  TEST_CALL_REPORT(&quot;ProFeatureElemtreeFree&quot;, &quot;CreateSketchFeatures&quot;, 
+<a name="anchor-135"></a>			status, status != PRO_TK_NO_ERROR );
+  
+  status = ProElementFree (&amp;pro_e_feature_tree ); 
+  TEST_CALL_REPORT(&quot;ProElementFree&quot;, &quot;CreateSketchFeatures&quot;, 
+			status, status != PRO_TK_NO_ERROR ); 
+<a name="anchor-136"></a>  return (status);
+}
+
+/*===============================================================*\
+FUNCTION: PromptSketchProjectionIds
+<a name="anchor-137"></a>PURPOSE:  Enquire the user about the projection reference
+\*===============================================================*/
+ProError PromptSketchProjectionIds (SketchInfo *sketch_info)
+{
+    ProError status = PRO_TK_NO_ERROR;
+<a name="anchor-138"></a>    ProSelection *sel;
+    int num_sel;
+    ProGeomitem geom_item;
+       
+   if(sketch_info->ref2.type == GEOM_UNUSED)
+<a name="anchor-139"></a>    {
+        ProUtilMsgPrint(msgfil,
+                     (char *)&quot;USER Select the two projection references of the sketch&quot;);
+        num_sel = 0; 
+        status = ProSelect ((char *)&quot;edge,surface&quot;, 2, NULL, NULL, NULL, NULL, &amp;sel, &amp;num_sel);
+<a name="anchor-140"></a>        TEST_CALL_REPORT(&quot;ProSelect&quot;, &quot;PromptSketchProjectionIds&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+        if (status != PRO_TK_NO_ERROR || num_sel &lt; 2)
+            return (status);
+        status = ProSelectionModelitemGet(sel[0], (ProModelitem *)&amp;geom_item);       
+<a name="anchor-141"></a>        TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;, &quot;PromptSketchProjectionIds&quot;, 
+			status, status != PRO_TK_NO_ERROR );           
+        status = ProUtilGetGeomItemToRef(&amp;geom_item, &amp;sketch_info->ref1);
+        if(PRO_TK_NO_ERROR == status)
+        {
+<a name="anchor-142"></a>            status = ProSelectionModelitemGet(sel[1], (ProModelitem *)&amp;geom_item);
+            TEST_CALL_REPORT(&quot;ProSelectionModelitemGet&quot;, &quot;PromptSketchProjectionIds&quot;, 
+			    status, status != PRO_TK_NO_ERROR );                      
+            status = ProUtilGetGeomItemToRef(&amp;geom_item, &amp;sketch_info->ref2);
+        }
+<a name="anchor-143"></a>    }
+    return status;
+}
+ 
+  
+<a name="anchor-144"></a>
+/*====================================================================*\
+FUNCTION : SketchFeatureCreate
+PURPOSE  : Create menu for differnt input of sketch creation
+\*====================================================================*/
+<a name="anchor-145"></a>ProError SketchFeatureCreate()	/* Out: Direction of feature creation */
+{
+    ProError		status;
+    int			menu_id;
+    int			action;
+<a name="anchor-146"></a>
+    /*------------------------------------*\
+      Menu for creation of sketch feature with
+      different input
+    \*------------------------------------*/
+<a name="anchor-147"></a>    ProMenuFileRegister( (char *)&quot;TKSectionCreate&quot;, (char *)&quot;tksectioncreate.mnu&quot;, &amp;menu_id );
+    
+    status = ProMenubuttonActionSet( (char *)&quot;TKSectionCreate&quot;,(char *)&quot;-Manual Section Copy&quot;,
+     (ProMenubuttonAction)CreateSectionCopyUserMode, NULL, 0);
+    TEST_CALL_REPORT( &quot;CreateSectionCopy&quot;, &quot;ProMenubuttonActionSet&quot;, 
+<a name="anchor-148"></a>			status, status != PRO_TK_NO_ERROR );
+    
+    status = ProMenubuttonActionSet( (char *)&quot;TKSectionCreate&quot;, (char *)&quot;-Auto Section Copy&quot;,
+     (ProMenubuttonAction)CreateSectionCopyAutoMode, NULL, 0);
+    TEST_CALL_REPORT( &quot;CreateSectionCopy&quot;, &quot;ProMenubuttonActionSet&quot;, 
+<a name="anchor-149"></a>			status, status != PRO_TK_NO_ERROR );
+    
+    status = ProMenubuttonActionSet( (char *)&quot;TKSectionCreate&quot;, (char *)&quot;-Section Creation From Edges&quot;,
+     (ProMenubuttonAction)CreateSectionCreateFromEdges, NULL, 0);
+    TEST_CALL_REPORT( &quot;CreateSectionCopy&quot;, &quot;ProMenubuttonActionSet&quot;, 
+<a name="anchor-150"></a>			status, status != PRO_TK_NO_ERROR );
+  
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;TKSectionCreate&quot;, &amp;menu_id );
+    if( status == PRO_TK_NO_ERROR )
+    {
+<a name="anchor-151"></a>        status = ProMenuProcess( (char *)&quot;TKSectionCreate&quot;, &amp;action );
+    }
+    return status;
+}
+                                 
+<a name="anchor-152"></a>
+</pre>
+</body>
+</html>

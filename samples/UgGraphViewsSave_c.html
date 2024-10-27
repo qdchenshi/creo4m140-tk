@@ -1,0 +1,185 @@
+<html>
+<head>
+<title>UgGraphViewsSave.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProGraphic.h&quot;
+<a name="anchor-2"></a>#include &quot;ProMode.h&quot;
+#include &quot;ProView.h&quot;
+#include &quot;ProMode.h&quot;
+#include &lt;PTApplsUnicodeUtils.h>
+/*---------------------- Application Includes ------------------------*/
+<a name="anchor-3"></a>#include &lt;math.h>
+#include &quot;user_tk_error.h&quot;
+
+/*---------------------- Function Prototypes -------------------------*/
+void UserMatrixPrint();
+<a name="anchor-4"></a>void UserMatrixNormalize();
+ProError UserViews();
+
+
+/*=====================================================================*\
+<a name="anchor-5"></a>    Function to print a ProMatrix
+\*=====================================================================*/
+void UserMatrixPrint(
+    FILE* f,
+    char* s,
+<a name="anchor-6"></a>    ProMatrix m
+)
+{
+    int i,j;
+
+<a name="anchor-7"></a>    if (f!=NULL)
+      {
+	ProTKFprintf(f,&quot;%s\n&quot;,s);
+	for(i=0;i&lt;4;i++)
+	    for(j=0;j&lt;4;j++)
+<a name="anchor-8"></a>	      ProTKFprintf(f,&quot;%1d %1d %10.4f\n&quot;,i,j,m[i][j]);
+      }
+}
+
+
+<a name="anchor-9"></a>/*=====================================================================*\
+    Function to normalize a 4 x 4 transformation matrix
+\*=====================================================================*/
+void UserMatrixNormalize(
+    ProMatrix m
+<a name="anchor-10"></a>)
+{
+    int row,col;
+    double scale;
+
+<a name="anchor-11"></a>/*---------------------------------------------------------------------*\
+    Get the scaling factor
+\*---------------------------------------------------------------------*/
+    scale = sqrt(m[0][0]*m[0][0] +
+                 m[0][1]*m[0][1] +
+<a name="anchor-12"></a>                 m[0][2]*m[0][2]);
+
+/*---------------------------------------------------------------------*\
+    Remove the scaling
+\*---------------------------------------------------------------------*/
+<a name="anchor-13"></a>    for(row=0; row&lt;3; row++)
+        for(col=0; col&lt;3; col++)
+            m[row][col] /= scale;
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-14"></a>    Remove the shift
+\*---------------------------------------------------------------------*/
+    m[3][0] = 0.0;
+    m[3][1] = 0.0;
+    m[3][2] = 0.0;
+<a name="anchor-15"></a>
+}
+
+
+/*=====================================================================*\
+<a name="anchor-16"></a>    Function to store three orthogonal views called FRONT, SIDE, and TOP
+\*=====================================================================*/
+ProError UserViews()
+{
+    ProMatrix vmatrix,matrix;
+<a name="anchor-17"></a>    ProName name;
+    ProMode mode;
+    ProView dummy_view;
+
+    int i,j;
+<a name="anchor-18"></a>    ProError err;
+    FILE *PTApplsUnicodeFopen(), *fp;
+
+/*---------------------------------------------------------------------*\
+    This test should only be run in part or assembly mode
+<a name="anchor-19"></a>\*---------------------------------------------------------------------*/
+    err=ProModeCurrentGet(&amp;mode);
+    ERROR_CHECK(&quot;UserViews&quot;,&quot;ProModeGet&quot;,err);
+    if ( mode!=PRO_PART &amp;&amp; mode!=PRO_ASSEMBLY )
+      return(0);
+<a name="anchor-20"></a>/*---------------------------------------------------------------------*\
+    set up to write out results (for verification)
+\*---------------------------------------------------------------------*/
+    fp=PTApplsUnicodeFopen( &quot;views.dat&quot;, &quot;w&quot; );
+
+<a name="anchor-21"></a>/*---------------------------------------------------------------------*\
+    Remember the current view matrix, and normalize it
+\*---------------------------------------------------------------------*/
+    err=ProViewMatrixGet(NULL,NULL,vmatrix);
+    UserMatrixPrint(fp,&quot;vmatrix before normalization&quot;,vmatrix);
+<a name="anchor-22"></a>    ERROR_CHECK(&quot;UserViews&quot;,&quot;ProViewMatrixGet&quot;,err);
+    UserMatrixNormalize(vmatrix);
+    UserMatrixPrint(fp,&quot;vmatrix after normalization&quot;,vmatrix);
+
+
+<a name="anchor-23"></a>/*---------------------------------------------------------------------*\
+    Store the current view (so we can recover after picking the following)
+\*---------------------------------------------------------------------*/
+    ProStringToWstring(name,&quot;ORIGINAL&quot;);
+    err=ProViewStore(NULL,name,&amp;dummy_view);
+<a name="anchor-24"></a>    ERROR_CHECK(&quot;UserViews&quot;,&quot;ProViewMatrixSet orig&quot;,err);
+/*---------------------------------------------------------------------*\
+    Store the FRONT view (x=x,y=y - unitary view matrix)
+\*---------------------------------------------------------------------*/
+    for(i=0;i&lt;4;i++)
+<a name="anchor-25"></a>        for(j=0;j&lt;4;j++)
+            matrix[i][j] = 0;
+    matrix[3][3]=1;
+    matrix[0][0]=matrix[1][1]=matrix[2][2]=1;
+
+<a name="anchor-26"></a>    err=ProViewMatrixSet(NULL,NULL,matrix);
+    ERROR_CHECK(&quot;UserViews&quot;,&quot;ProViewMatrixSet front&quot;,err);
+    UserMatrixPrint(fp,&quot;FRONT&quot;,matrix);
+    ProStringToWstring(name,&quot;FRONT&quot;);
+    err=ProViewStore(NULL,name,&amp;dummy_view); 
+<a name="anchor-27"></a>    ERROR_CHECK(&quot;UserViews&quot;,&quot;ProViewStore front&quot;,err);
+
+/*---------------------------------------------------------------------*\
+    Store the SIDE view (x=y,y=z)
+\*---------------------------------------------------------------------*/
+<a name="anchor-28"></a>    for(i=0;i&lt;4;i++)
+        for(j=0;j&lt;4;j++)
+            matrix[i][j] = 0;
+    matrix[3][3]=1;
+    matrix[0][2]=matrix[1][0]=matrix[2][1]=1;
+<a name="anchor-29"></a>
+    err=ProViewMatrixSet(NULL,NULL,matrix);
+    ERROR_CHECK(&quot;UserViews&quot;,&quot;ProViewMatrixSet side&quot;,err);
+    UserMatrixPrint(fp,&quot;SIDE&quot;,matrix);
+    ProStringToWstring(name,&quot;SIDE&quot;);
+<a name="anchor-30"></a>    err=ProViewStore(NULL,name,&amp;dummy_view); 
+    ERROR_CHECK(&quot;UserViews&quot;,&quot;ProViewStore side&quot;,err);
+
+/*---------------------------------------------------------------------*\
+    Store the TOP view (x=z,y=x)
+<a name="anchor-31"></a>\*---------------------------------------------------------------------*/
+    for(i=0;i&lt;4;i++)
+        for(j=0;j&lt;4;j++)
+            matrix[i][j] = 0;
+    matrix[3][3]=1;
+<a name="anchor-32"></a>    matrix[0][1]=matrix[1][2]=matrix[2][0]=1;
+
+    err=ProViewMatrixSet(NULL,NULL,matrix);
+    ERROR_CHECK(&quot;UserViews&quot;,&quot;ProViewMatrixSet top&quot;,err);
+    UserMatrixPrint(fp,&quot;TOP&quot;,matrix);
+<a name="anchor-33"></a>    ProStringToWstring(name,&quot;TOP&quot;);
+    err=ProViewStore(NULL,name,&amp;dummy_view); 
+    ERROR_CHECK(&quot;UserViews&quot;,&quot;ProViewStore top&quot;,err);
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-34"></a>    Reset the view matrix
+\*---------------------------------------------------------------------*/
+    ProViewMatrixSet(NULL,NULL,vmatrix);
+
+    if (fp!=NULL)
+<a name="anchor-35"></a>      fclose(fp);
+}
+</pre>
+</body>
+</html>

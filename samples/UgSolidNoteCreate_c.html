@@ -1,0 +1,173 @@
+<html>
+<head>
+<title>UgSolidNoteCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*----------------------------------------------------------------*\
+  Pro/TOOLKIT includes
+\*----------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProSelection.h>
+#include &lt;ProObjects.h>
+#include &lt;ProSolid.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMessage.h>
+<a name="anchor-3"></a>#include &lt;ProNote.h>
+#include &lt;ProArray.h>
+#include &lt;ProGraphic.h>
+#include &lt;ProAnnotation.h>
+/*----------------------------------------------------------------*\
+<a name="anchor-4"></a>  Application includes
+\*----------------------------------------------------------------*/
+#include &quot;ProUtil.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;UtilMath.h&quot;
+<a name="anchor-5"></a>#include &quot;UtilMatrix.h&quot;
+
+/*----------------------------------------------------------------*\
+  Application data
+\*----------------------------------------------------------------*/
+<a name="anchor-6"></a>static ProName msg_file;
+
+/*================================================================*\
+  FUNCTION: UserSolidNoteCreate()
+  PURPOSE:  Example of note creation for solids
+<a name="anchor-7"></a>\*================================================================*/
+int UserSolidNoteCreate()
+{
+#define MAX_NOTE_LEN PRO_LINE_SIZE
+  
+<a name="anchor-8"></a>  int             err;
+  ProSelection   *p_sel;                /* for selection */
+  int             n_sel;
+  ProModelitem    note_owner;           /* owner of the note */
+  
+<a name="anchor-9"></a>  wchar_t**       text_arr;             /* list of note text lines */
+  ProMdl          model;                /* current model */
+  ProLine         w_notetext;           /* line of note text */
+  ProNote         note;                 /* note object */
+  ProNoteAttach   note_attach;          /* attach information for
+<a name="anchor-10"></a>					   note */
+  int             i;
+  ProMouseButton  button;
+  ProPoint3d      note_pos_scrn;        /* note position in screen
+					   coordinates */
+<a name="anchor-11"></a>  ProPoint3d      outline[2];           /* points delimiting the
+					   model outline */
+  ProPoint3d      note_pos;             /* note position, in model
+					   coordinates */
+  ProMatrix       vmatrix, inv_vmatrix; /* view matrix and inverse */
+<a name="anchor-12"></a>  ProMatrix       def_matrix = {{1.0, 0.0, 0.0, 0.0},
+				{0.0, 1.0, 0.0, 0.0},
+				{0.0, 0.0, 1.0, 0.0},
+				{0.0, 0.0, 0.0, 1.0}};
+  
+<a name="anchor-13"></a>  ProStringToWstring (msg_file, &quot;msg_ugfund.txt&quot;);
+/*----------------------------------------------------------------*\
+  Get the current model.
+\*----------------------------------------------------------------*/
+  err = ProMdlCurrentGet (&amp;model);
+<a name="anchor-14"></a>  if (err != PRO_TK_NO_ERROR)
+    {
+      ProMessageDisplay (msg_file, &quot;USER %0s F&quot;,
+			 &quot;Error getting current model.&quot;);
+      return (err);
+<a name="anchor-15"></a>    }
+
+  /*----------------------------------------------------------------*\
+    Get the note text.
+  \*----------------------------------------------------------------*/
+<a name="anchor-16"></a>  ProMessageDisplay (msg_file, &quot;USER %0s F&quot;, &quot;Enter note text.&quot;);
+  err = ProMessageStringRead (MAX_NOTE_LEN, w_notetext);
+  if (err != PRO_TK_NO_ERROR)
+    return (err);
+  /*----------------------------------------------------------------*\
+<a name="anchor-17"></a>    Fill the array of note lines.
+  \*----------------------------------------------------------------*/
+  err = ProArrayAlloc (1, sizeof(wchar_t*), 1, (ProArray*)&amp;text_arr);
+  text_arr[0] = &amp;w_notetext [0];
+
+<a name="anchor-18"></a>  /*----------------------------------------------------------------*\
+    Get the modelitem for the model.
+  \*----------------------------------------------------------------*/
+  err = ProMdlToModelitem (model, &amp;note_owner);
+  
+<a name="anchor-19"></a>  /*----------------------------------------------------------------*\
+    Create the note to be owned by the model.
+  \*----------------------------------------------------------------*/ 
+  err = ProSolidNoteCreate (model, NULL, text_arr, &amp;note);
+
+<a name="anchor-20"></a>  /*----------------------------------------------------------------*\
+    Get the leaders and add to the attachment.
+  \*----------------------------------------------------------------*/
+  ProMessageDisplay (msg_file, &quot;USER %0s F&quot;,
+		     &quot;Select edges for leaders.&quot;);
+<a name="anchor-21"></a>  err = ProSelect (&quot;edge&quot;, -1, NULL, NULL, NULL, NULL, &amp;p_sel,
+		   &amp;n_sel);
+  if (err != PRO_TK_NO_ERROR)
+    return (err);
+  
+<a name="anchor-22"></a>  err = ProNoteAttachAlloc (&amp;note_attach);
+  
+  for (i = 0; i &lt; n_sel; i++)
+    {
+      err = ProNoteAttachAddend (note_attach, p_sel[i],   
+<a name="anchor-23"></a>		PRO_NOTE_ATT_NONE);
+    }
+  /*----------------------------------------------------------------*\
+    Get the note position, in screen coordinates.
+  \*----------------------------------------------------------------*/
+<a name="anchor-24"></a>  ProMessageDisplay (msg_file, &quot;USER %0s F&quot;, &quot;Select note location.&quot;);
+  err = ProMousePickGet (PRO_LEFT_BUTTON, &amp;button, note_pos_scrn);
+  if (err != PRO_TK_NO_ERROR)
+    return (err);
+  
+<a name="anchor-25"></a>  /*----------------------------------------------------------------*\
+    Get the view matrix (the transformation from model coordinates
+    to screen coordinates) and invert.
+  \*----------------------------------------------------------------*/
+  err = ProViewMatrixGet (model, NULL, vmatrix);
+<a name="anchor-26"></a>  err = ProUtilMatrixInvert (vmatrix, inv_vmatrix);
+  
+  /*------------------------------------------------------------------*\
+    Transform the note position from screen coordinates to model
+    coordinates.
+<a name="anchor-27"></a>  \*----------------------------------------------------------------*/
+  ProUtilPointTrans (inv_vmatrix, note_pos_scrn, note_pos);
+  err = ProSolidDispoutlineGet (model, def_matrix, outline);
+  
+  /*----------------------------------------------------------------*\
+<a name="anchor-28"></a>    Set the note position in terms of model size parameters
+    (see ProNote.h)
+  \*----------------------------------------------------------------*/
+  
+  for (i = 0; i &lt; 3; i++)
+<a name="anchor-29"></a>    {
+      note_pos[i] = (note_pos[i] - outline[0][i]) /
+	(outline[1][i] - outline[0][i]);
+    }
+  err = ProNoteAttachFreeSet (note_attach, note_pos[0], note_pos[1],
+<a name="anchor-30"></a>			      note_pos[2]);
+  err = ProNotePlacementSet (&amp;note, note_attach);
+  
+  /*----------------------------------------------------------------*\
+    Display the note.
+<a name="anchor-31"></a>  \*----------------------------------------------------------------*/
+    err = ProAnnotationShow ( (ProAnnotation*)&amp;note, NULL, NULL);
+  /*----------------------------------------------------------------*\
+    Free the memory.
+  \*----------------------------------------------------------------*/
+<a name="anchor-32"></a>  err = ProNoteAttachRelease (&amp;note_attach);
+  err = ProArrayFree ((ProArray*)&amp;text_arr);
+  
+  return (PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

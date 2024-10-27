@@ -1,0 +1,155 @@
+<html>
+<head>
+<title>PTWCServerMain.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMenuBar.h>
+#include &lt;ProUtil.h> 
+#include &lt;ProMessage.h>
+#include &lt;ProBrowser.h>
+<a name="anchor-2"></a>#include &lt;ProWTUtils.h>
+#include &lt;ProWorkspace.h>
+#include &lt;ProCore.h>
+
+#include &lt;PTWCServer.h>
+<a name="anchor-3"></a>
+ProFileName  message_file;
+
+#define POPULATE_MODE_FLAG &quot;populate&quot;
+#define REGFILE_FLAG &quot;regfile&quot;
+<a name="anchor-4"></a>
+uiCmdAccessState PTTestAccessDefault ()
+{
+	return ACCESS_AVAILABLE;
+}
+<a name="anchor-5"></a>
+/*====================================================================*\
+  FUNCTION :   user_initialize()
+  PURPOSE  :   Application initialization	
+\*====================================================================*/
+<a name="anchor-6"></a>int user_initialize(int argc, char* argv[])
+{
+	ProBoolean populateMode = PRO_B_FALSE;
+	int i;
+	uiCmdCmdId cmd_id;
+<a name="anchor-7"></a>	char initFile [PRO_FILE_NAME_SIZE];
+
+	PT_TEST_LOG_INIT
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-8"></a>	Set the default initialization file name
+\*--------------------------------------------------------------------*/
+	strcpy (initFile, &quot;pt_wc_server_init.dat&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-9"></a>	Parse command line
+\*--------------------------------------------------------------------*/
+	if (argc > 1)
+	{
+		for (i = 1; i &lt; argc; i++)
+<a name="anchor-10"></a>		{
+			char* flagString;
+			char* flagInitFile = NULL;
+			int loc;
+/*--------------------------------------------------------------------*\
+<a name="anchor-11"></a>	Skip the '+' used to signal this argument to Pro/TOOLKIT
+\*--------------------------------------------------------------------*/
+			flagString = argv [i] + 1;
+			if (strcmp (flagString, POPULATE_MODE_FLAG)== 0)
+			{
+<a name="anchor-12"></a>				populateMode = PRO_B_TRUE;
+			}
+			if (strncmp (flagString, REGFILE_FLAG, strlen (REGFILE_FLAG)) == 0)
+			{
+				flagInitFile = strchr (flagString, '=');
+<a name="anchor-13"></a>				strcpy (initFile, flagInitFile + 1);
+			}
+		}
+	}
+
+<a name="anchor-14"></a>/*--------------------------------------------------------------------*\
+	Run populate mode, this method will exit Pro/E after its complete
+\*--------------------------------------------------------------------*/
+	if (populateMode)
+	{
+<a name="anchor-15"></a>		PTWCUtilSetInteractive (PRO_B_FALSE);
+		return (PTWCPopulateServer (initFile));
+	}
+
+
+<a name="anchor-16"></a>  ProStringToWstring (message_file_init, &quot;pt_wc_server.txt&quot; ); 
+
+/*---------------------------------------------------------------------*\
+Add the application main menu
+\*---------------------------------------------------------------------*/
+<a name="anchor-17"></a>  status = ProMenubarMenuAdd (&quot;PTWCServer&quot;, &quot;PTWCServerLabel&quot;, &quot;Info&quot;,
+			      PRO_B_TRUE, message_file_init );
+  PT_TEST_LOG_SUCC (&quot;ProMenubarMenuAdd()&quot;);
+
+
+<a name="anchor-18"></a>/*---------------------------------------------------------------------*\
+Add the button for creating and checking in the BOM file
+\*---------------------------------------------------------------------*/
+  status = ProCmdActionAdd(&quot;PTWCServer.CreateBOM&quot;, 
+				(uiCmdCmdActFn)PTWCCreateOrUpdateDXF,
+<a name="anchor-19"></a>			   uiProe2ndImmediate, PTWCAccessCreateOrUpdateDXF,
+			   PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+  PT_TEST_LOG_SUCC (&quot;ProCmdActionAdd()&quot;);
+  
+  status = ProMenubarmenuPushbuttonAdd(
+<a name="anchor-20"></a>				       &quot;PTWCServer&quot;, &quot;PTWCCreateUpdateDXF&quot;, 
+				       &quot;PTWCCreateUpdateDXF-Label&quot;, 
+				       &quot;PTWCCreateUpdateDXF-Help&quot;,
+				       NULL, PRO_B_TRUE, cmd_id, message_file_init);
+  PT_TEST_LOG_SUCC (&quot;ProMenubarmenuPushbuttonAdd()&quot;);
+<a name="anchor-21"></a>  
+/*---------------------------------------------------------------------*\
+Add the button for creating and checking in the ProductView OL files as
+secondary content
+\*---------------------------------------------------------------------*/
+<a name="anchor-22"></a>  status = ProCmdActionAdd(&quot;PTWCServer.PartToPView&quot;, 
+				(uiCmdCmdActFn)PTWCPartsToProductView,
+			   uiProe2ndImmediate, PTWCAccessPartToPView,
+			   PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+  PT_TEST_LOG_SUCC (&quot;ProCmdActionAdd()&quot;);
+<a name="anchor-23"></a>  
+  status = ProMenubarmenuPushbuttonAdd(
+				       &quot;PTWCServer&quot;, &quot;PTWCPartToPView&quot;, 
+				       &quot;PTWCPartToPView-Label&quot;, 
+				       &quot;PTWCPartToPView-Help&quot;,
+<a name="anchor-24"></a>				       NULL, PRO_B_TRUE, cmd_id, message_file_init);
+  PT_TEST_LOG_SUCC (&quot;ProMenubarmenuPushbuttonAdd()&quot;);
+
+/*---------------------------------------------------------------------*\
+Add the button for automatic addition of a family table instance.
+<a name="anchor-25"></a>\*---------------------------------------------------------------------*/
+  status = ProCmdActionAdd(&quot;PTWCServer.AddInstance&quot;, 
+				(uiCmdCmdActFn)PTWCAddInstance,
+			   uiProe2ndImmediate, PTWCAccessAddInstance,
+			   PRO_B_TRUE, PRO_B_TRUE, &amp;cmd_id);
+<a name="anchor-26"></a>  PT_TEST_LOG_SUCC (&quot;ProCmdActionAdd()&quot;);
+  
+  status = ProMenubarmenuPushbuttonAdd(
+				       &quot;PTWCServer&quot;, &quot;PTWCAddInstance&quot;, 
+				       &quot;PTWCAddInstance-Label&quot;, 
+<a name="anchor-27"></a>				       &quot;PTWCAddInstance-Help&quot;,
+				       NULL, PRO_B_TRUE, cmd_id, message_file_init);
+  PT_TEST_LOG_SUCC (&quot;ProMenubarmenuPushbuttonAdd()&quot;);
+
+
+<a name="anchor-28"></a>  return(0);
+}
+
+void user_terminate()
+{
+<a name="anchor-29"></a>	PT_TEST_LOG_CLOSE
+}
+</pre>
+</body>
+</html>

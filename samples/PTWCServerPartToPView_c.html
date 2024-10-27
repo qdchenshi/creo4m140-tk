@@ -1,0 +1,233 @@
+<html>
+<head>
+<title>PTWCServerPartToPView.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProWorkspace.h>
+#include &lt;ProWTUtils.h>
+#include &lt;ProBrowser.h>
+<a name="anchor-2"></a>#include &lt;ProUtil.h>
+#include &lt;ProMenuBar.h>
+#include &lt;ProMode.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProSolid.h>
+<a name="anchor-3"></a>
+#include &lt;PTWCServer.h>
+
+typedef struct
+{
+<a name="anchor-4"></a>	wchar_t* server;
+	wchar_t* ws_name;
+	ProPath ws_path;
+} PTWCAsmVisitData;
+
+<a name="anchor-5"></a>/*====================================================================*\
+  FUNCTION: PTWCAddPartToPviewAsSecondary
+  PURPOSE:  Visit action for each part in the assembly.  Checkout the 
+			part, export it to ProductView and add the results as 
+			secondary content
+<a name="anchor-6"></a>\*====================================================================*/
+static ProError PTWCAddPartToPviewAsSecondary (ProAsmcomppath* path, ProSolid solid,
+											   ProError filter_status, ProAppData data)
+{
+	PTWCAsmVisitData* visit_data = (PTWCAsmVisitData*)data;
+<a name="anchor-7"></a>	ProMdlType type;
+	ProMdlName modelname;
+	ProMdlFileName objectname;
+	ProPath directory, filepath;
+	ProBoolean checkedout, modified;
+<a name="anchor-8"></a>	wchar_t* model_url;
+	ProServerCheckoutConflicts conflicts;
+	ProSolid generic = NULL;
+	ProServerCheckoutOptions co_options;
+
+<a name="anchor-9"></a>/*--------------------------------------------------------------------*\
+	Ensure that the model is a part, and export it to ProductView format
+\*--------------------------------------------------------------------*/
+	status = ProMdlTypeGet (solid, &amp;type);
+	PT_TEST_LOG_SUCC (&quot;ProMdlTypeGet()&quot;);
+<a name="anchor-10"></a>
+	if (status != PRO_TK_NO_ERROR || type != PRO_MDL_PART)
+		return PRO_TK_NO_ERROR;
+
+	status = ProProductviewExport (solid, NULL, NULL);
+<a name="anchor-11"></a>	PT_TEST_LOG_SUCC (&quot;ProProductviewExport()&quot;);
+
+/*--------------------------------------------------------------------*\
+	Derive the workspace path for the model
+\*--------------------------------------------------------------------*/
+<a name="anchor-12"></a>	status = ProMdlMdlnameGet (solid, modelname);
+	PT_TEST_LOG_SUCC (&quot;ProMdlMdlnameGet()&quot;);
+
+	PTWCUtilWstringToLower (modelname);
+
+<a name="anchor-13"></a>	ProWstringCopy (modelname, objectname, PRO_VALUE_UNUSED);
+	ProWstringConcatenate (L&quot;.prt&quot;, objectname, PRO_VALUE_UNUSED);
+
+/*--------------------------------------------------------------------*\
+	If the object is not checked out, check it out.  If the object is
+<a name="anchor-14"></a>	an instance, checkout its top level generic with instances instead.
+\*--------------------------------------------------------------------*/
+	status = ProServerObjectStatusGet (visit_data->server, visit_data->ws_name,
+										objectname, &amp;checkedout, &amp;modified);
+	PT_TEST_LOG_SUCC (&quot;ProServerObjectStatusGet()&quot;);
+<a name="anchor-15"></a>
+	if (status != PRO_TK_NO_ERROR || !checkedout)
+	{
+		status = ProServercheckoutoptsAlloc (&amp;co_options);
+		PT_TEST_LOG_SUCC (&quot;ProServercheckoutoptsAlloc()&quot;);
+<a name="anchor-16"></a>
+		status = ProServercheckoutoptsIncludeinstancesSet (co_options, 
+															PRO_SERVER_INCLUDE_ALL,
+															NULL);
+		PT_TEST_LOG_SUCC (&quot;ProServercheckoutoptsIncludeinstancesSet()&quot;);
+<a name="anchor-17"></a>
+		status = ProFaminstanceGenericGet (solid, PRO_B_FALSE, 
+										   (ProMdl*)&amp;generic);
+		PT_TEST_LOG_SUCC (&quot;ProFaminstanceGenericGet()&quot;);
+
+<a name="anchor-18"></a>		status = ProServerObjectsCheckout (status == PRO_TK_NO_ERROR ? generic : solid, 
+										NULL, PRO_B_TRUE, 
+										co_options, &amp;model_url, &amp;conflicts);
+		PT_TEST_LOG_SUCC (&quot;ProServerObjectsCheckout()&quot;);
+
+<a name="anchor-19"></a>		ProWstringFree (model_url);
+		ProServercheckoutoptsFree (co_options);
+	}
+
+	if (status == PRO_TK_CHECKOUT_CONFLICT)
+<a name="anchor-20"></a>	{
+		PTWCUtilSetInteractive (PRO_B_FALSE);
+		PTWCUtilConflictReport (conflicts);
+		ProServerconflictsFree (conflicts);
+		PTWCUtilSetInteractive (PRO_B_TRUE);
+<a name="anchor-21"></a>	}
+	else
+	{
+/*--------------------------------------------------------------------*\
+	Copy the ProductView .ol file as secondary content
+<a name="anchor-22"></a>\*--------------------------------------------------------------------*/
+		status = ProDirectoryCurrentGet (directory);
+		PT_TEST_LOG_SUCC (&quot;ProDirectoryCurrentGet()&quot;);
+
+		ProWstringCopy (directory, filepath, PRO_VALUE_UNUSED);
+<a name="anchor-23"></a>		ProWstringConcatenate (modelname, filepath, PRO_VALUE_UNUSED);
+		ProWstringConcatenate (L&quot;.ol&quot;, filepath, PRO_VALUE_UNUSED);
+
+		status = ProFileCopyToWS (filepath, visit_data->ws_path, objectname);
+		PT_TEST_LOG_SUCC (&quot;ProFileCopyToWS()&quot;);
+<a name="anchor-24"></a>
+/*--------------------------------------------------------------------*\
+	Copy the ProductView .ed file as secondary content
+\*--------------------------------------------------------------------*/
+		ProWstringCopy (directory, filepath, PRO_VALUE_UNUSED);
+<a name="anchor-25"></a>		ProWstringConcatenate (modelname, filepath, PRO_VALUE_UNUSED);
+		ProWstringConcatenate (L&quot;.ed&quot;, filepath, PRO_VALUE_UNUSED);
+
+		status = ProFileCopyToWS (filepath, visit_data->ws_path, objectname);
+		PT_TEST_LOG_SUCC (&quot;ProFileCopyToWS()&quot;);
+<a name="anchor-26"></a>	}
+
+	return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-27"></a>/*====================================================================*\
+  FUNCTION: PTWCPartsToProductView
+  PURPOSE:  Export OL/ED files for each part, add as secondary content,
+            and checkin modified models.
+\*====================================================================*/
+<a name="anchor-28"></a>int PTWCPartsToProductView ()
+{
+	ProMdl model;
+	ProMdlType type;
+	PTWCAsmVisitData visit_data;
+<a name="anchor-29"></a>
+/*--------------------------------------------------------------------*\
+	Get the target models to be processed: the active part or assembly,
+	or the current solid in the active drawing
+\*--------------------------------------------------------------------*/
+<a name="anchor-30"></a>	status = ProMdlCurrentGet (&amp;model);
+	PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet()&quot;);
+
+	status = ProMdlTypeGet (model, &amp;type);
+	PT_TEST_LOG_SUCC (&quot;ProMdlTypeGet()&quot;);
+<a name="anchor-31"></a>
+	if (type == PRO_MDL_DRAWING)
+	{
+		status = ProDrawingCurrentsolidGet ((ProDrawing)model, 
+											(ProSolid*)&amp;model);
+<a name="anchor-32"></a>		PT_TEST_LOG_SUCC (&quot;ProDrawingCurrsolidGet()&quot;);
+
+		status = ProMdlTypeGet (model, &amp;type);
+		PT_TEST_LOG_SUCC (&quot;ProMdlTypeGet()&quot;);
+	}
+<a name="anchor-33"></a>
+/*--------------------------------------------------------------------*\
+	Save some details about the active server to use for each visited
+	model.
+\*--------------------------------------------------------------------*/
+<a name="anchor-34"></a>	status = ProServerActiveGet (&amp;visit_data.server);
+	PT_TEST_LOG_SUCC (&quot;ProServerActiveGet()&quot;);
+
+	status = ProServerWorkspaceGet (visit_data.server, &amp;visit_data.ws_name);
+	PT_TEST_LOG_SUCC (&quot;ProServerWorkspaceGet()&quot;);
+<a name="anchor-35"></a>	
+	PTWCUtilBuildWSPath (visit_data.server, visit_data.ws_name, visit_data.ws_path);
+
+/*--------------------------------------------------------------------*\
+	Process the single part, or all displayed parts in the assembly
+<a name="anchor-36"></a>\*--------------------------------------------------------------------*/
+	if (type == PRO_MDL_PART)
+	{
+		PTWCAddPartToPviewAsSecondary (NULL, model, PRO_TK_NO_ERROR, 
+										(ProAppData)&amp;visit_data);
+<a name="anchor-37"></a>	}
+	else
+	{
+		status = ProSolidDispCompVisit (model, PTWCAddPartToPviewAsSecondary,
+										NULL, (ProAppData)&amp;visit_data);
+<a name="anchor-38"></a>		PT_TEST_LOG_SUCC (&quot;ProSolidDispCompVisit()&quot;);
+	}
+
+/*--------------------------------------------------------------------*\
+	Check in all changes
+<a name="anchor-39"></a>\*--------------------------------------------------------------------*/
+	PTWCUtilCheckinWSToFolder (visit_data.ws_name, NULL);
+
+	ProWstringFree (visit_data.server);
+	ProWstringFree (visit_data.ws_name);
+<a name="anchor-40"></a>
+	return 0;
+}
+
+/*====================================================================*\
+<a name="anchor-41"></a>  FUNCTION: PTWCAccessPartToPView
+  PURPOSE:  Access function for the &quot;part to ProductView&quot; command
+\*====================================================================*/
+uiCmdAccessState PTWCAccessPartToPView (uiCmdAccessMode m)
+{
+<a name="anchor-42"></a>	ProMode mode;
+	wchar_t* server;
+	wchar_t* server_class;
+	int result;
+
+<a name="anchor-43"></a>	status = ProModeCurrentGet (&amp;mode);
+	
+	if (mode != PRO_MODE_PART &amp;&amp; mode != PRO_MODE_ASSEMBLY &amp;&amp; mode != PRO_MODE_DRAWING)
+		return ACCESS_REMOVE;
+
+<a name="anchor-44"></a>/*--------------------------------------------------------------------*\
+	Ensure that there is an active Windchill server
+\*--------------------------------------------------------------------*/
+	return (PTWCUtilAccessIfWCServer ());
+}
+</pre>
+</body>
+</html>

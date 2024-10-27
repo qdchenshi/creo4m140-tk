@@ -1,0 +1,612 @@
+<html>
+<head>
+<title>TestAnalysis.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProAnalysis.h>
+#include &lt;ProMenu.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProExtdata.h>
+#include &lt;ProPoint.h>
+<a name="anchor-3"></a>#include &lt;ProSolid.h>
+#include &lt;ProDtmPnt.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProArray.h>
+#include &lt;ProMessage.h>
+<a name="anchor-4"></a>#include &lt;ProUtil.h>
+#include &lt;ProFeature.h>
+#include &lt;ProObjects.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-5"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestAnalysis.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilString.h&quot;
+#include &quot;UtilCollect.h&quot;
+
+static ProFileName msgfil;
+
+<a name="anchor-7"></a>/*====================================================================*\
+FUNCTION : ProTestClassRegister()
+PURPOSE  : Register a data class, if it does not already exist
+\*====================================================================*/
+int ProTestClassRegister(
+<a name="anchor-8"></a>    ProMdl model,
+    char   *class_name,
+    ProExtdataClass *extdata_class)
+{
+    ProName cname;
+<a name="anchor-9"></a>    ProExtdataErr err;
+
+    if (!ProTestClassExists(model, class_name, extdata_class))
+    {
+        ProStringToWstring(cname, class_name);
+<a name="anchor-10"></a>        err = ProExtdataClassRegister (model, cname, extdata_class);
+        TEST_CALL_REPORT (&quot;ProExtdataClassRegister()&quot;, 
+            &quot;ProTestClassRegister()&quot;, 
+            (ProError)err, err != PRO_TK_NO_ERROR);
+        if (err != PROEXTDATA_TK_NO_ERROR)
+<a name="anchor-11"></a>	    return(0);
+    }
+
+    return(1);
+}
+<a name="anchor-12"></a>
+/*====================================================================*\
+FUNCTION : ProTestIntegerSave()
+PURPOSE  : Utility to save an integer
+\*====================================================================*/
+<a name="anchor-13"></a>int ProTestIntegerSave(
+    ProExtdataClass *extdata_class,
+    char *slotname,
+    int i)
+{
+<a name="anchor-14"></a>    ProExtdataSlot slot;
+    ProName sname;
+    ProExtdataErr err;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-15"></a>    If the specified slot does not exist, create it
+\*--------------------------------------------------------------------*/
+    ProStringToWstring(sname, slotname);
+    err = ProExtdataSlotCreate(extdata_class, sname, &amp;slot);
+    TEST_CALL_REPORT (&quot;ProExtdataSlotCreate()&quot;, 
+<a name="anchor-16"></a>        &quot;ProTestIntegerSave()&quot;, 
+        (ProError)err, err != PROEXTDATA_TK_NO_ERROR &amp;&amp;
+	err != PROEXTDATA_TK_CLASS_OR_SLOT_EXISTS);
+    if (err != PROEXTDATA_TK_NO_ERROR)
+    {
+<a name="anchor-17"></a>        slot.p_class = extdata_class;
+        ProStringToWstring (slot.slot_name, slotname);
+    }
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-18"></a>    Write the integer to the data slot
+\*--------------------------------------------------------------------*/
+    err = ProExtdataSlotWrite (&amp;slot, KEY_BY_NAME, 
+        PRO_INTEGER_TYPE, 0, &amp;i);
+    TEST_CALL_REPORT (&quot;ProExtdataSlotWrite()&quot;, 
+<a name="anchor-19"></a>        &quot;ProTestIntegerSave()&quot;, 
+        (ProError)err, err != PRO_TK_NO_ERROR);
+
+    return(1);
+}
+<a name="anchor-20"></a>
+
+/*====================================================================*\
+FUNCTION : ProTestIntegerRetrieve()
+PURPOSE  : Retrieve an integer
+<a name="anchor-21"></a>\*====================================================================*/
+int ProTestIntegerRetrieve(
+    ProExtdataClass *extdata_class,
+    char *slotname,
+    int *i)
+<a name="anchor-22"></a>{
+    ProExtdataSlot slot;
+    int *data;
+    int size, type;
+    ProExtdataErr err;
+<a name="anchor-23"></a>
+/*--------------------------------------------------------------------*\
+    Read the integer from the data slot
+\*--------------------------------------------------------------------*/
+    slot.p_class = extdata_class;
+<a name="anchor-24"></a>    ProStringToWstring(slot.slot_name, slotname);
+    
+    err = ProExtdataSlotRead (&amp;slot, KEY_BY_NAME, &amp;type, 
+        &amp;size, (void**)&amp;data);
+    TEST_CALL_REPORT (&quot;ProExtdataSlotRead()&quot;, 
+<a name="anchor-25"></a>        &quot;ProTestIntegerRetrieve()&quot;, 
+        (ProError)err, err != PRO_TK_NO_ERROR);
+    if (err != PROEXTDATA_TK_NO_ERROR)
+        return(0);
+
+<a name="anchor-26"></a>    *i = *data;
+
+    return(1);
+}
+
+<a name="anchor-27"></a>/*====================================================================*\
+    FUNCTION :  ProTestClassExists
+    PURPOSE  :  Check if the specified class exists
+\*====================================================================*/
+int ProTestClassExists(
+<a name="anchor-28"></a>    ProMdl model,
+    char *name,
+    ProExtdataClass *extdata_class)
+{
+    ProExtdataErr err;
+<a name="anchor-29"></a>    int n_classes, c;
+    ProName *classes;
+
+    err = ProExtdataClassNamesList (model, &amp;n_classes, &amp;classes);
+    TEST_CALL_REPORT (&quot;ProExtdataClassNamesList()&quot;, 
+<a name="anchor-30"></a>        &quot;ProTestClassExists()&quot;, 
+        (ProError)err, err != PRO_TK_NO_ERROR);
+    if (err != PROEXTDATA_TK_NO_ERROR)
+        return(0);
+
+<a name="anchor-31"></a>    for (c = 0; c &lt; n_classes; c++)
+    {
+        if (!ProUtilStrwscmp (name, classes[c]))
+        {
+            extdata_class->p_model = model;
+<a name="anchor-32"></a>            ProStringToWstring (extdata_class->class_name, name);
+            ProArrayFree ((ProArray *)&amp;classes);
+            return(1);
+        }
+    }
+<a name="anchor-33"></a>
+    ProArrayFree((ProArray *)&amp;classes);
+
+    return(0);
+}
+<a name="anchor-34"></a>
+
+/*====================================================================*\
+    FUNCTION :  ProTestAtts
+    PURPOSE  :  Switch COMPUTE_OFF attribute 
+<a name="anchor-35"></a>\*====================================================================*/
+int ProTestAtts()
+{
+    ProSelection *sel;
+    int n_sel;
+<a name="anchor-36"></a>    ProFeature feature;
+    ProAnalysis analysis;
+    ProName wname;
+    ProCharName name, type;
+    ProBoolean is_set;
+<a name="anchor-37"></a>    ProError err;
+
+    /* Select an analysis feature, and flip the COMPUTE attribute */
+    ProMessageDisplay (msgfil, (char *)&quot;USER Selected an exteral analysis feature&quot;);
+    while (1)
+<a name="anchor-38"></a>    {
+	err = ProSelect ((char *)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+        if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+	    break;
+
+<a name="anchor-39"></a>	ProSelectionModelitemGet(sel[0], &amp;feature);
+
+	if(ProFeatureAnalysisGet(&amp;feature, &amp;analysis) != PRO_TK_NO_ERROR)
+	{
+	    ProMessageDisplay (msgfil, (char *)
+<a name="anchor-40"></a>                &quot;USER Selected feature contains no external analysis. &quot;
+                &quot;Select again&quot;);
+	    continue;
+	}
+	/* Should be QCR output */
+<a name="anchor-41"></a>	ProTKPrintf(&quot;analysis = %x\n&quot;, analysis);
+
+	err = ProAnalysisTypeGet (analysis, wname);
+        TEST_CALL_REPORT (&quot;ProAnalysisTypeGet()&quot;, 
+            &quot;ProTestAtts()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-42"></a>
+	ProWstringToString(type, wname);
+
+	ProTKPrintf(&quot;Selected feature %d with analysis type %s\n&quot;,
+			feature.id, type);
+<a name="anchor-43"></a>
+	err = ProAnalysisAttrIsSet (analysis, PROANALYSIS_COMPUTE_OFF, 
+            &amp;is_set);
+        TEST_CALL_REPORT (&quot;ProAnalysisAttrIsSet()&quot;, 
+            &quot;ProTestAtts()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-44"></a>
+	ProTKPrintf(&quot;COMPUTE_OFF = %d\n&quot;, is_set);
+
+        err = ProAnalysisAttrSet(analysis, PROANALYSIS_COMPUTE_OFF, (ProBoolean)!is_set);
+        TEST_CALL_REPORT (&quot;ProAnalysisAttrSet()&quot;, 
+<a name="anchor-45"></a>            &quot;ProTestAtts()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+
+    return 0;
+}
+<a name="anchor-46"></a>
+/*====================================================================*\
+    FUNCTION :  ProTestOutwardsSave
+    PURPOSE  :  Save direction in slot
+\*====================================================================*/
+<a name="anchor-47"></a>int ProTestOutwardsSave(
+    ProFeature *feature,
+    ProBoolean outwards)
+{
+    ProExtdataClass extdata_class;
+<a name="anchor-48"></a>    ProCharName slotname;
+
+    if (!ProTestClassRegister (feature->owner, (char *)&quot;SURFCSYS&quot;, &amp;extdata_class))
+	return 0;
+    ProTKSprintf (slotname, &quot;OUTWARDS_%d&quot;, feature->id);
+<a name="anchor-49"></a>    ProTestIntegerSave (&amp;extdata_class, slotname, (int)outwards);
+    return 1;
+}
+
+/*====================================================================*\
+<a name="anchor-50"></a>    FUNCTION :  ProTestOutwardsRetrieve
+    PURPOSE  :  Retrieve direction from slot
+\*====================================================================*/
+int ProTestOutwardsRetrieve(
+    ProFeature *feature,
+<a name="anchor-51"></a>    ProBoolean *outwards)
+{
+    ProExtdataClass extdata_class;
+    ProCharName slotname;
+    int i;
+<a name="anchor-52"></a>
+    if (!ProTestClassExists (feature->owner, (char *)&quot;SURFCSYS&quot;, &amp;extdata_class))
+	return(0);
+
+    ProTKSprintf (slotname,&quot;OUTWARDS_%d&quot;,feature->id);
+<a name="anchor-53"></a>    if (!ProTestIntegerRetrieve(&amp;extdata_class, slotname, &amp;i))
+	return(0);
+
+    *outwards = i==0 ? PRO_B_FALSE : PRO_B_TRUE;
+    return(1);
+<a name="anchor-54"></a>}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilAnalysisFeatureFilter
+    PURPOSE  :  Filter to collect analysis features
+<a name="anchor-55"></a>\*====================================================================*/
+int ProUtilAnalysisFeatureFilter (
+    ProFeature* p_feature,
+    ProAppData app_data)
+{
+<a name="anchor-56"></a>    ProFeattype feat_type;
+    ProError err;
+
+    err = ProFeatureTypeGet (p_feature, &amp;feat_type);
+    TEST_CALL_REPORT (&quot;ProFeatureTypeGet()&quot;,
+<a name="anchor-57"></a>        &quot;ProUtilAnalysisFeatureFilter()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR || feat_type != PRO_FEAT_ANALYSIS)
+        return PRO_TK_CONTINUE;
+
+    return PRO_TK_NO_ERROR;
+<a name="anchor-58"></a>}
+
+/*====================================================================*\
+    FUNCTION :  ProTestListAnalyses
+    PURPOSE  :  Make qcr output (info about all analysis features)
+<a name="anchor-59"></a>\*====================================================================*/
+int ProTestListAnalyses()
+{
+    ProError err;
+    ProMdl model;
+<a name="anchor-60"></a>    ProAnalysis *analyses, analysis;
+    int na, a, nf, f;
+    ProName wname;
+    ProCharName name, type;
+    ProFeature *feats;
+<a name="anchor-61"></a>    const char *fname = &quot;list.txt&quot;;
+    FILE *fp;
+
+    if ((fp = PTApplsUnicodeFopen (fname, &quot;w&quot;)) == NULL)
+        return 0;
+<a name="anchor-62"></a>
+    err = ProMdlCurrentGet (&amp;model);
+    TEST_CALL_REPORT (&quot;ProMdlCurrentGet()&quot;,
+        &quot;ProTestListAnalyses()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-63"></a>    /* Analyses */
+    ProTKFprintf (fp, &quot;Saved analyses in current model...\n&quot;);
+    err = ProUtilCollectSolidAnalysis ((ProSolid)model, &amp;analyses);
+    if (err == PRO_TK_E_NOT_FOUND)
+    {
+<a name="anchor-64"></a>        ProTKFprintf (fp, &quot;No analyses found\n&quot;);
+    }
+    else if (err != PRO_TK_NO_ERROR)
+    {
+        ProTKFprintf (fp, &quot;ProUtilCollectSolidAnalysis returns error %d\n&quot;, err);
+<a name="anchor-65"></a>        fclose (fp);
+        return 0;
+    }
+
+    ProArraySizeGet (analyses, &amp;na);
+<a name="anchor-66"></a>    ProTKFprintf(fp, &quot;%d analyses..\n&quot;, na);
+    for (a = 0; a &lt; na; a++)
+    {
+        err = ProAnalysisNameGet (analyses[a], wname);
+        TEST_CALL_REPORT (&quot;ProAnalysisNameGet()&quot;,
+<a name="anchor-67"></a>            &quot;ProTestListAnalyses()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        ProWstringToString(name, wname);
+        err = ProAnalysisTypeGet (analyses[a], wname);
+        TEST_CALL_REPORT (&quot;ProAnalysisNameGet()&quot;,
+<a name="anchor-68"></a>            &quot;ProTestListAnalyses()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        ProWstringToString(type, wname);
+        ProTKFprintf(fp, &quot;\tAnalysis %d :  name %s, type %s\n&quot;,
+            a, name, type);
+<a name="anchor-69"></a>    }
+
+    ProArrayFree ((ProArray*)&amp;analyses);
+
+    /* Analysis features */
+<a name="anchor-70"></a>    ProTKFprintf (fp, &quot;\nAnalysis features in current model...\n&quot;);
+
+    err = ProUtilCollectSolidFeaturesWithFilter ((ProSolid)model, 
+        (ProFeatureFilterAction)ProUtilAnalysisFeatureFilter, &amp;feats);
+    if (err == PRO_TK_E_NOT_FOUND)
+<a name="anchor-71"></a>    {
+        ProTKFprintf (fp, &quot;No analysis features found\n&quot;);
+        fclose (fp);
+        return 0;
+    }
+<a name="anchor-72"></a>    else if (err != PRO_TK_NO_ERROR)
+    {
+        ProTKFprintf (fp, 
+            &quot;ProUtilCollectSolidFeaturesWithFilter returns error %d\n&quot;, 
+            err);
+<a name="anchor-73"></a>        fclose (fp);
+        return 0;
+    }
+
+    ProArraySizeGet(feats, &amp;nf);
+<a name="anchor-74"></a>    for (f = 0; f &lt; nf; f++)
+    {
+        ProTKFprintf(fp, &quot;    Feature id %d\n&quot;, feats[f].id);
+        err = ProFeatureAnalysisGet(&amp;feats[f],  &amp;analysis);
+        TEST_CALL_REPORT (&quot;ProFeatureAnalysisGet()&quot;,
+<a name="anchor-75"></a>            &quot;ProTestListAnalyses()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        err = ProAnalysisTypeGet (analysis, wname);
+        TEST_CALL_REPORT (&quot;ProAnalysisTypeGet()&quot;,
+            &quot;ProTestListAnalyses()&quot;, err, err != PRO_TK_NO_ERROR); 
+<a name="anchor-76"></a>
+        ProWstringToString(type, wname);
+        ProTKFprintf(fp, &quot;, type %s\n&quot;, type);
+    }
+    fclose(fp);
+<a name="anchor-77"></a>
+    ProArrayFree ((ProArray*)&amp;feats);
+
+    ProStringToWstring(wname, (char *)fname);
+    ProInfoWindowDisplay(wname, NULL, NULL);
+<a name="anchor-78"></a>
+    return 0;
+}
+
+int ProTestAnalysis ()
+<a name="anchor-79"></a>{
+    int menu_id;
+
+/*--------------------------------------------------------------------*\
+    Setup analysis menu
+<a name="anchor-80"></a>\*--------------------------------------------------------------------*/
+    ProMenuFileRegister ((char *)&quot;-ExtAnalysis&quot;, (char *)&quot;extanalysis.mnu&quot;, &amp;menu_id);
+    ProMenubuttonActionSet ((char *)&quot;-ExtAnalysis&quot;, (char *)&quot;Attributes&quot;, 
+        (ProMenubuttonAction)ProTestAtts, NULL, 0);
+    ProMenubuttonActionSet ((char *)&quot;-ExtAnalysis&quot;, (char *)&quot;List Analyses&quot;, 
+<a name="anchor-81"></a>        (ProMenubuttonAction)ProTestListAnalyses, NULL, 0);
+    ProMenubuttonActionSet ((char *)&quot;-ExtAnalysis&quot;, (char *)&quot;-ExtAnalysis&quot;, 
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;-ExtAnalysis&quot;, &amp;menu_id);
+    ProMenuProcess((char *)&quot;&quot;, &amp;menu_id);
+<a name="anchor-82"></a>
+    return 0;
+}
+
+/*====================================================================*\
+<a name="anchor-83"></a>    FUNCTION :  ProTestAnalysisRegister
+    PURPOSE  :  Register all analysis features classes
+\*====================================================================*/
+int ProTestAnalysisRegister ()
+{
+<a name="anchor-84"></a>    ProError err;
+    ProAnalysisFuncsData analysis_data;
+    int menu_id;
+
+    ProStringToWstring(msgfil,(char *)&quot;analysis_msg.txt&quot;);
+<a name="anchor-85"></a>
+/*--------------------------------------------------------------------*\
+    Build the description of the surface csys analysis feature
+    data, and register it with Pro/E
+\*--------------------------------------------------------------------*/
+<a name="anchor-86"></a>    memset (&amp;analysis_data, '\0', sizeof(ProAnalysisFuncsData));
+    ProStringToWstring (analysis_data.type, (char *)&quot;Surface Csys&quot;);
+    analysis_data.ui_action             = ProTestSurfcsysUiAction;
+    analysis_data.dims_action           = ProTestSurfcsysDimsAction;
+    analysis_data.infoalloc_action      = ProTestSurfcsysInfoallocAction;
+<a name="anchor-87"></a>    analysis_data.infofree_action       = ProTestSurfcsysInfofreeAction;
+    analysis_data.compcheck_action      = ProTestSurfcsysCompcheckAction;
+    analysis_data.compute_action        = ProTestSurfcsysComputeAction;
+    analysis_data.display_action        = ProTestSurfcsysDisplayAction;
+    analysis_data.output_action         = ProTestSurfcsysOutputAction;
+<a name="anchor-88"></a>    analysis_data.savecheck_action      = ProTestSurfcsysSavecheckAction;
+    analysis_data.infosave_action       = ProTestSurfcsysInfosaveAction;
+    analysis_data.inforetrieve_action   = ProTestSurfcsysInforetrieveAction;
+    analysis_data.infocopy_action       = ProTestSurfcsysInfocopyAction;
+    analysis_data.result_action         = ProTestSurfcsysResultAction;
+<a name="anchor-89"></a>
+    err = ProAnalysisTypeRegister (&amp;analysis_data);
+    TEST_CALL_REPORT (&quot;ProAnalysisTypeRegister()&quot;, 
+        &quot;ProTestAnalysisRegister()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-90"></a>
+/*--------------------------------------------------------------------*\
+    Build the description of the curve wrap analysis feature
+    data, and register it with Pro/E
+\*--------------------------------------------------------------------*/
+<a name="anchor-91"></a>    memset (&amp;analysis_data, '\0', sizeof(ProAnalysisFuncsData));
+    ProStringToWstring (analysis_data.type, (char *)&quot;Curve Wrap&quot;);
+    analysis_data.ui_action             = ProTestCurvewrapUiAction;
+    analysis_data.dims_action           = ProTestCurvewrapDimsAction;
+    analysis_data.infoalloc_action      = ProTestCurvewrapInfoallocAction;
+<a name="anchor-92"></a>    analysis_data.infofree_action       = ProTestCurvewrapInfofreeAction;
+    analysis_data.compcheck_action      = ProTestCurvewrapCompcheckAction;
+    analysis_data.compute_action        = ProTestCurvewrapComputeAction;
+    analysis_data.display_action        = ProTestCurvewrapDisplayAction;
+    analysis_data.output_action         = ProTestCurvewrapOutputAction;
+<a name="anchor-93"></a>    analysis_data.savecheck_action      = ProTestCurvewrapSavecheckAction;
+    analysis_data.infosave_action       = ProTestCurvewrapInfosaveAction;
+    analysis_data.inforetrieve_action   = ProTestCurvewrapInforetrieveAction;
+    analysis_data.infocopy_action       = ProTestCurvewrapInfocopyAction;
+    analysis_data.result_action         = ProTestCurvewrapResultAction;
+<a name="anchor-94"></a>
+    err = ProAnalysisTypeRegister (&amp;analysis_data);
+    TEST_CALL_REPORT (&quot;ProAnalysisTypeRegister()&quot;, 
+        &quot;ProTestAnalysisRegister()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-95"></a>
+/*--------------------------------------------------------------------*\
+    Build the description of the point analysis feature
+    data, and register it with Pro/E
+\*--------------------------------------------------------------------*/
+<a name="anchor-96"></a>    memset (&amp;analysis_data, '\0', sizeof(ProAnalysisFuncsData));
+    ProStringToWstring (analysis_data.type, (char *)&quot;Surface Point&quot;);
+    analysis_data.ui_action             = ProTestSurfcsysUiAction;
+    analysis_data.dims_action           = ProTestSurfcsysDimsAction;
+    analysis_data.infoalloc_action      = ProTestSurfcsysInfoallocAction;
+<a name="anchor-97"></a>    analysis_data.infofree_action       = ProTestSurfcsysInfofreeAction;
+    analysis_data.compcheck_action      = ProTestSurfcsysCompcheckAction;
+    analysis_data.compute_action        = ProTestSurfcsysComputeAction;
+    analysis_data.display_action        = ProTestSurfcsysDisplayAction;
+    analysis_data.output_action         = ProTestSurfcsysOutputAction;
+<a name="anchor-98"></a>    analysis_data.savecheck_action      = ProTestSurfcsysSavecheckAction;
+    analysis_data.infosave_action       = ProTestSurfcsysInfosaveAction;
+    analysis_data.inforetrieve_action   = ProTestSurfcsysInforetrieveAction;
+    analysis_data.infocopy_action       = ProTestSurfcsysInfocopyAction;
+    analysis_data.result_action         = ProTestSurfpointResultAction;
+<a name="anchor-99"></a>
+    err = ProAnalysisTypeRegister (&amp;analysis_data);
+    TEST_CALL_REPORT (&quot;ProAnalysisTypeRegister()&quot;, 
+        &quot;ProTestAnalysisRegister()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-100"></a>
+/*--------------------------------------------------------------------*\
+    Build the description of the curve analysis feature
+    data, and register it with Pro/E
+\*--------------------------------------------------------------------*/
+<a name="anchor-101"></a>    memset (&amp;analysis_data, '\0', sizeof(ProAnalysisFuncsData));
+    ProStringToWstring (analysis_data.type, (char *)&quot;Curve&quot;);
+    analysis_data.ui_action             = ProTestCurveUiAction;
+    analysis_data.dims_action           = ProTestCurveDimsAction;
+    analysis_data.infoalloc_action      = ProTestCurveInfoallocAction;
+<a name="anchor-102"></a>    analysis_data.infofree_action       = ProTestCurveInfofreeAction;
+    analysis_data.compcheck_action      = ProTestCurveCompcheckAction;
+    analysis_data.compute_action        = ProTestCurveComputeAction;
+    analysis_data.display_action        = ProTestCurveDisplayAction;
+    analysis_data.output_action         = ProTestCurveOutputAction;
+<a name="anchor-103"></a>    analysis_data.savecheck_action      = ProTestCurveSavecheckAction;
+    analysis_data.infosave_action       = ProTestCurveInfosaveAction;
+    analysis_data.inforetrieve_action   = ProTestCurveInforetrieveAction;
+    analysis_data.infocopy_action       = ProTestCurveInfocopyAction;
+    analysis_data.result_action         = ProTestCurveResultAction;
+<a name="anchor-104"></a>
+    err = ProAnalysisTypeRegister (&amp;analysis_data);
+    TEST_CALL_REPORT (&quot;ProAnalysisTypeRegister()&quot;, 
+        &quot;ProTestAnalysisRegister()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-105"></a>
+/*--------------------------------------------------------------------*\
+    Build the description of the surface analysis feature
+    data, and register it with Pro/E
+\*--------------------------------------------------------------------*/
+<a name="anchor-106"></a>    memset (&amp;analysis_data, '\0', sizeof(ProAnalysisFuncsData));
+    ProStringToWstring (analysis_data.type, (char *)&quot;Surface&quot;);
+    analysis_data.ui_action             = ProTestSurfaceUiAction;
+    analysis_data.dims_action           = ProTestSurfaceDimsAction;
+    analysis_data.infoalloc_action      = ProTestSurfaceInfoallocAction;
+<a name="anchor-107"></a>    analysis_data.infofree_action       = ProTestSurfaceInfofreeAction;
+    analysis_data.compcheck_action      = ProTestSurfaceCompcheckAction;
+    analysis_data.compute_action        = ProTestSurfaceComputeAction;
+    analysis_data.display_action        = ProTestSurfaceDisplayAction;
+    analysis_data.output_action         = ProTestSurfaceOutputAction;
+<a name="anchor-108"></a>    analysis_data.savecheck_action      = ProTestSurfaceSavecheckAction;
+    analysis_data.infosave_action       = ProTestSurfaceInfosaveAction;
+    analysis_data.inforetrieve_action   = ProTestSurfaceInforetrieveAction;
+    analysis_data.infocopy_action       = ProTestSurfaceInfocopyAction;
+    analysis_data.result_action         = ProTestSurfaceResultAction;
+<a name="anchor-109"></a>
+    err = ProAnalysisTypeRegister (&amp;analysis_data);
+    TEST_CALL_REPORT (&quot;ProAnalysisTypeRegister()&quot;, 
+        &quot;ProTestAnalysisRegister()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-110"></a>
+/*--------------------------------------------------------------------*\
+    Build the description of NURBS surface analysis feature
+    data, and register it with Pro/E
+\*--------------------------------------------------------------------*/
+<a name="anchor-111"></a>    memset (&amp;analysis_data, '\0', sizeof(ProAnalysisFuncsData));
+    ProStringToWstring (analysis_data.type, (char *)&quot;NURBS Surface&quot;);
+    analysis_data.ui_action             = ProTestSurfaceUiAction;
+    analysis_data.dims_action           = ProTestSurfaceDimsAction;
+    analysis_data.infoalloc_action      = ProTestSurfaceInfoallocAction;
+<a name="anchor-112"></a>    analysis_data.infofree_action       = ProTestSurfaceInfofreeAction;
+    analysis_data.compcheck_action      = ProTestSurfaceCompcheckAction;
+    analysis_data.compute_action        = ProTestSurfaceComputeAction;
+    analysis_data.display_action        = ProTestSurfaceDisplayAction;
+    analysis_data.output_action         = ProTestSurfaceOutputAction;
+<a name="anchor-113"></a>    analysis_data.savecheck_action      = ProTestSurfaceSavecheckAction;
+    analysis_data.infosave_action       = ProTestSurfaceInfosaveAction;
+    analysis_data.inforetrieve_action   = ProTestSurfaceInforetrieveAction;
+    analysis_data.infocopy_action       = ProTestSurfaceInfocopyAction;
+    analysis_data.result_action         = ProTestNURBSSurfaceResultAction;
+<a name="anchor-114"></a>
+    err = ProAnalysisTypeRegister (&amp;analysis_data);
+    TEST_CALL_REPORT (&quot;ProAnalysisTypeRegister()&quot;, 
+        &quot;ProTestAnalysisRegister()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-115"></a>
+/*--------------------------------------------------------------------*\
+    Build the description of the composite curve analysis feature
+    data, and register it with Pro/E
+\*--------------------------------------------------------------------*/
+<a name="anchor-116"></a>    memset (&amp;analysis_data, '\0', sizeof(ProAnalysisFuncsData));
+    ProStringToWstring (analysis_data.type, (char *)&quot;CompCurve&quot;);
+    analysis_data.ui_action             = ProTestCompCurveUiAction;
+    analysis_data.dims_action           = ProTestCompCurveDimsAction;
+    analysis_data.infoalloc_action      = ProTestCompCurveInfoallocAction;
+<a name="anchor-117"></a>    analysis_data.infofree_action       = ProTestCompCurveInfofreeAction;
+    analysis_data.compcheck_action      = ProTestCompCurveCompcheckAction;
+    analysis_data.compute_action        = ProTestCompCurveComputeAction;
+    analysis_data.display_action        = ProTestCompCurveDisplayAction;
+    analysis_data.output_action         = ProTestCompCurveOutputAction;
+<a name="anchor-118"></a>    analysis_data.savecheck_action      = ProTestCompCurveSavecheckAction;
+    analysis_data.infosave_action       = ProTestCompCurveInfosaveAction;
+    analysis_data.inforetrieve_action   = ProTestCompCurveInforetrieveAction;
+    analysis_data.infocopy_action       = ProTestCompCurveInfocopyAction;
+    analysis_data.result_action         = ProTestCompCurveResultAction;
+<a name="anchor-119"></a>
+    err = ProAnalysisTypeRegister (&amp;analysis_data);
+    TEST_CALL_REPORT (&quot;ProAnalysisTypeRegister()&quot;, 
+        &quot;ProTestAnalysisRegister()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-120"></a>
+    return 0;
+}
+
+</pre>
+</body>
+</html>

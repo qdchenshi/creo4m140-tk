@@ -1,0 +1,190 @@
+<html>
+<head>
+<title>PTWCServerPopulate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProWorkspace.h>
+#include &lt;ProWTUtils.h>
+#include &lt;ProBrowser.h>
+#include &lt;ProUtil.h>
+<a name="anchor-2"></a>#include &lt;ProWstring.h>
+#include &lt;ProCore.h>
+
+#include &lt;PTWCServer.h>
+
+<a name="anchor-3"></a>#define POPULATE_ALIAS L&quot;_PTWC_Populate&quot;
+
+/*====================================================================*\
+  FUNCTION: PTWCPopulateServer
+  PURPOSE:  Populate the ProjectLink project with models based on the 
+<a name="anchor-4"></a>            contents of the initialization file
+\*====================================================================*/
+int PTWCPopulateServer (char* init_file)
+{
+	PTWCInitFileInfo file_data;
+<a name="anchor-5"></a>	int i, num_workspaces;
+	wchar_t* context;
+	wchar_t* ws_name;
+	wchar_t* aliased_url;
+	ProServerWorkspaceData* workspaces;
+<a name="anchor-6"></a>	ProServerCheckinOptions opts;
+	ProServerCheckinConflicts conflicts;
+	ProPath designs_path;
+	ProPath plans_path;
+
+<a name="anchor-7"></a>	status = PTWCGetInitFileInfo (init_file, &amp;file_data);
+	if (status == PRO_TK_NO_ERROR)
+	{
+/*--------------------------------------------------------------------*\
+		Setup authentication
+<a name="anchor-8"></a>\*--------------------------------------------------------------------*/
+		status = ProBrowserAuthenticate (file_data.username, file_data.password);
+		PT_TEST_LOG_SUCC (&quot;ProBrowserAuthenticate()&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-9"></a>		Register and activate the server.  We find the workspace on the 
+		given project (context) to use as the active workspace
+\*--------------------------------------------------------------------*/
+		status = ProServerWorkspacesCollect (file_data.server_url, &amp;workspaces);
+		PT_TEST_LOG_SUCC (&quot;ProServerWorkspacesCollect()&quot;);
+<a name="anchor-10"></a>
+		status = ProArraySizeGet (workspaces, &amp;num_workspaces);
+		PT_TEST_LOG_SUCC (&quot;ProArraySizeGet()&quot;);
+
+		for (i = 0; i &lt; num_workspaces; i++)
+<a name="anchor-11"></a>		{
+			int result = -1;
+
+			status = ProServerworkspacedataContextGet (workspaces [i], &amp;context);
+			PT_TEST_LOG_SUCC (&quot;ProServerworkspacedataContextGet()&quot;);
+<a name="anchor-12"></a>
+			ProWstringCompare (context, file_data.project, PRO_VALUE_UNUSED, &amp;result);
+			ProWstringFree (context);
+
+			if (result == 0)
+<a name="anchor-13"></a>			{
+				status = ProServerworkspacedataNameGet (workspaces [i], &amp;ws_name);
+				PT_TEST_LOG_SUCC (&quot;ProServerworkspacedataNameGet()&quot;);
+
+				break;
+<a name="anchor-14"></a>			}
+		}
+
+		ProServerworkspacedataProarrayFree (workspaces);
+
+<a name="anchor-15"></a>		status = ProServerRegister (POPULATE_ALIAS, file_data.server_url, ws_name, 
+									&amp;aliased_url);
+		PT_TEST_LOG_SUCC (&quot;ProServerRegister()&quot;);
+
+		status = ProServerActivate (POPULATE_ALIAS);
+<a name="anchor-16"></a>		PT_TEST_LOG_SUCC (&quot;ProServerActivate()&quot;);
+
+/*--------------------------------------------------------------------*\
+		Import part and assembly models.  
+\*--------------------------------------------------------------------*/
+<a name="anchor-17"></a>
+		if (file_data.design_models != NULL)
+		{
+			status = ProCurrentWorkspaceImport (PRO_WS_IMPEX_ALL, 
+												file_data.design_models);
+<a name="anchor-18"></a>			PT_TEST_LOG_SUCC (&quot;ProCurrentWorkspaceImport()&quot;);
+		}
+
+		PTWCUtilBuildPJLFolder (POPULATE_ALIAS, file_data.project, 
+									&quot;Designs&quot;, designs_path);
+<a name="anchor-19"></a>
+/*--------------------------------------------------------------------*\
+		Prepare the checkin options; by default the imported parts
+		and assemblies go in the &quot;Designs&quot; folder.
+\*--------------------------------------------------------------------*/
+<a name="anchor-20"></a>		status = ProServercheckinoptsAlloc (&amp;opts);
+		PT_TEST_LOG_SUCC (&quot;ProServercheckinoptsAlloc()&quot;);
+
+		status = ProServercheckinoptsDeflocationSet (opts, designs_path);
+		PT_TEST_LOG_SUCC (&quot;ProServercheckinoptsDeflocationSet()&quot;);
+<a name="anchor-21"></a>	
+/*--------------------------------------------------------------------*\
+		Import drawing models.  
+\*--------------------------------------------------------------------*/
+		if (file_data.plan_models != NULL)
+<a name="anchor-22"></a>		{
+			int num_drawings, i;
+			ProPath filepath;
+			ProMdlName name;
+			ProMdlExtension extension;
+<a name="anchor-23"></a>			ProMdlFileName filename;
+
+			status = ProCurrentWorkspaceImport (PRO_WS_IMPEX_NONE, 
+												file_data.plan_models);
+			PT_TEST_LOG_SUCC (&quot;ProCurrentWorkspaceImport()&quot;);
+<a name="anchor-24"></a>
+/*--------------------------------------------------------------------*\
+			The imported drawings go in the &quot;Plans&quot; folder.  
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-25"></a>			PTWCUtilBuildPJLFolder (POPULATE_ALIAS, file_data.project, 
+									&quot;Plans&quot;, plans_path);
+
+			status = ProArraySizeGet (file_data.plan_models, &amp;num_drawings);
+			PT_TEST_LOG_SUCC (&quot;ProArraySizeGet()&quot;);
+<a name="anchor-26"></a>
+			for (i = 0; i &lt; num_drawings; i++)
+			{
+/*--------------------------------------------------------------------*\
+				Each item is assigned to the checkin options using its
+<a name="anchor-27"></a>				model name.
+\*--------------------------------------------------------------------*/
+				ProWstringCopy (file_data.plan_models [i], filepath, PRO_VALUE_UNUSED);
+
+				status = ProFileMdlnameParse (filepath, NULL, 
+<a name="anchor-28"></a>											name, extension, NULL); 
+				PT_TEST_LOG_SUCC (&quot;ProFileMdlnameParse()&quot;);
+
+				ProWstringCopy (name, filename, PRO_VALUE_UNUSED);
+				ProWstringConcatenate (L&quot;.&quot;, filename, PRO_VALUE_UNUSED);
+<a name="anchor-29"></a>				ProWstringConcatenate (extension, filename, PRO_VALUE_UNUSED);
+
+				status = ProServercheckinoptsLocationAdd (opts, filename, plans_path);
+				PT_TEST_LOG_SUCC (&quot;ProServercheckinoptsLocationAdd()&quot;);
+			}
+<a name="anchor-30"></a>		}
+
+/*--------------------------------------------------------------------*\
+		Check in the entire workspace using the options.
+\*--------------------------------------------------------------------*/
+<a name="anchor-31"></a>		status = ProServerObjectsCheckin (NULL, opts, &amp;conflicts);
+		PT_TEST_LOG_SUCC (&quot;ProServerObjectsCheckin()&quot;);
+
+		if (status == PRO_TK_CHECKOUT_CONFLICT)
+		{
+<a name="anchor-32"></a>			PTWCUtilConflictReport (conflicts);
+			ProServerconflictsFree (conflicts);
+		}
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-33"></a>		Clean the workspace, and free allocated memory
+\*--------------------------------------------------------------------*/
+		PTWCUtilRemoveAllFromWS (POPULATE_ALIAS, ws_name);
+
+		PTWCInitFileDataFree (&amp;file_data);
+<a name="anchor-34"></a>
+		ProWstringFree (ws_name);
+
+	}
+/*--------------------------------------------------------------------*\
+<a name="anchor-35"></a>	End the Pro/ENGINEER session
+\*--------------------------------------------------------------------*/
+	PT_TEST_LOG_CLOSE
+	ProEngineerEnd ();
+
+<a name="anchor-36"></a>	return (PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

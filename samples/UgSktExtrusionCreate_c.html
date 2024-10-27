@@ -1,0 +1,280 @@
+<html>
+<head>
+<title>UgSktExtrusionCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProFeature.h&quot;
+<a name="anchor-2"></a>#include &quot;ProElemId.h&quot;
+#include &quot;ProExtrude.h&quot;
+#include &quot;ProModFeat.h&quot;
+#include &quot;ProStdSection.h&quot;
+#include &quot;ProElement.h&quot;
+<a name="anchor-3"></a>#include &quot;ProElempath.h&quot;
+#include &quot;ProFeatType.h&quot;
+#include &quot;ProFeatForm.h&quot;
+#include &quot;ProSelection.h&quot;
+#include &quot;ProSection.h&quot;
+<a name="anchor-4"></a>
+static ProFileName message_file; 
+
+#define C_LOG(a) ProTKPrintf (&quot;Status for %s is = %d\n&quot;, a, status ); \
+	ERROR_CHECK( a, &quot;UgSktExtrusionCreate.c&quot;, status );
+<a name="anchor-5"></a>
+/*---------------------- Function Prototypes -------------------------*/
+int ProDemoBaseExtrudeProtrCreate();
+
+/*------------------------- External Data ----------------------------*/
+<a name="anchor-6"></a>ProError ProDemoSectCreate();
+
+/*------------------------- Global Data -----------------------------*/
+typedef struct tree_element_data
+{
+<a name="anchor-7"></a>  ProElement    tree;
+  ProElement    parent_element;
+  ProElemId     elem_id;
+  ProValueData  value_data;
+} ProTreeElemdata;
+<a name="anchor-8"></a>
+ProError ProTestFeatElemAdd (ProTreeElemdata *elem);
+
+/*===============================================================*\
+FUNCTION : ProDemoBaseExtrudeProtrCreate
+<a name="anchor-9"></a>PURPOSE  : Demonstrates the creation of the extruded protrusion
+           base feature.
+\*===============================================================*/
+int ProDemoBaseExtrudeProtrCreate()
+{
+<a name="anchor-10"></a>    ProTreeElemdata         elem;
+    ProErrorlist            errors;
+    ProMdl                  model;
+    ProModelitem            model_item;
+    ProSelection            model_sel;
+<a name="anchor-11"></a>    ProFeature              feature;
+    ProFeatureCreateOptions *opts = NULL;
+    ProElempath             path;
+    ProElempathItem         path_items[2];
+    ProSection              section;
+<a name="anchor-12"></a>    ProAsmcomppath          comp_path;
+    ProAsmcomppath          *p_comp_path = NULL;
+    ProElement              parent_elem;
+    ProElement              parent_elem2;
+    ProValue                value;
+<a name="anchor-13"></a>    double                  width;
+    double                  height;
+    double                  bite_radius;
+    double                  bite_height;
+    char                    name[PRO_NAME_SIZE];
+<a name="anchor-14"></a>    ProBoolean              alloc;
+    ProError		    status;
+    ProSelection * 	    sketch_selection;
+    ProSelection * 	    selection_array;
+    int 		    n_select; 
+<a name="anchor-15"></a>
+    ProStringToWstring ( message_file, &quot;utilities.txt&quot; ); 
+/*---------------------------------------------------------------*\
+    Allocate the element tree.
+\*---------------------------------------------------------------*/
+<a name="anchor-16"></a>    status = ProElementAlloc (PRO_E_FEATURE_TREE, &amp;(elem.tree));
+    C_LOG(&quot; ProElementAlloc&quot;); 
+
+/*---------------------------------------------------------------*\
+    Add the feature type element to the tree.
+<a name="anchor-17"></a>\*---------------------------------------------------------------*/
+    elem.parent_element = elem.tree;
+    elem.elem_id = PRO_E_FEATURE_TYPE;
+    elem.value_data.type = PRO_VALUE_TYPE_INT;
+    elem.value_data.v.i = PRO_FEAT_PROTRUSION;
+<a name="anchor-18"></a>    status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;); 
+	
+/*---------------------------------------------------------------*\
+    Add the feature form element to the tree.
+<a name="anchor-19"></a>\*---------------------------------------------------------------*/
+    elem.parent_element = elem.tree;
+    elem.elem_id = PRO_E_FEATURE_FORM; 
+    elem.value_data.type = PRO_VALUE_TYPE_INT;
+    elem.value_data.v.i = PRO_EXTRUDE;
+<a name="anchor-20"></a>    status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;); 
+
+/*---------------------------------------------------------------*\
+    Add the feature solid/surface/cut element to the tree.
+<a name="anchor-21"></a>\*---------------------------------------------------------------*/
+    elem.parent_element = elem.tree;
+    elem.elem_id = PRO_E_EXT_SURF_CUT_SOLID_TYPE; 
+    elem.value_data.type = PRO_VALUE_TYPE_INT;
+    elem.value_data.v.i = PRO_EXT_FEAT_TYPE_SOLID;
+<a name="anchor-22"></a>    status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;); 
+
+/*---------------------------------------------------------------*\
+    Add the feature addition/removal material element to the tree.
+<a name="anchor-23"></a>\*---------------------------------------------------------------*/
+    elem.parent_element = elem.tree;
+    elem.elem_id = PRO_E_REMOVE_MATERIAL; 
+    elem.value_data.type = PRO_VALUE_TYPE_INT;
+    elem.value_data.v.i = PRO_EXT_MATERIAL_ADD;
+<a name="anchor-24"></a>    status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;); 
+
+/*---------------------------------------------------------------*\
+    Add the feature thin element to the tree.
+<a name="anchor-25"></a>\*---------------------------------------------------------------*/
+    elem.parent_element = elem.tree;
+    elem.elem_id = PRO_E_FEAT_FORM_IS_THIN; 
+    elem.value_data.type = PRO_VALUE_TYPE_INT;
+    elem.value_data.v.i = PRO_EXT_FEAT_FORM_NO_THIN;
+<a name="anchor-26"></a>    status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;); 
+
+/*---------------------------------------------------------------*\
+    Add the standard section element to the tree.
+<a name="anchor-27"></a>\*---------------------------------------------------------------*/
+    elem.parent_element = elem.tree;
+    elem.elem_id = PRO_E_STD_SECTION;
+    elem.value_data.type = -1;
+    elem.value_data.v.i = -1;
+<a name="anchor-28"></a>    status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;); 
+
+/*---------------------------------------------------------------*\
+    Add the section depth elements to the element tree.
+<a name="anchor-29"></a>\*---------------------------------------------------------------*/
+    elem.parent_element = elem.tree;
+    elem.elem_id = PRO_E_STD_EXT_DEPTH;
+    elem.value_data.type = -1;
+    elem.value_data.v.i = -1;
+<a name="anchor-30"></a>    status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;); 
+    parent_elem2 = elem.parent_element;
+
+    elem.elem_id = PRO_E_EXT_DEPTH_FROM;
+<a name="anchor-31"></a>    elem.value_data.type = -1;
+    elem.value_data.v.i = -1;
+    status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;); 
+    parent_elem = elem.parent_element;
+<a name="anchor-32"></a>    elem.elem_id = PRO_E_EXT_DEPTH_FROM_TYPE;
+    elem.value_data.type = PRO_VALUE_TYPE_INT;
+    elem.value_data.v.i = PRO_EXT_DEPTH_FROM_BLIND;
+	status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;); 
+<a name="anchor-33"></a>    elem.parent_element = parent_elem;
+    elem.elem_id = PRO_E_EXT_DEPTH_FROM_VALUE;
+    elem.value_data.type = PRO_VALUE_TYPE_DOUBLE;
+    elem.value_data.v.d = 50.0;
+    status = ProTestFeatElemAdd (&amp;elem);
+<a name="anchor-34"></a>    C_LOG(&quot; ProTestFeatElemAdd&quot;); 
+
+    elem.parent_element = parent_elem2;
+    elem.elem_id = PRO_E_EXT_DEPTH_TO;
+    elem.value_data.type = -1;
+<a name="anchor-35"></a>    elem.value_data.v.i = -1;
+    status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;);
+    parent_elem = elem.parent_element;
+    elem.elem_id = PRO_E_EXT_DEPTH_TO_TYPE;
+<a name="anchor-36"></a>    elem.value_data.type = PRO_VALUE_TYPE_INT;
+    elem.value_data.v.i = PRO_EXT_DEPTH_TO_BLIND;
+    status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;);
+    elem.parent_element = parent_elem;
+<a name="anchor-37"></a>    elem.elem_id = PRO_E_EXT_DEPTH_TO_VALUE;
+    elem.value_data.type = PRO_VALUE_TYPE_DOUBLE;
+    elem.value_data.v.d = 0.0;
+    status = ProTestFeatElemAdd (&amp;elem);
+    C_LOG(&quot; ProTestFeatElemAdd&quot;);
+<a name="anchor-38"></a>
+    status = ProMdlCurrentGet (&amp;model);
+    C_LOG(&quot; ProMdlCurrentGet&quot;); 
+    if ( status != PRO_TK_NO_ERROR ) return ( status );
+    status = ProMdlToModelitem( model, &amp;model_item ); 
+<a name="anchor-39"></a>    C_LOG(&quot; ProMdlToModelitem&quot;); 
+    status = ProSelectionAlloc (p_comp_path, &amp;model_item,
+          &amp;model_sel);
+    C_LOG(&quot; ProSelectionAlloc&quot;); 
+
+<a name="anchor-40"></a>    status = ProMessageDisplay ( message_file, 
+		&quot;Select a Sketched Datum Curve Feature&quot;);
+    C_LOG(&quot; ProMessageDisplay&quot;); 
+    ProTKPrintf ( &quot;Please Select a Sketched Datum Curve Feature \n&quot;);
+
+<a name="anchor-41"></a>    status = ProSelect ( &quot;feature&quot;, 1, NULL, NULL, NULL, NULL, 
+		      &amp;sketch_selection, &amp;n_select );
+    C_LOG(&quot; ProSelect&quot;); 
+
+    if ( n_select &lt;= 0 ) return -1;
+<a name="anchor-42"></a>
+    status = ProArrayAlloc ( n_select, sizeof (ProSelection), 
+                1, ( ProArray *)&amp;selection_array ); 
+    C_LOG(&quot; ProArrayAlloc&quot;); 
+
+<a name="anchor-43"></a>    status = ProSelectionCopy ( sketch_selection[0], &amp;selection_array[0] ); 
+    C_LOG(&quot; ProSelectionCopy&quot;); 
+
+/*---------------------------------------------------------------*\
+    Create the protrusion using the section of the selected feature
+<a name="anchor-44"></a>\*---------------------------------------------------------------*/
+	status = ProArrayAlloc ( 1, sizeof (ProFeatureCreateOptions), 
+		1, ( ProArray *)&amp;opts ); 
+	C_LOG(&quot; ProArrayAlloc&quot;); 
+    
+<a name="anchor-45"></a>	opts[0] = PRO_FEAT_CR_DEFINE_MISS_ELEMS;
+    status = ProFeatureSketchedWithOptionsCreate ( model_sel, elem.tree, 
+                opts, selection_array, PRO_REGEN_NO_FLAGS,
+                &amp;feature, &amp;errors );
+    C_LOG(&quot; ProFeatureSketchedWithOptionsCreate&quot;); 
+<a name="anchor-46"></a>
+	status = ProArrayFree((ProArray*)&amp;opts);
+
+/*---------------------------------------------------------------*\
+    Free up the allocated memory.
+<a name="anchor-47"></a>\*---------------------------------------------------------------*/
+    status = ProElementFree (&amp;elem.tree);
+    C_LOG(&quot; ProElementFree&quot;); 
+
+    return (status);
+<a name="anchor-48"></a>}
+
+/*===============================================================*\
+FUNCTION : ProTestFeatElemAdd
+PURPOSE  : Adds a generic feature element to the element tree.
+<a name="anchor-49"></a>\*===============================================================*/
+ProError ProTestFeatElemAdd (ProTreeElemdata *elem)
+{
+    ProElement  element;
+    ProError    status;
+<a name="anchor-50"></a>     status = ProElementAlloc (elem->elem_id, &amp;element);
+    C_LOG(&quot; ProElementAlloc&quot;); 
+	if(elem->value_data.type == PRO_VALUE_TYPE_INT)
+	{
+		status = ProElementIntegerSet (element, elem->value_data.v.i );
+<a name="anchor-51"></a>    	C_LOG( &quot; ProElementIntegerSet&quot; );
+	}
+	else if(elem->value_data.type == PRO_VALUE_TYPE_DOUBLE)
+	{
+		status = ProElementDoubleSet (element, elem->value_data.v.d );
+<a name="anchor-52"></a>    	C_LOG( &quot; ProElementDoubleSet&quot; );
+	}
+    status = ProElemtreeElementAdd (elem->parent_element, NULL, element);
+    C_LOG(&quot; ProElemtreeElementAdd&quot;); 
+    elem->parent_element = element;
+<a name="anchor-53"></a>    return (status);
+}
+
+#undef C_LOG
+#undef C_PRINT
+<a name="anchor-54"></a>
+
+</pre>
+</body>
+</html>

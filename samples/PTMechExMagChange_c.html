@@ -1,0 +1,276 @@
+<html>
+<head>
+<title>PTMechExMagChange.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*====================================================================*\
+FILE    : PTMechExCopy.c
+PURPOSE : Test Pro/TOOLKIT functions for Mechanica 
+\*====================================================================*/
+<a name="anchor-2"></a>
+/*--------------------------------------------------------------------*\
+  Pro/Toolkit includes -- include this first
+\*--------------------------------------------------------------------*/
+#include &lt;ProMechLoad.h>
+<a name="anchor-3"></a>#include &lt;ProUtil.h>
+#include &lt;ProMessage.h>
+#include &lt;ProMechValue.h>
+#include &lt;PTMechExamples.h>
+
+<a name="anchor-4"></a>/*================================================================*\
+  FUNCTION: PTMechExLoadPostfilter 
+  PURPOSE:  Selection filter to ensure that only pressure and force loads are selected
+\*================================================================*/
+static ProError PTMechExLoadPostfilter (ProSelection selection, ProAppData app_data)
+<a name="anchor-5"></a>{
+	ProModelitem mech_item;
+	ProMechLoadType load_type;
+
+	status = ProSelectionModelitemGet (selection, (ProModelitem*)&amp;mech_item);
+<a name="anchor-6"></a>    PT_TEST_LOG_SUCC (&quot;ProSelectionModelitemGet()&quot;);
+
+	if (mech_item.type != PRO_SIMULATION_LOAD)
+		return (PRO_TK_CONTINUE);
+   
+<a name="anchor-7"></a>    status =ProMechloadTypeGet (&amp;mech_item,&amp;load_type);
+    PT_TEST_LOG_SUCC(&quot;=ProMechloadTypeGet&quot;);
+
+    if (((load_type != PRO_MECH_LOAD_FORCE) &amp;&amp; (load_type != PRO_MECH_LOAD_PRESSURE)) || (status != PRO_TK_NO_ERROR))
+  		return (PRO_TK_CONTINUE);
+<a name="anchor-8"></a>
+	return (PRO_TK_NO_ERROR);
+}
+
+/*=============================================================*\
+<a name="anchor-9"></a>  FUNCTION: PTMechExMagChange  
+  PURPOSE:  Increases the magnitude of force/pressure 
+\*=============================================================*/
+
+ProError PTMechExMagChange ()
+<a name="anchor-10"></a>{
+  ProSelection* sels;
+  ProSelFunctions sel_funcs;
+  ProMechItem mech_item;
+  int n_sels, i=0;
+<a name="anchor-11"></a>  ProMdl constraint_part;
+  ProMechLoadType load_type;
+  ProMechVectoredValue force_vect_value;
+  ProMechValue force_value_mag;
+  ProMechForceData force_data;
+<a name="anchor-12"></a>  ProMechStatus mech_status;
+  ProMechPressureData press_data;
+  ProMechValue press_mech_val;
+  double mag;
+  ProLine val,val_5times;
+<a name="anchor-13"></a>  char curr_mag1[PRO_LINE_SIZE];
+  char curr_mag2[PRO_LINE_SIZE];
+
+  status = ProMdlCurrentGet(&amp;constraint_part);
+  PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet&quot;);
+<a name="anchor-14"></a>
+  sel_funcs.pre_filter = NULL;
+  sel_funcs.post_filter = PTMechExLoadPostfilter;
+  sel_funcs.post_selact = NULL;
+  sel_funcs.app_data = NULL;
+<a name="anchor-15"></a>
+  while (1)
+  {
+	status = ProMessageDisplay(msgfile, &quot;PTMechEx Select the load&quot;, msgbuf);
+	PT_TEST_LOG_SUCC(&quot;ProMessageDisplay()&quot;);
+<a name="anchor-16"></a>
+
+    status =ProSelect (&quot;sim_load&quot;,
+		       1,
+		       NULL, 
+<a name="anchor-17"></a>		       &amp;sel_funcs,
+		       NULL,
+		       NULL,
+		       &amp;sels,
+		       &amp;n_sels);
+<a name="anchor-18"></a>    PT_TEST_LOG_SUCC (&quot;ProSelect()&quot;);
+    
+    if( status != PRO_TK_NO_ERROR || n_sels &lt;= 0 )
+      break; 
+    
+<a name="anchor-19"></a>    status = ProSelectionModelitemGet (sels[i], (ProModelitem*)&amp;mech_item);
+    PT_TEST_LOG_SUCC (&quot;ProSelectionModelitemGet()&quot;);
+    
+    status =ProMechloadTypeGet (&amp;mech_item,&amp;load_type);
+    PT_TEST_LOG_SUCC(&quot;=ProMechloadTypeGet&quot;);
+<a name="anchor-20"></a>
+/*--------------------------------------------------------------------*\
+  Get the force data 
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-21"></a>    if (load_type == PRO_MECH_LOAD_FORCE)
+      {
+
+        status = ProMechloadForcedataGet (&amp;mech_item, &amp;force_data);
+	PT_TEST_LOG_SUCC (&quot;ProMechloadForcedataGet&quot;);
+<a name="anchor-22"></a>
+	status = ProMechforcedataForceGet (force_data,&amp;force_vect_value);
+	PT_TEST_LOG_SUCC(&quot;ProMechforcedataForceGet&quot;);
+
+	status = ProMechvectoredvalueMagnitudeGet (force_vect_value,&amp;force_value_mag);
+<a name="anchor-23"></a>	PT_TEST_LOG_SUCC(&quot;ProMechvectoredvalueMagnitudeGet&quot;);
+/*--------------------------------------------------------------------*\
+  Check if the  magnitude is required field 
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-24"></a>	if (status == PRO_TK_E_NOT_FOUND)
+	  {
+	    status = ProMessageDisplay(msgfile, &quot;PTMechEx Magnitude is not used for this load.&quot;);
+	    PT_TEST_LOG_SUCC(&quot;ProMessageDisplay()&quot;);
+	    continue;
+<a name="anchor-25"></a>	  }
+
+/*--------------------------------------------------------------------*\
+  Get the magnitude value 
+\*--------------------------------------------------------------------*/
+<a name="anchor-26"></a>	
+	status = ProMechvalueValueGet (force_value_mag,val);
+	PT_TEST_LOG_SUCC(&quot;ProMechvalueValueGet&quot;);
+
+
+<a name="anchor-27"></a>/*--------------------------------------------------------------------*\
+  Increase the magnitude 
+\*--------------------------------------------------------------------*/
+	
+	if ( status == PRO_TK_NO_ERROR)
+<a name="anchor-28"></a>	  {
+
+            ProWstringToString(curr_mag1,val);
+	    PTMechExMagValueIncrease(val,val_5times);
+
+<a name="anchor-29"></a>/*--------------------------------------------------------------------*\
+  Set the magnitude value 
+\*--------------------------------------------------------------------*/
+	    
+	    status = ProMechvalueValueSet (force_value_mag,val_5times);
+<a name="anchor-30"></a>	    PT_TEST_LOG_SUCC (&quot;ProMechvalueValueSet&quot;);
+	    
+	    status = ProMechvectoredvalueMagnitudeSet (force_vect_value, force_value_mag);
+	    PT_TEST_LOG_SUCC (&quot;ProMechvectoredvalueMagnitudeSet&quot;);
+	    
+<a name="anchor-31"></a>	    status = ProMechforcedataForceSet (force_data, force_vect_value);
+	    PT_TEST_LOG_SUCC (&quot;ProMechforcedataForceSet&quot;);
+	    
+	  }
+/*--------------------------------------------------------------------*\   
+<a name="anchor-32"></a>  Set the force data 
+\*--------------------------------------------------------------------*/
+
+	status = ProMechloadForcedataSet (&amp;mech_item,force_data);
+	PT_TEST_LOG_SUCC(&quot;ProMechloadForcedataSet&quot;);
+<a name="anchor-33"></a>
+/*--------------------------------------------------------------------*\
+ Confirm the changed value 
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-34"></a>        status = ProMechloadForcedataGet (&amp;mech_item, &amp;force_data);
+        PT_TEST_LOG_SUCC (&quot;ProMechloadForcedataGet&quot;);
+
+        status = ProMechforcedataForceGet (force_data,&amp;force_vect_value);
+        PT_TEST_LOG_SUCC(&quot;ProMechforcedataForceGet&quot;);
+<a name="anchor-35"></a>
+        status = ProMechvectoredvalueMagnitudeGet (force_vect_value,&amp;force_value_mag);
+        PT_TEST_LOG_SUCC(&quot;ProMechvectoredvalueMagnitudeGet&quot;);
+
+        status = ProMechvalueValueGet (force_value_mag,val);
+<a name="anchor-36"></a>        PT_TEST_LOG_SUCC(&quot;ProMechvalueValueGet&quot;);
+
+        ProWstringToString(curr_mag2,val);
+      }
+    
+<a name="anchor-37"></a>    if (load_type == PRO_MECH_LOAD_PRESSURE)
+      
+/*--------------------------------------------------------------------*\
+  Get the pressure data 
+\*--------------------------------------------------------------------*/
+<a name="anchor-38"></a>      {
+	status = ProMechloadPressuredataGet (&amp;mech_item,&amp;press_data);
+	PT_TEST_LOG_SUCC(&quot;ProMechloadPressuredataGet&quot;);
+	
+	status = ProMechpressuredataValueGet (press_data,&amp;press_mech_val);
+<a name="anchor-39"></a>	PT_TEST_LOG_SUCC(&quot;ProMechpressuredataValueGet&quot;);
+	
+/*--------------------------------------------------------------------*\
+  Get the value 
+\*--------------------------------------------------------------------*/
+<a name="anchor-40"></a>
+	status = ProMechvalueValueGet (press_mech_val,val);
+	PT_TEST_LOG_SUCC(&quot;ProMechvalueValueGet&quot;);
+	
+/*--------------------------------------------------------------------*\
+<a name="anchor-41"></a>  Increase the magnitude
+\*--------------------------------------------------------------------*/
+	
+	if ( status == PRO_TK_NO_ERROR)
+	  
+<a name="anchor-42"></a>	 {
+
+           ProWstringToString(curr_mag1,val);
+	   PTMechExMagValueIncrease(val,val_5times);
+	    
+<a name="anchor-43"></a>	   status = ProMechvalueValueSet (press_mech_val,val_5times);
+	   PT_TEST_LOG_SUCC (&quot;ProMechvalueValueSet&quot;);
+	   
+	   status = ProMechpressuredataValueSet (press_data,press_mech_val);
+	   PT_TEST_LOG_SUCC(&quot;ProMechpressuredataValueSet&quot;);
+<a name="anchor-44"></a>	 }
+
+/*--------------------------------------------------------------------*\
+  Set the pressure data
+\*--------------------------------------------------------------------*/
+<a name="anchor-45"></a>	
+	status = ProMechloadPressuredataSet (&amp;mech_item,press_data);
+	PT_TEST_LOG_SUCC(&quot;ProMechloadPressuredataSet&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-46"></a> Confirm the changed value
+\*--------------------------------------------------------------------*/
+
+        status = ProMechloadPressuredataGet (&amp;mech_item,&amp;press_data);
+        PT_TEST_LOG_SUCC(&quot;ProMechloadPressuredataGet&quot;);
+<a name="anchor-47"></a>
+        status = ProMechpressuredataValueGet (press_data,&amp;press_mech_val);
+        PT_TEST_LOG_SUCC(&quot;ProMechpressuredataValueGet&quot;);
+
+        status = ProMechvalueValueGet (press_mech_val,val);
+<a name="anchor-48"></a>        PT_TEST_LOG_SUCC(&quot;ProMechvalueValueGet&quot;);
+
+        ProWstringToString(curr_mag2,val);
+      }
+    
+<a name="anchor-49"></a>    status = ProMechitemUpdateComplete (&amp;mech_item);
+    PT_TEST_LOG_SUCC (&quot;ProMechitemUpdateComplete&quot;);
+    
+    status = ProMechitemStatusGet (&amp;mech_item, &amp;mech_status);
+    PT_TEST_LOG_SUCC (&quot;ProMechitemStatusGet&quot;);
+<a name="anchor-50"></a>    
+/*--------------------------------------------------------------------*\
+  Print Message from the result
+\*--------------------------------------------------------------------*/
+    if (mech_status == PRO_MECH_ACTIVE)
+<a name="anchor-51"></a>      {
+	status = ProMessageDisplay(msgfile, &quot;PTMechEx Magnitude changed successfuly&quot;,curr_mag1,curr_mag2);
+	PT_TEST_LOG_SUCC(&quot;ProMessageDisplay()&quot;);
+      }
+    else
+<a name="anchor-52"></a>      {
+	status = ProMessageDisplay(msgfile, &quot;PTMechEx Magnitude modification failed&quot;, msgbuf);
+	PT_TEST_LOG_SUCC(&quot;ProMessageDisplay()&quot;);
+      }
+  
+<a name="anchor-53"></a>  }
+  return PRO_TK_NO_ERROR;
+}
+</pre>
+</body>
+</html>

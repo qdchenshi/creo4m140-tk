@@ -1,0 +1,178 @@
+<html>
+<head>
+<title>UgAnimAsmcompAnim.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*------------------------------------------------------------------*\
+Pro/Toolkit includes
+\*------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProSelection.h>
+#include &lt;ProAsmcomppath.h>
+#include &lt;ProAnimate.h>
+#include &lt;ProMessage.h>
+<a name="anchor-3"></a>#include &lt;ProUtil.h>
+#include &lt;ProModelitem.h>
+
+/*------------------------------------------------------------------*\
+Application includes 
+<a name="anchor-4"></a>\*------------------------------------------------------------------*/
+#include &lt;TestError.h>
+
+/*------------------------------------------------------------------*\
+    C System includes
+<a name="anchor-5"></a>\*------------------------------------------------------------------*/
+#include &lt;math.h>
+
+/*------------------------------------------------------------------*\
+Application data
+<a name="anchor-6"></a>\*------------------------------------------------------------------*/
+#define MAX_NUM_FRAMES 20 
+#define PI 3.1451
+
+/*==================================================================*\
+<a name="anchor-7"></a>FUNCTION : UserAsmcompAnimate()
+PURPOSE  : Animates an assembly component.
+\*==================================================================*/
+int UserAsmcompAnimate()
+{
+<a name="anchor-8"></a>    ProMdl model ;               /* current model */    
+    ProModelitem anim_mdlitem ;  /* Modelitem for anim. component */
+    ProMdl anim_model ;          /* Mdl for anim. component */
+    ProSelection *p_sel_comp ;   /* ProSelection for anim. comp. */
+    ProAnimObj anim_obj ;        /* anim. object for anim. comp. */
+<a name="anchor-9"></a>    ProAsmcomppath comp_path ;   /* component path for anim. comp. */
+    int n_sel ;                  /* number of selections */
+    ProMatrix pos_mat ;          /* transformation matrix of assembly 
+                                    component */
+    double angle ;               /* rotation angle */
+<a name="anchor-10"></a>    int num_frames ;             /* number of frames in animation */
+    int range[2] ;               /* allowable range for input  */
+    ProAnimFrame frame ;         /* animation frame */
+    ProAnimMovie anim_movie ;    /* movie */
+    int i ;                      /* counter */
+<a name="anchor-11"></a>    ProName msg_file ;           /* message file */
+    int err ;                    /* return status */
+    ProMatrix frame_view = {
+                            {1.0, 0.0, 0.0, 0.0},
+                            {0.0, 1.0, 0.0, 0.0},
+<a name="anchor-12"></a>                            {0.0, 0.0, 1.0, 0.0},
+                            {0.0, 0.0, 0.0, 1.0} 
+                           };   /* view matrix for frame */
+    
+    void ProUtilRotX(double, ProMatrix) ;  /* rotation function */
+<a name="anchor-13"></a>
+
+    ProStringToWstring(msg_file, &quot;msg_ugfund.txt&quot;) ;
+
+/*------------------------------------------------------------------*\
+<a name="anchor-14"></a>    Get the current model.
+\*------------------------------------------------------------------*/
+    err = ProMdlCurrentGet(&amp;model);
+    ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, &quot;ProMdlCurrentGet()&quot;, err); 
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-15"></a>    {
+       ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, 
+           &quot;Error getting current model.&quot;); 
+       return(err) ; 
+    }
+<a name="anchor-16"></a>
+/*------------------------------------------------------------------*\
+    Get the component to be animated (only 1 allowed).
+\*------------------------------------------------------------------*/
+    ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, 
+<a name="anchor-17"></a>        &quot;Select a component to be animated.&quot;) ; 
+    err = ProSelect(&quot;prt_or_asm&quot;, 1, NULL, NULL, NULL, NULL, 
+        &amp;p_sel_comp, &amp;n_sel) ; 
+    ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, &quot;ProSelect()&quot;, err); 
+    if ( err != PRO_TK_NO_ERROR )
+<a name="anchor-18"></a>    {
+        ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, 
+            &quot;Error or abort during selection.&quot;) ; 
+        return(err) ; 
+    }
+<a name="anchor-19"></a>
+/*------------------------------------------------------------------*\
+    Get the transformation matrix of the selection.
+\*------------------------------------------------------------------*/
+    err = ProSelectionAsmcomppathGet(p_sel_comp[0], &amp;comp_path) ; 
+<a name="anchor-20"></a>    ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, 
+        &quot;ProSelectionAsmcomppathGet()&quot;, err); 
+    err = ProAsmcomppathTrfGet(&amp;comp_path, PRO_B_TRUE, pos_mat) ; 
+    ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, &quot;ProAsmcomppathTrfGet()&quot;, err); 
+    
+<a name="anchor-21"></a>/*------------------------------------------------------------------*\
+    Get ProModelitem and ProMdl for component.
+\*------------------------------------------------------------------*/
+    err = ProSelectionModelitemGet(p_sel_comp[0], &amp;anim_mdlitem) ; 
+    ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, &quot;ProSelectionModelitemGet()&quot;, 
+<a name="anchor-22"></a>        err); 
+
+    err = ProModelitemMdlGet(&amp;anim_mdlitem, &amp;anim_model) ; 
+    ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, &quot;ProModelitemMdlGet()&quot;, err); 
+
+<a name="anchor-23"></a>/*------------------------------------------------------------------*\
+    Create the animation.
+\*------------------------------------------------------------------*/
+    err = ProAnimmovieCreate(anim_model, &amp;anim_movie) ; 
+    ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, &quot;ProAnimmovieCreate()&quot;, err); 
+<a name="anchor-24"></a>    
+    angle = 0.0 ; 
+    ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, 
+        &quot;Enter the number of frames: &quot;) ; 
+    range[0] = 2 ; range[1] = MAX_NUM_FRAMES ; 
+<a name="anchor-25"></a>    ProMessageIntegerRead(range, &amp;num_frames) ; 
+
+    for (i=0 ; i &lt; num_frames ; i++) 
+    {
+        angle += 360.0/ (double) num_frames  ; 
+<a name="anchor-26"></a>        ProUtilRotX(angle, pos_mat) ; 
+
+        err = ProAnimobjectCreate(p_sel_comp[0], pos_mat, &amp;anim_obj) ; 
+        ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, &quot;ProAnimobjectCreate()&quot;, err); 
+        
+<a name="anchor-27"></a>        err = ProAnimframeCreate(frame_view, &amp;frame) ; 
+        ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, &quot;ProAnimframeCreate()&quot;, err); 
+
+        err = ProAnimframeObjAdd(frame, anim_obj) ; 
+        ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, &quot;ProAnimframeObjAdd()&quot;, err); 
+<a name="anchor-28"></a>
+        err = ProAnimmovieFrameAdd(anim_movie, frame) ; 
+        ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, &quot;ProAnimmovieFrameAdd()&quot;, err); 
+
+    }
+<a name="anchor-29"></a>
+    err = ProBatchAnimationStart(anim_movie, NULL, NULL) ; 
+    ERROR_CHECK(&quot;UserAsmcompAnimate()&quot;, &quot;ProBatchAnimationStart()&quot;, err); 
+        
+    return(PRO_TK_NO_ERROR) ; 
+<a name="anchor-30"></a>}
+
+/*------------------------------------------------------------------*\
+FUNCTION:   ProUtilRotX()
+PURPOSE:    Add x rotation values to the transformation matrix.
+<a name="anchor-31"></a>RETURNS:    None
+NOTE:       Only the rotation components of the matrix are 
+            modified.
+\*------------------------------------------------------------------*/
+void ProUtilRotX( 
+<a name="anchor-32"></a>    double angle,       /* (In)   The rotation angle */
+    ProMatrix mx )      /* (Out)  The transformation matrix */
+{
+    mx[0][0] = 1.0;
+    mx[0][1] = mx[0][2] = mx[1][0] = mx[2][0] = 0.0;
+<a name="anchor-33"></a>    mx[1][1] = mx[2][2] = cos( angle * PI / 180.0);
+    mx[1][2] = sin( angle * PI / 180.0);
+    mx[2][1] = - mx[1][2];
+}
+
+</pre>
+</body>
+</html>

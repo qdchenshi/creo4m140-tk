@@ -1,0 +1,1505 @@
+<html>
+<head>
+<title>TestAsm.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProAssembly.h>
+#include &lt;ProElemId.h>
+#include &lt;ProElement.h>
+#include &lt;ProExpldstate.h>
+<a name="anchor-3"></a>#include &lt;ProFeatType.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMessage.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProMenu.h>
+<a name="anchor-4"></a>#include &lt;ProSelection.h>
+#include &lt;ProSolid.h>
+#include &lt;ProUtil.h>
+#include &lt;ProValue.h>
+#include &lt;ProWindows.h>
+<a name="anchor-5"></a>#include &lt;ProSkeleton.h>
+#include &lt;ProAsmcomp.h>
+
+#if (PRO_MACHINE == SUN4 || PRO_MACHINE == SOLARISx64 || PRO_MACHINE == HP8000)
+#include &lt;unistd.h>
+<a name="anchor-6"></a>#elif(PRO_MACHINE == i486_nt || PRO_MACHINE == x86_win64)  
+#include &lt;windows.h>
+#endif
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-7"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestSleep.h&quot;
+#include &quot;TestFiletypes.h&quot;
+<a name="anchor-8"></a>#include &quot;UtilFiles.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilNames.h&quot;
+#include &quot;UtilCollect.h&quot;
+<a name="anchor-9"></a>#include &quot;UtilTree.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &quot;PTApplsUnicodeUtils.h&quot;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-10"></a>    Application macros
+\*--------------------------------------------------------------------*/
+#define TEST_ASM_EXPLODE		1
+#define TEST_ASM_UNEXPLODE		2
+#define TEST_ASM_EXPLODE_LIST   	3
+<a name="anchor-11"></a>#define TEST_ASM_SET_CURRENT_EXPLODE	4
+
+#define TEST_ASMCOMP_CONSTR_REDEF	10
+#define TEST_ASMCOMP_REGENERATE		11
+#define TEST_ASMCOMP_INFO		12
+<a name="anchor-12"></a>#define TEST_ASMCOMP_PACKAGE_MOVE	13
+#define TEST_ASMCOMP_CONSTR_REMOVE	14	
+#define TEST_ASMCOMP_ASSEMBLE		15
+#define TEST_ASMCOMP_REDEFINE		16
+#define TEST_ASMCOMP_TREE_INFO		17
+<a name="anchor-13"></a>
+#define TEST_ASMCOMP_PACKAGE_MOVE20     18
+
+#define TEST_ASMCOMP_MECHANISM      19
+
+<a name="anchor-14"></a>#define TEST_ASMCOMP_CREATE		20
+#define TEST_ASMCOMP_REPLACE		21
+
+
+
+<a name="anchor-15"></a>#define TEST_ASMCOMP_MOTION_UNDEF       PRO_M_UNDEF
+#define TEST_ASMCOMP_MOTION_ORIENTMODE  PRO_M_ORIENTMODE
+#define TEST_ASMCOMP_MOTION_TRANSLATE   PRO_M_TRANSLATE
+#define TEST_ASMCOMP_MOTION_ROTATE      PRO_M_ROTATE
+#define TEST_ASMCOMP_MOTION_ADJUST      PRO_M_ADJUST
+<a name="anchor-16"></a>#define TEST_ASMCOMP_SHOWUI_DIALOG      PRO_B_TRUE
+#define TEST_ASMCOMP_SHOWUI_ACTION      PRO_B_FALSE
+#define TEST_ASMCOMP_REF_VIEW_PLANE     PRO_M_VIEW_PLANE
+#define TEST_ASMCOMP_REF_SEL_PLANE      PRO_M_SEL_PLANE
+#define TEST_ASMCOMP_REF_ENTITY_EDGE    PRO_M_ENTITY_EDGE
+<a name="anchor-17"></a>#define TEST_ASMCOMP_REF_PLANE_NORMAL   PRO_M_PLANE_NORMAL
+#define TEST_ASMCOMP_REF_2_POINTS       PRO_M_2_POINTS
+#define TEST_ASMCOMP_REF_CSYS_X         PRO_M_CSYS_X
+#define TEST_ASMCOMP_REF_CSYS_Y         PRO_M_CSYS_Y
+#define TEST_ASMCOMP_REF_CSYS_Z         PRO_M_CSYS_Z
+<a name="anchor-18"></a>
+/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+typedef struct pro_test_asm_comp_type_str
+<a name="anchor-19"></a>{
+    ProAsmcompType type;
+    char *str;
+} ProTestAsmcompTypeStr;
+
+<a name="anchor-20"></a>typedef struct app_data
+{
+    ProAssembly assembly;
+    FILE *fp;
+} ProTestAppData;
+<a name="anchor-21"></a>
+typedef struct tag_menubut
+{
+    char *button;
+    int action;
+<a name="anchor-22"></a>} ProTestMenuButton;
+
+ProError ProTestExpldstateVisit(ProGeomitem	*p_geomitem,
+                          ProError err, ProAppData p_appdata);
+/*--------------------------------------------------------------------*\
+<a name="anchor-23"></a>Application global/external data
+\*--------------------------------------------------------------------*/
+
+/*====================================================================*\
+  Function : ProTestMenuDynamicRegister ()
+<a name="anchor-24"></a>  Purpose  : Dinamically register of menu
+\*====================================================================*/
+int ProTestMenuDynamicRegister (
+    char* name_menu,
+    ProTestMenuButton buttons[],
+<a name="anchor-25"></a>    int n_but)
+{
+    int i, dummy;
+    ProError status;
+    wchar_t **names;
+<a name="anchor-26"></a>
+    ProUtilMenuStringsAlloc( &amp;names );
+
+    for (i=0; i&lt;n_but; i++)
+    {
+<a name="anchor-27"></a>        ProUtilMenuStringsStrAdd( &amp;names, buttons[i].button );
+    }
+
+    status = ProMenuFromStringsRegister ( name_menu, NULL, names, NULL,
+        NULL, &amp;dummy);
+<a name="anchor-28"></a>    TEST_CALL_REPORT(&quot;ProMenuFromStringsRegister()&quot;,
+        &quot;ProTestAsmcompFunc()&quot;, status, status != PRO_TK_NO_ERROR);
+
+    ProUtilMenuStringsFree( &amp;names );
+
+<a name="anchor-29"></a>    return (dummy);
+}
+
+/*====================================================================*\
+  Function : ProTestAsmFunc()
+<a name="anchor-30"></a>  Purpose  : to test some ProAssembly functions
+\*====================================================================*/
+int ProTestAsmFunc(ProMdl *model)
+{
+    ProError 		status;
+<a name="anchor-31"></a>    int                 menu_id;    /* The identifier of the created menu */
+    int                 menu_action;
+ 
+    int			ProTestAsmExplode(ProAppData _appdata,int option);
+
+<a name="anchor-32"></a>
+    /* Load menu from file */
+    status = ProMenuFileRegister((char *)&quot;TkExplodeState&quot;, (char *)&quot;tkexpld.mnu&quot;,
+                                  &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestAsmFunc()&quot;,
+<a name="anchor-33"></a>                        status, status != PRO_TK_NO_ERROR );
+
+    /* Define menu buttons */
+    ProMenubuttonActionSet((char *)&quot;TkExplodeState&quot;, (char *)&quot;Explode&quot;,
+        (ProMenubuttonAction)ProTestAsmExplode, model, TEST_ASM_EXPLODE );
+<a name="anchor-34"></a>    ProMenubuttonActionSet((char *)&quot;TkExplodeState&quot;, (char *)&quot;Unexplode&quot;,
+        (ProMenubuttonAction)ProTestAsmExplode, model, TEST_ASM_UNEXPLODE );
+    ProMenubuttonActionSet((char *)&quot;TkExplodeState&quot;,(char *)&quot;Set Current&quot;,
+        (ProMenubuttonAction)ProTestAsmExplode, model, 
+	TEST_ASM_SET_CURRENT_EXPLODE );
+<a name="anchor-35"></a>    ProMenubuttonActionSet((char *)&quot;TkExplodeState&quot;, (char *)&quot;List&quot;,
+        (ProMenubuttonAction)ProTestAsmExplode, model, TEST_ASM_EXPLODE_LIST );
+    ProMenubuttonActionSet((char *)&quot;TkExplodeState&quot;, (char *)&quot;TkExplodeState Done&quot;,
+        (ProMenubuttonAction)ProMenuDelete, model, 0 );
+    ProMenubuttonActionSet((char *)&quot;TkExplodeState&quot;, (char *)&quot;TkExplodeState&quot;,
+<a name="anchor-36"></a>        (ProMenubuttonAction)ProMenuDelete, model, 0 );
+
+    /* Run menu */
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;TkExplodeState&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestAsmFunc()&quot;,
+<a name="anchor-37"></a>                        status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+    {
+        status = ProMenuProcess((char *)&quot;TkExplodeState&quot;, &amp;menu_action );
+        TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestAsmFunc()&quot;,
+<a name="anchor-38"></a>                            status, status != PRO_TK_NO_ERROR );
+    }
+
+
+    return (0);
+<a name="anchor-39"></a>}
+
+
+
+/*====================================================================*\
+<a name="anchor-40"></a>  Function : ProTestAsmExplode()
+  Purpose  : to test assembly explosions
+\*====================================================================*/
+int ProTestAsmExplode( 
+    ProAppData		p_appdata,
+<a name="anchor-41"></a>    int			option
+)
+{
+    ProError		status;
+    ProAssembly		p_assembly;
+<a name="anchor-42"></a>    ProExpldstate	expldstate;
+    ProExpldstate       current_expldstate;
+    ProBoolean		is_exploded;
+    FILE		*fp;
+    ProGeomitem         *geomitems;
+<a name="anchor-43"></a>    int                 i, geomitems_num;
+
+
+    p_assembly = *((ProAssembly*)p_appdata);
+    memset( &amp;expldstate, 0, sizeof(ProExpldstate) );
+<a name="anchor-44"></a>    memset( &amp;current_expldstate, 0, sizeof(ProExpldstate) );
+
+    status = ProAssemblyIsExploded( p_assembly, &amp;is_exploded );
+    TEST_CALL_REPORT( &quot;ProAssemblyIsExploded()&quot;, &quot;ProTestAsmExplode()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-45"></a>
+    status = ProExpldstateActiveGet( p_assembly, &amp;current_expldstate );
+    TEST_CALL_REPORT( &quot;ProExpldstateActiveGet()&quot;, &quot;ProTestAsmExplode()&quot;,
+                                    status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-46"></a>    switch( option )
+    {
+      case TEST_ASM_EXPLODE:
+	if( is_exploded != PRO_B_TRUE )
+	{
+<a name="anchor-47"></a>            status = ProAssemblyExplode( p_assembly );
+            TEST_CALL_REPORT( &quot;ProAssemblyExplode()&quot;, &quot;ProTestAsmExplode()&quot;,
+            	status, status != PRO_TK_NO_ERROR);
+       	    
+	    if( status == PRO_TK_NO_ERROR ) 
+<a name="anchor-48"></a>	    	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Assembly exploded&quot; );
+	}
+	else
+	    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Assembly already exploded&quot; );
+	break;
+<a name="anchor-49"></a>
+      case TEST_ASM_UNEXPLODE:
+        if( is_exploded != PRO_B_FALSE )
+        {
+            status = ProAssemblyUnexplode( p_assembly );
+<a name="anchor-50"></a>            TEST_CALL_REPORT( &quot;ProAssemblyUnexplode()&quot;, &quot;ProTestAsmExplode()&quot;,
+            	status, status != PRO_TK_NO_ERROR);
+
+            if( status == PRO_TK_NO_ERROR )
+        	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Assembly unexploded&quot; );
+<a name="anchor-51"></a>        }
+        else
+            ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Assembly already unexploded&quot; );
+	break;
+
+<a name="anchor-52"></a>      case TEST_ASM_EXPLODE_LIST:
+	fp = PTApplsUnicodeFopen( &quot;explode.lst&quot;, &quot;wt&quot; );
+	if( fp != NULL )
+	{
+            ProTKFprintf( fp, &quot;!--------------------------\n&quot; );
+<a name="anchor-53"></a>	    ProTKFprintf( fp, &quot;!EXPLODE NAME\tOWNER NAME\n&quot; );
+            ProTKFprintf( fp, &quot;!--------------------------\n&quot; );
+                
+            status = ProUtilCollectExplstate (p_assembly, &amp;geomitems);
+            TEST_CALL_REPORT(&quot;ProUtilCollectExplstate()&quot;, &quot;ProTestAsmExplode()&quot;,
+<a name="anchor-54"></a>                status, status != PRO_TK_NO_ERROR);
+            if (status == PRO_TK_NO_ERROR)
+            {
+                status = ProArraySizeGet ((ProArray)geomitems, &amp;geomitems_num);
+                TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestAsmExplode()&quot;, 
+<a name="anchor-55"></a>                    status, status != PRO_TK_NO_ERROR );
+                for (i = 0; i &lt; geomitems_num; i++)
+                {
+                    status = ProTestExpldstateVisit (&amp;geomitems[i],
+	                PRO_TK_NO_ERROR, (ProAppData)fp);
+<a name="anchor-56"></a>                }
+                status = ProArrayFree ((ProArray*)&amp;geomitems);
+                TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestAsmExplode()&quot;, 
+                    status, status != PRO_TK_NO_ERROR );
+            }
+<a name="anchor-57"></a>
+	    fclose( fp );
+	}
+	break;
+
+<a name="anchor-58"></a>      case TEST_ASM_SET_CURRENT_EXPLODE:
+    	status = ProExpldstateSelect( p_assembly, &amp;expldstate );
+    	TEST_CALL_REPORT(&quot;ProExpldstateSelect()&quot;, &quot;ProTestAsmExplode()&quot;,
+    		status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-59"></a>    	status = ProExpldstateActivate( p_assembly, &amp;expldstate );
+    	TEST_CALL_REPORT( &quot;ProExpldstateActivate()&quot;, &quot;ProTestAsmExplode()&quot;,
+        	status, status != PRO_TK_NO_ERROR);
+        break;
+    }
+<a name="anchor-60"></a>
+    if( current_expldstate.id != expldstate.id )
+    {
+    	status = ProWindowRepaint( PRO_VALUE_UNUSED );
+    	TEST_CALL_REPORT( &quot;ProWindowRepaint()&quot;, &quot;ProTestAsmExplode()&quot;,
+<a name="anchor-61"></a>		status, status != PRO_TK_NO_ERROR );
+    }
+
+
+    return 0;
+<a name="anchor-62"></a>}
+
+
+
+/*====================================================================*\
+<a name="anchor-63"></a>  Function : ProTestExpldstateVisit(
+  Purpose  : visit action to visit assembly explosions
+\*====================================================================*/
+ProError ProTestExpldstateVisit(
+    ProGeomitem		*p_geomitem,
+<a name="anchor-64"></a>    ProError		err,
+    ProAppData		p_appdata
+)
+{
+    ProError		status;
+<a name="anchor-65"></a>    FILE		*fp;
+    ProMdlName		wname;
+    char		explode_name[ PRO_MDLNAME_SIZE ];
+    char                model_name[ PRO_MDLNAME_SIZE ];
+    ProMdl		p_model;
+<a name="anchor-66"></a>
+
+    TEST_CALL_REPORT(&quot;ProGeomitemAction()&quot;, &quot;ProTestExpldstateVisit()&quot;,
+    PRO_TK_NO_ERROR, 0);
+
+<a name="anchor-67"></a>    fp = (FILE*)p_appdata;
+
+    status = ProModelitemNameGet( p_geomitem, wname );
+    TEST_CALL_REPORT( &quot;ProModelitemNameGet()&quot;, &quot;ProTestExpldstateVisit()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-68"></a>
+    ProWstringToString( explode_name, wname );
+
+    status = ProModelitemMdlGet( p_geomitem, &amp;p_model );
+    TEST_CALL_REPORT( &quot;ProModelitemMdlGet()&quot;, &quot;ProTestExpldstateVisit()&quot;,
+<a name="anchor-69"></a>        status, status != PRO_TK_NO_ERROR );
+
+    status = ProMdlMdlnameGet( p_model, wname );
+    TEST_CALL_REPORT( &quot;ProMdlMdlnameGet()&quot;, &quot;ProTestExpldstateVisit()&quot;,
+        status, status != PRO_TK_NO_ERROR );
+<a name="anchor-70"></a>
+    ProWstringToString( model_name, wname );
+
+    ProTKFprintf( fp, &quot;%s\t\t%s\n&quot;, explode_name, model_name );
+
+<a name="anchor-71"></a>
+    return PRO_TK_NO_ERROR;
+}
+
+
+<a name="anchor-72"></a>
+/*====================================================================*\
+  Function : ProTestExpldstateFilter
+  Purpose  : filter action to filter assembly explosions
+\*====================================================================*/
+<a name="anchor-73"></a>ProError ProTestExpldstateFilter(
+    ProGeomitem         *p_geomitem,
+    ProAppData          p_appdata
+)
+{
+<a name="anchor-74"></a>    TEST_CALL_REPORT(&quot;ProGeomitemFilter()&quot;, &quot;ProTestExpldstateFilter()&quot;,
+    PRO_TK_NO_ERROR, 0);
+
+    if( p_geomitem->type == PRO_EXPLD_STATE )
+	return PRO_TK_NO_ERROR;
+<a name="anchor-75"></a>
+    return PRO_TK_CONTINUE;
+}
+
+
+<a name="anchor-76"></a>
+/*====================================================================*\
+  Function : ProTestAsmcomppathFunc()
+  Purpose  : to test some ProAssembly functions
+\*====================================================================*/
+<a name="anchor-77"></a>int ProTestAsmcomppathFunc(ProMdl *mdl)
+{
+    ProError status;
+    ProAsmcomppath comppath, comp_path;
+    ProAssembly assembly = *(ProAssembly *)mdl;
+<a name="anchor-78"></a>    ProMdl model;
+    ProSelection *p_sel;
+    char name[PRO_NAME_SIZE], type[PRO_TYPE_SIZE];
+    ProCharLine str;
+    int n_sel,i;
+<a name="anchor-79"></a>    ProMatrix matrix;
+    ProVector tvec;
+    ProBoolean bool_val;
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;Test %0s&quot;, &quot;Select an assembly component&quot;);
+<a name="anchor-80"></a>
+    n_sel = 0;
+    status = ProSelect((char *)&quot;prt_or_asm&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+	    status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_USER_ABORT &amp;&amp;
+<a name="anchor-81"></a>	    status != PRO_TK_PICK_ABOVE);
+    if (status != PRO_TK_NO_ERROR &amp;&amp; n_sel&lt;1)
+	return (0);
+
+    status = ProSelectionAsmcomppathGet(p_sel[0], &amp;comp_path);
+<a name="anchor-82"></a>    TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+
+    status = ProAsmcomppathInit(comp_path.owner, comp_path.comp_id_table, 
+				comp_path.table_num, &amp;comppath);
+<a name="anchor-83"></a>    TEST_CALL_REPORT(&quot;ProAsmcomppathInit()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+        
+    status = ProAssemblyDynPosGet(assembly, &amp;bool_val);
+    TEST_CALL_REPORT(&quot;ProAssemblyDynPosGet()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+<a name="anchor-84"></a>				    status, status != PRO_TK_NO_ERROR);
+        
+    status = ProAssemblyDynPosSet(assembly, PRO_B_TRUE);
+    TEST_CALL_REPORT(&quot;ProAssemblyDynPosSet()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-85"></a>
+    status = ProAsmcomppathMdlGet(&amp;comppath, &amp;model);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathMdlGet()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-86"></a>    ProUtilModelnameGet(&amp;model, name, type);
+    ProTKSprintf(str, &quot;Now rotate component %s.%s&quot;, name, type);
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;Test %0s&quot;, str);
+
+    status = ProAsmcomppathTrfGet(&amp;comppath, PRO_B_TRUE, matrix);
+<a name="anchor-87"></a>    TEST_CALL_REPORT(&quot;ProAsmcomppathTrfGet()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+
+/*----------------------------------------------------------------*\
+    now shift the matrix
+<a name="anchor-88"></a>\*----------------------------------------------------------------*/
+       for(i=0; i&lt;3; i++) tvec[i]      = matrix[0][i];
+       for(i=0; i&lt;3; i++) matrix[0][i] = matrix[1][i];
+       for(i=0; i&lt;3; i++) matrix[1][i] = matrix[2][i];
+       for(i=0; i&lt;3; i++) matrix[2][i] = tvec[i];      
+<a name="anchor-89"></a>
+    status = ProAsmcomppathTrfSet(&amp;comppath, PRO_B_TRUE, matrix);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathTrfSet()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+    status = ProSolidRegenerate((ProSolid)assembly, PRO_REGEN_NO_FLAGS);
+<a name="anchor-90"></a>    TEST_CALL_REPORT(&quot;ProSolidRegenerate()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+#ifndef PT_PRODUCTS_BUILD
+    status = ProSolidDisplay((ProSolid)assembly);
+    TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+<a name="anchor-91"></a>				    status, status != PRO_TK_NO_ERROR);
+#endif
+
+    ProTestSleep(1);
+/*----------------------------------------------------------------*\
+<a name="anchor-92"></a>    now shift the matrix
+\*----------------------------------------------------------------*/
+    for(i=0; i&lt;3; i++) tvec[i]      = matrix[0][i];
+    for(i=0; i&lt;3; i++) matrix[0][i] = matrix[1][i];
+    for(i=0; i&lt;3; i++) matrix[1][i] = matrix[2][i];
+<a name="anchor-93"></a>    for(i=0; i&lt;3; i++) matrix[2][i] = tvec[i];      
+
+    status = ProAsmcomppathTrfSet(&amp;comppath, PRO_B_TRUE, matrix);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathTrfSet()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-94"></a>    status = ProSolidRegenerate((ProSolid)assembly, PRO_REGEN_NO_FLAGS);
+    TEST_CALL_REPORT(&quot;ProSolidRegenerate()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+#ifndef PT_PRODUCTS_BUILD
+    status = ProSolidDisplay((ProSolid)assembly);
+<a name="anchor-95"></a>    TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+#endif
+
+    ProTestSleep(1);
+<a name="anchor-96"></a>/*----------------------------------------------------------------*\
+    now shift the matrix
+\*----------------------------------------------------------------*/
+    for(i=0; i&lt;3; i++) tvec[i]      = matrix[0][i];
+    for(i=0; i&lt;3; i++) matrix[0][i] = matrix[1][i];
+<a name="anchor-97"></a>    for(i=0; i&lt;3; i++) matrix[1][i] = matrix[2][i];
+    for(i=0; i&lt;3; i++) matrix[2][i] = tvec[i];      
+
+    status = ProAsmcomppathTrfSet(&amp;comppath, PRO_B_TRUE, matrix);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathTrfSet()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+<a name="anchor-98"></a>				    status, status != PRO_TK_NO_ERROR);
+    status = ProSolidRegenerate((ProSolid)assembly, PRO_REGEN_NO_FLAGS);
+    TEST_CALL_REPORT(&quot;ProSolidRegenerate()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+#ifndef PT_PRODUCTS_BUILD
+<a name="anchor-99"></a>    status = ProSolidDisplay((ProSolid)assembly);
+    TEST_CALL_REPORT(&quot;ProSolidDisplay()&quot;, &quot;ProTestAsmcomppathFunc()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+#endif
+
+<a name="anchor-100"></a>    return (0);
+}
+
+
+
+<a name="anchor-101"></a>/*====================================================================*\
+  Function : ProUtilAsmcompStr
+  Purpose  : return string tyoe for  ProAsmcompType
+\*====================================================================*/
+char *ProUtilAsmcompStr(ProAsmcompType type)
+<a name="anchor-102"></a>{
+    static ProTestAsmcompTypeStr tab[] = {
+	{PRO_ASM_COMP_TYPE_NONE, (char *)&quot;PRO_ASM_COMP_TYPE_NONE&quot;},
+	{PRO_ASM_COMP_TYPE_WORKPIECE, (char *)&quot;PRO_ASM_COMP_TYPE_WORKPIECE&quot;},
+	{PRO_ASM_COMP_TYPE_REF_MODEL, (char *)&quot;PRO_ASM_COMP_TYPE_REF_MODEL&quot;},
+<a name="anchor-103"></a>	{PRO_ASM_COMP_TYPE_FIXTURE, (char *)&quot;PRO_ASM_COMP_TYPE_FIXTURE&quot;},
+	{PRO_ASM_COMP_TYPE_MOLD_BASE, (char *)&quot;PRO_ASM_COMP_TYPE_MOLD_BASE&quot;},
+	{PRO_ASM_COMP_TYPE_MOLD_ASSEM, (char *)&quot;PRO_ASM_COMP_TYPE_MOLD_ASSEM&quot;},
+	{PRO_ASM_COMP_TYPE_GEN_ASSEM, (char *)&quot;PRO_ASM_COMP_TYPE_GEN_ASSEM&quot;},
+	{PRO_ASM_COMP_TYPE_CAST_ASSEM, (char *)&quot;PRO_ASM_COMP_TYPE_CAST_ASSEM&quot;},
+<a name="anchor-104"></a>	{PRO_ASM_COMP_TYPE_DIE_BLOCK, (char *)&quot;PRO_ASM_COMP_TYPE_DIE_BLOCK&quot;},
+	{PRO_ASM_COMP_TYPE_DIE_COMP, (char *)&quot;PRO_ASM_COMP_TYPE_DIE_COMP&quot;},
+	{PRO_ASM_COMP_TYPE_SAND_CORE, (char *)&quot;PRO_ASM_COMP_TYPE_SAND_CORE&quot;},
+	{PRO_ASM_COMP_TYPE_CAST_RESULT, (char *)&quot;PRO_ASM_COMP_TYPE_CAST_RESULT&quot;}
+    };
+<a name="anchor-105"></a>
+    static int tabsize=sizeof(tab)/sizeof(tab[0]);
+    int i;
+
+    for (i=0; i&lt;tabsize; i++)
+<a name="anchor-106"></a>	if (type == tab[i].type)
+	    return tab[i].str;
+    return (char *)&quot;UNKNOWN&quot;;
+}
+
+<a name="anchor-107"></a>
+
+/*====================================================================*\
+  Function : ProUtilAsmcompFilter()
+  Purpose  : to allow select only  asmcomps 
+<a name="anchor-108"></a>\*====================================================================*/
+ProError  ProUtilAsmcompFilter(
+    ProSelection sel,
+    ProAppData data)
+{
+<a name="anchor-109"></a>    ProError status;
+    ProAsmcomppath asmcomppath;
+
+   status = ProSelectionAsmcomppathGet(sel, &amp;asmcomppath);
+   TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProUtilAsmcompSelect()&quot;,
+<a name="anchor-110"></a>                                status, status != PRO_TK_NO_ERROR);
+   if (asmcomppath.table_num != 1)
+        return (PRO_TK_CONTINUE);
+   else
+	return (PRO_TK_NO_ERROR);
+<a name="anchor-111"></a>}
+
+/*====================================================================*\
+  Function : ProUtilAsmcompSelect()
+  Purpose  : to select one asmcomp 
+<a name="anchor-112"></a>\*====================================================================*/
+ProError ProUtilAsmcompSelect(ProAsmcomp *p_asmcomp)
+{
+   ProSelection *p_sel;
+   ProError status;
+<a name="anchor-113"></a>   ProSelFunctions filter = {NULL, (ProSelectionPostFilter)ProUtilAsmcompFilter,
+                             NULL, NULL};
+   int n_sel;
+   ProAsmcomppath asmcomppath;
+
+<a name="anchor-114"></a>   status = ProSelect((char *)&quot;prt_or_asm&quot;, 1, NULL, &amp;filter, NULL, NULL,
+	&amp;p_sel, &amp;n_sel);
+   TEST_CALL_REPORT(&quot;ProSelect()&quot;, 
+	&quot;ProUtilAsmcompSelect()&quot;, status, status != PRO_TK_NO_ERROR);
+   if (status != PRO_TK_NO_ERROR)
+<a name="anchor-115"></a>	return (status);
+   status = ProSelectionAsmcomppathGet(p_sel[0], &amp;asmcomppath);
+   TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProUtilAsmcompSelect()&quot;, 
+				status, status != PRO_TK_NO_ERROR);
+   p_asmcomp->owner = asmcomppath.owner;
+<a name="anchor-116"></a>   p_asmcomp->id =  asmcomppath.comp_id_table[0];
+   p_asmcomp->type = PRO_FEATURE;
+ 
+   return (PRO_TK_NO_ERROR);  
+}
+<a name="anchor-117"></a>
+/*====================================================================*\
+FUNCTION : ProTestAsmcompAssembleBycsys ()
+PURPOSE  : Assemble a component by coordinate system.
+\*====================================================================*/
+<a name="anchor-118"></a>ProError ProTestAsmcompAssembleBycsys (
+    ProSolid       assembly,
+    ProSelection   _asm_csys,
+    ProSolid       component,
+    ProSelection   _comp_csys)
+<a name="anchor-119"></a>{
+    ProError       err;
+    ProElement     elem_root;
+    ProSelection   sel;
+    ProModelitem   modelitem;
+<a name="anchor-120"></a>    ProErrorlist   errors;
+    ProFeature     feature;
+    ProFeatureCreateOptions *opts = 0;
+
+    static ElemTreeData tree[] = {
+<a name="anchor-121"></a> 	{0, PRO_E_FEATURE_TREE, {(ProValueDataType)-1}},
+	{1, PRO_E_FEATURE_TYPE, {PRO_VALUE_TYPE_INT, {PRO_FEAT_COMPONENT}}},
+	{1, PRO_E_COMPONENT_MODEL, {PRO_VALUE_TYPE_POINTER}},
+	{1, PRO_E_COMPONENT_CONSTRAINTS, {(ProValueDataType)-1}},
+	{2, PRO_E_COMPONENT_CONSTRAINT, {(ProValueDataType)-1}},
+<a name="anchor-122"></a>	{3, PRO_E_COMPONENT_CONSTR_TYPE, {PRO_VALUE_TYPE_INT, {PRO_ASM_CSYS}}},
+	{3, PRO_E_COMPONENT_COMP_CONSTR_REF, {PRO_VALUE_TYPE_SELECTION}},
+	{3, PRO_E_COMPONENT_ASSEM_CONSTR_REF, {PRO_VALUE_TYPE_SELECTION}}};
+	
+/*--------------------------------------------------------------------*\
+<a name="anchor-123"></a>    Prepare value for the component model element.
+\*--------------------------------------------------------------------*/
+    tree[2].data.v.p = (void *)component;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-124"></a>    Prepare value for the component and assembly reference element.
+\*--------------------------------------------------------------------*/
+    tree[6].data.v.r=_comp_csys;
+    tree[7].data.v.r=_asm_csys;
+/*--------------------------------------------------------------------*\
+<a name="anchor-125"></a>    Create element tree
+\*--------------------------------------------------------------------*/
+    err = ProUtilElemtreeCreate(tree, sizeof(tree)/sizeof(tree[0]),
+	NULL, &amp;elem_root);
+
+<a name="anchor-126"></a>/*--------------------------------------------------------------------*\
+    Set up a selection structure for the feature context.
+\*--------------------------------------------------------------------*/
+    err = ProMdlToModelitem (assembly, &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProMdlToModelitem()&quot;, 
+<a name="anchor-127"></a>		&quot;ProTestAsmcompAssembleBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProSelectionAlloc (NULL, &amp;modelitem, &amp;sel);
+    TEST_CALL_REPORT(&quot;ProSelectionAlloc ()&quot;, 
+		&quot;ProTestAsmcompAssembleBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-128"></a>/*--------------------------------------------------------------------*\
+    Assemble the component by feature creation.
+\*--------------------------------------------------------------------*/
+     err = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+        1, (ProArray*)&amp;opts);
+<a name="anchor-129"></a>
+    opts[0]= PRO_FEAT_CR_INCOMPLETE_FEAT;
+
+    err = ProFeatureWithoptionsCreate (sel, elem_root,
+        opts, PRO_REGEN_NO_FLAGS, &amp;feature, &amp;errors);
+<a name="anchor-130"></a>    TEST_CALL_REPORT(&quot;ProFeatureWithoptionsCreate()&quot;, 
+		&quot;ProTestAsmcompAssembleBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+
+  err = ProArrayFree((ProArray*)&amp;opts);
+
+<a name="anchor-131"></a>    if (err != PRO_TK_NO_ERROR)
+    {
+	ProUtilShowTreeInInfo(elem_root);
+        ProUtilFeatErrsPrint (&amp;errors);
+    }
+<a name="anchor-132"></a>/*--------------------------------------------------------------------*\
+    Free Allocated memory
+\*--------------------------------------------------------------------*/
+    err = ProElementFree(&amp;elem_root);
+    TEST_CALL_REPORT(&quot;ProElementFree()&quot;, 
+<a name="anchor-133"></a>		&quot;ProTestAsmcompAssembleBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProSelectionFree(&amp;sel);
+    TEST_CALL_REPORT(&quot;ProSelectionFree()&quot;, 
+		&quot;ProTestAsmcompAssembleBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (tree[6].data.v.r!=NULL) {
+<a name="anchor-134"></a>	err = ProSelectionFree(&amp;tree[6].data.v.r);
+	TEST_CALL_REPORT(&quot;ProSelectionFree()&quot;, 
+		&quot;ProTestAsmcompAssembleBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    if (tree[7].data.v.r!=NULL) {
+<a name="anchor-135"></a>	err = ProSelectionFree(&amp;tree[7].data.v.r);
+	TEST_CALL_REPORT(&quot;ProSelectionFree()&quot;, 
+		&quot;ProTestAsmcompAssembleBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    return (err);
+<a name="anchor-136"></a>}
+
+
+/*====================================================================*\
+FUNCTION : ProTestAsmcompReplaceBycsys()
+<a name="anchor-137"></a>PURPOSE  : Replace a component whose constraint is by CSYS.
+\*====================================================================*/
+ProError ProTestAsmcompReplaceBycsys(
+    ProSolid parent_asm,      /*  parent assembly */
+    ProName  w_asm_csys_name, /*  new assembly CSYS (can be NULL) */
+<a name="anchor-138"></a>    ProSolid new_comp,        /*  new (replacement) component */
+    ProName  w_comp_csys_name,/*  name of component's CSYS */
+    ProFeature *p_component)  /* As input, this argument is the component to be
+                               replaced.  As output, it's the new component. */
+{
+<a name="anchor-139"></a>    ProError err;
+    ProGeomitem asm_csys, comp_csys;
+    ProSelection sel;
+    ProElement elemtree, elem_comp, elem_comp_ref, elem_asm_ref;
+    ProValueData value_data;
+<a name="anchor-140"></a>    ProModelitem modelitem;
+    ProAsmcomppath path;    
+   ProFeatureCreateOptions *opts = 0;
+    ProErrorlist   errors;
+    
+<a name="anchor-141"></a>    static ProElempathItem comp_mod_path[]= {
+	{PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_COMPONENT_MODEL}};
+    static ProElempathItem comp_ref_path[]= {
+	{PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_COMPONENT_CONSTRAINTS},
+	{PRO_ELEM_PATH_ITEM_TYPE_INDEX, 0},
+<a name="anchor-142"></a>	{PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_COMPONENT_COMP_CONSTR_REF}};
+    static ProElempathItem asm_ref_path[] = {
+	{PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_COMPONENT_CONSTRAINTS},
+	{PRO_ELEM_PATH_ITEM_TYPE_INDEX, 0},
+	{PRO_ELEM_PATH_ITEM_TYPE_ID, PRO_E_COMPONENT_ASSEM_CONSTR_REF}};
+<a name="anchor-143"></a>
+/*--------------------------------------------------------------------*\
+    Find the named assembly coordinate system.
+\*--------------------------------------------------------------------*/
+    if (w_asm_csys_name != NULL)
+<a name="anchor-144"></a>    {
+	err = ProUtilFindCsysByName (parent_asm, w_asm_csys_name, &amp;asm_csys);
+	if (err != PRO_TK_NO_ERROR)
+	    return (PRO_TK_E_NOT_FOUND);
+    }
+<a name="anchor-145"></a>/*--------------------------------------------------------------------*\
+    Find the named component coordinate system.
+\*--------------------------------------------------------------------*/
+    err = ProUtilFindCsysByName (new_comp, w_comp_csys_name, &amp;comp_csys);
+    if (err != PRO_TK_NO_ERROR)
+<a name="anchor-146"></a>        return (PRO_TK_E_NOT_FOUND);
+
+/*--------------------------------------------------------------------*\
+    Get element tree for component to be replaced.
+\*--------------------------------------------------------------------*/
+<a name="anchor-147"></a>    err = ProFeatureElemtreeExtract(p_component, NULL, PRO_FEAT_EXTRACT_NO_OPTS, &amp;elemtree) ; 
+    TEST_CALL_REPORT(&quot;ProFeatureElemtreeExtract()&quot;, 
+	&quot;ProTestAsmcompReplaceBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err != PRO_TK_NO_ERROR)
+        return (err);
+<a name="anchor-148"></a>
+/*--------------------------------------------------------------------*\
+    Modify the tree to reference the new component.
+    Will have to change PRO_E_COMPONENT_MODEL and
+    PRO_E_COMPONENT_COMP_CONSTR_REF
+<a name="anchor-149"></a>\*--------------------------------------------------------------------*/
+    err = ProUtilElemtreeElementGet(elemtree, comp_mod_path,
+	sizeof(comp_mod_path)/sizeof(comp_mod_path[0]), &amp;elem_comp);
+
+    if (err == PRO_TK_NO_ERROR)
+<a name="anchor-150"></a>    {
+	value_data.type = PRO_VALUE_TYPE_POINTER;
+	value_data.v.p = new_comp;
+	ProUtilElementValueSet(elem_comp, &amp;value_data);
+
+<a name="anchor-151"></a>	err = ProUtilElemtreeElementGet(elemtree, comp_ref_path,
+	    sizeof(comp_ref_path)/sizeof(comp_ref_path[0]), &amp;elem_comp_ref);
+
+	if (err == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-152"></a>	    value_data.type = PRO_VALUE_TYPE_SELECTION;
+	    err = ProSelectionAlloc (NULL, &amp;comp_csys, &amp;sel);
+	    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;, 
+		&quot;ProTestAsmcompReplaceBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+	    value_data.v.r = sel;
+<a name="anchor-153"></a>	    ProUtilElementValueSet(elem_comp_ref, &amp;value_data);
+	    err = ProSelectionFree(&amp;sel);
+	    TEST_CALL_REPORT(&quot;ProSelectionFree()&quot;, 
+		&quot;ProTestAsmcompReplaceBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+	}
+<a name="anchor-154"></a>    }
+
+/*--------------------------------------------------------------------*\
+    If new assembly csys used, change PRO_E_COMPONENT_ASSEM_CONSTR_REF
+\*--------------------------------------------------------------------*/
+<a name="anchor-155"></a>    if (err == PRO_TK_NO_ERROR &amp;&amp; w_asm_csys_name != NULL)
+    {
+	err = ProUtilElemtreeElementGet(elemtree, asm_ref_path,
+	    sizeof(asm_ref_path)/sizeof(asm_ref_path[0]), &amp;elem_asm_ref);
+
+<a name="anchor-156"></a>	if (err == PRO_TK_NO_ERROR)
+	{
+	    value_data.type = PRO_VALUE_TYPE_SELECTION;
+	    err = ProAsmcomppathInit(parent_asm, NULL, 0, &amp;path);    
+	    TEST_CALL_REPORT(&quot;ProAsmcomppathInit()&quot;, 
+<a name="anchor-157"></a>		&quot;ProTestAsmcompReplaceBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+	    err = ProSelectionAlloc (&amp;path, &amp;asm_csys, &amp;sel);
+	    TEST_CALL_REPORT(&quot;ProSelectionAlloc()&quot;, 
+		&quot;ProTestAsmcompReplaceBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+	    value_data.v.r = sel;
+<a name="anchor-158"></a>	    ProUtilElementValueSet(elem_asm_ref, &amp;value_data);
+	    err = ProSelectionFree(&amp;sel);
+	    TEST_CALL_REPORT(&quot;ProSelectionFree()&quot;, 
+		&quot;ProTestAsmcompReplaceBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+	}
+<a name="anchor-159"></a>    }
+/*--------------------------------------------------------------------*\
+    Call ProFeatureRedefine 
+\*--------------------------------------------------------------------*/
+    if (err == PRO_TK_NO_ERROR)
+<a name="anchor-160"></a>    {
+	err = ProMdlToModelitem (parent_asm, &amp;modelitem);
+	TEST_CALL_REPORT(&quot;ProFeatureRedefine()&quot;, 
+	    &quot;ProTestAsmcompReplaceBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProSelectionAlloc (NULL, &amp;modelitem, &amp;sel);
+<a name="anchor-161"></a>	TEST_CALL_REPORT(&quot;ProFeatureRedefine()&quot;, 
+	    &quot;ProTestAsmcompReplaceBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+        1, (ProArray*)&amp;opts);
+<a name="anchor-162"></a>
+    opts[0]= PRO_FEAT_CR_FIX_MODEL_ON_FAIL;
+
+	err = ProFeatureWithoptionsRedefine(NULL, p_component, elemtree,
+        opts, PRO_REGEN_NO_FLAGS, &amp;errors);
+<a name="anchor-163"></a>	TEST_CALL_REPORT(&quot;ProFeatureWithoptionsRedefine()&quot;, 
+	    &quot;ProTestAsmcompReplaceBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+
+ err = ProArrayFree((ProArray*)&amp;opts);
+
+<a name="anchor-164"></a>    }
+
+    if (err != PRO_TK_NO_ERROR)
+    {
+	ProUtilShowTreeInInfo(elemtree);
+<a name="anchor-165"></a>        ProUtilFeatErrsPrint (&amp;errors);
+    }
+
+/*--------------------------------------------------------------------*\
+    Free Allocated memory
+<a name="anchor-166"></a>\*--------------------------------------------------------------------*/
+    err = ProFeatureElemtreeFree(p_component,elemtree);
+    TEST_CALL_REPORT(&quot;ProFeatureElemtreeFree()&quot;, 
+	    &quot;ProTestAsmcompReplaceBycsys()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-167"></a>    return(err) ; 
+}
+
+/*=============================================================*\
+  FUNCTION: ProTestAsmcompCreateRedefine()
+<a name="anchor-168"></a>  PURPOSE:  User interface to funcs UsrAsmcompAssembleBycsys,
+				    UsrAsmcompReplaceBycsys  
+\*=============================================================*/
+int ProTestAsmcompCreateRedefine(
+    ProSolid assembly,
+<a name="anchor-169"></a>    ProFeature *component,
+    int action)
+{
+    ProSolid comp;
+    ProError err, er1;
+<a name="anchor-170"></a>    int version, win_id,sel_n, Oldwin_id;
+    ProCharLine line, str;
+    ProLine buff;
+    ProPath *path_arr, sel_path, def_path, cur_path;
+    ProName *path_lab_arr;
+<a name="anchor-171"></a>	ProMdlName w_name, w_sel_name;
+	ProMdlExtension w_type;
+    static ProCharName asm_csys = {&quot;ACS0&quot;}, comp_csys = {&quot;CS0&quot;};
+    ProName w_asm_csys, w_comp_csys;
+    ProType type;
+<a name="anchor-172"></a>    ProSelection *win_sel, sel_C, sel_A;
+	ProBoolean tree_flag=PRO_B_FALSE;
+
+/*------------------------------------------------------------------*\
+    Choose the component to assembly or redefine
+<a name="anchor-173"></a>\*--------------------------------------------------------------------*/
+    ProStringToWstring(buff, (char *)&quot;*.prt,*.asm&quot;);
+    ProStringToWstring(def_path, (char *)&quot;.&quot;);
+
+    ProTKSprintf(str, &quot;Choose new component to %s.&quot;,
+<a name="anchor-174"></a>	action == TEST_ASMCOMP_ASSEMBLE ? &quot;assemble&quot; : &quot;redefine&quot;);
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+
+    /* No default dirs */
+    err = ProArrayAlloc(0, sizeof(ProPath), 1, (ProArray*)&amp;path_arr);
+<a name="anchor-175"></a>    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, 
+	&quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProArrayAlloc(0, sizeof(ProPath), 1, (ProArray*)&amp;path_lab_arr);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, 
+	&quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-176"></a>
+    /* Open file */
+    err = ProFileMdlnameOpen(NULL, buff, path_arr, path_lab_arr, def_path, NULL,
+	sel_path);
+    TEST_CALL_REPORT(&quot;ProFileMdlnameOpen()&quot;, 
+<a name="anchor-177"></a>	&quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    if (err == PRO_TK_NO_ERROR)
+    {
+	err = ProFileMdlnameParse(sel_path, def_path, w_name, w_type, &amp;version);
+<a name="anchor-178"></a>	TEST_CALL_REPORT(&quot;ProFileMdlnameParse()&quot;, 
+	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+	
+	ProUtilWstrcpy(sel_path, def_path);
+	err = ProPathMdlnameCreate(NULL, w_name, w_type, PRO_VALUE_UNUSED, def_path);
+<a name="anchor-179"></a>	TEST_CALL_REPORT(&quot;ProPathMdlnameCreate()&quot;, 
+	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+	
+	ProWstringToString(str, def_path);
+	if( ProUtilConfirmNameType(str, line, &amp;type) != PRO_TK_BAD_INPUTS)
+<a name="anchor-180"></a>	{
+
+	    err = ProDirectoryCurrentGet(cur_path); 
+	    TEST_CALL_REPORT(&quot;ProDirectoryCurrentGet()&quot;, 
+		&quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-181"></a>
+	    err = ProDirectoryChange(sel_path); 
+	    TEST_CALL_REPORT(&quot;ProDirectoryCurrentGet()&quot;, 
+		&quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+	
+<a name="anchor-182"></a>	    err = ProMdlnameRetrieve (w_name, (ProMdlfileType)type, (ProMdl*)&amp;comp);
+	    TEST_CALL_REPORT(&quot;ProMdlnameRetrieve ()&quot;, 
+		&quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	    er1 = ProDirectoryChange(cur_path); 
+<a name="anchor-183"></a>	    TEST_CALL_REPORT(&quot;ProDirectoryCurrentGet()&quot;, 
+		&quot;ProTestAsmcompCreateRedefine()&quot;, er1, er1 != PRO_TK_NO_ERROR);
+
+	    if (err != PRO_TK_NO_ERROR)
+	    {
+<a name="anchor-184"></a>		ProTKSprintf(line , &quot;Failed to retrieve %s&quot;, str);
+		ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, line);
+	    }
+	}
+    }
+<a name="anchor-185"></a>/*------------------------------------------------------------------*\
+    Free Allocated memory
+\*--------------------------------------------------------------------*/
+    er1 = ProArrayFree((ProArray*)&amp;path_arr);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, 
+<a name="anchor-186"></a>	&quot;ProTestAsmcompCreateRedefine()&quot;, er1, er1 != PRO_TK_NO_ERROR);
+    er1 = ProArrayFree((ProArray*)&amp;path_lab_arr);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, 
+	&quot;ProTestAsmcompCreateRedefine()&quot;, er1, er1 != PRO_TK_NO_ERROR);
+
+<a name="anchor-187"></a>    if (err != PRO_TK_NO_ERROR)
+	return (0);
+
+    if (action == TEST_ASMCOMP_ASSEMBLE)
+    {
+<a name="anchor-188"></a>	/*------------------------------------------------------------------*\
+	    Select the assembly 
+	\*--------------------------------------------------------------------*/
+    
+    	    sel_n=0;
+<a name="anchor-189"></a>    	    err = ProSelect((char *)&quot;csys&quot;,1,NULL,NULL,NULL,NULL,&amp;win_sel,&amp;sel_n);
+	    TEST_CALL_REPORT(&quot;ProSelect()&quot;, 
+	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+	 
+        
+<a name="anchor-190"></a>	if (err != PRO_TK_NO_ERROR)
+	  return (0);  
+    
+	err = ProSelectionCopy(win_sel[0],&amp;sel_A);
+	TEST_CALL_REPORT(&quot;ProSelectionCopy()&quot;, 
+<a name="anchor-191"></a>	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+	/*------------------------------------------------------------------*\
+	    Select the component csys 
+	\*--------------------------------------------------------------------*/
+	err = ProMdlMdlnameGet((ProMdl)comp, w_sel_name);
+<a name="anchor-192"></a>	TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, 
+	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProWindowCurrentGet(&amp;Oldwin_id);
+	TEST_CALL_REPORT(&quot;ProWindowCurrentGet()&quot;, 
+<a name="anchor-193"></a>	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err=ProAccessorywindowWithTreeCreate(w_sel_name,type,tree_flag,&amp;win_id);
+	TEST_CALL_REPORT(&quot;ProAccessorywindowWithTreeCreate()&quot;, 
+	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-194"></a>
+	err = ProMdlDisplay((ProMdl)comp);
+	TEST_CALL_REPORT(&quot;ProMdlDisplay()&quot;, 
+	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-195"></a>	err = ProWindowCurrentSet(win_id);
+	TEST_CALL_REPORT(&quot;ProWindowCurrentSet()&quot;, 
+	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+
+
+<a name="anchor-196"></a>	    sel_n=0;
+	    err = ProSelect((char *)&quot;csys&quot;,1,NULL,NULL,NULL,NULL,&amp;win_sel,&amp;sel_n);
+	    TEST_CALL_REPORT(&quot;ProSelect()&quot;, 
+		&quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+	 
+<a name="anchor-197"></a>
+	if (err != PRO_TK_NO_ERROR)
+	  return (0);    
+
+	err = ProSelectionCopy(win_sel[0],&amp;sel_C);
+<a name="anchor-198"></a>	TEST_CALL_REPORT(&quot;ProSelectionCopy()&quot;, 
+	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProWindowCurrentSet(Oldwin_id);
+	TEST_CALL_REPORT(&quot;ProWindowCurrentSet()&quot;, 
+<a name="anchor-199"></a>	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProWindowDelete(win_id);
+	TEST_CALL_REPORT(&quot;ProWindowDelete()&quot;, 
+	    &quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-200"></a>
+	err = ProTestAsmcompAssembleBycsys (assembly,sel_A,
+		comp,sel_C);
+    }
+    else
+<a name="anchor-201"></a>    {
+	/*------------------------------------------------------------------*\
+	    Enter the assembly csys name
+	\*--------------------------------------------------------------------*/
+    
+<a name="anchor-202"></a>	ProStringToWstring(w_asm_csys, asm_csys);
+	ProTKSprintf(str, &quot;Enter the assembly csys name [%s].&quot;, asm_csys);
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+	if (ProUtilStringGet(w_asm_csys, w_asm_csys, PRO_NAME_SIZE)==0)
+	return (0);
+<a name="anchor-203"></a>	ProWstringToString(asm_csys, w_asm_csys);
+
+	/*------------------------------------------------------------------*\
+	    Enter the component csys name
+	\*--------------------------------------------------------------------*/
+<a name="anchor-204"></a>	ProStringToWstring(w_comp_csys, comp_csys);
+	ProTKSprintf(str, &quot;Enter the component csys name [%s].&quot;, comp_csys);
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+	if (ProUtilStringGet(w_comp_csys, w_comp_csys, PRO_NAME_SIZE)==0)
+	return (0);
+<a name="anchor-205"></a>	ProWstringToString(comp_csys, w_comp_csys);    
+
+	err = ProTestAsmcompReplaceBycsys (assembly, w_asm_csys, comp, 
+	    w_comp_csys, component);
+    }
+<a name="anchor-206"></a>
+    if (err != PRO_TK_NO_ERROR)
+	ProTKSprintf(str, &quot;Failed to %s component.&quot;,
+	    action == TEST_ASMCOMP_ASSEMBLE ? &quot;assemble&quot; : &quot;redefine&quot;);
+    else
+<a name="anchor-207"></a>	ProTKSprintf(str, &quot;Component successfully %s.&quot;,
+	    action == TEST_ASMCOMP_ASSEMBLE ? &quot;assembled&quot; : &quot;redefined&quot;);
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+
+    err = ProTreetoolRefresh(assembly);
+<a name="anchor-208"></a>    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, 
+	&quot;ProTestAsmcompCreateRedefine()&quot;, err, err != PRO_TK_NO_ERROR);
+    return (0);
+}
+
+<a name="anchor-209"></a>/*====================================================================*\
+  Function : ProTestAsmcompPackageMoveAct()
+  Purpose  : Act to test ProAsmcompPackageMove function
+\*====================================================================*/
+ProError ProTestAsmcompPackageMoveAct (ProAppData data, int action)
+<a name="anchor-210"></a>{
+    char *sel_ptr = NULL;
+    int num_sel;
+    ProError status;
+    ProSelection **sel_array_ptr = (ProSelection**)data;
+<a name="anchor-211"></a>    ProCharLine str;
+
+/*------------------------------------------------------------------*\
+    Select reference motions 
+\*--------------------------------------------------------------------*/
+<a name="anchor-212"></a>    if (sel_array_ptr != NULL)
+    {
+        switch (action)
+        {
+        case TEST_ASMCOMP_REF_VIEW_PLANE:
+<a name="anchor-213"></a>            sel_ptr = NULL;
+            num_sel = 0;
+            break;
+        case TEST_ASMCOMP_REF_SEL_PLANE:
+        case TEST_ASMCOMP_REF_PLANE_NORMAL:   
+<a name="anchor-214"></a>            sel_ptr = (char *)&quot;datum,surface&quot;;
+            num_sel = 1;
+            break;
+        case TEST_ASMCOMP_REF_ENTITY_EDGE:
+            sel_ptr = (char *)&quot;axis,edge,curve&quot;;
+<a name="anchor-215"></a>            num_sel = 1;
+            break; 
+        case TEST_ASMCOMP_REF_2_POINTS:
+            sel_ptr = (char *)&quot;point,edge_end&quot;;
+            num_sel = 2;
+<a name="anchor-216"></a>            break; 
+        case TEST_ASMCOMP_REF_CSYS_X:
+        case TEST_ASMCOMP_REF_CSYS_Y:
+        case TEST_ASMCOMP_REF_CSYS_Z:
+            sel_ptr = (char *)&quot;csys&quot;;
+<a name="anchor-217"></a>            num_sel = 1;
+            break;
+	default:
+	    sel_ptr = NULL;
+	    break;
+<a name="anchor-218"></a>        }
+
+        if ( sel_ptr != NULL )
+        {
+            ProTKSprintf (str,&quot;Select %d %s&quot;, num_sel, sel_ptr);
+<a name="anchor-219"></a>            ProUtilMsgPrint ( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+            status = ProSelect ( sel_ptr, num_sel,
+                NULL, NULL, NULL, NULL, 
+                sel_array_ptr, &amp;num_sel);
+            ProMessageClear();
+<a name="anchor-220"></a>            if ( status == PRO_TK_USER_ABORT ||
+                 status == PRO_TK_PICK_ABOVE)
+                 sel_ptr = (char*)NULL;
+        }
+    }
+<a name="anchor-221"></a>
+/*------------------------------------------------------------------*\
+    Return action for reusing
+\*--------------------------------------------------------------------*/
+    ProMenuDeleteWithStatus ( action );
+<a name="anchor-222"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+  Function : ProTestAsmcompPackageMove ()
+<a name="anchor-223"></a>  Purpose  : to test ProAsmcompPackageMove function
+\*====================================================================*/
+ProError ProTestAsmcompPackageMove (ProAsmcomp *asmcomp_ptr)
+{
+   ProTestMenuButton  menubut_motion[] = {
+<a name="anchor-224"></a>        {(char *)&quot;-Orient Mode&quot;, TEST_ASMCOMP_MOTION_ORIENTMODE},
+        {(char *)&quot;-Translate&quot;, TEST_ASMCOMP_MOTION_TRANSLATE},
+        {(char *)&quot;-Rotate&quot;,    TEST_ASMCOMP_MOTION_ROTATE},
+        {(char *)&quot;-Adjust&quot;,    TEST_ASMCOMP_MOTION_ADJUST},
+        {(char *)&quot;Done&quot;,      -1}
+<a name="anchor-225"></a>    };
+
+  ProTestMenuButton  menubut_showui[] = {
+        {(char *)&quot;-Dialog&quot;,     TEST_ASMCOMP_SHOWUI_DIALOG},
+        {(char *)&quot;-Action&quot;,     TEST_ASMCOMP_SHOWUI_ACTION},
+<a name="anchor-226"></a>        {(char *)&quot;Done&quot;,       -1}
+    };
+
+   ProTestMenuButton  menubut_ref[] = {
+        {(char *)&quot;-View Plane&quot;,  TEST_ASMCOMP_REF_VIEW_PLANE},
+<a name="anchor-227"></a>        {(char *)&quot;-Sel Plane&quot;,   TEST_ASMCOMP_REF_SEL_PLANE},
+        {(char *)&quot;-Entity Edge&quot;, TEST_ASMCOMP_REF_ENTITY_EDGE},
+        {(char *)&quot;-Plane Normal&quot;,TEST_ASMCOMP_REF_PLANE_NORMAL},
+        {(char *)&quot;-2 points&quot;,    TEST_ASMCOMP_REF_2_POINTS},
+        {(char *)&quot;-Csys X&quot;,      TEST_ASMCOMP_REF_CSYS_X},
+<a name="anchor-228"></a>        {(char *)&quot;-Csys Y&quot;,      TEST_ASMCOMP_REF_CSYS_Y},
+        {(char *)&quot;-Csys Z&quot;,      TEST_ASMCOMP_REF_CSYS_Z},
+        {(char *)&quot;Done&quot;,        -1}
+    };
+
+<a name="anchor-229"></a>    char menus_names[][14] =
+    { &quot;MotionType&quot;,
+      &quot;ShowUI&quot;,
+      &quot;Reference&quot; };
+
+<a name="anchor-230"></a>    int i, n_but_motion, n_but_ref, n_but_showui;
+    static int first=1;
+    ProError status;
+    ProSelection *sel_array = NULL;
+
+<a name="anchor-231"></a>    n_but_motion = sizeof(menubut_motion)/sizeof(menubut_motion[0]);
+    n_but_showui = sizeof(menubut_showui)/sizeof(menubut_showui[0]);
+    n_but_ref    = sizeof(menubut_ref)/sizeof(menubut_ref[0]);
+/*--------------------------------------------------------------------------*\
+        For a first call register a menu from strings
+<a name="anchor-232"></a>\*--------------------------------------------------------------------------*/
+    if (first)
+    {
+        ProTestMenuDynamicRegister ( menus_names[0],
+            menubut_motion, n_but_motion);
+<a name="anchor-233"></a>
+        ProTestMenuDynamicRegister ( menus_names[1],
+            menubut_showui, n_but_showui);
+
+        ProTestMenuDynamicRegister ( menus_names[2],
+<a name="anchor-234"></a>            menubut_ref, n_but_ref);
+
+        first = 0;
+    }
+/*--------------------------------------------------------------------------*\
+<a name="anchor-235"></a>    Set action for the menu button 
+\*--------------------------------------------------------------------------*/
+    for (i=0; i&lt;n_but_showui; i++)
+        ProMenubuttonActionSet ( menus_names[1], menubut_showui[i].button,
+            (ProMenubuttonAction)ProTestAsmcompPackageMoveAct, NULL,
+<a name="anchor-236"></a>            menubut_showui[i].action);
+    ProMenubuttonActionSet ( menus_names[1], menus_names[1],
+            (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    ProMenuCreate (PROMENUTYPE_MAIN, menus_names[1], &amp;i);
+    ProMenuProcess ( menus_names[1], &amp;n_but_showui);
+<a name="anchor-237"></a>
+    if ( n_but_showui == -1 )
+        return (PRO_TK_USER_ABORT);
+
+    if ( (ProBoolean)n_but_showui == PRO_B_FALSE )
+<a name="anchor-238"></a>    {
+       for (i=0; i&lt;n_but_motion; i++)
+            ProMenubuttonActionSet ( menus_names[0], menubut_motion[i].button,
+                (ProMenubuttonAction)ProTestAsmcompPackageMoveAct, NULL,
+                menubut_motion[i].action);
+<a name="anchor-239"></a>        ProMenubuttonActionSet ( menus_names[0], menus_names[0],
+            (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+        ProMenuCreate (PROMENUTYPE_MAIN, menus_names[0], &amp;i);
+        ProMenuProcess ( menus_names[0], &amp;n_but_motion);
+
+<a name="anchor-240"></a>        if ( n_but_motion == -1)
+            return (PRO_TK_USER_ABORT);
+
+        for (i=0; i&lt;n_but_ref; i++)
+            ProMenubuttonActionSet ( menus_names[2], menubut_ref[i].button,
+<a name="anchor-241"></a>                 (ProMenubuttonAction)ProTestAsmcompPackageMoveAct,
+                 (ProAppData)&amp;sel_array,
+                 menubut_ref[i].action);
+         ProMenubuttonActionSet ( menus_names[2], menus_names[2],
+                 (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-242"></a>         ProMenuCreate (PROMENUTYPE_MAIN, menus_names[2], &amp;i);
+         ProMenuProcess ( menus_names[2], &amp;n_but_ref);
+
+         if ( n_but_ref == -1 )
+             return (PRO_TK_USER_ABORT);
+<a name="anchor-243"></a>    }
+    else
+    {
+       n_but_ref = TEST_ASMCOMP_REF_VIEW_PLANE;
+       n_but_motion = TEST_ASMCOMP_MOTION_UNDEF; 
+<a name="anchor-244"></a>    }
+/*--------------------------------------------------------------------------*\
+    Call ProAsmcompPackageMove 
+\*--------------------------------------------------------------------------*/
+    if (sel_array != NULL)
+<a name="anchor-245"></a>        status = ProArraySizeGet (sel_array, &amp;i);
+    else
+        i = 0;
+
+    status = ProAsmcompPackageMove ( asmcomp_ptr, (ProMotionType)n_but_motion,
+<a name="anchor-246"></a>        (ProBoolean)n_but_showui, (ProMotionRefType)n_but_ref,
+        sel_array, i);
+    TEST_CALL_REPORT(&quot;ProAsmcompPackageMove()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-247"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+  Function : ProTestAsmcompAct()
+<a name="anchor-248"></a>  Purpose  : to test some ProAsmcomp functions
+\*====================================================================*/
+ProError ProTestAsmcompAct(ProMdl *mdl, int action)
+{
+   int ProTestSkelCopyCreate(ProAssembly current_assy);
+<a name="anchor-249"></a>   int ProTestCompSkelReplace (ProAssembly current_assy);
+   /* TestSkelet.c */
+	
+   int  ProTestAsmcompMechanismMenu (ProAppData data, int dummy);
+   /* TestMechanism.c*/
+<a name="anchor-250"></a>
+   
+    ProAssembly    assembly = *(ProAssembly *)mdl;
+    ProElement     elemtree;
+    ProMdl         model;
+<a name="anchor-251"></a>    ProMdlfileType     mdltype;
+    ProCharLine    str;
+    char           name[PRO_FAMILY_MDLNAME_SIZE], type[PRO_TYPE_SIZE];
+    ProFamilyMdlName        w_name;
+    ProError       status;
+<a name="anchor-252"></a>    ProAsmcomp    *asmcomps, asmcomp;
+    FILE          *fp;
+    int            i, n, range[2]={0,3}, index;
+    ProAsmcompType r_type;
+    ProBoolean     bool_type;
+<a name="anchor-253"></a>    ProMotionType motion_type =PRO_M_UNDEF;
+    ProMotionRefType motion_ref_type=PRO_M_VIEW_PLANE;
+    ProSelection *motion_ref=NULL;
+    int sel_sz=0;
+	
+<a name="anchor-254"></a>
+	
+    if (action != TEST_ASMCOMP_INFO 
+     &amp;&amp; action != TEST_ASMCOMP_ASSEMBLE
+     &amp;&amp; action !=TEST_ASMCOMP_MECHANISM
+<a name="anchor-255"></a>     &amp;&amp; action != TEST_ASMCOMP_CREATE
+     &amp;&amp; action != TEST_ASMCOMP_REPLACE)
+    {
+        ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select assembly component.&quot; );
+	status = ProUtilAsmcompSelect(&amp;asmcomp);
+<a name="anchor-256"></a>	if (status != PRO_TK_NO_ERROR)
+	    return (status);
+    }
+
+    switch (action)
+<a name="anchor-257"></a>    {
+    case TEST_ASMCOMP_ASSEMBLE:
+	ProTestAsmcompCreateRedefine(assembly, NULL, TEST_ASMCOMP_ASSEMBLE);
+	break;
+    case TEST_ASMCOMP_REDEFINE:
+<a name="anchor-258"></a>	ProTestAsmcompCreateRedefine(assembly, (ProFeature*)&amp;asmcomp, 
+	    TEST_ASMCOMP_REDEFINE);
+	break;
+    case TEST_ASMCOMP_TREE_INFO:
+      status = ProFeatureElemtreeExtract((ProFeature*)&amp;asmcomp, NULL, PRO_FEAT_EXTRACT_NO_OPTS, &amp;elemtree);
+<a name="anchor-259"></a>    	TEST_CALL_REPORT(&quot;ProFeatureElemtreeExtract()&quot;,
+		    &quot;ProTestAsmcompFunc()&quot;, status, status != PRO_TK_NO_ERROR);
+	ProUtilShowTreeInInfo(elemtree);
+	status = ProFeatureElemtreeFree((ProFeature*)&amp;asmcomp, elemtree);
+    	TEST_CALL_REPORT(&quot;ProFeatureElemtreeFree()&quot;, 
+<a name="anchor-260"></a>		    &quot;ProTestAsmcompFunc()&quot;, status, status != PRO_TK_NO_ERROR);
+	break;
+    case TEST_ASMCOMP_INFO:
+    	status = ProUtilCollectAsmcomp(assembly, &amp;asmcomps);
+    	if (status != PRO_TK_NO_ERROR)
+<a name="anchor-261"></a>	    return (status);
+
+    	ProTestQcrName(mdl, (char *)&quot;.cmp&quot;, str);
+    	fp = PTApplsUnicodeFopen(str, &quot;w&quot;);
+
+<a name="anchor-262"></a>    	status = ProArraySizeGet((ProArray)asmcomps, &amp;n);
+    	TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+    	for (i=0; i&lt;n; i++)
+   	    {
+<a name="anchor-263"></a>        status = ProAsmcompMdlGet(asmcomps+i, &amp;model);
+	    TEST_CALL_REPORT(&quot;ProAsmcompMdlGet()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	    if (status != PRO_TK_NO_ERROR)
+	    	continue;
+<a name="anchor-264"></a>
+	    status = ProAsmcompMdlMdlnameGet(asmcomps+i, &amp;mdltype, w_name); 
+	    TEST_CALL_REPORT(&quot;ProAsmcompMdlMdlnameGet()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+ 	
+<a name="anchor-265"></a>	    ProUtilModelnameGet(&amp;model, name, type);
+	    ProWstringToString(name, w_name);
+	    ProTKSprintf(str, &quot;Found component %s.%s&quot;, name, type);
+	    ProTKFprintf(fp, &quot;%s\n&quot;, str);
+	    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+<a name="anchor-266"></a>
+#ifndef PT_PRODUCTS_BUILD
+	    status = ProAsmcompIsBulkitem(asmcomps+i, &amp;bool_type);
+	    TEST_CALL_REPORT(&quot;ProAsmcompIsBulkitem()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-267"></a>    
+	    ProMessageClear();
+	    ProTKSprintf(str, &quot;component is %sa bulk item&quot;, bool_type ? &quot;&quot; : &quot;not &quot;);
+	    ProTKFprintf(fp, &quot;\t%s\n&quot;, str);
+	    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+<a name="anchor-268"></a>#endif    
+	    status = ProAsmcompTypeGet(asmcomps+i, assembly, &amp;r_type);
+	    TEST_CALL_REPORT(&quot;ProAsmcompTypeGet()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-269"></a>	    ProMessageClear();
+	    ProTKSprintf(str, &quot;component type is %s&quot;, ProUtilAsmcompStr(r_type));
+	    ProTKFprintf(fp, &quot;\t%s\n&quot;, str);
+	    ProUtilMsgPrint( &quot;gen&quot;, &quot;Test %0s&quot;, str);
+    
+<a name="anchor-270"></a>	    status = ProAsmcompTypeSet(asmcomps+i, assembly, r_type);
+	    TEST_CALL_REPORT(&quot;ProAsmcompTypeSet()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+/* check &quot;is skeleton?&quot; */
+		 
+<a name="anchor-271"></a>	    status = ProMdlIsSkeleton (model, &amp;bool_type);
+	    TEST_CALL_REPORT(&quot;ProMdlIsSkeleton()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+	    
+	    if (bool_type)
+<a name="anchor-272"></a>	    {
+		    ProMessageClear();
+	        ProTKSprintf(str, &quot;component is a skeleton&quot;);
+	        ProTKFprintf(fp, &quot;\t%s\n&quot;, str);
+	        ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+<a name="anchor-273"></a>	    }
+		
+		 
+/* check &quot;is unplaced?&quot; */
+		
+<a name="anchor-274"></a>		 
+	    status = ProAsmcompIsUnplaced(asmcomps+i, &amp;bool_type);
+	    TEST_CALL_REPORT(&quot;ProAsmcompIsUnplaced()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+        if (bool_type)
+<a name="anchor-275"></a>	    {
+	        ProMessageClear();
+	        ProTKSprintf(str, &quot;component is unplaced&quot;);
+	        ProTKFprintf(fp, &quot;\t%s\n&quot;, str);
+	        ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+<a name="anchor-276"></a>	    }
+
+/* check &quot;is substitute?&quot; */
+		
+		 
+<a name="anchor-277"></a>	    status = ProAsmcompIsSubstitute (asmcomps+i, &amp;bool_type);
+	    TEST_CALL_REPORT(&quot;ProAsmcompIsSubstitute()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+        if (bool_type)
+	    {
+<a name="anchor-278"></a>	        ProMessageClear();
+	        ProTKSprintf(str, &quot;component is substitute&quot;);
+	        ProTKFprintf(fp, &quot;\t%s\n&quot;, str);
+	        ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+	    }
+<a name="anchor-279"></a>
+    	}/* end of for */
+        
+    	ProArrayFree((ProArray*)&amp;asmcomps);
+    	TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+<a name="anchor-280"></a>					    status, status != PRO_TK_NO_ERROR);
+    	fclose(fp);
+	break;
+    case TEST_ASMCOMP_CONSTR_REDEF:
+	status = ProAsmcompConstrRedefUI(&amp;asmcomp); 
+<a name="anchor-281"></a>    	TEST_CALL_REPORT(&quot;ProAsmcompConstrRedefUI()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+	break;
+    case TEST_ASMCOMP_CONSTR_REMOVE:
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, 
+<a name="anchor-282"></a>	    &quot;Enter index of constrains to remove [QUIT]:&quot;);
+	status = ProMessageIntegerRead(range, &amp;index);
+	if (status!= PRO_TK_NO_ERROR)
+	    break;
+	status = ProAsmcompConstrRemove(&amp;asmcomp, index); 
+<a name="anchor-283"></a>    	TEST_CALL_REPORT(&quot;ProAsmcompConstrRemove()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+	break;
+    case  TEST_ASMCOMP_REGENERATE:
+	status = ProAsmcompRegenerate(&amp;asmcomp, PRO_B_TRUE);
+<a name="anchor-284"></a>    	TEST_CALL_REPORT(&quot;ProAsmcompRegenerate()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+	break;
+    case TEST_ASMCOMP_PACKAGE_MOVE20:
+	status = ProAsmcompPackageMove(&amp;asmcomp,(ProMotionType)motion_type,PRO_B_TRUE,motion_ref_type,motion_ref,sel_sz);
+<a name="anchor-285"></a>    	TEST_CALL_REPORT(&quot;ProAsmcompPackageMove()&quot;, &quot;ProTestAsmcompFunc()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+	break;	
+    case TEST_ASMCOMP_PACKAGE_MOVE:
+        ProTestAsmcompPackageMove (&amp;asmcomp);
+<a name="anchor-286"></a>        break;
+
+    case TEST_ASMCOMP_MECHANISM:
+		
+	     ProTestAsmcompMechanismMenu (NULL, 0);
+<a name="anchor-287"></a>	break;
+
+    case TEST_ASMCOMP_CREATE:
+
+         ProTestSkelCopyCreate (assembly);
+<a name="anchor-288"></a>	
+	break;
+    case TEST_ASMCOMP_REPLACE:
+         ProTestCompSkelReplace (assembly);
+	break;
+<a name="anchor-289"></a>	
+    }
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-290"></a>
+/*====================================================================*\
+  Function : ProTestAsmcompFunc()
+  Purpose  : to test some ProAsmcomp functions
+\*====================================================================*/
+<a name="anchor-291"></a>int ProTestAsmcompFunc(ProMdl *mdl)
+{
+    ProTestMenuButton  menubut[] = {
+	{(char *)&quot;Assemble&quot;, TEST_ASMCOMP_ASSEMBLE},
+	{(char *)&quot;Redefine&quot;, TEST_ASMCOMP_REDEFINE},
+<a name="anchor-292"></a>	{(char *)&quot;ConstrRedef&quot;, TEST_ASMCOMP_CONSTR_REDEF},
+	{(char *)&quot;ConstrRedef&quot;, TEST_ASMCOMP_CONSTR_REDEF},
+	{(char *)&quot;ConstrRemove&quot;,TEST_ASMCOMP_CONSTR_REMOVE},
+	{(char *)&quot;Regenerate&quot;, TEST_ASMCOMP_REGENERATE},
+	{(char *)&quot;Package Move&quot;, TEST_ASMCOMP_PACKAGE_MOVE},
+<a name="anchor-293"></a>	{(char *)&quot;Package Move20&quot;, TEST_ASMCOMP_PACKAGE_MOVE20},
+	{(char *)&quot;Info&quot;, TEST_ASMCOMP_INFO},
+	{(char *)&quot;Tree Info&quot;, TEST_ASMCOMP_TREE_INFO},
+	{(char *)&quot;Mechanism&quot;, TEST_ASMCOMP_MECHANISM},
+	{(char *)&quot;AsmcompCreate&quot;, TEST_ASMCOMP_CREATE},
+<a name="anchor-294"></a>	{(char *)&quot;AsmcompReplace&quot;, TEST_ASMCOMP_REPLACE},
+	{(char *)&quot;Done TkAsmcomp&quot;, 0}
+    };
+    int n_but, i;
+    static int first=1;
+<a name="anchor-295"></a>
+    n_but = sizeof(menubut)/sizeof(menubut[0]);
+/*--------------------------------------------------------------------------*\
+	For a first call register a menu from strings
+\*--------------------------------------------------------------------------*/
+<a name="anchor-296"></a>    if (first)
+    {
+        ProTestMenuDynamicRegister ( (char *)&quot;TkAsmcomp&quot;, menubut, n_but);
+	first = 0;
+    }
+<a name="anchor-297"></a>    for (i=0; i&lt;n_but; i++)
+    	ProMenubuttonActionSet( (char *)&quot;TkAsmcomp&quot;, menubut[i].button,
+       	    (i == n_but-1 ? (ProMenubuttonAction)ProMenuDelete : 
+	    (ProMenubuttonAction)ProTestAsmcompAct), mdl, menubut[i].action); 
+    ProMenubuttonActionSet( (char *)&quot;TkAsmcomp&quot;, (char *)&quot;TkAsmcomp&quot;, 
+<a name="anchor-298"></a>       	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    
+    ProMenuCreate(PROMENUTYPE_MAIN, (char *)&quot;TkAsmcomp&quot;, NULL);
+    ProMenuProcess((char *)&quot;TkAsmcomp&quot;, &amp;i);
+
+<a name="anchor-299"></a>    return (0);
+}
+</pre>
+</body>
+</html>

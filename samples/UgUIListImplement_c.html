@@ -1,0 +1,208 @@
+<html>
+<head>
+<title>UgUIListImplement.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProMessage.h>
+#include &lt;ProMdl.h>
+#include &lt;ProModelitem.h>
+<a name="anchor-2"></a>#include &lt;ProWindows.h>
+#include &lt;ProDwgtable.h>
+#include &lt;ProUtil.h>
+#include &lt;ProUIDialog.h>
+#include &lt;ProUIList.h>
+<a name="anchor-3"></a>#include &lt;ProUIPushbutton.h>
+#include &lt;ProUITextarea.h>
+
+
+#include &quot;UtilString.h&quot;
+<a name="anchor-4"></a>#include &quot;UtilFiles.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;UtilNames.h&quot;
+
+#define OK 1
+<a name="anchor-5"></a>#define CANCEL 0
+
+void list_OKAction(char *dialog, char *component, ProAppData data);
+void list_CancelAction(char *dialog, char *component, ProAppData data);
+ProError UserUIListImplement ();
+<a name="anchor-6"></a>
+/*==================================================================*\
+  	FUNCTION : list_OKAction()
+  	PURPOSE  : Action function for the &quot;OK&quot; button
+\*==================================================================*/
+<a name="anchor-7"></a>void list_OKAction(char *dialog, char *component, ProAppData data)
+{
+  ProError status;
+
+  status = ProUIDialogExit(dialog, OK);
+<a name="anchor-8"></a>  TEST_CALL_REPORT (&quot;ProUIDialogExit()&quot;, &quot;list_OKAction()&quot;,
+		    status, status!=PRO_TK_NO_ERROR);
+}
+/*==================================================================*\
+  	FUNCTION : list_CancelAction()
+<a name="anchor-9"></a>  	PURPOSE  : Action function for the &quot;Cancel&quot; button
+\*==================================================================*/
+void list_CancelAction(char *dialog, char *component, ProAppData data)
+{
+  ProError status;
+<a name="anchor-10"></a>
+  status = ProUIDialogExit(dialog, CANCEL);
+   TEST_CALL_REPORT (&quot;ProUIDialogExit()&quot;, &quot;list_CancelAction()&quot;,
+		    status, status!=PRO_TK_NO_ERROR);
+}
+<a name="anchor-11"></a>
+
+
+/*===========================================================================*\
+  FUNCTION: UserUIListImplement
+<a name="anchor-12"></a>  PURPOSE:  demonstrates how to use the UI ListNames and ListLabel 
+            Set functions
+\*===========================================================================*/
+ProError UserUIListImplement ()
+{
+<a name="anchor-13"></a>  ProError                status;
+  ProDrawing              drawing;
+  ProSolid                *solids;
+  ProLine                 wline;
+  wchar_t                 **model_names;
+<a name="anchor-14"></a>  int                     i, exit_status, num; 
+  char                    **strings, type;
+  char                    *list_dialog = &quot;ug_uilist&quot;;
+  char                    *list_comp = &quot;ug_uilist_comp&quot;;
+  char                    *list_txtarea = &quot;ug_uilist_txtarea&quot;;
+<a name="anchor-15"></a>  char                    *list_pbok = &quot;ug_uilist_ok&quot;;
+  char                    *list_pbcancel = &quot;ug_uilist_cancel&quot;;
+
+  /*-------------------------------------------------*\
+    Get current drawing
+<a name="anchor-16"></a>  \*-------------------------------------------------*/
+  status = ProMdlCurrentGet ((ProMdl*)&amp;drawing);
+  TEST_CALL_REPORT (&quot;ProMdlCurrentGet()&quot;, &quot;UserUIListImplement()&quot;,
+		    status, status!=PRO_TK_NO_ERROR);
+
+<a name="anchor-17"></a>  /*-------------------------------------------------*\
+    Get the models that make the drawing
+  \*-------------------------------------------------*/
+  status = ProDrawingSolidsCollect(drawing, &amp;solids);
+  TEST_CALL_REPORT (&quot;ProDrawingTablesCollect()&quot;, &quot;UserUIListImplement()&quot;,
+<a name="anchor-18"></a>		    status, status!=PRO_TK_NO_ERROR);
+
+  /*-------------------------------------------------*\
+    Allocate memory for the char and wchar string arrays
+  \*-------------------------------------------------*/
+<a name="anchor-19"></a>  if (status == PRO_TK_NO_ERROR)
+    {
+      status = ProArraySizeGet ((ProArray)solids, &amp;num);
+      TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;, &quot;UserUIListImplement()&quot;,
+			status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-20"></a>
+      status = ProArrayAlloc (num, sizeof(wchar_t *), 1, 
+			      (ProArray *)&amp;model_names);
+      TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;, &quot;UserUIListImplement()&quot;,
+			status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-21"></a>
+      status = ProArrayAlloc(num, sizeof(char *), 1, (ProArray *)&amp;strings);
+      TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;, &quot;UserUIListImplement()&quot;,
+			status, status!=PRO_TK_NO_ERROR);
+      
+<a name="anchor-22"></a>      /*-------------------------------------------------*\
+	Allocate memory for the char and wchar strings
+      \*-------------------------------------------------*/
+      for (i=0; i&lt;num; i++)
+        {
+<a name="anchor-23"></a>	  model_names[i] = (wchar_t *)calloc(PRO_MDLNAME_SIZE, sizeof(wchar_t));
+	  strings[i] = (char *)calloc(PRO_MDLNAME_SIZE, sizeof(char));
+
+	  /*-------------------------------------------------*\
+	    Get the names of the models that makeup the drawing
+<a name="anchor-24"></a>	  \*-------------------------------------------------*/
+	  status = ProMdlMdlnameGet ((ProMdl)solids[i],  model_names[i]);
+	  TEST_CALL_REPORT (&quot;ProMdlMdlnameGet()&quot;, &quot;UserUIListImplement()&quot;,
+			status, status!=PRO_TK_NO_ERROR);
+
+<a name="anchor-25"></a>	  /*-------------------------------------------------*\
+	    convert widestrings to strings
+	  \*-------------------------------------------------*/
+	  ProWstringToString(strings[i], model_names[i]);
+        }
+<a name="anchor-26"></a>
+      /*-------------------------------------------------*\
+	Create and set the pushbutton activate actions
+      \*-------------------------------------------------*/
+      status = ProUIDialogCreate (list_dialog, list_dialog); 
+<a name="anchor-27"></a>      TEST_CALL_REPORT (&quot;ProUIDialogCreate()&quot;, &quot;UserUIListImplement()&quot;,
+		    status, status!=PRO_TK_NO_ERROR );
+
+      status = ProUIPushbuttonActivateActionSet (list_dialog, list_pbok,  
+						 list_OKAction, NULL); 
+<a name="anchor-28"></a>      TEST_CALL_REPORT (&quot;ProUIPushbuttonActivateSet()&quot;, 
+			&quot;UserUIListImplement()&quot;, status, 
+			status!=PRO_TK_NO_ERROR );
+
+      status = ProUIPushbuttonActivateActionSet (list_dialog, list_pbcancel,  
+<a name="anchor-29"></a>						 list_CancelAction, NULL); 
+      TEST_CALL_REPORT (&quot;ProUIPushbuttonActivateSet()&quot;, 
+			&quot;UserUIListImplement()&quot;, status, 
+			status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-30"></a>      /*-------------------------------------------------*\
+	Populate the list with the model names after activating
+	the dialog and destroy the dialog when done
+      \*-------------------------------------------------*/
+
+<a name="anchor-31"></a>      status = ProUIListNamesSet (list_dialog, list_comp, num, strings); 
+      TEST_CALL_REPORT (&quot;ProUIListNamesSet()&quot;, &quot;UserUIListImplement()&quot;,
+		    status, status!=PRO_TK_NO_ERROR );
+
+      status = ProUIListLabelsSet (list_dialog, list_comp, num, model_names); 
+<a name="anchor-32"></a>      TEST_CALL_REPORT (&quot;ProUIListLabelsSet()&quot;, &quot;UserUIListImplement()&quot;,
+		    status, status!=PRO_TK_NO_ERROR );
+
+      ProStringToWstring(wline, 
+		 &quot;These are the names of the parts\nthat makeup the drawing&quot;);
+<a name="anchor-33"></a> 
+      status = ProUITextareaValueSet(list_dialog, list_txtarea, wline);
+      TEST_CALL_REPORT (&quot;ProUIListLabelsSet()&quot;, &quot;UserUIListImplement()&quot;,
+		    status, status!=PRO_TK_NO_ERROR );
+      
+<a name="anchor-34"></a>
+      status = ProUIDialogActivate (list_dialog, &amp;exit_status);
+      TEST_CALL_REPORT (&quot;ProUIDialogActivate()&quot;, &quot;UserUIListImplement()&quot;,
+		    status, status!=PRO_TK_NO_ERROR );
+
+<a name="anchor-35"></a>      status = ProUIDialogDestroy (list_dialog);
+      TEST_CALL_REPORT (&quot;ProUIDialogDestroy()&quot;, &quot;UserUIListImplement()&quot;,
+		    status, status!=PRO_TK_NO_ERROR );
+      
+      /*-------------------------------------------------*\
+<a name="anchor-36"></a>	Free memory
+      \*-------------------------------------------------*/
+      
+      status = ProArrayFree ((ProArray*)&amp;solids);
+      TEST_CALL_REPORT (&quot;ProArrayFree()&quot;, &quot;UserUIListImplement()&quot;,
+<a name="anchor-37"></a>			status, status!=PRO_TK_NO_ERROR);
+
+      status = ProArrayFree((ProArray *)&amp;model_names);
+      TEST_CALL_REPORT (&quot;ProWstringproarrayFree()&quot;, &quot;UserUIListImplement()&quot;,
+			status, status!=PRO_TK_NO_ERROR);
+<a name="anchor-38"></a>      
+      status = ProArrayFree((ProArray *)&amp;strings);
+      TEST_CALL_REPORT (&quot;ProStringproarrayFree()&quot;, &quot;UserUIListImplement()&quot;,
+			status, status!=PRO_TK_NO_ERROR);
+      
+<a name="anchor-39"></a>    }
+
+    return(PRO_TK_NO_ERROR);
+}
+
+</pre>
+</body>
+</html>

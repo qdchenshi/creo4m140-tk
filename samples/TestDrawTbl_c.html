@@ -1,0 +1,1364 @@
+<html>
+<head>
+<title>TestDrawTbl.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>/*--------------------------------------------------------------------*\
+    System includes
+\*--------------------------------------------------------------------*/
+#include &lt;string.h>
+
+<a name="anchor-2"></a>/*--------------------------------------------------------------------*\
+    ProToolkit includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProArray.h>
+#include &lt;ProAsmcomppath.h>
+<a name="anchor-3"></a>#include &lt;ProAssembly.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProDwgtable.h>
+#include &lt;ProDtlitem.h>
+#include &lt;ProToolkit.h>
+<a name="anchor-4"></a>#include &lt;ProObjects.h>
+#include &lt;ProGraphic.h>
+#include &lt;ProSelection.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMessage.h>
+<a name="anchor-5"></a>#include &lt;ProModelitem.h>
+#include &lt;ProMdl.h>
+#include &lt;ProDrawing.h>
+#include &lt;ProWindows.h>
+#include &lt;ProSolid.h>
+<a name="anchor-6"></a>#include &lt;ProUtil.h>
+#include &lt;ProWstring.h>
+
+/*--------------------------------------------------------------------*\
+    Application includes
+<a name="anchor-7"></a>\*--------------------------------------------------------------------*/
+#include &lt;TestError.h>
+#include &lt;UtilCollect.h>
+#include &lt;UtilFiles.h>
+#include &lt;UtilMessage.h>
+<a name="anchor-8"></a>#include &lt;UtilString.h>
+#include &lt;UtilNames.h>
+#include &lt;UtilMenu.h>
+#include &lt;PTApplsUnicodeUtils.h>
+
+<a name="anchor-9"></a>/*--------------------------------------------------------------------*\
+    Application macros
+\*--------------------------------------------------------------------*/
+#define TBL_INFO_NAME           &quot;dwg_table.info&quot;
+#define TBL_CREATE_DESCENDING   1
+<a name="anchor-10"></a>#define TBL_CREATE_ASCENDING    2
+#define TBL_CREATE_RIGHTWARD    3
+#define TBL_CREATE_LEFTWARD     4
+#define TBL_CREATE_NUM_CHARS    5
+#define TBL_CREATE_LENGTH       6
+<a name="anchor-11"></a>#define TBL_DESASC_TO_STRING(x) ((x==TBL_CREATE_DESCENDING)?&quot;down&quot;:&quot;upper&quot;)   
+#define TBL_LR_TO_STRING(x)     ((x==TBL_CREATE_LEFTWARD)?&quot;left&quot;:&quot;right&quot;)
+
+/*--------------------------------------------------------------------*\
+    Constants for application menu
+<a name="anchor-12"></a>\*--------------------------------------------------------------------*/
+#define TBL_TEST_MN_CREATE             1
+#define TBL_TEST_MN_DELETE             2
+#define TBL_TEST_MN_UPDATE             3
+#define TBL_TEST_MN_MODIFY             4
+<a name="anchor-13"></a>#define TBL_TEST_MN_INFO               5
+#define TBL_TEST_MN_RETRIVE            6
+#define TBL_TEST_MN_MOD_TABLE          7
+#define TBL_TEST_MN_MOD_ROW_COL        8
+#define TBL_TEST_MN_MOD_TBL_MERGE      9
+<a name="anchor-14"></a>#define TBL_TEST_MN_MOD_TBL_REMESH    10
+#define TBL_TEST_MN_MOD_TBL_ROTATE    11
+#define TBL_TEST_MN_MOD_TBL_MERGE_ROW 12
+#define TBL_TEST_MN_MOD_TBL_MERGE_COL 13
+#define TBL_TEST_MN_MOD_TBL_MERGE_RC  14
+<a name="anchor-15"></a>#define TBL_TEST_MN_MOD_TBL_INSERT    15
+#define TBL_TEST_MN_MOD_TBL_REMOVE    16
+#define TBL_TEST_MN_PICK_POINT        17  
+#define TBL_TEST_MN_PICK_VERTEX       18
+#define TBL_TEST_MN_PICK_ENTITY       19
+<a name="anchor-16"></a>#define TBL_TEST_MN_PICK_REL_COORDS   20 
+#define TBL_TEST_MN_PICK_ABS_COORDS   21 
+#define TBL_TEST_MN_MOD_TBL_ROW       22
+#define TBL_TEST_MN_MOD_TBL_COL       23
+#define TBL_TEST_MN_LEFT_RIGHT        24
+<a name="anchor-17"></a>#define TBL_TEST_MN_NUM_LEN           25
+#define TBL_TEST_MN_DES_AS            26
+#define TBL_TEST_MN_DONE              27
+
+
+<a name="anchor-18"></a>/*===========================================================================*\
+  FUNCTION: ProTestTableRemesh
+  PURPOSE:  merge/remesh table cells
+\*===========================================================================*/
+int ProTestTableRemesh(ProDrawing drawing, int opt)   
+<a name="anchor-19"></a>{
+    ProDwgtable table;
+    ProError error;
+    ProSelection *sel;
+    int tseg[2];
+<a name="anchor-20"></a>    int table_id[2];
+    int i,j,n;
+    int row[2], col[2];
+
+
+<a name="anchor-21"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, 
+	    &quot;Pick pair of table cells&quot;);
+
+/*--------------------------------------------------------------------*\
+    Select two table cells
+<a name="anchor-22"></a>\*--------------------------------------------------------------------*/
+    error = ProSelect((char*)&quot;table_cell&quot;, 2, NULL, NULL, NULL, NULL, &amp;sel, &amp;n);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestTableRemesh()&quot;,
+	error, error!=PRO_TK_NO_ERROR);
+
+<a name="anchor-23"></a>    if ((error!=PRO_TK_NO_ERROR)||(n&lt;2))
+        return(error);
+
+    for(j=0;j&lt;n;j++)
+    {
+<a name="anchor-24"></a>      error = ProSelectionUnhighlight(sel[j]);
+    }
+
+/*--------------------------------------------------------------------*\
+    Get cell position
+<a name="anchor-25"></a>\*--------------------------------------------------------------------*/
+    for (i=0; i&lt;2; i++)    
+    {
+       error = ProSelectionDwgtableGet(sel[i],&amp;table);
+       TEST_CALL_REPORT(&quot;ProSelectionDwgtableGet()&quot;, &quot;ProTestTableRemesh()&quot;,
+<a name="anchor-26"></a>		   error, error!=PRO_TK_NO_ERROR);
+
+        error = ProSelectionDwgtblcellGet(sel[i], &amp;tseg[i], &amp;row[i], &amp;col[i]);
+        TEST_CALL_REPORT(&quot;ProSelectionDwgtblcellGet()&quot;, &quot;ProTestTableRemesh()&quot;,
+	    error, error!=PRO_TK_NO_ERROR);
+<a name="anchor-27"></a>        row[i]++;
+        col[i]++;    
+        table_id[i] = table.id;
+    }
+/*--------------------------------------------------------------------*\
+<a name="anchor-28"></a>    Both cells must be in the some table
+\*--------------------------------------------------------------------*/
+    if (table_id[0]!=table_id[1])
+    {
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, 
+<a name="anchor-29"></a>		&quot;Both points must be in the some table&quot;);
+	return (PRO_TK_GENERAL_ERROR);
+    }
+    
+/*--------------------------------------------------------------------*\
+<a name="anchor-30"></a>    Initialize table handle
+\*--------------------------------------------------------------------*/
+    error = ProModelitemInit((ProMdl)drawing, table_id[0], PRO_DRAW_TABLE,
+	    (ProModelitem*)&amp;table);
+    TEST_CALL_REPORT(&quot;ProModelitemInit()&quot;, 
+<a name="anchor-31"></a>            &quot;ProTestTableRemesh&quot;, error, error != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Sorting the row and colums
+\*--------------------------------------------------------------------*/
+<a name="anchor-32"></a>    if(row[1]&lt;row[0])
+    {
+        i=row[0];
+        row[0]=row[1];
+        row[1]=i;
+<a name="anchor-33"></a>    }    
+    if(col[1]&lt;col[0])
+    {
+        i=col[0];
+        col[0]=col[1];
+<a name="anchor-34"></a>        col[1]=i;
+    }    
+    switch(opt)
+    {
+/*--------------------------------------------------------------------*\
+<a name="anchor-35"></a>    Merge rows
+\*--------------------------------------------------------------------*/
+        case TBL_TEST_MN_MOD_TBL_MERGE_ROW:
+            for (i=col[0]; i&lt;=col[1]; i++)
+            {
+<a name="anchor-36"></a>	        error = ProDwgtableCellsMerge(&amp;table, i, row[0], i, row[1], 1);
+		TEST_CALL_REPORT(&quot;ProDwgtableCellsMerge()&quot;, 
+			    &quot;ProTestTableRemesh&quot;, error, error != PRO_TK_NO_ERROR);
+	    }
+	    break;
+<a name="anchor-37"></a>/*--------------------------------------------------------------------*\
+    Merge colums
+\*--------------------------------------------------------------------*/
+        case TBL_TEST_MN_MOD_TBL_MERGE_COL:
+            for (i=row[0]; i&lt;=row[1]; i++)
+<a name="anchor-38"></a>	    {
+                error = ProDwgtableCellsMerge(&amp;table, col[0], i, col[1], i, 1);
+		TEST_CALL_REPORT(&quot;ProDwgtableCellsMerge()&quot;, 
+		    &quot;ProTestTableRemesh&quot;, error, error != PRO_TK_NO_ERROR);
+	    }
+<a name="anchor-39"></a>            break;
+/*--------------------------------------------------------------------*\
+    Merge row and colums
+\*--------------------------------------------------------------------*/
+        case TBL_TEST_MN_MOD_TBL_MERGE_RC :
+<a name="anchor-40"></a>                error = ProDwgtableCellsMerge(&amp;table, col[0], row[0], col[1], row[1], 1);
+		TEST_CALL_REPORT(&quot;ProDwgtableCellsMerge()&quot;, 
+			    &quot;ProTestTableRemesh&quot;, error, error != PRO_TK_NO_ERROR);
+            break;
+/*--------------------------------------------------------------------*\
+<a name="anchor-41"></a>    Remesh table
+\*--------------------------------------------------------------------*/
+        case TBL_TEST_MN_MOD_TBL_REMESH:    
+	    error = ProDwgtableCellsRemesh(&amp;table, col[0], row[0], col[1], row[1], 1);
+	    TEST_CALL_REPORT(&quot;ProDwgtableCellsRemesh()&quot;, 
+<a name="anchor-42"></a>		    &quot;ProTestTableRemesh&quot;, error, error != PRO_TK_NO_ERROR);
+
+            error = ProDwgtableDisplay(&amp;table);
+            TEST_CALL_REPORT (&quot;ProDwgtableDisplay()&quot;,
+                    &quot;ProTestTableRemesh&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-43"></a>            break;        
+	default:
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Error!&quot;);
+            break;
+    }            
+<a name="anchor-44"></a>
+    return (PRO_TK_NO_ERROR);
+}
+
+/*===========================================================================*\
+<a name="anchor-45"></a>  FUNCTION: ProTestTableRotate
+  PURPOSE:  Rotate selected table
+\*===========================================================================*/
+int ProTestTableRotate(ProDrawing drawing)
+{
+<a name="anchor-46"></a>    ProDwgtable table;
+    ProError error;
+    ProSelection *sel;
+    int n,j;
+
+<a name="anchor-47"></a>/*--------------------------------------------------------------------*\
+    Select table for rotate
+\*--------------------------------------------------------------------*/
+    error = ProSelect((char*)&quot;dwg_table&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestTableRotate()&quot;,
+<a name="anchor-48"></a>	error, error!=PRO_TK_NO_ERROR);
+
+    for(j=0;j&lt;n;j++)
+    {
+    error = ProSelectionUnhighlight(sel[j]);
+<a name="anchor-49"></a>    }
+    
+    if((error == PRO_TK_NO_ERROR)&amp;&amp;(n>0))
+    {
+        error = ProSelectionModelitemGet(sel[0], (ProModelitem*)&amp;table);
+<a name="anchor-50"></a>        TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestTableRotate()&quot;,
+	        error, error!=PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Rotate table
+<a name="anchor-51"></a>\*--------------------------------------------------------------------*/
+	error = ProDwgtableRotate(&amp;table, 1);
+	TEST_CALL_REPORT(&quot;ProDwgtableRotate()&quot;,&quot;ProTestTableRotate&quot;, 
+                error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-52"></a>	error = ProWindowRepaint(PRO_VALUE_UNUSED);
+	TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;,&quot;ProTestTableRotate&quot;, 
+                error, error != PRO_TK_NO_ERROR);
+    }
+                
+<a name="anchor-53"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*=================================================================*\
+    FUNCTION : ProTestTableModTabMerge()
+<a name="anchor-54"></a>    PURPOSE  : Create &quot;TblMerge&quot; menu 
+\*=================================================================*/
+int ProTestTableModTabMerge(ProDrawing drawing)
+{
+    int n;
+<a name="anchor-55"></a>    ProError error;
+    static ProUtilMenuButtons  TMenu[] ={
+		{&quot;TblMerge&quot;,  -1, TEST_CALL_PRO_MENU_DELETE},
+		{&quot;-Rows&quot;,     TBL_TEST_MN_MOD_TBL_MERGE_ROW, 0},
+		{&quot;-Columns&quot;,  TBL_TEST_MN_MOD_TBL_MERGE_COL, 0},
+<a name="anchor-56"></a>		{&quot;-Row&amp;Cols&quot;, TBL_TEST_MN_MOD_TBL_MERGE_RC,  0},
+		{&quot;-Done/Return&quot;,-1,  TEST_CALL_PRO_MENU_DELETE},
+		{&quot;&quot;,      -1,0}};
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-57"></a>    Create &quot;TblMerge&quot; select  &quot;-Done/Return&quot;  for exit from menu
+\*--------------------------------------------------------------------*/
+    do
+    {    
+        error = ProUtilMenuIntValueSelect(TMenu, &amp;n);
+<a name="anchor-58"></a>
+        if((error!=PRO_TK_NO_ERROR)||(n&lt;0))
+            return(PRO_TK_USER_ABORT);
+    
+        error = (ProError)ProTestTableRemesh(drawing, n);    
+<a name="anchor-59"></a>        if((error!=PRO_TK_NO_ERROR) &amp;&amp; (error != PRO_TK_USER_ABORT))
+            return error;
+	
+    }while (error!=PRO_TK_USER_ABORT);
+    
+<a name="anchor-60"></a>    return(PRO_TK_NO_ERROR);
+}
+
+/*=================================================================*\
+    FUNCTION : ProTestTableModTabMenu()
+<a name="anchor-61"></a>    PURPOSE  : Create &quot;TblModify&quot; menu 
+\*=================================================================*/
+int ProTestTableModTabMenu(ProDrawing drawing)
+{
+    int n ;
+<a name="anchor-62"></a>    ProError error;
+    static ProUtilMenuButtons  TMenu[] ={
+		{&quot;TblModify&quot;,  -1, TEST_CALL_PRO_MENU_DELETE},
+		{&quot;-Merge&quot;,    TBL_TEST_MN_MOD_TBL_MERGE,    0},
+		{&quot;-Remesh&quot;,   TBL_TEST_MN_MOD_TBL_REMESH,  0},
+<a name="anchor-63"></a>		{&quot;-Rotate&quot;,   TBL_TEST_MN_MOD_TBL_ROTATE,  0},
+		{&quot;-Done/Return&quot;,-1,  TEST_CALL_PRO_MENU_DELETE},
+		{&quot;&quot;,      -1,0}};
+/*--------------------------------------------------------------------*\
+    Create &quot;TblModify&quot; select  &quot;-Done/Return&quot;  for exit from menu
+<a name="anchor-64"></a>\*--------------------------------------------------------------------*/
+    do
+    {
+        error = ProUtilMenuIntValueSelect(TMenu, &amp;n);
+    
+<a name="anchor-65"></a>        if((error!=PRO_TK_NO_ERROR)||(n&lt;0))
+            return(PRO_TK_USER_ABORT);
+            
+        switch(n)
+        {        
+<a name="anchor-66"></a>            case TBL_TEST_MN_MOD_TBL_REMESH:
+                error = (ProError)ProTestTableRemesh(drawing, TBL_TEST_MN_MOD_TBL_REMESH);
+                break;
+            case TBL_TEST_MN_MOD_TBL_MERGE:
+                ProTestTableModTabMerge(drawing);
+<a name="anchor-67"></a>                break;
+            case TBL_TEST_MN_MOD_TBL_ROTATE:
+                ProTestTableRotate(drawing);
+                break;
+        }            
+<a name="anchor-68"></a>        
+    }while ((error == PRO_TK_NO_ERROR)&amp;&amp;(n>0));
+    
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-69"></a>
+/*===========================================================================*\
+  FUNCTION: ProTestTableInsertRemove
+  PURPOSE:  insert/remove  row/col into(from) a table
+\*===========================================================================*/
+<a name="anchor-70"></a>ProError ProTestTableInsertRemove(ProDrawing drawing, int action, int opt)
+{
+    ProError error;
+    ProDwgtable table;
+    ProSelection *sel;
+<a name="anchor-71"></a>    int tseg;
+    int table_id;
+    int row,col, n,j;
+    double d, range[2]={1, 20};
+    ProCharLine cstr;
+<a name="anchor-72"></a>
+    ProTKSprintf(cstr, &quot;Pick location in the table to %s %s&quot;,
+        (action == TBL_TEST_MN_MOD_TBL_INSERT) ? &quot;insert&quot;:&quot;remove&quot;,
+        (opt == TBL_TEST_MN_MOD_TBL_ROW) ? &quot;row&quot; : &quot;column&quot;);
+
+<a name="anchor-73"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, cstr);
+/*--------------------------------------------------------------------*\
+    Select place in the table for insert or remove row or columns 
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-74"></a>    error = ProSelect((char*)&quot;table_cell&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestTableInsertRemove()&quot;,
+	    error, error!=PRO_TK_NO_ERROR);
+
+    if ((error!=PRO_TK_NO_ERROR)||(n&lt;1))
+<a name="anchor-75"></a>            return(PRO_TK_USER_ABORT);
+
+    for(j=0;j&lt;n;j++)
+    {
+    error = ProSelectionUnhighlight(sel[j]);
+<a name="anchor-76"></a>    }
+            
+/*--------------------------------------------------------------------*\
+    Get cell position
+\*--------------------------------------------------------------------*/
+<a name="anchor-77"></a>
+    error = ProSelectionDwgtableGet(sel[0],&amp;table);
+    TEST_CALL_REPORT(&quot;ProSelectionDwgtableGet()&quot;, &quot;ProTestTableInsertRemove()&quot;,
+             error, error!=PRO_TK_NO_ERROR);
+
+<a name="anchor-78"></a>    error = ProSelectionDwgtblcellGet(sel[0], &amp;tseg, &amp;row, &amp;col);
+    TEST_CALL_REPORT(&quot;ProSelectionDwgtblcellGet()&quot;, &quot;ProTestTableInsertRemove()&quot;,
+	    error, error!=PRO_TK_NO_ERROR);
+    row++;
+    col++;
+<a name="anchor-79"></a>    table_id = table.id;         
+
+    error = ProModelitemInit((ProMdl)drawing,
+        table_id, PRO_DRAW_TABLE, (ProModelitem*)&amp;table);
+    TEST_CALL_REPORT(&quot;ProModelitemInit()&quot;, &quot;ProTestTableInsertRemove()&quot;,
+<a name="anchor-80"></a>	    error, error!=PRO_TK_NO_ERROR);
+
+    if (action == TBL_TEST_MN_MOD_TBL_INSERT)
+    {
+        if(opt == TBL_TEST_MN_MOD_TBL_ROW)
+<a name="anchor-81"></a>        {
+/*--------------------------------------------------------------------*\
+    Insert row into the table
+\*--------------------------------------------------------------------*/
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter row height in chars&quot;);
+<a name="anchor-82"></a>	    if (ProMessageDoubleRead(range, &amp;d)!=PRO_TK_NO_ERROR)
+                return (PRO_TK_USER_ABORT);
+
+            error = ProDwgtableRowAdd(&amp;table, row, 1, d);
+	    TEST_CALL_REPORT(&quot;ProDwgtableRowAdd()&quot;, 
+<a name="anchor-83"></a>                &quot;ProTestTableInsertRemove()&quot;, error, error != PRO_TK_NO_ERROR);
+        }
+        else
+        {
+/*--------------------------------------------------------------------*\
+<a name="anchor-84"></a>    Insert col into the table
+\*--------------------------------------------------------------------*/
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter cell width in chars&quot;);
+	    if (ProMessageDoubleRead(range, &amp;d)!=PRO_TK_NO_ERROR)
+                return (PRO_TK_NO_ERROR);
+<a name="anchor-85"></a>
+            error = ProDwgtableColumnAdd(&amp;table, col, 1,d);
+	    TEST_CALL_REPORT(&quot;ProDwgtableColumnAdd()&quot;, 
+                &quot;ProTestTableInsertRemove()&quot;, error, error != PRO_TK_NO_ERROR);
+        }
+<a name="anchor-86"></a>    }
+    else
+    {
+        ProTKSprintf(cstr, &quot;Do you really want to remove the %0s? [N]:&quot;, 
+            (opt == TBL_TEST_MN_MOD_TBL_ROW) ? &quot;row&quot; : &quot;column&quot;);
+<a name="anchor-87"></a>	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, cstr);
+
+	if (ProUtilYesnoGet((char*)&quot;yes&quot;)==0)
+            return (PRO_TK_USER_ABORT);
+            
+<a name="anchor-88"></a>	if (opt == TBL_TEST_MN_MOD_TBL_ROW)
+	{
+/*--------------------------------------------------------------------*\
+    Remove row from the table
+\*--------------------------------------------------------------------*/
+<a name="anchor-89"></a>		error = ProDwgtableRowDelete(&amp;table, row, 1);
+		TEST_CALL_REPORT(&quot;ProDwgtableRowDelete()&quot;, 
+		    &quot;ProTestTableInsertRemove()&quot;, error, error != PRO_TK_NO_ERROR);
+	} 
+	else
+<a name="anchor-90"></a>	{
+/*--------------------------------------------------------------------*\
+    Remove column from the table
+\*--------------------------------------------------------------------*/
+		error = ProDwgtableColumnDelete(&amp;table, col, 1);
+<a name="anchor-91"></a>		TEST_CALL_REPORT(&quot;ProDwgtableColumnDelete()&quot;, 
+		    &quot;ProTestTableInsertRemove()&quot;, error, error != PRO_TK_NO_ERROR);
+	}
+    }
+    
+<a name="anchor-92"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*=================================================================*\
+    FUNCTION : ProTestTableInsertRemoveMenu()
+<a name="anchor-93"></a>    PURPOSE  : Create &quot;TblInsRm&quot; menu 
+\*=================================================================*/
+ProError ProTestTableInsertRemoveMenu(ProDrawing drawing)
+{
+    int n1, n2;
+<a name="anchor-94"></a>    ProError error;
+    static ProUtilMenuButtons  TMenu1[] ={
+		{&quot;TblInsRm&quot;,  -1, TEST_CALL_PRO_MENU_DELETE},
+		{&quot;-Insert&quot;,  TBL_TEST_MN_MOD_TBL_INSERT, 0},
+		{&quot;-Remove&quot;,  TBL_TEST_MN_MOD_TBL_REMOVE, 0},
+<a name="anchor-95"></a>		{&quot;-Done/Return&quot;,-1,  TEST_CALL_PRO_MENU_DELETE},
+		{&quot;&quot;,      -1,0}};
+
+    static ProUtilMenuButtons  TMenu2[] ={
+		{&quot;TblRowCol&quot;,  -1, TEST_CALL_PRO_MENU_DELETE},
+<a name="anchor-96"></a>		{&quot;-Row&quot;,  TBL_TEST_MN_MOD_TBL_ROW, 0},
+		{&quot;-Col&quot;,  TBL_TEST_MN_MOD_TBL_COL, 0},
+		{&quot;-Done/Return&quot;,-1,  TEST_CALL_PRO_MENU_DELETE},
+		{&quot;&quot;,      -1,0}};
+/*--------------------------------------------------------------------*\
+<a name="anchor-97"></a>    Show &quot;Insert/Remove&quot; menu  
+\*--------------------------------------------------------------------*/
+    do
+    {
+        error = ProUtilMenuIntValueSelect(TMenu1, &amp;n1);
+<a name="anchor-98"></a>
+        if((error!=PRO_TK_NO_ERROR)||(n1&lt;0))
+            return(PRO_TK_NO_ERROR);
+        
+        do
+<a name="anchor-99"></a>        {        
+            error = ProUtilMenuIntValueSelect(TMenu2, &amp;n2);
+            
+            if((error!=PRO_TK_NO_ERROR)||(n2&lt;0))
+                break;
+<a name="anchor-100"></a>            
+            error = ProTestTableInsertRemove(drawing, n1, n2);
+            
+        } while((error==PRO_TK_NO_ERROR));
+        
+<a name="anchor-101"></a>    }while(1);
+    return (error);      
+}
+
+/*=================================================================*\
+<a name="anchor-102"></a>    FUNCTION : ProTestTableModifyMenu()
+    PURPOSE  : Create &quot;TkModify&quot; menu 
+\*=================================================================*/
+int ProTestTableModifyMenu(ProDrawing drawing)
+{
+<a name="anchor-103"></a>    int n;
+    ProError error;
+    static ProUtilMenuButtons  TMenu[] ={
+		{&quot;TkModify&quot;,     -1, TEST_CALL_PRO_MENU_DELETE},
+		{&quot;-Table&quot;,      TBL_TEST_MN_MOD_TABLE,    0},
+<a name="anchor-104"></a>		{&quot;-Row/Cols&quot;,   TBL_TEST_MN_MOD_ROW_COL,  0},
+		{&quot;-Done/Return&quot;,-1,  TEST_CALL_PRO_MENU_DELETE},
+		{&quot;&quot;,      -1,0}};
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-105"></a>    Show &quot;TkModify&quot; menu  
+\*--------------------------------------------------------------------*/
+    error = ProUtilMenuIntValueSelect(TMenu, &amp;n);
+
+    if((error!=PRO_TK_NO_ERROR)||(n&lt;0))
+<a name="anchor-106"></a>        return(PRO_TK_NO_ERROR);
+        
+    switch(n)
+    {        
+        case TBL_TEST_MN_MOD_TABLE:
+<a name="anchor-107"></a>            ProTestTableModTabMenu(drawing);
+            break;
+        case TBL_TEST_MN_MOD_ROW_COL:
+            ProTestTableInsertRemoveMenu(drawing);
+            break;
+<a name="anchor-108"></a>    }            
+    return(PRO_TK_NO_ERROR);
+}
+
+/*===========================================================================*\
+<a name="anchor-109"></a>  FUNCTION: ProTestTableDelete
+  PURPOSE:  delete the table from drawing
+\*===========================================================================*/
+int ProTestTableDelete(ProDrawing drawing)
+{
+<a name="anchor-110"></a>    ProError error;
+    ProDwgtable table;
+    ProSelection *sel;
+    int n,j;
+
+<a name="anchor-111"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick the table to be deleted.&quot;);
+    
+/*--------------------------------------------------------------------*\
+    Select table for delete
+\*--------------------------------------------------------------------*/
+<a name="anchor-112"></a>    error = ProSelect((char*)&quot;dwg_table&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestTableDelete()&quot;,
+	error, error!=PRO_TK_NO_ERROR);
+    
+    for(j=0;j&lt;n;j++)
+<a name="anchor-113"></a>    {
+    error = ProSelectionUnhighlight(sel[j]);
+    }
+
+    if((error == PRO_TK_NO_ERROR)&amp;&amp;(n>0))
+<a name="anchor-114"></a>    {
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Do you really want to delete the table [N]:&quot;);
+	if (ProUtilYesnoGet((char*)&quot;yes&quot;)==1)
+        {
+            error = ProSelectionModelitemGet(sel[0], (ProModelitem*)&amp;table);
+<a name="anchor-115"></a>            TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestTableDelete()&quot;,
+	        error, error!=PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Delete selected table
+<a name="anchor-116"></a>\*--------------------------------------------------------------------*/
+            error = ProDwgtableDelete(&amp;table, 1);
+            TEST_CALL_REPORT(&quot;ProDwgtableDelete()&quot;, &quot;ProTestTableDelete()&quot;,
+	        error, error!=PRO_TK_NO_ERROR);
+        }    
+<a name="anchor-117"></a>    }
+        
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-118"></a>/*===========================================================================*\
+  FUNCTION: ProTestTableInfo
+  PURPOSE:  list parameters of table
+\*===========================================================================*/
+int ProTestTableInfo (ProDrawing drawing)
+<a name="anchor-119"></a>{
+    ProPath  f_name;
+    ProCharLine cstr;    
+    int  i, j, cur_sheet, n, ncols, nrows,k;
+    FILE *fp;
+<a name="anchor-120"></a>    ProDwgtableInfo table_info;
+    ProDwgtable table;	
+    ProBoolean  from_format, is_comment;
+    ProAsmcomppath component;
+    ProError error;
+<a name="anchor-121"></a>    ProMdldata mdl_data;
+    ProMdl     mdl;
+    ProSelection *sel;
+    double sw, sl;
+	ProMdlName modelName;
+<a name="anchor-122"></a>    
+/*--------------------------------------------------------------------*\
+    Get current sheet number
+\*--------------------------------------------------------------------*/
+    error = ProDrawingCurrentSheetGet(drawing, &amp;cur_sheet);
+<a name="anchor-123"></a>    TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;,
+        &quot;ProTestTableInfo()&quot;, error, error!=PRO_TK_NO_ERROR);
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select a drawing table to parameters listing&quot;);
+
+<a name="anchor-124"></a>/*--------------------------------------------------------------------*\
+    Select table from the current drawing
+\*--------------------------------------------------------------------*/
+    error = ProSelect((char*)&quot;dwg_table&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestTableInfo()&quot;,
+<a name="anchor-125"></a>	    error, error!=PRO_TK_NO_ERROR);
+            
+    if((error!=PRO_TK_NO_ERROR)||(n&lt;1))
+        return (PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-126"></a>    for(k=0;k&lt;n;k++)
+    {
+    error = ProSelectionUnhighlight(sel[k]);
+    }
+
+<a name="anchor-127"></a>    error = ProSelectionModelitemGet(sel[0], (ProModelitem*)&amp;table);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestTableInfo()&quot;,
+	        error, error!=PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-128"></a>    Open file for output information about selected table
+\*--------------------------------------------------------------------*/
+    fp = PTApplsUnicodeFopen(TBL_INFO_NAME, &quot;w&quot;);
+    if (fp == NULL)
+       return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-129"></a>
+/*--------------------------------------------------------------------*\
+    Get parameters of table.
+\*--------------------------------------------------------------------*/
+    ProTKFprintf (fp, &quot;Table %d.\n&quot;, table.id);
+<a name="anchor-130"></a>            
+    error = ProDwgtableRowsCount (&amp;table, &amp;nrows);
+    TEST_CALL_REPORT(&quot;ProDwgtableRowsCount()&quot;, &quot;ProTestTableInfo()&quot;,
+        error, error!=PRO_TK_NO_ERROR);
+    ProTKFprintf (fp, &quot;Number of row %d. &quot;, nrows);
+<a name="anchor-131"></a>
+    error = ProDwgtableColumnsCount (&amp;table, &amp;ncols);
+    TEST_CALL_REPORT(&quot;ProDwgtableColumnsCount()&quot;, &quot;ProTestTableInfo()&quot;,
+        error, error!=PRO_TK_NO_ERROR);
+    ProTKFprintf (fp, &quot;Number of column %d\n&quot;, ncols);
+<a name="anchor-132"></a>
+/*--------------------------------------------------------------------*\
+    Calculate table size
+\*--------------------------------------------------------------------*/
+    for(i=0, sw=0; i&lt;nrows; i++) 
+<a name="anchor-133"></a>    {
+        error = ProDwgtableRowSizeGet(&amp;table, 0, i, &amp;sw);
+        TEST_CALL_REPORT(&quot;ProDwgtableRowSizeGet()&quot;, &quot;ProTestTableInfo()&quot;,
+            error, error!=PRO_TK_NO_ERROR);
+        sw+=sw;
+<a name="anchor-134"></a>    }
+
+    for(i=0, sl=0; i&lt;ncols; i++) 
+    {
+        error = ProDwgtableColumnSizeGet(&amp;table, 0, i, &amp;sl);
+<a name="anchor-135"></a>        TEST_CALL_REPORT(&quot;ProDwgtableColumnSizeGet()&quot;, &quot;ProTestTableInfo()&quot;,
+            error, error!=PRO_TK_NO_ERROR);
+        sl+=sl;
+    }
+
+<a name="anchor-136"></a>    ProTKFprintf(fp,&quot;Table size: %3.3f X %3.3f\n&quot;,sw,sl);
+    
+    error = ProDwgtableInfoGet(&amp;table, 0, &amp;table_info);
+    TEST_CALL_REPORT(&quot;ProDwgtableColumnsCount()&quot;, &quot;ProTestTableInfo()&quot;,
+        error, error!=PRO_TK_NO_ERROR);
+<a name="anchor-137"></a>        
+    ProTKFprintf (fp, &quot;Seg origin %f, %f, %f\n&quot;, table_info.seg_origin[0],
+            table_info.seg_origin[1], table_info.seg_origin[2]);
+    ProTKFprintf (fp, &quot;Height of char in table %f, in segment %f. &quot;,
+            table_info.table_char_height, table_info.seg_char_height);
+<a name="anchor-138"></a>    ProTKFprintf (fp, &quot;Width of char %f.\n&quot;, table_info.char_width);
+    ProTKFprintf (fp, &quot;Rotation of the table  %d.\n&quot;, table_info.rotation);
+/*--------------------------------------------------------------------*\
+    Get associating of table and format on current sheet.
+\*--------------------------------------------------------------------*/
+<a name="anchor-139"></a>
+    error = ProDwgtableIsFromFormat(&amp;table, &amp;from_format);
+    TEST_CALL_REPORT (&quot;ProDwgtableIsFromFormat()&quot;,
+            &quot;ProTestTableInfo()&quot;,error, error!=PRO_TK_NO_ERROR);
+
+<a name="anchor-140"></a>    ProTKFprintf (fp, &quot;%s&quot;,(from_format)?(&quot;Is&quot;):(&quot;Not&quot;));
+    ProTKFprintf (fp, &quot; associated with the format on %d sheet.\n&quot;, cur_sheet);
+    ProTKFprintf (fp, &quot;\tcell is comment/path length(top model of region->&quot;);
+    ProTKFprintf (fp, &quot;the model of the record of the cell)\n&quot;);
+
+<a name="anchor-141"></a>    for (j=1; j&lt;=table_info.nrows; j++)
+    {
+        for (i=1; i&lt;=table_info.ncols; i++)
+        { 
+            error = ProDwgtableCellIsComment(&amp;table, i, j, &amp;is_comment);
+<a name="anchor-142"></a>            TEST_CALL_REPORT (&quot;ProDwgtableCellIsComment()&quot;,
+                &quot;ProTestTableInfo()&quot;, error, error!=PRO_TK_NO_ERROR);
+
+            ProTKFprintf (fp,&quot;\t%s/&quot;,(is_comment)?&quot;yes&quot;:&quot;no&quot;);
+/*--------------------------------------------------------------------*\
+<a name="anchor-143"></a>    Get specified member identifier table.
+\*--------------------------------------------------------------------*/
+	    error = ProDwgtableCellComponentGet(&amp;table, i, j, &amp;component);
+            TEST_CALL_REPORT (&quot;ProDwgtableCellComponentGet()&quot;,
+                    &quot;ProTestTableInfo()&quot;, error, error == PRO_TK_NO_ERROR);
+<a name="anchor-144"></a>	    ProTKFprintf (fp, &quot;%d&quot;, component.table_num);		
+/*--------------------------------------------------------------------*\
+    Get a model pointer by decoding a cell in a repeat region.
+\*--------------------------------------------------------------------*/
+            if (error != PRO_TK_NO_ERROR)
+<a name="anchor-145"></a>            { 
+                ProTKFprintf (fp, &quot;(none->none)&quot;);
+            }
+            else
+            {
+<a name="anchor-146"></a>		error = ProMdlMdlnameGet(component.owner, modelName);
+                TEST_CALL_REPORT (&quot;ProMdlMdlnameGet()&quot;,
+                       &quot;ProTestTableInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+                ProTKFprintf (fp, &quot;(%s->&quot;, ProWstringToString(cstr, modelName));
+<a name="anchor-147"></a>
+		error = ProAsmcomppathMdlGet(&amp;component, &amp;mdl);
+		TEST_CALL_REPORT (&quot;ProAsmcomppathMdlGet()&quot;,
+			&quot;ProTestTableInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-148"></a>		error = ProMdlMdlnameGet(mdl, modelName);
+                TEST_CALL_REPORT (&quot;ProMdlMdlnameGet()&quot;,
+                       &quot;ProTestTableInfo()&quot;, error, error != PRO_TK_NO_ERROR);
+
+                    ProTKFprintf (fp, &quot;%s)&quot;, ProWstringToString(cstr, modelName));
+<a name="anchor-149"></a>            }
+        }
+
+    ProTKFprintf (fp,&quot;\n&quot;);
+    }
+<a name="anchor-150"></a>        
+    fclose (fp);
+    
+/*--------------------------------------------------------------------*\
+    Display information
+<a name="anchor-151"></a>\*--------------------------------------------------------------------*/
+    error = ProInfoWindowDisplay(ProStringToWstring(f_name,(char*)TBL_INFO_NAME),NULL,NULL);
+    TEST_CALL_REPORT (&quot;ProInfoWindowDisplay()&quot;,&quot;ProTestTableInfo()&quot;, 
+        error, error != PRO_TK_NO_ERROR);
+    
+<a name="anchor-152"></a>    return (PRO_TK_NO_ERROR);
+}
+ 
+/*===========================================================================*\
+  FUNCTION: ProTestTableRetrieve
+<a name="anchor-153"></a>  PURPOSE:  retrieve table from disk
+\*===========================================================================*/
+int ProTestTableRetrieve(ProDrawing drawing)
+{
+    ProError error;
+<a name="anchor-154"></a>    ProDwgtable table;
+    ProCharLine f_name, c_name;
+    ProPath w_full_name, w_path;
+    ProMdlName w_name;
+	ProMdlExtension w_type;
+<a name="anchor-155"></a>    int ver, mdl_num,i;
+    ProMouseButton but;
+    ProPoint3d point;
+    ProMdl  mdl = NULL, *mdl_arr = NULL;
+
+<a name="anchor-156"></a>/*--------------------------------------------------------------------*\
+    Display information
+\*--------------------------------------------------------------------*/
+    error = ProUtilFileOpen((char*)&quot;*.tbl&quot;, f_name);
+    
+<a name="anchor-157"></a>    if(error!=PRO_TK_NO_ERROR)
+        return(error);
+        
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select table origin.&quot;);
+
+<a name="anchor-158"></a>/*--------------------------------------------------------------------*\
+    Collect all models in the current session
+\*--------------------------------------------------------------------*/
+    error = ProSessionMdlList ( PRO_MDL_ASSEMBLY, &amp;mdl_arr, &amp;mdl_num);
+    
+<a name="anchor-159"></a>    if (error == PRO_TK_NO_ERROR &amp;&amp; mdl_num>0)
+    {
+        for (i=0; i&lt;mdl_num; i++)
+        {
+            error = ProMdlMdlnameGet (mdl_arr[i], w_name);
+<a name="anchor-160"></a>            TEST_CALL_REPORT(&quot;ProMdlMdlnameGet()&quot;, &quot;ProTestTableRetrieve()&quot;, 
+	        error, error != PRO_TK_NO_ERROR);
+            
+	    ProTKSprintf(c_name,&quot;Copy data into table from model %s:&quot;, 
+		ProWstringToString (c_name, w_name));
+<a name="anchor-161"></a>
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, c_name);
+
+	    if (ProUtilYesnoGet((char*)&quot;yes&quot;)==1)
+            {
+<a name="anchor-162"></a>                mdl = mdl_arr[i];
+                break;
+            }   
+        } 
+    }
+<a name="anchor-163"></a>    error = ProMousePickGet(PRO_LEFT_BUTTON, &amp;but, point);
+    TEST_CALL_REPORT(&quot;ProMousePickGet()&quot;, &quot;ProTestTableRetrieve()&quot;, 
+	error, error != PRO_TK_NO_ERROR);
+
+    if (error == PRO_TK_NO_ERROR)
+<a name="anchor-164"></a>    {
+    
+	error = ProFileMdlnameParse(ProStringToWstring(w_full_name, f_name), 
+                w_path, w_name, w_type, &amp;ver);
+	TEST_CALL_REPORT(&quot;ProFileMdlnameParse()&quot;, &quot;ProTestTableRetrieve()&quot;, 
+<a name="anchor-165"></a>		error, error != PRO_TK_NO_ERROR);
+                
+/*--------------------------------------------------------------------*\
+    Retrive table from the disk
+\*--------------------------------------------------------------------*/
+<a name="anchor-166"></a>        error = ProDwgtableRetrieve((ProDrawing)drawing,
+	        w_name, w_path, ver, point,(ProSolid) mdl, NULL, &amp;table);
+        TEST_CALL_REPORT(&quot;ProDwgtableRetrieve()&quot;, &quot;ProTestTableRetrieve()&quot;, 
+                error, error!=PRO_TK_NO_ERROR);
+        if (error == PRO_TK_NO_ERROR)
+<a name="anchor-167"></a>        {
+            error = ProDwgtableDisplay(&amp;table);
+            TEST_CALL_REPORT(&quot;ProDwgtableDisplay()&quot;, &quot;ProTestTableRetrieve()&quot;, 
+                error, error!=PRO_TK_NO_ERROR);
+        }        
+<a name="anchor-168"></a>                
+    }
+
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-169"></a>
+/*===========================================================================*\
+  FUNCTION: ProTestTableSizeByLenGet
+  PURPOSE:  Get table cols width
+\*===========================================================================*/
+<a name="anchor-170"></a>ProError ProTestTableSizeByLenGet(double *width, double *height, int *ncols, int *nrows)
+{ 
+    double d=0;
+    double range[2]={1e-9, 1e3};
+    
+<a name="anchor-171"></a>    *ncols=*nrows=0;
+
+    if((width == NULL)||(height == NULL)||(ncols == NULL)||(nrows == NULL))
+        return(PRO_TK_BAD_INPUTS);
+        
+<a name="anchor-172"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,
+	    &quot;Enter the width of the first column in the drawing units ( INCH ) [QUIT]:&quot;);
+
+    if (ProMessageDoubleRead(range, &amp;d)!=PRO_TK_NO_ERROR)
+        return (PRO_TK_BAD_INPUTS);
+<a name="anchor-173"></a>            
+    width[(*ncols)++] =  d;
+    while (*ncols&lt;PRO_TABLE_MAX_COLS)
+    {
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,
+<a name="anchor-174"></a>		&quot;Enter the width of the next column in the drawing units ( INCH ) [DONE]:&quot;);
+
+        if (ProMessageDoubleRead(range, &amp;d)!=PRO_TK_NO_ERROR)
+    	    break;
+	width[(*ncols)++] =  d;
+<a name="anchor-175"></a>    }
+    
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,
+	&quot;Enter the height of the first row in the drawing units( INCH ) [QUIT]:&quot;);
+
+<a name="anchor-176"></a>    if (ProMessageDoubleRead(range, &amp;d)!=PRO_TK_NO_ERROR)
+	    return (PRO_TK_BAD_INPUTS);
+            
+    height[(*nrows)++] =  d;
+    
+<a name="anchor-177"></a>    while (*nrows&lt;PRO_TABLE_MAX_ROWS)
+    {
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,
+            &quot;Enter the height of the next row in the drawing units ( INCH ) [DONE]:&quot;);
+
+<a name="anchor-178"></a>	if (ProMessageDoubleRead(range, &amp;d)!=PRO_TK_NO_ERROR)
+		break;
+                
+	height[(*nrows)++] =  d;
+    }
+<a name="anchor-179"></a>    
+    return(PRO_TK_NO_ERROR);
+}
+
+/*===========================================================================*\
+<a name="anchor-180"></a>  FUNCTION: ProTestTableLength
+  PURPOSE:  Return table length or width
+\*===========================================================================*/
+double ProTestTableLength(double *width, int ncols)
+{   int i;
+<a name="anchor-181"></a>    double d=0;
+
+    if (width == NULL)
+        return(0.0);
+        
+<a name="anchor-182"></a>    for (i=0; i&lt;ncols; i++)
+	d += width[i];
+        
+    return(d);
+}
+<a name="anchor-183"></a>
+/*===========================================================================*\
+  FUNCTION: ProTestTableFlip
+  PURPOSE:  Flip table
+\*===========================================================================*/
+<a name="anchor-184"></a>ProError ProTestTableFlip(double *width, int ncols)
+{   int i;
+    double d;
+    
+    for (i=0; i&lt;ncols/2; i++)
+<a name="anchor-185"></a>    {
+        d = width[i];
+	width[i] = width[ncols-1-i];
+	width[ncols-1-i] = d;
+    }
+<a name="anchor-186"></a>    
+    return(PRO_TK_NO_ERROR);    
+}
+
+/*===========================================================================*\
+<a name="anchor-187"></a>  FUNCTION: ProTestTableCreate
+  PURPOSE:  create table
+\*===========================================================================*/
+int ProTestTableCreate(ProDrawing drw,
+        int right_left,
+<a name="anchor-188"></a>        int desc_asc,
+        int num_len)
+{
+    static char *size=(char*)&quot;123456789012345678901234567890&quot;;
+    static char *sizo=(char*)&quot;098765432109876543210987654321&quot;;
+<a name="anchor-189"></a>    double d, k;
+    ProMatrix matrix;
+    double width[PRO_TABLE_MAX_COLS], 
+	   height[PRO_TABLE_MAX_ROWS]; 
+    ProHorzJust justifications[PRO_TABLE_MAX_COLS]; 
+<a name="anchor-190"></a>    double sw, sh;
+    ProPoint2d arr[4];
+    ProPoint3d point, pos ={0.0, 0.0, 0.0};
+    ProDwgtabledata table_data;
+    wchar_t w_size[PRO_NAME_SIZE];
+<a name="anchor-191"></a>    ProTextAttribute text_attr;
+    ProDwgtable table;
+    ProColor old_color, old_color0;
+	ProColor drawing_color, background_color;
+    ProError error;
+<a name="anchor-192"></a>    int sign = 1, start=0;
+    int  ncols=0, nrows=0, i, len;
+    ProMouseButton but;
+    ProPoint3d origin;
+	
+<a name="anchor-193"></a>	drawing_color.method = PRO_COLOR_METHOD_TYPE;
+	drawing_color.value.type = PRO_COLOR_DRAWING;
+	
+	background_color.method = PRO_COLOR_METHOD_TYPE;
+	background_color.value.type = PRO_COLOR_BACKGROUND;
+<a name="anchor-194"></a>    
+/*--------------------------------------------------------------------*\
+    Get current transformation matrix
+\*--------------------------------------------------------------------*/
+    error = ProWindowCurrentMatrixGet(matrix);
+<a name="anchor-195"></a>    TEST_CALL_REPORT(&quot;ProWindowCurrentMatrixGet()&quot;, 
+	&quot;ProTestTableCreate&quot;, error, error != PRO_TK_NO_ERROR);
+    k=matrix[0][0];
+    
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select table origin.&quot;);
+<a name="anchor-196"></a>    error = ProMousePickGet(PRO_LEFT_BUTTON, &amp;but, origin);
+    
+    if (num_len == TBL_CREATE_LENGTH)
+    {
+/*--------------------------------------------------------------------*\
+<a name="anchor-197"></a>    Table created by length
+\*--------------------------------------------------------------------*/
+        
+        if(ProTestTableSizeByLenGet(width, height, &amp;ncols, &amp;nrows)!=PRO_TK_NO_ERROR)
+            return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-198"></a>        
+	if (right_left == TBL_CREATE_LEFTWARD)
+	{
+            d=ProTestTableLength(width,ncols);
+	    origin[0] -= d/k; 
+<a name="anchor-199"></a>	}
+        
+	if (desc_asc == TBL_CREATE_LEFTWARD)
+	{
+            d=ProTestTableLength(height, nrows); 
+<a name="anchor-200"></a>	    origin[1] += d/k; 
+	}
+    }
+    else
+    {
+<a name="anchor-201"></a>/*--------------------------------------------------------------------*\
+    Get  current text attributes
+\*--------------------------------------------------------------------*/
+	error = ProTextAttributesCurrentGet(&amp;text_attr);
+        TEST_CALL_REPORT (&quot;ProTextAttributesCurrentGet()&quot;,
+<a name="anchor-202"></a>                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+	sh = text_attr.height;
+	sw = text_attr.height*0.5;
+        
+	memcpy(pos, origin, sizeof(double)*3);
+<a name="anchor-203"></a>        
+	if (right_left == TBL_CREATE_LEFTWARD)
+	    sign = -1;
+            
+	error = ProGraphicsColorModify(&amp;background_color, &amp;old_color0);
+<a name="anchor-204"></a>        TEST_CALL_REPORT (&quot;ProGraphicsColorModify()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+	len = strlen(size); 
+
+<a name="anchor-205"></a>	while (ncols&lt;PRO_TABLE_MAX_COLS)
+	{
+	    if (ncols>0)
+	    {
+		error = ProGraphicsPolygonDraw(arr, 4, PRO_COLOR_BACKGROUND);
+<a name="anchor-206"></a>	        TEST_CALL_REPORT (&quot;ProGraphicsPolygonDraw()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+	    }
+	    error = ProGraphicsColorModify(&amp;drawing_color, &amp;old_color);
+<a name="anchor-207"></a>            TEST_CALL_REPORT (&quot;ProGraphicsColorModify()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+	    ProGraphicsPenPosition(pos);
+	    pos[1]-=sh;
+<a name="anchor-208"></a>	    ProGraphicsLineDraw(pos);
+	    pos[1]+=sh;
+	    error = ProGraphicsColorModify(&amp;background_color, &amp;old_color);
+            TEST_CALL_REPORT (&quot;ProGraphicsColorModify()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-209"></a>
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, (ncols == 0) ? 
+		(&quot; Mark off the %0s of the first column. (Middle buton - to quit.)&quot;): 
+		(&quot; Mark the next column. (Middle buton - to quit.) width Enter the height of the next row in the drawing units ( INCH ) [DONE]:&quot;));
+
+<a name="anchor-210"></a>    	    memcpy(point, pos, sizeof(double)*3);
+
+	    if (right_left == TBL_CREATE_LEFTWARD)
+	    {
+		point[0] -= sw * len;
+<a name="anchor-211"></a>		error = ProGraphicsTextDisplay(point, ProStringToWstring(w_size, sizo));
+                TEST_CALL_REPORT (&quot;ProGraphicsTextDisplay()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+	    }
+<a name="anchor-212"></a>	    else
+	    {
+		error = ProGraphicsTextDisplay(pos, ProStringToWstring(w_size, size));
+                TEST_CALL_REPORT (&quot;ProGraphicsTextDisplay()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-213"></a>
+	    }
+            
+	    arr[0][0] = arr[3][0] = point[0];
+	    arr[1][0] = arr[2][0] = point[0] + sw*len;
+<a name="anchor-214"></a>    	    arr[0][1] = arr[1][1] = point[1];
+	    arr[2][1] = arr[3][1] = point[1] + sh;
+
+	    error = ProMousePickGet(PRO_ANY_BUTTON, &amp;but, point);
+            TEST_CALL_REPORT (&quot;ProMousePickGet()&quot;,
+<a name="anchor-215"></a>                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+	    if ((error!=PRO_TK_NO_ERROR)||(but == PRO_MIDDLE_BUTTON))
+	    	break;
+                
+<a name="anchor-216"></a>	    if ((point[0]-pos[0])*sign&lt;=sw)
+	    {
+		ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Less than minimal size - ignored.&quot;);
+		continue;
+	    }
+<a name="anchor-217"></a>            
+	    width[ncols] = (point[0]-pos[0])*sign/sw;
+	    pos[0] += width[ncols]*sw*sign;
+            
+	    ncols++;
+<a name="anchor-218"></a>	}
+	error = ProGraphicsPolygonDraw(arr, 4, PRO_COLOR_BACKGROUND);
+        TEST_CALL_REPORT (&quot;ProGraphicsPolygonDraw()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-219"></a>	sign  = (desc_asc == TBL_CREATE_DESCENDING) ?  -1: 1;
+	start = (desc_asc == TBL_CREATE_DESCENDING) ?  0: 1;
+	len = 5;
+
+	if (ncols!=0) while (nrows&lt;PRO_TABLE_MAX_ROWS)
+<a name="anchor-220"></a>	{
+	    if (nrows>0)
+	    {
+		error = ProGraphicsPolygonDraw(arr, 4, PRO_COLOR_BACKGROUND);
+	        TEST_CALL_REPORT (&quot;ProGraphicsPolygonDraw()&quot;,
+<a name="anchor-221"></a>                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+	    }
+            
+	    error = ProGraphicsColorModify(&amp;drawing_color, &amp;old_color);
+            TEST_CALL_REPORT (&quot;ProGraphicsColorModify()&quot;,
+<a name="anchor-222"></a>                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+	    pos[0]+=sw;
+	    ProGraphicsPenPosition(pos);
+	    pos[0]+=sw;
+<a name="anchor-223"></a>	    ProGraphicsLineDraw(pos);
+	    pos[0]-=2*sw;
+	    error = ProGraphicsColorModify(&amp;background_color, &amp;old_color);
+            TEST_CALL_REPORT (&quot;ProGraphicsColorModify()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-224"></a>
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, (nrows == 0) ? 
+		(&quot;USER Mark off the %0s of the first column. (Middle buton - to quit.)&quot;): 
+		(&quot;USER Mark the next column. (Middle buton - to quit.) height&quot;));
+    	    
+<a name="anchor-225"></a>	    for (i=0; i&lt;len; i++)
+	    {
+		char sym[2];
+
+		sym[0] = size[i];
+<a name="anchor-226"></a>		sym[1] = '\0';
+
+		memcpy(point, pos, sizeof(double)*3);
+		point[1] += (i+start)*sign*sh;
+		ProGraphicsTextDisplay(point, ProStringToWstring(w_size, sym));
+<a name="anchor-227"></a>	    }
+
+	    memcpy(point, pos, sizeof(double)*3);
+	    arr[0][0] = arr[3][0] = point[0];
+	    arr[1][0] = arr[2][0] = point[0] + sw;
+<a name="anchor-228"></a>    	    arr[0][1] = arr[1][1] = point[1] + sh*start;
+	    arr[2][1] = arr[3][1] = point[1] + sh*(len+start)*sign;
+
+	    error = ProMousePickGet(PRO_ANY_BUTTON, &amp;but, point);
+            TEST_CALL_REPORT (&quot;ProMousePickGet()&quot;,
+<a name="anchor-229"></a>                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+	    if ((error!=PRO_TK_NO_ERROR)||(but == PRO_MIDDLE_BUTTON))
+	    	break;
+
+<a name="anchor-230"></a>	    if ((point[1]-pos[1])*sign&lt;=sh)
+	    {
+		ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Less than minimal size - ignored.&quot;);
+		continue;
+	    }
+<a name="anchor-231"></a>	    height[nrows] = (point[1]-pos[1])*sign/sh;
+	    pos[1] += ((height[nrows]+0)*sh )*sign;
+	    nrows++;
+	}
+	if (ncols!=0)
+<a name="anchor-232"></a>	{
+	    error = ProGraphicsPolygonDraw(arr, 4, PRO_COLOR_BACKGROUND);
+            TEST_CALL_REPORT (&quot;ProGraphicsPolygonDraw()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-233"></a>	}
+	error = ProGraphicsColorModify(&amp;old_color0, &amp;old_color);
+        TEST_CALL_REPORT (&quot;ProGraphicsColorModify()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-234"></a>	if ((ncols >0) &amp;&amp; (nrows>0))
+	{
+	    if (right_left == TBL_CREATE_LEFTWARD)
+	    {
+		d=ProTestTableLength(width,ncols);
+<a name="anchor-235"></a>		origin[0] -= d*sw; 
+	    }
+	    if (desc_asc == TBL_CREATE_ASCENDING)
+	    {
+		d=ProTestTableLength(height,nrows);
+<a name="anchor-236"></a>		origin[1] += d*sh; 
+	    }
+	}
+    }
+/*--------------------------------------------------------------------*\
+<a name="anchor-237"></a>    Create table
+\*--------------------------------------------------------------------*/
+    if (ncols>0 &amp;&amp; nrows>0)
+    {
+	if (right_left == TBL_CREATE_LEFTWARD)
+<a name="anchor-238"></a>            error = ProTestTableFlip(width, ncols);
+
+	if (desc_asc == TBL_CREATE_ASCENDING)
+            error = ProTestTableFlip(height, nrows);
+
+<a name="anchor-239"></a>	error = ProDwgtabledataAlloc(&amp;table_data);
+        TEST_CALL_REPORT (&quot;ProDwgtabledataAlloc()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+	if(error!=PRO_TK_NO_ERROR)
+	    return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-240"></a>            
+	error = ProDwgtabledataOriginSet(table_data, origin);
+        TEST_CALL_REPORT (&quot;ProDwgtabledataOriginSet()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-241"></a>	for (i=0; i&lt;ncols; i++) justifications[i] = PROHORZJUST_LEFT;
+	error = ProDwgtabledataColumnsSet(table_data, ncols, 
+	    width, justifications);
+        TEST_CALL_REPORT (&quot;ProDwgtabledataColumnsSet()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-242"></a>
+	error = ProDwgtabledataRowsSet(table_data, nrows, height);
+        TEST_CALL_REPORT (&quot;ProDwgtabledataColumnsSet()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+	error = ProDwgtabledataSizetypeSet(table_data, PRODWGTABLESIZE_CHARACTERS);
+<a name="anchor-243"></a>        TEST_CALL_REPORT (&quot;ProDwgtabledataSizetypeSet()&quot;,
+                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+
+	error = ProDrawingTableCreate((ProDrawing)(drw), table_data, 1, &amp;table);
+        TEST_CALL_REPORT (&quot;ProDrawingTableCreate()&quot;,
+<a name="anchor-244"></a>                    &quot;ProTestTableCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+    }
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-245"></a>/*===========================================================================*\
+  FUNCTION: ProTestTableCreateMenu
+  PURPOSE:  Show &quot;table create&quot; menu
+\*===========================================================================*/
+ProError ProTestTableCreateMenu(ProDrawing drawing,
+<a name="anchor-246"></a>        int opt_left_right,
+        int opt_des_as,
+        int opt_num_len)
+{
+    int n;
+<a name="anchor-247"></a>    ProError error;
+    int left_right=(opt_left_right==-1)?TBL_CREATE_RIGHTWARD:opt_left_right;
+    int des_as=(opt_des_as==-1)?TBL_CREATE_DESCENDING:opt_des_as;
+    int num_len=(opt_num_len==-1)?TBL_CREATE_NUM_CHARS:opt_num_len;
+    
+<a name="anchor-248"></a>    static ProUtilMenuButtons  TMenu[] ={
+		{&quot;TkTblCreate&quot;, -1, TEST_CALL_PRO_MENU_DELETE},
+		{&quot;&quot;,      TBL_TEST_MN_LEFT_RIGHT, 0},
+		{&quot;&quot;,      TBL_TEST_MN_DES_AS,     0},
+		{&quot;&quot;,      TBL_TEST_MN_NUM_LEN,    0},
+<a name="anchor-249"></a>		{&quot;-Done&quot;, TBL_TEST_MN_DONE,       0},
+		{&quot;-Quit&quot;,    -1,TEST_CALL_PRO_MENU_DELETE},
+		{&quot;&quot;,      -1,0}};
+    
+    ProTKSprintf(TMenu[1].button,&quot;%s&quot;,(left_right==TBL_CREATE_RIGHTWARD)?&quot;-rightward&quot;:&quot;-leftward&quot;);
+<a name="anchor-250"></a>    ProTKSprintf(TMenu[2].button,&quot;%s&quot;,(des_as==TBL_CREATE_DESCENDING)?&quot;-descending&quot;:&quot;-ascending&quot;);
+    ProTKSprintf(TMenu[3].button,&quot;%s&quot;,(num_len==TBL_CREATE_NUM_CHARS)?&quot;-by num chars&quot;:&quot;-by length&quot;);
+    
+    error = ProUtilMenuIntValueSelect(TMenu, &amp;n);
+
+<a name="anchor-251"></a>    if((error!=PRO_TK_NO_ERROR)||(n&lt;0))
+        return(PRO_TK_USER_ABORT);
+        
+    if(n!=TBL_TEST_MN_DONE)
+    {
+<a name="anchor-252"></a>        switch(n)    
+        {
+            case TBL_TEST_MN_LEFT_RIGHT:
+                left_right=(left_right==TBL_CREATE_RIGHTWARD)?
+                        TBL_CREATE_LEFTWARD:TBL_CREATE_RIGHTWARD;
+<a name="anchor-253"></a>                break;
+            case TBL_TEST_MN_DES_AS:       
+                des_as=(des_as==TBL_CREATE_DESCENDING)?
+                        TBL_CREATE_ASCENDING:TBL_CREATE_DESCENDING;    
+                break;
+<a name="anchor-254"></a>            case TBL_TEST_MN_NUM_LEN:
+                num_len=(num_len==TBL_CREATE_NUM_CHARS)?
+                        TBL_CREATE_LENGTH:TBL_CREATE_NUM_CHARS;                   
+                break;
+        }
+<a name="anchor-255"></a>
+        if(ProTestTableCreateMenu(drawing,
+           left_right, des_as, num_len)!=PRO_TK_NO_ERROR)
+                return(PRO_TK_USER_ABORT);
+    }
+<a name="anchor-256"></a>    else
+    {   
+        ProTestTableCreate(drawing, left_right, des_as, num_len);
+	error = ProWindowRepaint(PRO_VALUE_UNUSED);
+	TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;,&quot;ProTestTableCreateMenu&quot;, 
+<a name="anchor-257"></a>                error, error != PRO_TK_NO_ERROR);
+        
+        error = ProTestTableCreateMenu(drawing,left_right, des_as, num_len);
+    }    
+
+<a name="anchor-258"></a>    return(PRO_TK_NO_ERROR);
+} 
+ 
+/*=================================================================*\
+    FUNCTION : ProTestDrwTable()
+<a name="anchor-259"></a>    PURPOSE  : Create main menu for Table test
+\*=================================================================*/
+ProError ProTestDrwTable()
+{
+    int n;
+<a name="anchor-260"></a>    ProError error;
+    ProDrawing drawing;
+    static ProUtilMenuButtons  TMenu[] ={
+		{&quot;TkTable&quot;,    -1, TEST_CALL_PRO_MENU_DELETE},
+		{&quot;-Create&quot;,     TBL_TEST_MN_CREATE,  0},
+<a name="anchor-261"></a>		{&quot;-Delete&quot;,     TBL_TEST_MN_DELETE,  0},
+		{&quot;-Modify&quot;,     TBL_TEST_MN_MODIFY,  0},
+		{&quot;-Info&quot;,       TBL_TEST_MN_INFO,    0},
+/*		{&quot;-Retrive&quot;,    TBL_TEST_MN_RETRIVE, 0}, */
+		{&quot;-UpDate&quot;,     TBL_TEST_MN_UPDATE, 0},
+<a name="anchor-262"></a>		{&quot;-Done/Return&quot;,-1,  TEST_CALL_PRO_MENU_DELETE},
+		{&quot;&quot;,      -1,0}};
+    do
+    {
+        error = ProUtilMenuIntValueSelect(TMenu, &amp;n);
+<a name="anchor-263"></a>
+        if((error!=PRO_TK_NO_ERROR)||(n&lt;0))
+            return(PRO_TK_NO_ERROR);
+
+        error = ProMdlCurrentGet((ProMdl*)&amp;drawing);
+<a name="anchor-264"></a>        TEST_CALL_REPORT (&quot;ProMdlCurrentGet()&quot;,
+            &quot;ProTestTblMainMenu()&quot;, error, error != PRO_TK_NO_ERROR);            
+        
+        switch(n)
+        {        
+<a name="anchor-265"></a>            case TBL_TEST_MN_CREATE:   
+                ProTestTableCreateMenu(drawing, -1,-1,-1);
+                break;
+            case TBL_TEST_MN_DELETE:
+                ProTestTableDelete(drawing);
+<a name="anchor-266"></a>                break;
+            case TBL_TEST_MN_MODIFY:
+                ProTestTableModifyMenu(drawing);
+                break;
+            case TBL_TEST_MN_INFO:
+<a name="anchor-267"></a>                ProTestTableInfo(drawing);
+                break;
+/*--------------------------------------------------------------------*\
+    Table retrive temporary disable
+\*--------------------------------------------------------------------*/
+<a name="anchor-268"></a>/*
+        case TBL_TEST_MN_RETRIVE:
+            ProTestTableRetrieve(drawing);
+            break;
+*/
+<a name="anchor-269"></a>            case TBL_TEST_MN_UPDATE:
+                error = ProDrawingTablesUpdate(drawing);
+                TEST_CALL_REPORT (&quot;ProDrawingTablesUpdate()&quot;,
+                    &quot;ProTestTblMainMenu()&quot;, error, error != PRO_TK_NO_ERROR);            
+                break;                   
+<a name="anchor-270"></a>        }
+    } while(1);        
+    return (error);    
+}
+
+<a name="anchor-271"></a>
+</pre>
+</body>
+</html>

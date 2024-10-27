@@ -1,0 +1,337 @@
+<html>
+<head>
+<title>PTUDFExParamVerify.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+#include &lt;ProToolkit.h>
+#include &lt;ProParameter.h>
+#include &lt;ProRelSet.h>
+<a name="anchor-2"></a>
+#include &lt;PTUDFExamples.h>
+#include &lt;ProTKRunTime.h>
+
+/*====================================================================*\
+<a name="anchor-3"></a>FUNCTION: PTUDFExParamValidateLimit
+PURPOSE:  Check the parameter value if it meets the given limit restriction.
+\*====================================================================*/
+static ProError PTUDFExParamValidateLimit (ProParamvalue* value, ProParamLimit*
+					   limit)
+<a name="anchor-4"></a>{
+  double real_value, real_limit;
+
+/*--------------------------------------------------------------------*\
+Shouldn't happen, boolean and string params can't be ranged
+<a name="anchor-5"></a>\*--------------------------------------------------------------------*/
+  if (value->type != PRO_PARAM_INTEGER &amp;&amp; value->type != PRO_PARAM_DOUBLE)
+    return PRO_TK_NOT_VALID; 
+
+  if (limit->type == PRO_PARAM_UNLIMITED)
+<a name="anchor-6"></a>    return PRO_TK_NO_ERROR;
+
+/*--------------------------------------------------------------------*\
+Real value and real limit are set to double even if the parameter is integer.
+\*--------------------------------------------------------------------*/
+<a name="anchor-7"></a>  real_value = (value->type == PRO_PARAM_INTEGER? (double)value->value.i_val : value->value.d_val);
+
+  real_limit = (limit->value.type == PRO_PARAM_INTEGER ? (double)limit->value.value.i_val : limit->value.value.d_val);
+
+  switch (limit->type)
+<a name="anchor-8"></a>    {
+    case PRO_PARAM_LESS_THAN:
+      return (real_value &lt; real_limit ? PRO_TK_NO_ERROR : PRO_TK_NOT_VALID);
+    case PRO_PARAM_LESS_THAN_OR_EQUAL:
+      return (real_value &lt;= real_limit ? PRO_TK_NO_ERROR : PRO_TK_NOT_VALID);
+<a name="anchor-9"></a>    case PRO_PARAM_GREATER_THAN:
+      return (real_value > real_limit ? PRO_TK_NO_ERROR : PRO_TK_NOT_VALID);
+    case PRO_PARAM_GREATER_THAN_OR_EQUAL:
+      return (real_value >= real_limit ? PRO_TK_NO_ERROR : PRO_TK_NOT_VALID);
+    }
+<a name="anchor-10"></a>
+  return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-11"></a>FUNCTION: PTUDFExParamValidateConstraint
+PURPOSE:  Check the parameter value in a single constraint to see if it
+          passes.
+\*====================================================================*/
+static ProError PTUDFExParamValidateConstraint (ProRelset* relset,
+<a name="anchor-12"></a>						ProName name,
+						ProParamvalue* value, 
+						wchar_t* constraint)
+{
+  ProLine line;
+<a name="anchor-13"></a>  char c_line [PRO_LINE_SIZE * 4], c_constraint [PRO_LINE_SIZE * 4];
+  char c_name [PRO_NAME_SIZE * 4];
+  char c_param_value [PRO_LINE_SIZE * 4];
+  char c_buff [2];
+  int param_name_len, constraint_len;
+<a name="anchor-14"></a>  ProParamvalue result;
+  int i;
+
+/*--------------------------------------------------------------------*\
+Convert the new value to a string value expression.
+<a name="anchor-15"></a>\*--------------------------------------------------------------------*/
+  switch (value->type)
+    {
+    case PRO_PARAM_INTEGER:
+      ProTKSprintf (c_param_value, &quot;%d&quot;, value->value.i_val);
+<a name="anchor-16"></a>      break;
+    case PRO_PARAM_DOUBLE:
+      ProTKSprintf (c_param_value, &quot;%lf&quot;, value->value.d_val);
+      break; 
+    case PRO_PARAM_BOOLEAN:
+<a name="anchor-17"></a>      ProTKSprintf (c_param_value, &quot;%s&quot;, value->value.l_val ? &quot;TRUE&quot; : &quot;FALSE&quot;);
+      break; 
+    case PRO_PARAM_STRING:
+      ProWstringToString (c_param_value, value->value.s_val);
+      break;
+<a name="anchor-18"></a>    }
+
+  ProWstringToString (c_name, name);
+  param_name_len = strlen (c_name);
+
+<a name="anchor-19"></a>  ProWstringToString (c_constraint, constraint);
+  constraint_len = strlen (c_constraint);
+
+/*--------------------------------------------------------------------*\
+Replace each instance of 'name' appearing in the constraint with the 
+<a name="anchor-20"></a>value expression.
+\*--------------------------------------------------------------------*/
+  strcpy (c_line, &quot;&quot;);
+
+  for (i = 0; i &lt; constraint_len; i ++)
+<a name="anchor-21"></a>    {
+      if (strncmp (&amp;c_constraint[i], c_name, param_name_len) == 0)
+	{
+	  strcat (c_line, c_param_value);
+	  i = i + param_name_len;
+<a name="anchor-22"></a>	}
+      ProTKSprintf (c_buff, &quot;%c&quot;, c_constraint [i]);
+      strcat (c_line, c_buff);
+    }
+
+<a name="anchor-23"></a>  ProStringToWstring (line, c_line);
+  
+/*--------------------------------------------------------------------*\
+Pass the modified expression to Pro/E for evaluation.  It should output
+a boolean param value with the result.
+<a name="anchor-24"></a>\*--------------------------------------------------------------------*/
+  status = ProRelationEval (relset, line, &amp;result);
+  PT_TEST_LOG_SUCC (&quot;ProRelationEval()&quot;);
+  
+  if (result.type != PRO_PARAM_BOOLEAN)
+<a name="anchor-25"></a>    return (PRO_TK_NOT_VALID);
+  
+  if (result.value.l_val != PRO_B_TRUE)
+    return (PRO_TK_NOT_VALID);
+
+<a name="anchor-26"></a>  return (PRO_TK_NO_ERROR);
+}
+
+
+/*====================================================================*\
+<a name="anchor-27"></a>FUNCTION: PTUDFExParamCompareValue
+PURPOSE:  Compare two param values.
+\*====================================================================*/
+static ProError PTUDFExParamCompareValue (ProParamvalue* value,
+					       ProParamvalue* permitted_value)
+<a name="anchor-28"></a>{
+  if (value->type != permitted_value->type)
+    return (PRO_TK_NOT_VALID);
+
+  switch (value->type)
+<a name="anchor-29"></a>    {
+    case PRO_PARAM_INTEGER:
+      return (value->value.i_val == permitted_value->value.i_val ? 
+	      PRO_TK_NO_ERROR : PRO_TK_NOT_VALID);
+    case PRO_PARAM_DOUBLE:
+<a name="anchor-30"></a>      return (value->value.d_val == permitted_value->value.d_val ? 
+	      PRO_TK_NO_ERROR : PRO_TK_NOT_VALID);
+    case PRO_PARAM_BOOLEAN:
+       return (value->value.l_val == permitted_value->value.l_val ? 
+	      PRO_TK_NO_ERROR : PRO_TK_NOT_VALID);
+<a name="anchor-31"></a>    case PRO_PARAM_STRING:
+      {
+	int result;
+	ProWstringCompare (value->value.s_val, permitted_value->value.s_val,
+			   PRO_VALUE_UNUSED, &amp;result);
+<a name="anchor-32"></a>        return (result == 0 ?  PRO_TK_NO_ERROR : PRO_TK_NOT_VALID);
+      }
+    }
+
+  return (PRO_TK_NOT_VALID);
+<a name="anchor-33"></a>}
+
+
+/*====================================================================*\
+FUNCTION: PTUDFExParamRangeFailureStringGet
+<a name="anchor-34"></a>PURPOSE: Create the string showing that the value failed due to
+         a violated range.
+\*====================================================================*/
+static ProError PTUDFExParamRangeFailureStringGet (ProParameter* param,
+						   ProParamLimit* minimum,
+<a name="anchor-35"></a>						   ProParamLimit* maximum,
+						   ProLine reason)
+{
+  ProCharLine c_reason;
+
+<a name="anchor-36"></a>  ProTKSprintf (c_reason, &quot;Parameter violated range assigned.&quot;);
+  ProStringToWstring (reason, c_reason);
+  
+  return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-37"></a>
+/*====================================================================*\
+FUNCTION: PTUDFExParamConstraintFailureStringGet
+PURPOSE: Create the string showing that the value failed due to
+         a violated constraint.
+<a name="anchor-38"></a>\*====================================================================*/
+static ProError PTUDFExParamConstraintFailureStringGet (ProParameter* param,
+							wchar_t* constraint, 
+							ProLine reason)
+{
+<a name="anchor-39"></a>  ProCharLine c_reason;
+
+  ProTKSprintf (c_reason, &quot;Parameter violated constraint assigned.&quot;);
+  ProStringToWstring (reason, c_reason);
+  
+<a name="anchor-40"></a>  return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+FUNCTION: PTUDFExParamVerify
+<a name="anchor-41"></a>PURPOSE: Utility for deciding if a given parameter can be set to a
+         given value.
+\*====================================================================*/
+ProError PTUDFExParamVerify (ProParameter* param, ProParamvalue* value, ProLine reason)
+{
+<a name="anchor-42"></a>  ProError ret_status = PRO_TK_NO_ERROR;
+  ProBoolean is_enumerated;
+  ProParamvalue* values;
+  ProBoolean has_range;
+  ProParamLimit minimum;
+<a name="anchor-43"></a>  ProParamLimit maximum;
+  ProError min_status, max_status;
+  ProModelitem m_item;
+  ProRelset relset;
+  wchar_t** constraints;
+<a name="anchor-44"></a>  int i, array_size;
+  ProCharLine c_reason;
+
+/*--------------------------------------------------------------------*\
+Check enumerated values for the parameter.
+<a name="anchor-45"></a>\*--------------------------------------------------------------------*/
+  status = ProParameterIsEnumerated (param, &amp;is_enumerated, &amp;values);
+  PT_TEST_LOG_SUCC (&quot;ProParameterIsEnumerated&quot;);
+
+  if (is_enumerated)
+<a name="anchor-46"></a>    {
+      status = ProArraySizeGet (values, &amp;array_size);
+      PT_TEST_LOG_SUCC (&quot;ProArraySizeGet&quot;);
+
+      for (i = 0; i &lt; array_size; i++)
+<a name="anchor-47"></a>	{
+/*--------------------------------------------------------------------*\
+If this function returns PRO_TK_NO_ERROR, we have a match and can stop
+checking.
+\*--------------------------------------------------------------------*/
+<a name="anchor-48"></a>	  status = PTUDFExParamCompareValue (value, &amp;values[i]);
+	  if (status == PRO_TK_NO_ERROR)
+	    break;
+	}
+
+<a name="anchor-49"></a>      if (status != PRO_TK_NO_ERROR)
+	{
+	  ProTKSprintf (c_reason, &quot;Parameter value not found in list of available enumerated values.&quot;);
+	  ProStringToWstring (reason, c_reason);
+	  ret_status = PRO_TK_NOT_VALID;
+<a name="anchor-50"></a>	}
+
+      ProArrayFree ((ProArray*)&amp;values);
+    }
+
+<a name="anchor-51"></a>  if (ret_status != PRO_TK_NO_ERROR)
+    return (ret_status);
+
+/*--------------------------------------------------------------------*\
+Check numerical range for the parameter.
+<a name="anchor-52"></a>\*--------------------------------------------------------------------*/
+  status = ProParameterRangeGet (param, &amp;has_range, &amp;minimum, &amp;maximum);
+  PT_TEST_LOG (&quot;ProParameterRangeGet&quot;, status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+
+  if (has_range &amp;&amp; (minimum.type != PRO_PARAM_UNLIMITED &amp;&amp; maximum.type != PRO_PARAM_UNLIMITED))
+<a name="anchor-53"></a>    {
+/*--------------------------------------------------------------------*\
+If either function returns PRO_TK_NOT_VALID the value is out of range.
+\*--------------------------------------------------------------------*/
+      min_status = PTUDFExParamValidateLimit (value, &amp;minimum);
+<a name="anchor-54"></a>      max_status = PTUDFExParamValidateLimit (value, &amp;maximum);
+
+      if (min_status == PRO_TK_NOT_VALID || max_status == PRO_TK_NOT_VALID)
+	{
+	  PTUDFExParamRangeFailureStringGet (param, &amp;minimum, &amp;maximum, 
+<a name="anchor-55"></a>					     reason);
+	  ret_status = PRO_TK_NOT_VALID;
+	}
+    }
+
+<a name="anchor-56"></a>  if (ret_status != PRO_TK_NO_ERROR)
+    return (ret_status);
+
+/*--------------------------------------------------------------------*\
+Check constraints applied to the parameter via parameter tables.
+<a name="anchor-57"></a>\*--------------------------------------------------------------------*/
+  if (param->owner.type == PRM_MODEL)
+    {
+      status = ProMdlToModelitem (param->owner.who.model, &amp;m_item);
+    }
+<a name="anchor-58"></a>  else
+    {
+      m_item = param->owner.who.item;
+    }
+
+<a name="anchor-59"></a>  status = ProModelitemToRelset (&amp;m_item, &amp;relset);
+
+  status = ProRelsetConstraintsGet (&amp;relset, &amp;constraints);
+  PT_TEST_LOG (&quot;ProRelsetConstraintsGet&quot;, status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+  
+<a name="anchor-60"></a>  if (status == PRO_TK_NO_ERROR)
+    {
+      status = ProArraySizeGet (constraints, &amp;array_size);
+
+      for (i = 0; i &lt; array_size; i++)
+<a name="anchor-61"></a>	{
+/*--------------------------------------------------------------------*\
+If the function returns PRO_TK_NOT_VALID the constraint is violated.
+\*--------------------------------------------------------------------*/
+	  status = PTUDFExParamValidateConstraint (&amp;relset, param->id, value, 
+<a name="anchor-62"></a>						   constraints[i]);
+	  
+	  if (status == PRO_TK_NOT_VALID)
+	    {
+	      PTUDFExParamConstraintFailureStringGet (param, constraints[i], 
+<a name="anchor-63"></a>						      reason);
+	      ret_status = PRO_TK_NOT_VALID;
+	      
+	      break;
+	    }
+<a name="anchor-64"></a>	}
+      
+      ProArrayFree ((ProArray*)&amp;constraints);
+    }
+
+<a name="anchor-65"></a>  return (ret_status);
+}
+
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<html>
+<head>
+<title>UgAsmcompTransfGet.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*====================================================================*\
+Function : UserAsmcompTransfGet()
+Purpose  : Find the transformation matrix of the specified component
+\*====================================================================*/
+<a name="anchor-2"></a>int UserAsmcompTransfGet()
+{
+        ProError 	status;
+        ProMdl 		model;
+        int 		nb_sel, i;
+<a name="anchor-3"></a>        ProMatrix 	matrix;
+        ProAsmcomppath 	comp_path;
+        ProIdTable 	comp_id_table;
+        ProSelection 	*sel_list,selection;
+        ProModelitem 	sel_obj;
+<a name="anchor-4"></a>        ProFeature 	feature;
+        ProFeattype	ftype;
+        FILE 		*fp_out=NULL;
+        ProMdlName 	w_name;
+		ProName     wfile_name;
+<a name="anchor-5"></a>        char  	    name[PRO_MDLNAME_SIZE];
+
+        status = ProSelect (&quot;prt_or_asm&quot;,1,NULL,NULL,NULL,NULL,
+			    &amp;sel_list,&amp;nb_sel);
+	ERROR_CHECK(&quot;UserAsmcompTransfGet&quot;,&quot;ProSelect&quot;,status);
+<a name="anchor-6"></a>
+        if (status == PRO_TK_NO_ERROR)
+        {
+        if (nb_sel > 0)
+                {
+<a name="anchor-7"></a>                status = ProSelectionModelitemGet (sel_list[0],&amp;sel_obj);
+		ERROR_CHECK(&quot;UserAsmcompTransfGet&quot;,&quot;ProSelectionModelitemGet&quot;,
+			status);
+
+                status = ProSelectionHighlight (sel_list[0],PRO_COLOR_ERROR);
+<a name="anchor-8"></a>		ERROR_CHECK(&quot;UserAsmcompTransfGet&quot;,&quot;ProSelectionHighlight&quot;,
+                        status);
+
+                status = ProSelectionAsmcomppathGet(sel_list[0],&amp;comp_path);
+                ERROR_CHECK(&quot;UserAsmcompTransfGet&quot;,&quot;ProSelectionAsmcomppathGet&quot;,
+<a name="anchor-9"></a>                        status);
+                if (status != PRO_TK_NO_ERROR) return (PRO_TK_GENERAL_ERROR);
+
+                status = ProAsmcomppathTrfGet (&amp;comp_path,PRO_B_TRUE,matrix);
+                ERROR_CHECK(&quot;UserAsmcompTransfGet&quot;,&quot;ProAsmcomppathTrfGet&quot;,
+<a name="anchor-10"></a>                        status);
+                if (status != PRO_TK_NO_ERROR) return (PRO_TK_GENERAL_ERROR);
+
+                status = ProAsmcomppathMdlGet(&amp;comp_path,&amp;model);
+                ERROR_CHECK(&quot;UserAsmcompTransfGet&quot;,&quot;ProAsmcomppathMdlGet&quot;,
+<a name="anchor-11"></a>                        status);
+                if (status != PRO_TK_NO_ERROR) return (PRO_TK_GENERAL_ERROR);
+
+                ProMdlMdlnameGet(model,w_name);
+                ProWstringToString(name,w_name);
+<a name="anchor-12"></a>                fp_out = PTApplsUnicodeFopen(&quot;rptfile.txt&quot;, &quot;w&quot;);
+                ProTKFprintf(fp_out, &quot; ------ Component Location ------ \n\n&quot;);
+                ProTKFprintf(fp_out, &quot;Component name : %s\n\n&quot;,name);
+                ProTKFprintf(fp_out, &quot;Matrix :\n\n&quot;);
+		for (i=0 ; i&lt;4 ; i++)
+<a name="anchor-13"></a>                	ProTKFprintf(fp_out, &quot;%f\t%f\t%f\t%f\n&quot;,
+				matrix[i][0],matrix[i][1],
+				matrix[i][2],matrix[i][3]);
+                fclose(fp_out);
+		ProStringToWstring(w_name,&quot;rptfile.txt&quot;);
+<a name="anchor-14"></a>                status = ProInfoWindowDisplay (w_name,NULL,NULL);
+		ERROR_CHECK(&quot;UserAsmcompTransfGet&quot;,&quot;ProInfoWindowDisplay&quot;,
+                        status);
+                if (status != PRO_TK_NO_ERROR) return (-1);
+                }
+<a name="anchor-15"></a>        }
+        return (PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

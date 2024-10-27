@@ -1,0 +1,434 @@
+<html>
+<head>
+<title>UgSweepCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProElement.h>
+<a name="anchor-2"></a>#include &lt;ProFeatType.h>
+#include &lt;ProFeatForm.h>
+#include &lt;ProSweep.h>
+#include &lt;ProFeature.h>
+#include &lt;ProSection.h>
+<a name="anchor-3"></a>#include &lt;ProSecdim.h>
+ 
+/*---------------------- Pro/Develop Includes ------------------------*/
+
+/*---------------------- Application Includes ------------------------*/
+<a name="anchor-4"></a>#include &lt;TestError.h>
+
+/*---------------------- Application Typedefs ------------------------*/
+typedef struct element_data
+{
+<a name="anchor-5"></a>    ProElement parent_element;
+    ProElemId elem_id;
+    ProValueData value_data;
+} UgElemdata;
+
+<a name="anchor-6"></a>/*---------------------- Prototypes ----------------------------------*/
+ProError UgFeatElemAdd(UgElemdata *elem,ProElement *added_elem);
+ProError UgFeatElemValueGet(ProElement tree, ProElempathItem *path, int size, 
+			    ProValueData *elem_val);
+ProError UgSectionRegenerate(ProSection section);
+<a name="anchor-7"></a>ProError UgSweepSpineSktCreate(ProSection section);
+ProError UgSweepSectSktCreate(ProSection section);
+ProError UgFeatElemRemove(ProElement tree, ProElempathItem *path, int size);
+ProError UgFeatElemAddSecMethod(ProElement std_sec_elem);
+
+<a name="anchor-8"></a>/*====================================================================*\
+Function: UgBaseSweepProtrCreate
+Purpose: Example to demonstrate creation of first feature sweep protrusion
+\*====================================================================*/
+int UgBaseSweepProtrCreate(ProPart part )
+<a name="anchor-9"></a>{
+    ProError err;
+    UgElemdata elem_data;
+    ProFeature feature;
+    ProErrorlist ftcr_errs;
+<a name="anchor-10"></a>    ProElement elem,elem_tree;
+    ProSelection part_sel;
+    ProModelitem part_mdlitem;
+    ProFeatureCreateOptions *ftcropts = 0;
+    ProElempathItem sect_path[] = {{PRO_ELEM_PATH_ITEM_TYPE_ID,
+<a name="anchor-11"></a>				    PRO_E_SWEEP_SECTION}};
+    ProElempathItem spine_skt_path[] = {{PRO_ELEM_PATH_ITEM_TYPE_ID,
+					 PRO_E_SWEEP_SPINE},
+                                        {PRO_ELEM_PATH_ITEM_TYPE_ID,
+					 PRO_E_SKETCHER}};
+<a name="anchor-12"></a>    ProElempathItem sect_skt_path[] = {{PRO_ELEM_PATH_ITEM_TYPE_ID,
+					 PRO_E_SWEEP_SECTION},
+                                        {PRO_ELEM_PATH_ITEM_TYPE_ID,
+					 PRO_E_SKETCHER}};
+    ProValueData spine_skt_val, sect_skt_val;
+<a name="anchor-13"></a>
+    if (part == NULL)
+    {
+	err = ProMdlCurrentGet((ProMdl *)&amp;part);
+	ERROR_CHECK(&quot;ProMdlCurrentGet&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+<a name="anchor-14"></a>    }
+/*--------------------------------------------------------------------*\
+Initialize element tree
+\*--------------------------------------------------------------------*/
+    err = ProElementAlloc(PRO_E_FEATURE_TREE,&amp;elem_tree);
+<a name="anchor-15"></a>    ERROR_CHECK(&quot;ProElementAlloc&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+
+/*--------------------------------------------------------------------*\
+Add feature type element to the tree
+\*--------------------------------------------------------------------*/
+<a name="anchor-16"></a>    elem_data.parent_element = elem_tree;
+    elem_data.elem_id = PRO_E_FEATURE_TYPE;
+    elem_data.value_data.type = PRO_VALUE_TYPE_INT;
+    elem_data.value_data.v.i = PRO_FEAT_FIRST_FEAT;
+    err = UgFeatElemAdd(&amp;elem_data,&amp;elem);
+<a name="anchor-17"></a>       
+/*--------------------------------------------------------------------*\
+Add feature form element to the tree
+\*--------------------------------------------------------------------*/
+    elem_data.parent_element = elem_tree;
+<a name="anchor-18"></a>    elem_data.elem_id = PRO_E_FEATURE_FORM;
+    elem_data.value_data.type = PRO_VALUE_TYPE_INT;
+    elem_data.value_data.v.i = PRO_SWEEP;
+    err = UgFeatElemAdd(&amp;elem_data,&amp;elem);
+
+<a name="anchor-19"></a>/*--------------------------------------------------------------------*\
+Add section method for the spine section 
+\*--------------------------------------------------------------------*/
+    elem_data.parent_element = elem_tree;
+    elem_data.elem_id = PRO_E_SWEEP_SPINE;
+<a name="anchor-20"></a>    elem_data.value_data.type = -1;
+    elem_data.value_data.v.i = 0;
+    err = UgFeatElemAdd(&amp;elem_data,&amp;elem);
+    err = UgFeatElemAddSecMethod(elem);
+
+<a name="anchor-21"></a>/*--------------------------------------------------------------------*\
+Add section method for the sweep section 
+\*--------------------------------------------------------------------*/
+    elem_data.parent_element = elem_tree;
+    elem_data.elem_id = PRO_E_SWEEP_SECTION;
+<a name="anchor-22"></a>    elem_data.value_data.type = -1;
+    elem_data.value_data.v.i = 0;
+    err = UgFeatElemAdd(&amp;elem_data,&amp;elem);
+    err = UgFeatElemAddSecMethod(elem);
+
+<a name="anchor-23"></a>/*--------------------------------------------------------------------*\
+Create incomplete feature to initialize spine sketch handle
+\*--------------------------------------------------------------------*/
+    err = ProMdlToModelitem((ProMdl)part,&amp;part_mdlitem);
+    ERROR_CHECK(&quot;ProMdlToModelitem&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+<a name="anchor-24"></a>    err = ProSelectionAlloc(NULL,&amp;part_mdlitem,&amp;part_sel);
+    ERROR_CHECK(&quot;ProSelectionAlloc&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+    status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+        1, (ProArray*)&amp;ftcropts);
+
+<a name="anchor-25"></a>    ftcropts[0]= PRO_FEAT_CR_INCOMPLETE_FEAT;
+
+    err = ProFeatureWithoptionsCreate(part_sel,elem_tree,
+        ftcropts, PRO_REGEN_NO_FLAGS,&amp;feature, &amp;ftcr_errs);
+    ERROR_CHECK(&quot;ProFeatureWithoptionsCreate&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+<a name="anchor-26"></a>
+    err = ProElementFree(&amp;elem_tree);
+    ERROR_CHECK(&quot;ProElementFree&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-27"></a>Retrieve initialized element tree from the proe data base
+\*--------------------------------------------------------------------*/
+  err = ProFeatureElemtreeExtract (&amp;feature,NULL,PRO_FEAT_EXTRACT_NO_OPTS,&amp;elem_tree);
+  ERROR_CHECK (&quot;ProFeatureElemtreeExtract()&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+
+<a name="anchor-28"></a>/*--------------------------------------------------------------------*\
+Get the spine sketch handle from the element tree
+\*--------------------------------------------------------------------*/
+    err = UgFeatElemValueGet(elem_tree,spine_skt_path,2,&amp;spine_skt_val);
+
+<a name="anchor-29"></a>/*--------------------------------------------------------------------*\
+Create sweep spine
+\*--------------------------------------------------------------------*/
+    err = UgSweepSpineSktCreate((ProSection)spine_skt_val.v.p);
+
+<a name="anchor-30"></a>/*--------------------------------------------------------------------*\
+Remove sweep section element tree to avoid unitialized data 
+\*--------------------------------------------------------------------*/
+    err = UgFeatElemRemove(elem_tree,sect_path,1);
+
+<a name="anchor-31"></a>/*--------------------------------------------------------------------*\
+Add section method for the sweep x-section 
+\*--------------------------------------------------------------------*/
+    elem_data.parent_element = elem_tree;
+    elem_data.elem_id = PRO_E_SWEEP_SECTION;
+<a name="anchor-32"></a>    elem_data.value_data.type = -1;
+    elem_data.value_data.v.i = 0;
+    err = UgFeatElemAdd(&amp;elem_data,&amp;elem);
+    err = UgFeatElemAddSecMethod(elem);
+
+<a name="anchor-33"></a>/*--------------------------------------------------------------------*\
+Redefine feature as incomplete to add spine and initialize section sketch
+\*--------------------------------------------------------------------*/
+    err = ProFeatureWithoptionsRedefine(NULL,&amp;feature,elem_tree,
+        ftcropts, PRO_REGEN_NO_FLAGS, &amp;ftcr_errs);
+<a name="anchor-34"></a>    ERROR_CHECK(&quot;ProFeatureWithoptionsRedefine&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+
+    status = ProArrayFree((ProArray*)&amp;ftcropts);
+    err = ProFeatureElemtreeFree(&amp;feature, elem_tree);
+    ERROR_CHECK(&quot;ProFeatureElemtreeFree&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+<a name="anchor-35"></a>
+/*--------------------------------------------------------------------*\
+Retrieve initialized element tree from the proe data base
+\*--------------------------------------------------------------------*/
+  err = ProFeatureElemtreeExtract (&amp;feature, NULL, PRO_FEAT_EXTRACT_NO_OPTS,
+<a name="anchor-36"></a>		&amp;elem_tree);
+  ERROR_CHECK (&quot;ProFeatureElemtreeExtract&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+
+/*--------------------------------------------------------------------*\
+Get the section sketch handle from the element tree
+<a name="anchor-37"></a>\*--------------------------------------------------------------------*/
+    err = UgFeatElemValueGet(elem_tree,sect_skt_path,2,&amp;sect_skt_val);
+
+/*--------------------------------------------------------------------*\
+Create sweep section sketch
+<a name="anchor-38"></a>\*--------------------------------------------------------------------*/
+    err = UgSweepSectSktCreate((ProSection)sect_skt_val.v.p);
+
+/*--------------------------------------------------------------------*\
+Redefine feature to create complete feature
+<a name="anchor-39"></a>\*--------------------------------------------------------------------*/
+
+    status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+        1, (ProArray*)&amp;ftcropts);
+
+<a name="anchor-40"></a>    ftcropts[0]= PRO_FEAT_CR_NO_OPTS;
+
+    err = ProFeatureWithoptionsRedefine(NULL,&amp;feature,elem_tree,
+        ftcropts, PRO_REGEN_NO_FLAGS, &amp;ftcr_errs);
+    ERROR_CHECK(&quot;ProFeatureWithoptionsRedefine&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+<a name="anchor-41"></a>
+    status = ProArrayFree((ProArray*)&amp;ftcropts);
+    err = ProFeatureElemtreeFree(&amp;feature, elem_tree);
+    ERROR_CHECK(&quot;ProFeatureElemtreeFree&quot;,&quot;UgBaseSweepProtrCreate&quot;,err);
+
+<a name="anchor-42"></a>    return(err);
+}
+/*====================================================================*\
+Function: UgFeatElemAdd
+Purpose: Adds a generic feature element to the element tree
+<a name="anchor-43"></a>\*====================================================================*/
+ProError UgFeatElemAdd(UgElemdata *elem,ProElement *added_elem)
+{
+    ProValue value;
+    ProElement element;
+<a name="anchor-44"></a>    ProError err;
+
+
+    err = ProElementAlloc(elem->elem_id,&amp;element);
+    ERROR_CHECK(&quot;ProElementAlloc&quot;,&quot;UgFeatElemAdd&quot;,err);
+<a name="anchor-45"></a>    
+    if (elem->value_data.type == PRO_VALUE_TYPE_INT)
+    {	
+	    err = ProElementIntegerSet (element, elem->value_data.v.i);
+    	ERROR_CHECK(&quot;ProElementValueSet&quot;,&quot; ProElementIntegerSet&quot;,err);
+<a name="anchor-46"></a>    }
+
+    err = ProElemtreeElementAdd(elem->parent_element,NULL,element);
+    ERROR_CHECK(&quot;ProElemtreeElementAdd&quot;,&quot;UgFeatElemAdd&quot;,err);
+    
+<a name="anchor-47"></a>    *added_elem = element;
+    
+    return(err);
+}
+/*====================================================================*\
+<a name="anchor-48"></a>Function: UgFeatElemAddSecMethod
+Purpose: adds necessary elements below PRO_E_STD_SECTION elem to 
+	 specify sec method element
+\*====================================================================*/
+ProError UgFeatElemAddSecMethod(ProElement std_sec_elem)
+<a name="anchor-49"></a>{
+    ProElement elem;
+    UgElemdata elem_data;
+    ProError err;
+
+<a name="anchor-50"></a>    elem_data.parent_element = std_sec_elem;
+    elem_data.elem_id = PRO_E_STD_SEC_SETUP;
+    elem_data.value_data.type = -1;
+    elem_data.value_data.v.i = 0;
+    err = UgFeatElemAdd(&amp;elem_data,&amp;elem);
+<a name="anchor-51"></a>
+    elem_data.parent_element = elem;
+    elem_data.elem_id = PRO_E_STD_SEC_METHOD;
+    elem_data.value_data.type = PRO_VALUE_TYPE_INT;
+    elem_data.value_data.v.i = PRO_SEC_SKETCH;
+<a name="anchor-52"></a>    err = UgFeatElemAdd(&amp;elem_data,&amp;elem);
+
+    return(0);
+}
+/*====================================================================*\
+<a name="anchor-53"></a>Function: UgFeatElemValueGet
+Purpose: Gets a feature element from the element tree
+\*====================================================================*/
+ProError UgFeatElemValueGet(ProElement tree, ProElempathItem *path, int size, 
+			    ProValueData *elem_val)
+<a name="anchor-54"></a>{
+    ProElempath elem_path;
+    ProElement elem;
+    ProValue value;
+    ProError err;
+<a name="anchor-55"></a>
+    err = ProElempathAlloc(&amp;elem_path);
+    ERROR_CHECK(&quot;ProElempathAlloc&quot;,&quot;UgFeatElemGet&quot;,err);
+
+    err = ProElempathDataSet(elem_path,path,size);
+<a name="anchor-56"></a>    ERROR_CHECK(&quot;ProElempathDataSet&quot;,&quot;UgFeatElemGet&quot;,err);
+
+    err = ProElemtreeElementGet(tree,elem_path,&amp;elem);
+    ERROR_CHECK(&quot;ProElemtreeElementGet&quot;,&quot;UgFeatElemValueGet&quot;,err);
+
+<a name="anchor-57"></a>	err = ProElementSpecialvalueGet(elem, NULL, (ProAppData *) &amp;(elem_val->v.p));
+	ERROR_CHECK (&quot; ProElementSpecialvalueGet&quot;,&quot;UgFeatElemValueGet&quot;,err);
+  
+  elem_val->type = PRO_VALUE_TYPE_POINTER;
+ 
+<a name="anchor-58"></a> return(err);      
+}
+/*====================================================================*\
+Function: UgFeatElemRemove
+Purpose: Removes a feature element from the element tree
+<a name="anchor-59"></a>\*====================================================================*/
+ProError UgFeatElemRemove(ProElement tree, ProElempathItem *path, int size)
+{
+    ProElempath elem_path;
+    ProElement elem;
+<a name="anchor-60"></a>    ProError err;
+
+    err = ProElempathAlloc(&amp;elem_path);
+    ERROR_CHECK(&quot;ProElempathAlloc&quot;,&quot;UgFeatElemGet&quot;,err);
+
+<a name="anchor-61"></a>    err = ProElempathDataSet(elem_path,path,size);
+    ERROR_CHECK(&quot;ProElempathDataSet&quot;,&quot;UgFeatElemGet&quot;,err);
+
+    err = ProElemtreeElementGet(tree,elem_path,&amp;elem);
+    ERROR_CHECK(&quot;ProElemtreeElementGet&quot;,&quot;UgFeatElemValueGet&quot;,err);
+<a name="anchor-62"></a>
+    err = ProElemtreeElementRemove(tree,elem_path,&amp;elem);
+    ERROR_CHECK(&quot;ProElemtreeElementRemove&quot;,&quot;UgFeatElemRemove&quot;,err);
+
+    err = ProElementFree(&amp;elem);
+<a name="anchor-63"></a>    ERROR_CHECK(&quot;ProElementFree&quot;,&quot;UgFeatElemRemove&quot;,err);
+
+    return(err);
+}
+/*====================================================================*\
+<a name="anchor-64"></a>Function: UgSweepSpineSktCreate
+Purpose: Creates a spine sketch for a sweep first feature
+\*====================================================================*/
+ProError UgSweepSpineSktCreate(ProSection section)
+{
+<a name="anchor-65"></a>    Pro2dSplinedef spline;
+    Pro2dPnt pnt_ar[] = {{0.0,0.0},{5.0,5.0},{10.0,-5.0},{15.0,2.0}};
+    int spl_id, dim_id;
+    Pro2dPnt place_pnt = {7.5,0.0};
+    ProSectionPointType pnt_types[] = {PRO_ENT_START,PRO_ENT_END};
+<a name="anchor-66"></a>    int ent_ids[2];
+    ProError err;
+
+    spline.type = PRO_2D_SPLINE;
+    spline.tangency_type = PRO_2D_SPLINE_TAN_NONE;
+<a name="anchor-67"></a>    spline.n_points = 4;
+    spline.point_arr = pnt_ar;
+    spline.start_tang_angle = 0.0;
+    spline.end_tang_angle = 0.0;
+
+<a name="anchor-68"></a>    err = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;spline,&amp;spl_id);
+    ERROR_CHECK(&quot;ProSecitonEntityAdd&quot;,&quot;UgSweepSpineSktCreate&quot;,err);
+
+    ent_ids[0] = ent_ids[1] = spl_id;
+    err = ProSecdimCreate(section,ent_ids,pnt_types,2,
+<a name="anchor-69"></a>			  PRO_TK_DIM_PNT_PNT_HORIZ,place_pnt,&amp;dim_id);
+    ERROR_CHECK(&quot;ProSecdimCreate&quot;,&quot;UgSweepSpineSktCreate&quot;,err);
+
+    ent_ids[0] = ent_ids[1] = spl_id;
+    err = ProSecdimCreate(section,ent_ids,pnt_types,2,
+<a name="anchor-70"></a>			  PRO_TK_DIM_PNT_PNT_VERT,place_pnt,&amp;dim_id);
+    ERROR_CHECK(&quot;ProSecdimCreate&quot;,&quot;UgSweepSpineSktCreate&quot;,err);
+
+    err = UgSectionRegenerate(section);
+
+<a name="anchor-71"></a>    return(err);
+}
+/*====================================================================*\
+Function: UgSweepSectSktCreate
+Purpose: Creates a section sketch for a constant section sweep
+<a name="anchor-72"></a>\*====================================================================*/
+ProError UgSweepSectSktCreate(ProSection section)
+{
+    ProError err;
+    Pro2dCircledef circle;
+<a name="anchor-73"></a>    int circle_id;
+    ProSectionPointType pnt_types[] = {PRO_ENT_WHOLE};
+    Pro2dPnt place_pnt = {0.0,0.0};
+    int dim_id;
+    ProIntlist ids;
+<a name="anchor-74"></a>    int n_ids;
+
+    err = ProSectionEntityIdsGet(section,&amp;ids,&amp;n_ids);
+    ERROR_CHECK(&quot;ProSectionEntityIdsGet&quot;,&quot;UgSweepSectSktCreate&quot;,err);
+
+<a name="anchor-75"></a>    ProTKPrintf(&quot;Number of section entities: %d\n&quot;,n_ids);
+
+    circle.type = PRO_2D_CIRCLE;
+    circle.center[0] = circle.center[1] = 0.0;
+    circle.radius = 1.0;
+<a name="anchor-76"></a>    err = ProSectionEntityAdd(section,(Pro2dEntdef *)&amp;circle,&amp;circle_id);
+    ERROR_CHECK(&quot;ProSecitonEntityAdd&quot;,&quot;UgSweepSectSktCreate&quot;,err);
+
+/*--------------------------------------------------------------------*\
+Dimension section and add location dimensions if necessary; Section can
+<a name="anchor-77"></a>be dimensioned with respect to the construction entities created by 
+default (i.e. xy centerlines) although not needed here since the circle is
+placed at the origin.
+\*--------------------------------------------------------------------*/
+    err = ProSecdimCreate(section,&amp;circle_id,pnt_types,1,
+<a name="anchor-78"></a>			  PRO_TK_DIM_DIA,place_pnt,&amp;dim_id);
+    ERROR_CHECK(&quot;ProSecdimCreate&quot;,&quot;UgSweepSectSktCreate&quot;,err);
+
+    err = UgSectionRegenerate(section);
+    
+<a name="anchor-79"></a>    return(err);
+}
+/*====================================================================*\
+Function: UgSectionRegenerate
+Purpose: Regenerate a section
+<a name="anchor-80"></a>\*====================================================================*/
+ProError UgSectionRegenerate(ProSection section)
+{
+    ProWSecerror sec_errs;
+    ProError err;
+<a name="anchor-81"></a>
+    err = ProSecerrorAlloc(&amp;sec_errs);
+    ERROR_CHECK(&quot;ProSecerrorAlloc&quot;,&quot;UgSectionRegenerate&quot;,err);
+
+    err = ProSectionSolve(section,&amp;sec_errs);
+<a name="anchor-82"></a>    ERROR_CHECK(&quot;ProSectionSolve&quot;,&quot;UgSectionRegenerate&quot;,err);
+
+    err = ProSecerrorFree(&amp;sec_errs);
+    ERROR_CHECK(&quot;ProSecerrorFree&quot;,&quot;UgSectionRegenerate&quot;,err);
+
+<a name="anchor-83"></a>    err = ProSecerrorAlloc(&amp;sec_errs);
+    ERROR_CHECK(&quot;ProSecerrorAlloc&quot;,&quot;UgSectionRegenerate&quot;,err);
+
+    err = ProSectionRegenerate(section,&amp;sec_errs);
+    ERROR_CHECK(&quot;ProSectionRegenerate&quot;,&quot;UgSectionRegenerate&quot;,err);
+<a name="anchor-84"></a>
+    err = ProSecerrorAlloc(&amp;sec_errs);
+    ERROR_CHECK(&quot;ProSecerrorAlloc&quot;,&quot;UgSectionRegenerate&quot;,err);
+
+    return(err);
+<a name="anchor-85"></a>}
+</pre>
+</body>
+</html>

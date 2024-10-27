@@ -1,0 +1,285 @@
+<html>
+<head>
+<title>UgMaterial.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+#include &lt;ProToolkit.h>
+#include &lt;ProParameter.h>
+#include &lt;ProMaterial.h>
+#include &lt;ProUtil.h>
+<a name="anchor-2"></a>#include &lt;ProSolid.h>
+#include &lt;ProMdlUnits.h>
+
+#include &lt;ProSelbuffer.h>
+#include &lt;ProUICmd.h>
+<a name="anchor-3"></a>#include &lt;ProMessage.h>
+#include &lt;ProModelitem.h>
+
+#include &lt;TestError.h>
+
+<a name="anchor-4"></a>extern int UserPartInfoMass (ProPart part);
+
+/*====================================================================*\
+FUNCTION: UserApplyAndUpdateMaterial()
+PURPOSE:  Read a material from file, read some of its properties,  and 
+<a name="anchor-5"></a>          add a user-defined parameter to it.  Then assign it to the model
+		  and calculate the model mass properties.
+\*====================================================================*/
+ProError UserApplyAndUpdateMaterial (ProPart part) 
+{
+<a name="anchor-6"></a>  ProError status;
+  ProFileName msg_file;
+  ProName fopen_label;
+  ProLine filter_string;
+  ProPath* shortcut_paths;
+<a name="anchor-7"></a>  ProName* shortcut_names;
+  ProPath mtl_file;
+  ProPath mtl_file_path;
+  ProPath current_dir;
+  ProMdlName mtl_name;
+<a name="anchor-8"></a>  ProMaterialItem material_item;
+  ProParamvalue mtl_type, mtl_density;
+  ProUnititem units;
+  int mtl_type_value;
+  ProParamvalue mtl_prop_value;
+<a name="anchor-9"></a>  ProName mtl_prop_name;
+  ProParameter param;
+  ProMaterial material;
+  ProPath unit_expression;
+  ProMassProperty mass_prop;
+<a name="anchor-10"></a>  ProUnitsystem unit_system;
+  ProUnititem mass_unit;
+
+/*--------------------------------------------------------------------*\
+    Set up the message file.
+<a name="anchor-11"></a>\*--------------------------------------------------------------------*/
+  ProStringToWstring (msg_file, &quot;msg_ugparam.txt&quot;);
+
+/*--------------------------------------------------------------------*\
+    Get the material file name from the user.
+<a name="anchor-12"></a>\*--------------------------------------------------------------------*/
+  ProStringToWstring (fopen_label, &quot;Select material file&quot;);
+  ProStringToWstring (filter_string, &quot;*.mtl&quot;);
+
+  ProArrayAlloc (0, sizeof (ProPath), 1, (ProArray*)&amp;shortcut_paths);
+<a name="anchor-13"></a>  ProArrayAlloc (0, sizeof (ProName), 1, (ProArray*)&amp;shortcut_names);
+
+  status = ProFileMdlnameOpen (fopen_label, filter_string, shortcut_paths,
+			shortcut_names, NULL, NULL, mtl_file);
+
+<a name="anchor-14"></a>  ProArrayFree ((ProArray*)&amp;shortcut_paths);
+  ProArrayFree ((ProArray*)&amp;shortcut_names);
+
+  if (status != PRO_TK_NO_ERROR) 
+    {
+<a name="anchor-15"></a>      return (status);
+    }
+
+/*--------------------------------------------------------------------*\
+    Change Pro/ENGINEER to the material file directory
+<a name="anchor-16"></a>\*--------------------------------------------------------------------*/
+  ProFileMdlnameParse (mtl_file, mtl_file_path, mtl_name, NULL, NULL);
+
+  ProDirectoryCurrentGet (current_dir);
+
+<a name="anchor-17"></a>  ProDirectoryChange (mtl_file_path);
+
+/*--------------------------------------------------------------------*\
+    Read the material from the file.
+\*--------------------------------------------------------------------*/
+<a name="anchor-18"></a>  status = ProMaterialfileRead (part, mtl_name);
+
+  ProDirectoryChange (current_dir);
+
+  if (status != PRO_TK_NO_ERROR)
+<a name="anchor-19"></a>    {
+      ProMessageDisplay (msg_file, &quot;UG MaterialFile Read Error&quot;, mtl_name);
+      ProDirectoryChange (current_dir);
+      return (status);
+    }
+<a name="anchor-20"></a>
+/*--------------------------------------------------------------------*\
+    Get the material type and density.  
+\*--------------------------------------------------------------------*/
+  status = ProModelitemByNameInit (part, PRO_RP_MATERIAL, mtl_name,
+<a name="anchor-21"></a>				   &amp;material_item);
+
+  status = ProMaterialPropertyGet (&amp;material_item, PRO_MATPROP_TYPE, 
+				   &amp;mtl_type, &amp;units);
+
+<a name="anchor-22"></a>  status = ProMaterialPropertyGet (&amp;material_item, PRO_MATPROP_MASS_DENSITY,
+				   &amp;mtl_density, &amp;units);
+
+/*--------------------------------------------------------------------*\
+    Convert the density units to a user-readable format.
+<a name="anchor-23"></a>\*--------------------------------------------------------------------*/
+  status = ProUnitExpressionGet (&amp;units, unit_expression);
+
+/*--------------------------------------------------------------------*\
+    Create a user-defined material property based on the type.
+<a name="anchor-24"></a>\*--------------------------------------------------------------------*/
+  ProStringToWstring (mtl_prop_name, &quot;STRUCTURAL_TYPE&quot;);
+
+  mtl_type_value = mtl_type.value.i_val;
+	
+<a name="anchor-25"></a>  mtl_prop_value.type = PRO_PARAM_STRING;
+  if (mtl_type_value &amp; PRO_MATERIAL_TYPE_STRUCTURAL_ISOTROPIC)
+    {
+      ProStringToWstring (mtl_prop_value.value.s_val, &quot;Isotropic&quot;);
+    }
+<a name="anchor-26"></a>  else if (mtl_type_value &amp; PRO_MATERIAL_TYPE_STRUCTURAL_ORTHOTROPIC)
+    {
+      ProStringToWstring (mtl_prop_value.value.s_val, &quot;Orthotropic&quot;);
+    }
+  else
+<a name="anchor-27"></a>    ProStringToWstring (mtl_prop_value.value.s_val, 
+			&quot;Transversely orthotropic&quot;);
+  ProStringToWstring (mass_unit.name,&quot;in&quot;);
+  status = ProParameterWithUnitsCreate (&amp;material_item, mtl_prop_name, 
+			       &amp;mtl_prop_value,&amp;mass_unit, &amp;param);
+<a name="anchor-28"></a>								
+/*--------------------------------------------------------------------*\
+    Assign the material.
+\*--------------------------------------------------------------------*/
+  material.part = part;
+<a name="anchor-29"></a>  ProWstringCopy (mtl_name, material.matl_name, PRO_VALUE_UNUSED);
+
+  status = ProMaterialCurrentSet (&amp;material);
+
+  ProMessageDisplay (msg_file, &quot;UG MaterialFile Mass Info&quot;, mtl_name,
+<a name="anchor-30"></a>		     &amp;mtl_density.value.d_val, unit_expression);
+
+/*--------------------------------------------------------------------*\
+    Compute and display the mass properties.
+\*--------------------------------------------------------------------*/
+<a name="anchor-31"></a>  UserPartInfoMass (part);
+
+  return (0);
+}
+
+<a name="anchor-32"></a>/*=====================================================================*\
+FUNCTION: UserApplyMaterial_OA
+PURPOSE:  Object/Action callback for applying material to the part.
+\*=====================================================================*/
+int UserApplyMaterial_OA()
+<a name="anchor-33"></a>{
+  ProError status; 
+  ProSelection* sel_array;
+  ProModelitem item;
+
+<a name="anchor-34"></a>/*--------------------------------------------------------------------*\
+Extract the current selected part
+\*--------------------------------------------------------------------*/
+  status = ProSelbufferSelectionsGet (&amp;sel_array);
+
+<a name="anchor-35"></a>  status = ProSelectionModelitemGet (sel_array [0], &amp;item);
+
+  UserApplyAndUpdateMaterial (item.owner);
+
+  ProSelectionarrayFree (sel_array);
+<a name="anchor-36"></a>
+  return (1);
+}
+
+#define OA 1  /* Standard OA in the menu system, typically gray out 
+<a name="anchor-37"></a>		 the button when not usable*/
+#define PM 2 /* OA in a popup menu, typically remove the button when 
+	         not usable */
+
+/*=====================================================================*\
+<a name="anchor-38"></a>FUNCTION: UserApplyMaterial_TestLow
+PURPOSE:  Access function for the button for applying material to a part.
+\*=====================================================================*/
+static uiCmdAccessState UserApplyMaterial_TestLow (ProSelection* sels, int mode)
+{
+<a name="anchor-39"></a>  uiCmdAccessState access_result;
+  ProBoolean should_free = PRO_B_FALSE;
+  ProError status;
+  int size;
+
+<a name="anchor-40"></a>/*-----------------------------------------------------------------*\
+  Set the default return if the button is unusable.
+\*-----------------------------------------------------------------*/  
+  if (mode == OA)
+    access_result = ACCESS_UNAVAILABLE;
+<a name="anchor-41"></a>  else 
+    access_result = ACCESS_REMOVE;
+
+/*-----------------------------------------------------------------*\
+  If called without selections, extract the current selections from
+<a name="anchor-42"></a>  the buffer.
+\*-----------------------------------------------------------------*/ 
+  if (sels == NULL)
+    {   
+      status = ProSelbufferSelectionsGet (&amp;sels);
+<a name="anchor-43"></a>      
+      if (status != PRO_TK_NO_ERROR)
+	return access_result;
+
+      if (sels == NULL)
+<a name="anchor-44"></a>	return access_result;
+
+      should_free = PRO_B_TRUE;
+    }
+
+<a name="anchor-45"></a>/*-----------------------------------------------------------------*\
+  This command allows only one selection.
+\*-----------------------------------------------------------------*/   
+  status = ProArraySizeGet (sels, &amp;size);
+  
+<a name="anchor-46"></a>  if (status != PRO_TK_NO_ERROR)
+    return access_result;
+
+  if (size == 1)
+    {
+<a name="anchor-47"></a>      ProModelitem item;
+
+      status = ProSelectionModelitemGet (sels [0], &amp;item);
+
+/*-----------------------------------------------------------------*\
+<a name="anchor-48"></a>  The selected type must be part.
+\*-----------------------------------------------------------------*/   
+      if (item.type == PRO_PART)
+	{
+	  access_result = ACCESS_AVAILABLE;	  
+<a name="anchor-49"></a>	}
+    }
+
+  if (should_free)
+    ProSelectionarrayFree (sels);
+<a name="anchor-50"></a>  
+  return access_result;
+}
+
+/*=====================================================================*\
+<a name="anchor-51"></a>FUNCTION: UserApplyMaterial_TestMdlTree
+PURPOSE:  Access function for the model tree popup menu button.	
+\*=====================================================================*/
+uiCmdAccessState UserApplyMaterial_TestMdlTree (uiCmdAccessMode mode)
+{ 
+<a name="anchor-52"></a>  return UserApplyMaterial_TestLow (NULL, PM);
+}
+
+/*=====================================================================*\
+FUNCTION: UserApplyMaterial_TestPM
+<a name="anchor-53"></a>PURPOSE:  Access function for the graphics window popup menu button.	
+\*=====================================================================*/
+uiCmdAccessState UserApplyMaterial_TestPM (uiCmdCmdId id,
+				      ProAppData data,
+				      ProSelection* sels)
+<a name="anchor-54"></a>{ 
+  return UserApplyMaterial_TestLow (sels, PM);
+}
+
+#undef OA
+<a name="anchor-55"></a>#undef PM
+
+</pre>
+</body>
+</html>

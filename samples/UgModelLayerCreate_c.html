@@ -1,0 +1,178 @@
+<html>
+<head>
+<title>UgModelLayerCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProGraphic.h>
+#include &lt;ProLayer.h>
+#include &lt;ProObjects.h>
+#include &lt;ProSelection.h>
+#include &lt;ProMenu.h>
+<a name="anchor-3"></a>
+#include &lt;TestError.h>
+
+/*==========================================================================*\
+FUNCTION : UserLayerItemAction()
+<a name="anchor-4"></a>PURPOSE  : Closes menu, reports selected menu action.
+\*==========================================================================*/
+int UserLayerItemAction (ProAppData dummy, int action)
+{
+    ProMenuDeleteWithStatus(action);
+<a name="anchor-5"></a>}
+
+/*==========================================================================*\
+FUNCTION : UserLayerItemTypeChoose()
+PURPOSE  : Prompts the user to select an element type for adding to layer.
+<a name="anchor-6"></a>\*==========================================================================*/
+int UserLayerItemTypeChoose()
+{
+    int menu_id;
+    int action;
+<a name="anchor-7"></a>    ProError err;
+
+    err=ProMenuFileRegister(&quot;ublank6&quot;,&quot;ublank6.mnu&quot;,&amp;menu_id);
+    ERROR_CHECK(&quot;UserLayerItemTypeChoose&quot;,&quot;ProMenuFileRegister&quot;,err);
+
+<a name="anchor-8"></a>    err=ProMenubuttonActionSet(&quot;ublank6&quot;,&quot;Part&quot;,
+			       UserLayerItemAction,NULL,PRO_PART);
+    ERROR_CHECK(&quot;UserLayerItemTypeChoose&quot;,&quot;ProMenubuttonActionSet(Part)&quot;,err);
+
+    err=ProMenubuttonActionSet(&quot;ublank6&quot;,&quot;Feature&quot;,
+<a name="anchor-9"></a>			       UserLayerItemAction,NULL,PRO_FEATURE);
+    ERROR_CHECK(&quot;UserLayerItemTypeChoose&quot;,&quot;ProMenubuttonActionSet(Feature)&quot;
+       ,err);
+
+    err=ProMenubuttonActionSet(&quot;ublank6&quot;,&quot;Curve&quot;,
+<a name="anchor-10"></a>			       UserLayerItemAction,NULL,PRO_CURVE);
+    ERROR_CHECK(&quot;UserLayerItemTypeChoose&quot;,&quot;ProMenubuttonActionSet(Curve)&quot;,err);
+
+    err=ProMenubuttonActionSet(&quot;ublank6&quot;,&quot;Quilt&quot;,
+			       UserLayerItemAction,NULL,PRO_QUILT);
+<a name="anchor-11"></a>    ERROR_CHECK(&quot;UserLayerItemTypeChoose&quot;,&quot;ProMenubuttonActionSet(Quilt)&quot;,err);
+
+    err=ProMenubuttonActionSet(&quot;ublank6&quot;,&quot;Point&quot;,
+			       UserLayerItemAction,NULL,PRO_POINT);
+    ERROR_CHECK(&quot;UserLayerItemTypeChoose&quot;,&quot;ProMenubuttonActionSet(Point)&quot;,err);
+<a name="anchor-12"></a>
+    err=ProMenubuttonActionSet(&quot;ublank6&quot;,&quot;ublank6&quot;,
+			       UserLayerItemAction,NULL,-1);
+    ERROR_CHECK(&quot;UserLayerItemTypeChoose&quot;,&quot;ProMenubuttonActionSet(ublank)&quot;,err);
+
+<a name="anchor-13"></a>    ProMenuCreate(PROMENUTYPE_MAIN,&quot;ublank6&quot;,&amp;menu_id);
+    ProMenuProcess(&quot;&quot;,&amp;action);
+    return(action);
+}
+
+<a name="anchor-14"></a>/*=========================================================================*\
+FUNCTION : UserLayerCreate()
+PURPOSE  : Function to create a layer and add items to it.
+\*==========================================================================*/
+int UserLayerCreate()
+<a name="anchor-15"></a>{
+    #define MAX_BUFFER_LENGTH 20 
+    ProLayer   layer;
+    ProLayerItem layer_item;
+    ProMdl     object, member;
+<a name="anchor-16"></a>    ProSelection  *sel;
+    ProModelitem model_item;
+    int        type;
+    int        nsel;
+    int        m;
+<a name="anchor-17"></a>    char      *option;
+    ProFileName msg_file ; 
+    ProCharName str1 ; 
+    ProCharLine str2 ; 
+    ProError   err;
+<a name="anchor-18"></a>
+/* PHILIPPE : 	The Layer examples have to be changed for rev 20 
+		Until then, I make it unavailable */
+    return (PRO_TK_NO_ERROR);
+#if 0    
+<a name="anchor-19"></a> 
+    ProStringToWstring(msg_file, &quot;msg_ugfund.txt&quot;);
+/*-------------------------------------------------------------------------*\
+    Get handle for the active model.
+\*-------------------------------------------------------------------------*/
+<a name="anchor-20"></a>    err=ProMdlCurrentGet(&amp;object);
+    ERROR_CHECK(&quot;UserLayerCreate&quot;,&quot;ProMdlCurrentGet&quot;,err);
+    if (err != PRO_TK_NO_ERROR)
+    {
+       ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, &quot;Error getting current model.&quot;); 
+<a name="anchor-21"></a>       return(err) ; 
+    }
+
+/*-------------------------------------------------------------------------*\
+    Get layer name from user.
+<a name="anchor-22"></a>\*-------------------------------------------------------------------------*/
+    ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, &quot;Enter name of new layer: &quot;) ; 
+    ProMessageStringRead(MAX_BUFFER_LENGTH, layer.layer_name) ; 
+
+/*-------------------------------------------------------------------------*\
+<a name="anchor-23"></a>    Load model information into layer struct.
+\*-------------------------------------------------------------------------*/
+    layer.owner=object;
+
+/*-------------------------------------------------------------------------*\
+<a name="anchor-24"></a>    Create the new layer
+\*-------------------------------------------------------------------------*/
+    err=ProLayerCreate(&amp;layer);
+    ERROR_CHECK(&quot;UserLayerCreate&quot;,&quot;ProLayerCreate&quot;,err);
+    sprintf(str2, &quot;New layer %s created.&quot;, 
+<a name="anchor-25"></a>        ProWstringToString(str1, layer.layer_name) ) ; 
+    if (err == PRO_TK_NO_ERROR) 
+    {
+        ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, str2) ; 
+    }
+<a name="anchor-26"></a>    else 
+    {
+        ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, &quot;Error creating new layer.&quot;) ; 
+	return(err) ; 
+    }
+<a name="anchor-27"></a>
+/*--------------------------------------------------------------------------*\
+    Choose the type of element to be selected.
+\*--------------------------------------------------------------------------*/
+    ProMessageDisplay(msg_file, &quot;USER %0s F&quot;, &quot;Select type of items to add.&quot;) ; 
+<a name="anchor-28"></a>    type = UserLayerItemTypeChoose();
+    if (type &lt; 0)
+        return(0);
+    layer_item.type=type;
+/*-------------------------------------------------------------------------*\
+<a name="anchor-29"></a>    Set the ProSelect() option accordingly.
+\*-------------------------------------------------------------------------*/
+    switch (type)
+    {
+    case PRO_PART    : option = &quot;part&quot;    ; break;
+<a name="anchor-30"></a>    case PRO_FEATURE : option = &quot;feature&quot; ; break;
+    case PRO_CURVE   : option = &quot;curve&quot;   ; break;
+    case PRO_QUILT   : option = &quot;dtmqlt&quot;  ; break;
+    case PRO_POINT   : option = &quot;point&quot;   ; break;
+    }
+<a name="anchor-31"></a>    while ( ProSelect(option,1,NULL,NULL,NULL,NULL,&amp;sel,&amp;nsel)==PRO_TK_NO_ERROR
+	     &amp;&amp; nsel>0 )
+    {
+        err=ProSelectionModelitemGet(sel[0],&amp;model_item);
+	ERROR_CHECK(&quot;UserLayerCreate&quot;,&quot;ProSelectionModelitemGet&quot;,err);
+<a name="anchor-32"></a>	layer_item.id = model_item.id;
+	err=ProLayerItemAdd(&amp;layer,&amp;layer_item);
+	ERROR_CHECK(&quot;UserLayerCreate&quot;,&quot;ProLayerItemAdd&quot;,err);
+        ProWindowRepaint(-1);
+    }
+<a name="anchor-33"></a>    
+    return(0);
+
+#endif
+}
+</pre>
+</body>
+</html>

@@ -1,0 +1,548 @@
+<html>
+<head>
+<title>TestMfgWcell.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes -- include this first
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProNcseq.h>
+#include &lt;ProMenu.h>
+
+/*--------------------------------------------------------------------*\
+Application macros
+<a name="anchor-3"></a>\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilMessage.h&quot;
+/*--------------------------------------------------------------------*\
+<a name="anchor-4"></a>Application data types
+\*--------------------------------------------------------------------*/
+#include &quot;MfgMenu.h&quot;
+#include &quot;TestMfgNew.h&quot;
+#include &lt;ProTKRunTime.h>
+<a name="anchor-5"></a>/*====================================================================*\
+FUNCTION : ProTestWkcellCreate 
+PURPOSE  : ProTestWkcellCreate
+\*====================================================================*/
+ProError ProTestWkcellCreate(MfgMenuChoice *obj_action)
+<a name="anchor-6"></a>{
+    ProMfg       mfg_model = NULL;
+    ProSolid     mfg_solid = NULL;
+    ProFeature   wc_feature;
+    ProAsmcomppath comp_path;
+<a name="anchor-7"></a>    ProError     status = PRO_TK_NO_ERROR;
+    wchar_t      wcell_name[PRO_LINE_SIZE];
+    int          done_quit;
+    static char *menu[] = {&quot;TkMfgWcell&quot;,&quot;TkMfgWAxs&quot;,&quot;TkMfgWDQ&quot;,&quot;&quot;};
+    Workcell wcell;
+<a name="anchor-8"></a>    int		id;
+
+    int ProTestChooseWcellType(Workcell *wcell, int opt);
+    int ProTestWcellDQ(int *done_quit, int opt);
+
+<a name="anchor-9"></a>    wcell.type = PRO_WCELL_LATHE;
+    wcell.n_axis = -(WKCL_AXIS_2);
+
+    status = ProMenuPush();
+    TEST_CALL_REPORT (&quot;ProMenuPush&quot;, &quot;ProTestWkcellCreate&quot;, status,
+<a name="anchor-10"></a>        status != PRO_TK_NO_ERROR);
+
+    status = ProMenuFileRegister((char*)&quot;TkMfgWcell&quot;,(char*)&quot;tkmfgwcell.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuPush&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+<a name="anchor-11"></a>    status = ProMenubuttonActionSet((char*)&quot;TkMfgWcell&quot;,(char*)&quot;TkMfgWcell&quot;, (ProMenubuttonAction)ProMenuHold,NULL,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Lathe&quot;,
+                       (ProMenubuttonAction)ProTestChooseWcellType, &amp;wcell, PRO_WCELL_LATHE);
+<a name="anchor-12"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Mill&quot;,
+                       (ProMenubuttonAction)ProTestChooseWcellType, &amp;wcell, PRO_WCELL_MILL);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+<a name="anchor-13"></a>        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Mill/Turn&quot;,
+                       (ProMenubuttonAction)ProTestChooseWcellType, &amp;wcell, PRO_WCELL_MILL_N_TRN);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+<a name="anchor-14"></a>    status = ProMenubuttonActionSet((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Wedm&quot;,
+                       (ProMenubuttonAction)ProTestChooseWcellType, &amp;wcell, PRO_WCELL_WEDM);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProMenuDatamodeSet((char*)&quot;TkMfgWcell&quot;, (ProBoolean)0);
+<a name="anchor-15"></a>    TEST_CALL_REPORT (&quot;ProMenuDatamodeSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+
+    status = ProMenuFileRegister((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;tkmfgwaxs.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuPush&quot;, &quot;ProTestWkcellCreate&quot;, status,
+<a name="anchor-16"></a>        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;TkMfgWAxs&quot;, (ProMenubuttonAction)ProMenuHold,NULL,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;,
+<a name="anchor-17"></a>                       (ProMenubuttonAction)ProTestChooseWcellType, &amp;wcell, WKCL_AXIS_2);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;,
+                       (ProMenubuttonAction)ProTestChooseWcellType, &amp;wcell, WKCL_AXIS_3);
+<a name="anchor-18"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;,
+                       (ProMenubuttonAction)ProTestChooseWcellType, &amp;wcell, WKCL_AXIS_4);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+<a name="anchor-19"></a>        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;,
+                       (ProMenubuttonAction)ProTestChooseWcellType, &amp;wcell, WKCL_AXIS_5);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+<a name="anchor-20"></a>    status = ProMenuDatamodeSet((char*)&quot;TkMfgWAxs&quot;, (ProBoolean)0);
+    TEST_CALL_REPORT (&quot;ProMenuDatamodeSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+
+    status = ProMenuFileRegister((char*)&quot;TkMfgWDQ&quot;,(char*)&quot;tkmfgwdq.mnu&quot;, &amp;id);
+<a name="anchor-21"></a>    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgWDQ&quot;,(char*)&quot;TkMfgWDQ&quot;, (ProMenubuttonAction)ProMenuHold,NULL,0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+<a name="anchor-22"></a>    status = ProMenubuttonActionSet((char*)&quot;TkMfgWDQ&quot;,(char*)&quot;Done&quot;,
+                       (ProMenubuttonAction)ProTestWcellDQ, &amp;done_quit, MFGTK_DONE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMfgWDQ&quot;,(char*)&quot;Quit&quot;,
+<a name="anchor-23"></a>                       (ProMenubuttonAction)ProTestWcellDQ, &amp;done_quit, MFGTK_QUIT);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+
+    status = ProCompoundmenuCreate(menu, &amp;id);
+<a name="anchor-24"></a>    TEST_CALL_REPORT (&quot;ProCompoundmenuCreate&quot;, &quot;ProTestWkcellCreate&quot;, status,
+        status != PRO_TK_NO_ERROR);
+
+    status = ProMenubuttonHighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Lathe&quot;);
+    TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestWkcellCreate&quot;,
+<a name="anchor-25"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonHighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);
+    TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestWkcellCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonDeactivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);
+<a name="anchor-26"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, &quot;ProTestWkcellCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonDeactivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);
+    TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, &quot;ProTestWkcellCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-27"></a>    
+    status = ProMenuProcess(menu[0], &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProTestWkcellCreate&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-28"></a>    if( done_quit == MFGTK_QUIT )
+    {
+        status = ProMenuPop();
+        TEST_CALL_REPORT (&quot;ProMenuPop&quot;, &quot;ProTestWkcellCreate&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-29"></a>        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgDQ&quot;,(char*)&quot;Done&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestWkcellCreate&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        return((ProError)0);
+    }
+<a name="anchor-30"></a>
+        /* Choose Wcell name. */
+    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Enter MFG Workcell name: &quot;);
+    if(!ProUtilStringGet(wcell_name, NULL, PRO_LINE_SIZE)) 
+        return(PRO_TK_BAD_INPUTS);
+<a name="anchor-31"></a>    wcell.wname = wcell_name;
+
+    status = ProTestGetModels(&amp;mfg_model, &amp;mfg_solid, &amp;comp_path);
+
+    status = ProTempCreateWkcell(wcell, &amp;wc_feature);
+<a name="anchor-32"></a>    ProTKPrintf((char*)&quot;ProTempCreateWkcell: wc_feature = %d\n&quot;, wc_feature);
+
+
+        /* Return to previous menu. */
+    status = ProMenuPop();
+<a name="anchor-33"></a>    TEST_CALL_REPORT (&quot;ProMenuPop&quot;, &quot;ProTestWkcellCreate&quot;,
+       status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonUnhighlight((char*)&quot;TkMfgDQ&quot;,(char*)&quot;Done&quot;);
+    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestWkcellCreate&quot;,
+       status, status != PRO_TK_NO_ERROR);
+<a name="anchor-34"></a>    status = ProMenubuttonActivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);     
+    TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestWkcellCreate&quot;,
+       status, status != PRO_TK_NO_ERROR);
+    
+    return ((ProError)1);
+<a name="anchor-35"></a>}
+
+
+/*====================================================================*\
+FUNCTION : ProTestChooseWcellType
+<a name="anchor-36"></a>PURPOSE  : ProTestChooseWcellType
+\*====================================================================*/
+int ProTestChooseWcellType(Workcell *wcell, int opt)
+{
+     ProError	status;
+<a name="anchor-37"></a>     switch(opt)
+     {
+        /* Set mfg. object type. */
+     case PRO_WCELL_LATHE:
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Mill&quot;);
+<a name="anchor-38"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Mill/Turn&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-39"></a>        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Wedm&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-40"></a>           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);
+<a name="anchor-41"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+        status = ProMenubuttonActivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-42"></a>            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonActivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonDeactivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);     
+<a name="anchor-43"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonDeactivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-44"></a>
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Lathe&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);
+<a name="anchor-45"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+
+        wcell->type = PRO_WCELL_LATHE;
+        wcell->n_axis = -(WKCL_AXIS_2);
+<a name="anchor-46"></a>        break;
+
+     case PRO_WCELL_MILL:
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Lathe&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-47"></a>           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Mill/Turn&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Wedm&quot;);
+<a name="anchor-48"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-49"></a>        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-50"></a>           status, status != PRO_TK_NO_ERROR);
+
+        status = ProMenubuttonDeactivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-51"></a>        status = ProMenubuttonActivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonActivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-52"></a>            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonActivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-53"></a>        status = ProMenubuttonHighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Mill&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-54"></a>            status, status != PRO_TK_NO_ERROR);
+
+        wcell->type = PRO_WCELL_MILL;
+        wcell->n_axis = -(WKCL_AXIS_3);
+        break;
+<a name="anchor-55"></a>
+     case PRO_WCELL_MILL_N_TRN:
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Lathe&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-56"></a>        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Mill&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Wedm&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-57"></a>           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);
+<a name="anchor-58"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-59"></a>
+        status = ProMenubuttonActivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonActivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);     
+<a name="anchor-60"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonActivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-61"></a>        status = ProMenubuttonActivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Mill/Turn&quot;);
+<a name="anchor-62"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-63"></a>
+        wcell->type = PRO_WCELL_MILL_N_TRN;
+        wcell->n_axis = -(WKCL_AXIS_2);
+        break;
+
+<a name="anchor-64"></a>     case PRO_WCELL_WEDM:
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Lathe&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Mill&quot;);
+<a name="anchor-65"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Mill/Turn&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-66"></a>        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-67"></a>           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-68"></a>        status = ProMenubuttonActivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonActivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-69"></a>            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonDeactivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);     
+        TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonDeactivate((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);     
+<a name="anchor-70"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgWcell&quot;,(char*)&quot;-Wedm&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-71"></a>            status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-72"></a>        wcell->type = PRO_WCELL_WEDM;
+        wcell->n_axis = -(WKCL_AXIS_2);
+        break;
+
+     case WKCL_AXIS_2:
+<a name="anchor-73"></a>        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-74"></a>           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-75"></a>        status = ProMenubuttonHighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        wcell->n_axis = -(WKCL_AXIS_2);
+        break;
+<a name="anchor-76"></a>
+     case WKCL_AXIS_3:
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-77"></a>        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+<a name="anchor-78"></a>           status, status != PRO_TK_NO_ERROR);
+
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-79"></a>        wcell->n_axis = -(WKCL_AXIS_3);
+        break;
+
+     case WKCL_AXIS_4:
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);
+<a name="anchor-80"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-81"></a>        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);
+<a name="anchor-82"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        wcell->n_axis = -(WKCL_AXIS_4);
+        break;
+
+<a name="anchor-83"></a>     case WKCL_AXIS_5:
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-2 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-3 Axis&quot;);
+<a name="anchor-84"></a>        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+        status = ProMenubuttonUnhighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-4 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+           status, status != PRO_TK_NO_ERROR);
+<a name="anchor-85"></a>
+        status = ProMenubuttonHighlight((char*)&quot;TkMfgWAxs&quot;,(char*)&quot;-5 Axis&quot;);
+        TEST_CALL_REPORT (&quot;ProMenubuttonHighlight&quot;, &quot;ProTestChooseWcellType&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        wcell->n_axis = -(WKCL_AXIS_5);
+<a name="anchor-86"></a>        break;
+
+      default:
+        break;
+     }
+<a name="anchor-87"></a>
+
+  return(0);
+}
+
+<a name="anchor-88"></a>
+
+/*====================================================================*\
+FUNCTION : ProTestWcellDQ
+PURPOSE  : ProTestWcellDQ
+<a name="anchor-89"></a>\*====================================================================*/
+int ProTestWcellDQ(int *done_quit, int opt)
+{
+     ProError	status;
+     switch(opt)
+<a name="anchor-90"></a>     {
+     case MFGTK_DONE:
+        status = ProMenuDelete();
+        TEST_CALL_REPORT (&quot;ProMenuDelete&quot;, &quot;ProTestWcellDQ&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-91"></a>        status = ProMenuDelete();
+        TEST_CALL_REPORT (&quot;ProMenuDelete&quot;, &quot;ProTestWcellDQ&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenuDelete();
+        TEST_CALL_REPORT (&quot;ProMenuDelete&quot;, &quot;ProTestWcellDQ&quot;,
+<a name="anchor-92"></a>            status, status != PRO_TK_NO_ERROR);
+        *done_quit = MFGTK_DONE;
+        break;
+
+     case MFGTK_QUIT:
+<a name="anchor-93"></a>        status = ProMenuDelete();
+        TEST_CALL_REPORT (&quot;ProMenuDelete&quot;, &quot;ProTestWcellDQ&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        status = ProMenuDelete();
+        TEST_CALL_REPORT (&quot;ProMenuDelete&quot;, &quot;ProTestWcellDQ&quot;,
+<a name="anchor-94"></a>            status, status != PRO_TK_NO_ERROR);
+        status = ProMenuDelete();
+        TEST_CALL_REPORT (&quot;ProMenuDelete&quot;, &quot;ProTestWcellDQ&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        *done_quit = MFGTK_QUIT;
+<a name="anchor-95"></a>        break;
+
+      default:
+        break;
+     }
+<a name="anchor-96"></a>  return(0);
+}
+
+ProError ProTestWkcellId(ProAppData p_wcell, ProAppData app_data, int ts)
+{
+<a name="anchor-97"></a>    *((int*)app_data) = ((ProModelitem*)p_wcell)->id ;
+
+    ProTKFprintf(stderr, (char*)&quot;In ProTestWkcellId()\n&quot;);
+    ProTKFprintf(stderr, (char*)&quot;Workcell id  = %d\n&quot;, ((ProModelitem*)p_wcell)->id );
+    ProTKFprintf(stderr, (char*)&quot;App data = %d\n&quot;, *((int*)app_data));
+<a name="anchor-98"></a>
+    return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+<a name="anchor-99"></a>FUNCTION : ProTestWkcellList
+PURPOSE  : ProTestWkcellList
+\*====================================================================*/
+int ProTestWkcellList( MfgMenuChoice *obj_action )
+{
+<a name="anchor-100"></a>    ProError status;
+    int      wcll_id = -1;
+
+    status = ProUtilMfgobjAction(obj_action, MFGOBJ_WKCELL, 1, 
+                                             ProTestWkcellId, &amp;wcll_id, 0 );
+<a name="anchor-101"></a>
+    ProTKFprintf(stderr, (char*)&quot;In ProTestWkcellList()\n&quot;);
+    ProTKFprintf(stderr, (char*)&quot;Workcell id  = %d\n&quot;, wcll_id);
+
+  return(0);
+<a name="anchor-102"></a>}
+
+/*====================================================================*\
+FUNCTION : ProTestWkcellRedefine 
+PURPOSE  : ProTestWkcellRedefine
+<a name="anchor-103"></a>\*====================================================================*/
+ProError ProTestWkcellRedefine(MfgMenuChoice *obj_action)
+{
+    ProError     status = PRO_TK_NO_ERROR;
+
+<a name="anchor-104"></a>    status = ProMenuPush();
+    TEST_CALL_REPORT (&quot;ProMenuPush&quot;, &quot;ProWkcellRedefine&quot;, status,
+        status != PRO_TK_NO_ERROR);
+
+    ProTestWkcellList(obj_action);
+<a name="anchor-105"></a>
+    /* Return to previous menu. */
+    status = ProMenuPop();
+    TEST_CALL_REPORT (&quot;ProMenuPop&quot;, &quot;ProTestWkcellRedefine&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-106"></a>    status = ProMenubuttonUnhighlight((char*)&quot;TkMfgDQ&quot;,(char*)&quot;Done&quot;);
+    TEST_CALL_REPORT (&quot;ProMenubuttonUnhighlight&quot;, &quot;ProTestWkcellRedefine&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActivate((char*)&quot;TkMfgAct&quot;,(char*)&quot;-Redefine&quot;);     
+    TEST_CALL_REPORT (&quot;ProMenubuttonActivate&quot;, &quot;ProTestWkcellRedefine&quot;,
+<a name="anchor-107"></a>        status, status != PRO_TK_NO_ERROR);
+    
+    return ((ProError)1);
+}
+
+</pre>
+</body>
+</html>

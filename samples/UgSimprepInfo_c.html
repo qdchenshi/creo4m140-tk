@@ -1,0 +1,186 @@
+<html>
+<head>
+<title>UgSimprepInfo.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProSimprep.h>
+#include &lt;ProSimprepdata.h>
+#include &lt;ProSelection.h>
+#include &lt;ProUtil.h>
+<a name="anchor-2"></a>#include &lt;ProSolid.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProAsmcomppath.h>
+#include &lt;ProModelitem.h>
+
+<a name="anchor-3"></a>#include &lt;TestError.h>
+#include &lt;PTApplsUnicodeUtils.h>
+/*===========================================================*\
+  FUNCTION : UserSimpRepInfo
+  PURPOSE  : Prints out the simplified representation
+<a name="anchor-4"></a>             information.
+\*===========================================================*/
+int UserSimpRepInfo ()
+{
+    ProMdl		  owner;
+<a name="anchor-5"></a>    ProSimprep            simp_rep;
+    ProSimprepdata       *data;
+    ProSimprepActionType  def_act;
+    wchar_t               w_sr_name[PRO_LINE_SIZE];
+    char                  temp[PRO_LINE_SIZE] = &quot;&quot;;
+<a name="anchor-6"></a>    ProBoolean            tmp_rep = PRO_B_FALSE;
+    ProError              status;
+    int                   num = 0;
+
+    ProError UserSimpRepVisAct();
+<a name="anchor-7"></a>
+
+    status = ProMdlCurrentGet(&amp;owner);
+    ERROR_CHECK(&quot;UserSimpRepInfo&quot;,&quot;ProMdlCurrentGet&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return (status);
+<a name="anchor-8"></a>
+    status = ProSimprepSelect ((ProSolid)owner, &amp;simp_rep);
+    ERROR_CHECK(&quot;UserSimpRepInfo&quot;,&quot;ProSimprepSelect&quot;,status);
+    if (status == PRO_TK_NO_ERROR &amp;&amp; simp_rep.id != -1)
+    {
+<a name="anchor-9"></a>        status = ProSimprepdataGet (&amp;simp_rep, &amp;data);
+	ERROR_CHECK(&quot;UserSimpRepInfo&quot;,&quot;ProSimprepdataGet&quot;,status);
+        if (status == PRO_TK_NO_ERROR)
+        {
+            status = ProSimprepdataNameGet (data, w_sr_name);
+<a name="anchor-10"></a>	    ERROR_CHECK(&quot;UserSimpRepInfo&quot;,&quot;ProSimprepdataNameGet&quot;,status);
+            if (status == PRO_TK_NO_ERROR)
+            {
+                pro_wstr_to_str (temp, w_sr_name);
+                ProTKPrintf (&quot;Simp rep name           : %s\n&quot;, temp);
+<a name="anchor-11"></a>            }
+            status = ProSimprepdataDefltGet (data, &amp;def_act);
+	    ERROR_CHECK(&quot;UserSimpRepInfo&quot;,&quot;ProSimprepdataDefltGet&quot;,status);
+            if (status == PRO_TK_NO_ERROR)
+            {
+<a name="anchor-12"></a>                switch (def_act)
+                {
+                    case PRO_SIMPREP_NONE:
+                        strcpy (temp, &quot;None&quot;);
+                        break;
+<a name="anchor-13"></a>                    case PRO_SIMPREP_REVERSE:
+                        strcpy (temp, &quot;Reverse&quot;);
+                        break;
+                    case PRO_SIMPREP_SUBSTITUTE:
+                        strcpy (temp, &quot;Substitute&quot;);
+<a name="anchor-14"></a>                        break;
+                    case PRO_SIMPREP_INCLUDE:
+                        strcpy (temp, &quot;Include&quot;);
+                        break;
+                    case PRO_SIMPREP_EXCLUDE:
+<a name="anchor-15"></a>                        strcpy (temp, &quot;Exclude&quot;);
+                        break;
+                    default:
+                        strcpy (temp, &quot;Unknown&quot;);
+                }
+<a name="anchor-16"></a>                ProTKPrintf (&quot;Default action          : %s\n&quot;,
+                         temp);
+            }
+            status = ProSimprepdataTmpvalGet (data, &amp;tmp_rep);
+	    ERROR_CHECK(&quot;UserSimpRepInfo&quot;,&quot;ProSimprepdataTmpvalGet&quot;,status);
+<a name="anchor-17"></a>            if (status == PRO_TK_NO_ERROR)
+            {
+                ProTKPrintf (&quot;Temporary simp rep      : %s\n&quot;, 
+                         tmp_rep == PRO_B_TRUE ? &quot;Yes&quot; : &quot;No&quot;);
+            }
+<a name="anchor-18"></a>
+	    ProSimprepdataitemsVisit (data, NULL,
+	   	    UserSimpRepVisAct, (ProAppData) owner);
+	    ERROR_CHECK(&quot;UserSimpRepInfo&quot;,&quot;ProSimprepdataitemsVisit&quot;,status);
+	    status = ProSimprepdataFree (&amp;data);
+<a name="anchor-19"></a>        }
+    }
+
+    return status;
+}
+<a name="anchor-20"></a>
+/*===========================================================*\
+  FUNCTION : UserSimpRepVisAct
+  PURPOSE  : Highlights the members of the simplified
+             representation.
+<a name="anchor-21"></a>\*===========================================================*/
+ProError UserSimpRepVisAct (
+    ProSimprepitem  *item,
+    ProError         err, 
+    ProSolid         owner)
+<a name="anchor-22"></a>{
+    ProError         status;
+    ProSelection     selection;
+    ProAsmcomppath   comp_path;
+    ProModelitem     mdl_item;
+<a name="anchor-23"></a>    ProFeature       feature;
+    ProMdl           model;
+    ProMdlType       mdl_type;
+    int              id;
+   
+<a name="anchor-24"></a>
+    if (item->item_path.path_size != -1)
+    {
+/*-----------------------------------------------------------*\
+        Part
+<a name="anchor-25"></a>\*-----------------------------------------------------------*/
+        status = ProAsmcomppathInit (owner, item->item_path.comp_path,
+				item->item_path.path_size, &amp;comp_path);
+	ERROR_CHECK(&quot;UserSimpRepVisAct&quot;,&quot;ProAsmcomppathInit&quot;,status);
+        if (status == PRO_TK_NO_ERROR)
+<a name="anchor-26"></a>	{
+            status = ProAsmcomppathMdlGet (&amp;comp_path, &amp;model);
+	    ERROR_CHECK(&quot;UserSimpRepVisAct&quot;,&quot;ProAsmcompMdlGet&quot;,status);
+	}
+	
+<a name="anchor-27"></a>        if (status == PRO_TK_NO_ERROR)
+	{
+	    status = ProMdlIdGet(model, &amp;id);
+	    ERROR_CHECK(&quot;UserSimpRepVisAct&quot;,&quot;ProMdlIdGet&quot;,status);
+
+<a name="anchor-28"></a>	    status = ProMdlTypeGet(model, &amp;mdl_type);
+	    ERROR_CHECK(&quot;UserSimpRepVisAct&quot;,&quot;ProMdlIdGet&quot;,status);
+	    
+	    if (status == PRO_TK_NO_ERROR)
+	    {
+<a name="anchor-29"></a>		status = ProModelitemInit (model, id, (ProType)mdl_type, &amp;mdl_item);
+		ERROR_CHECK(&quot;UserSimpRepVisAct&quot;,&quot;ProModelitemInit&quot;,status);
+	    }
+
+	    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-30"></a>	    {
+		status = ProSelectionAlloc(&amp;comp_path, &amp;mdl_item, &amp;selection);
+		ERROR_CHECK(&quot;UserSimpRepVisAct&quot;,&quot;ProSelectionAlloc&quot;,status);
+	    }
+	}
+<a name="anchor-31"></a>    }
+    else
+    {
+/*-----------------------------------------------------------*\
+        Feature
+<a name="anchor-32"></a>\*-----------------------------------------------------------*/
+        status = ProFeatureInit (owner, item->item_path.feat_id, &amp;feature);
+	ERROR_CHECK(&quot;UserSimpRepVisAct&quot;,&quot;ProFeatureInit&quot;,status);
+        if (status == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-33"></a>            status = ProFeatureSelectionGet (&amp;feature, &amp;selection);
+	    ERROR_CHECK(&quot;UserSimpRepVisAct&quot;,&quot;ProFeatureSelectionGet&quot;,status);
+        }
+    }
+
+<a name="anchor-34"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+        ProSelectionHighlight (selection, PRO_COLOR_WARNING);
+	ERROR_CHECK(&quot;UserSimpRepVisAct&quot;,&quot;ProSelectionHighlight&quot;,status);
+    }
+<a name="anchor-35"></a>
+    return PRO_TK_NO_ERROR;
+}
+</pre>
+</body>
+</html>

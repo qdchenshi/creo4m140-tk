@@ -1,0 +1,826 @@
+<html>
+<head>
+<title>TestDtlsyminst.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*---------------------------------------------------------------------------*\
+    Pro/TOOLKIT includes
+\*---------------------------------------------------------------------------*/
+<a name="anchor-2"></a>#include &quot;ProSelection.h&quot;
+#include &quot;ProModelitem.h&quot;
+#include &quot;ProColor.h&quot;
+#include &quot;ProMessage.h&quot;
+#include &quot;ProMenu.h&quot;
+<a name="anchor-3"></a>#include &quot;ProMdl.h&quot;
+#include &quot;ProDrawing.h&quot;
+#include &quot;ProGraphic.h&quot;
+#include &quot;ProUtil.h&quot;
+#include &quot;ProDtlsyminst.h&quot;
+<a name="anchor-4"></a>#include &quot;ProDtlsymdef.h&quot;
+#include &quot;ProDtlnote.h&quot;
+#include &quot;ProDtlattach.h&quot;
+
+/*---------------------------------------------------------------------------*\
+<a name="anchor-5"></a>    Application includes
+\*---------------------------------------------------------------------------*/
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &quot;UtilFiles.h&quot;
+<a name="anchor-6"></a>#include &lt;UtilString.h>
+#include &lt;ProTKRunTime.h>
+
+/*---------------------------------------------------------------------------*\
+    Application macros
+<a name="anchor-7"></a>\*---------------------------------------------------------------------------*/
+
+/* modify options */
+#define SYM_INST_COLOR   0
+#define SYM_INST_LENTH   1
+<a name="anchor-8"></a>#define SYM_INST_ANGLE   2
+#define SYM_INST_LEADER  3
+#define SYM_INST_HEIGHT  4
+#define SYM_INST_ATTACH  5
+#define SYM_INST_VARTEXT 6
+<a name="anchor-9"></a>
+/* display options */
+#define SYM_INST_DRAW   0
+#define SYM_INST_REMOVE 1
+#define SYM_INST_ERASE  2
+<a name="anchor-10"></a>#define SYM_INST_DELETE 3
+  
+#define DTL_SYM_INST_FILE &quot;.inf&quot;
+
+ProError ProTestSymInstGet (ProDrawing , ProDtlsyminst * );
+<a name="anchor-11"></a>ProError ProTestAttachGet(ProDrawing, ProDtlsymdefdata, 
+                          ProDtlsymdefattachType*, ProDtlattach* );
+
+ProError ProTestDtlsymdefNameGet (ProDtlsymdef *, ProName );
+
+<a name="anchor-12"></a>/*===========================================================================*\
+  Function : ProTestSymInst
+  Purpose  : 
+\*===========================================================================*/
+int ProTestSymInst(void *app_data)
+<a name="anchor-13"></a>{
+    ProError err;
+    int menu_id;
+    ProDrawing draw = (ProDrawing)app_data;
+    int ProTestSumInstAdd (ProDrawing drw);
+<a name="anchor-14"></a>    int ProTestSymInstModify (ProDrawing drw);
+    int ProTestSymInstDisplay (ProDrawing drw);
+    int ProTestSymInstInfo (ProDrawing drw);
+        
+    err = ProMenuFileRegister((char*)&quot;Syminst&quot;,(char*)&quot;tksyminst.mnu&quot;, &amp;menu_id);
+<a name="anchor-15"></a>    err = ProMenubuttonActionSet((char*)&quot;Syminst&quot;,(char*)&quot;Syminst&quot;, 
+		(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;Syminst&quot;,(char*)&quot;Create&quot;, 
+		(ProMenubuttonAction)ProTestSumInstAdd, draw, 0);
+    err = ProMenubuttonActionSet((char*)&quot;Syminst&quot;,(char*)&quot;Redefine&quot;, 
+<a name="anchor-16"></a>		(ProMenubuttonAction)ProTestSymInstModify, draw, 0);
+    err = ProMenubuttonActionSet((char*)&quot;Syminst&quot;,(char*)&quot;Display&quot;,  
+                (ProMenubuttonAction)ProTestSymInstDisplay, draw, 0);
+    err = ProMenubuttonActionSet((char*)&quot;Syminst&quot;,(char*)&quot;Info&quot;,  
+                (ProMenubuttonAction)ProTestSymInstInfo, draw, 0);
+<a name="anchor-17"></a>    err = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;Syminst&quot;,&amp;menu_id);
+    err = ProMenuProcess((char*)&quot;&quot;, &amp;menu_id);
+    return (0);
+}
+
+<a name="anchor-18"></a>/*===========================================================================*\
+  Function : ProTestSumInstAdd
+  Purpose  : 
+\*===========================================================================*/
+int ProTestSumInstAdd(ProDrawing drw)
+<a name="anchor-19"></a>{
+    ProError err;
+    ProDtlsymdef sym_def;
+    ProDtlsyminst sym_inst;
+    ProDtlsymdefdata def_data;
+<a name="anchor-20"></a>    ProDtlsyminstdata sym_data;
+    ProDtlattach attach, *p_leaders = NULL;
+    ProDtlsymdefattachType def_attach_type;
+    int i, n_leaders;
+    ProError ProTestVarTextSet(ProDrawing drw,
+<a name="anchor-21"></a>                            ProDtlsymdef symbol,
+                            ProDtlsyminstdata inst_data);
+    ProError ProTestSymDefGet (ProDrawing drw, ProDtlsymdef *sym_def);
+    ProError ProTestLeadersGet ();
+        
+<a name="anchor-22"></a>    err = ProDtlsyminstdataAlloc (drw, &amp;sym_data);
+    TEST_CALL_REPORT(&quot;ProDtlsyminstdataAlloc()&quot;,
+        &quot;ProTestSumInstAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+    err = ProTestSymDefGet (drw, &amp;sym_def);
+<a name="anchor-23"></a>    if (err !=  PRO_TK_NO_ERROR)
+        return (0);
+        
+    err = ProDtlsymdefDataGet (&amp;sym_def, &amp;def_data);
+    TEST_CALL_REPORT(&quot;ProDtlsymdefDataGet()&quot;,
+<a name="anchor-24"></a>        &quot;ProTestSumInstAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProTestAttachGet (drw, def_data, &amp;def_attach_type, &amp;attach);
+    if (err != PRO_TK_NO_ERROR)
+        return (-1);
+<a name="anchor-25"></a>    err = ProDtlsyminstdataDefSet (sym_data, &amp;sym_def);
+    TEST_CALL_REPORT(&quot;ProDtlsyminstdataDefSet()&quot;,
+        &quot;ProTestSumInstAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProDtlsyminstdataAttachtypeSet (sym_data, def_attach_type);
+<a name="anchor-26"></a>    TEST_CALL_REPORT(&quot;ProDtlsyminstdataAttachtypeSet()&quot;,
+        &quot;ProTestSumInstAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProDtlsyminstdataAttachmentSet (sym_data, attach);
+    TEST_CALL_REPORT(&quot;ProDtlsyminstdataAttachmentSet()&quot;,
+<a name="anchor-27"></a>        &quot;ProTestSumInstAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProDtlattachFree (attach);
+    TEST_CALL_REPORT(&quot;ProDtlattachFree()&quot;,
+        &quot;ProTestSumInstAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-28"></a>       
+    err = ProTestVarTextSet (drw, sym_def, sym_data);
+    
+    err = ProTestLeadersGet (&amp;p_leaders);
+    if (err == PRO_TK_NO_ERROR &amp;&amp; p_leaders != NULL)
+<a name="anchor-29"></a>    {
+        err = ProArraySizeGet ((ProArray)p_leaders, &amp;n_leaders);
+        err = ProDtlsyminstdataLeadersSet (sym_data, p_leaders);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataLeadersSet()&quot;,
+            &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-30"></a>        err = ProArraySizeGet ((ProArray)p_leaders, &amp;n_leaders);
+        for (i = 0; i &lt; n_leaders; i++)
+            err = ProDtlattachFree (p_leaders[i]);
+        err = ProArrayFree ((ProArray*)&amp;p_leaders);
+    }
+<a name="anchor-31"></a>    err = ProDtlsyminstCreate (drw, sym_data, &amp;sym_inst);
+    TEST_CALL_REPORT(&quot;ProDtlsyminstCreate()&quot;,
+        &quot;ProTestSumInstAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProDtlsyminstShow (&amp;sym_inst);
+    TEST_CALL_REPORT(&quot;ProDtlsyminstShow()&quot;,
+<a name="anchor-32"></a>        &quot;ProTestSumInstAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    err = ProDtlsyminstdataFree (sym_data);
+    TEST_CALL_REPORT(&quot;ProDtlsyminstdataFree()&quot;,
+        &quot;ProTestSumInstAdd()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-33"></a>    return 0;
+}
+
+/*===========================================================================*\
+  Function : ProTestSymDefGet
+<a name="anchor-34"></a>  Purpose  : 
+\*===========================================================================*/
+ProError ProTestSymDefGet (ProDrawing drw, ProDtlsymdef *sym_def)
+{
+    ProError err;
+<a name="anchor-35"></a>    ProDtlsymdef *p_symdefs;
+    int size = 0, i, n_sel = 0;
+    ProName title, name;
+    wchar_t **selected, **names;
+        
+<a name="anchor-36"></a>    err = ProDrawingDtlsymdefsCollect (drw, &amp;p_symdefs);
+    TEST_CALL_REPORT(&quot;ProDrawingDtlsymdefsCollect()&quot;,
+        &quot;ProTestSymDefGet()&quot;, err, err != PRO_TK_NO_ERROR
+        &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+
+<a name="anchor-37"></a>    if (err != PRO_TK_NO_ERROR)
+        return (err);
+    err = ProUtilMenuStringsAlloc (&amp;names);    
+    err = ProArraySizeGet ((ProArray)p_symdefs, &amp;size);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;,
+<a name="anchor-38"></a>    &quot;ProTestSymDefGet()&quot;, err, err != PRO_TK_NO_ERROR);
+    for (i = 0; i &lt; size; i++)
+    {
+        err = ProTestDtlsymdefNameGet (&amp;p_symdefs[i], name);
+        if (err != PRO_TK_NO_ERROR)
+<a name="anchor-39"></a>            ProStringToWstring (name, (char*)&quot;ERROR&quot;);
+        err = ProUtilMenuStringsWstrAdd(&amp;names, name);
+    }
+    ProStringToWstring(title, (char*)&quot;Symbol defs&quot;);
+    err = ProMenuStringsSelect(title, names, 1, NULL, &amp;selected, &amp;n_sel);
+<a name="anchor-40"></a>    if (err !=  PRO_TK_NO_ERROR || n_sel != 1)
+	return  (PRO_TK_E_NOT_FOUND);
+    for (i = 0; i &lt; size; i++)
+        if (ProUtilWstrcmp (names[i], selected[0]) == 0)
+        {
+<a name="anchor-41"></a>            *sym_def = p_symdefs[i];
+            break; 
+        }
+    err = ProUtilMenuStringsFree(&amp;names);
+    err = ProArrayFree ((ProArray*)&amp;p_symdefs);
+<a name="anchor-42"></a>    
+    return PRO_TK_NO_ERROR;
+}
+
+/*===========================================================================*\
+<a name="anchor-43"></a>  Function : ProTestAttachGet
+  Purpose  : 
+\*===========================================================================*/
+ProError  ProTestAttachGet (ProDrawing drw, 
+                            ProDtlsymdefdata def_data,
+<a name="anchor-44"></a>                            ProDtlsymdefattachType *def_attach_type,
+                            ProDtlattach *attach)
+{
+    ProError err;
+    int size = 0,  n_sel, sheet = 0, menu_id, i;
+<a name="anchor-45"></a>    ProDtlsymdefattach *p_attaches;
+    ProDtlsymdefattachType def_at_type;
+    ProDtlattachType attach_type;
+    ProMouseButton btn;
+    ProSelection *sel;
+<a name="anchor-46"></a>    ProPoint3d sel_pnt;
+    ProView over_view;
+    
+    err = ProDtlsymdefdataAttachGet (def_data, &amp;p_attaches);
+    TEST_CALL_REPORT(&quot;ProDtlsymdefdataAttachGet()&quot;,
+<a name="anchor-47"></a>        &quot;ProTestAttachGet()&quot;, err, err != PRO_TK_NO_ERROR);
+    if (err !=  PRO_TK_NO_ERROR)
+        return (err); 
+    err = ProMenuFileRegister((char*)&quot;AttachType&quot;,(char*)&quot;tkattachtype.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;AttachType&quot;, 
+<a name="anchor-48"></a>		(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;Free&quot;, 
+		(ProMenubuttonAction)ProUtilAssign, def_attach_type, 
+                    PROSYMDEFATTACHTYPE_FREE);
+    err = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;Leader&quot;, 
+<a name="anchor-49"></a>		(ProMenubuttonAction)ProUtilAssign, def_attach_type, 
+                    PROSYMDEFATTACHTYPE_LEFT_LEADER);
+     err = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;On item&quot;, 
+		(ProMenubuttonAction)ProUtilAssign, def_attach_type, 
+                    PROSYMDEFATTACHTYPE_ON_ITEM);
+<a name="anchor-50"></a>     err = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;Normal&quot;, 
+		(ProMenubuttonAction)ProUtilAssign, def_attach_type, 
+                    PROSYMDEFATTACHTYPE_NORM_ITEM);
+    ProMenuCreate(PROMENUTYPE_MAIN,(char*)&quot;AttachType&quot; ,&amp;menu_id );
+    
+<a name="anchor-51"></a>    err = ProMenubuttonDeactivate ((char*)&quot;AttachType&quot;,(char*)&quot;Free&quot;);
+    err = ProMenubuttonDeactivate ((char*)&quot;AttachType&quot;,(char*)&quot;Leader&quot;);
+    err = ProMenubuttonDeactivate ((char*)&quot;AttachType&quot;,(char*)&quot;On item&quot;);
+    err = ProMenubuttonDeactivate ((char*)&quot;AttachType&quot;,(char*)&quot;Normal&quot;);
+    
+<a name="anchor-52"></a>    /* Get type */
+    err = ProArraySizeGet ((ProArray)p_attaches, &amp;size);
+    for (i = 0; i &lt; size; i++)
+    {
+        err = ProDtlsymdefattachGet (p_attaches[i], &amp;def_at_type,
+<a name="anchor-53"></a>            NULL, NULL, NULL);
+        switch (def_at_type)
+        {
+        case PROSYMDEFATTACHTYPE_FREE :
+            err = ProMenubuttonActivate ((char*)&quot;AttachType&quot;,(char*)&quot;Free&quot;);
+<a name="anchor-54"></a>            break;
+        case PROSYMDEFATTACHTYPE_LEFT_LEADER :
+            err = ProMenubuttonActivate ((char*)&quot;AttachType&quot;,(char*)&quot;Leader&quot;);
+            break;
+        case PROSYMDEFATTACHTYPE_RIGHT_LEADER :
+<a name="anchor-55"></a>            err = ProMenubuttonActivate ((char*)&quot;AttachType&quot;,(char*)&quot;Leader&quot;);
+            break;
+        case PROSYMDEFATTACHTYPE_RADIAL_LEADER :
+            err = ProMenubuttonActivate ((char*)&quot;AttachType&quot;,(char*)&quot;Leader&quot;);
+            break;
+<a name="anchor-56"></a>        case PROSYMDEFATTACHTYPE_ON_ITEM :
+            err = ProMenubuttonActivate ((char*)&quot;AttachType&quot;,(char*)&quot;On item&quot;);
+            break;
+        case PROSYMDEFATTACHTYPE_NORM_ITEM :
+            err = ProMenubuttonActivate ((char*)&quot;AttachType&quot;,(char*)&quot;Normal&quot;);
+<a name="anchor-57"></a>            break;
+        default : break;
+        }
+        
+    } 
+<a name="anchor-58"></a>    err = ProMenuProcess((char*)&quot;AttachType&quot;, &amp;menu_id);
+    /* setup attach */
+    switch (*def_attach_type)
+    {
+    case PROSYMDEFATTACHTYPE_FREE :
+<a name="anchor-59"></a>    case PROSYMDEFATTACHTYPE_LEFT_LEADER :
+    case PROSYMDEFATTACHTYPE_RIGHT_LEADER :
+    case PROSYMDEFATTACHTYPE_RADIAL_LEADER :
+        attach_type = PRO_DTLATTACHTYPE_FREE;
+        err = ProDrawingCurrentSheetGet (drw, &amp;sheet);
+<a name="anchor-60"></a>        err = ProDrawingBackgroundViewGet (drw, sheet, &amp;over_view);
+       TEST_CALL_REPORT(&quot;ProDrawingBackgroundViewGet()&quot;,
+            &quot;ProTestAttachGet()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter position&quot;);
+        if (ProMousePickGet(PRO_ANY_BUTTON, &amp;btn, sel_pnt) != PRO_TK_NO_ERROR)
+<a name="anchor-61"></a>            break;
+        ProGraphicsCircleDraw (sel_pnt, 0.5);
+        err = ProDtlattachAlloc (attach_type, over_view, sel_pnt, NULL, attach);
+        TEST_CALL_REPORT(&quot;ProDtlattachAlloc()&quot;,
+            &quot;ProTestAttachGet()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-62"></a>        
+        break;
+    case PROSYMDEFATTACHTYPE_ON_ITEM :
+    case PROSYMDEFATTACHTYPE_NORM_ITEM :
+        attach_type = PRO_DTLATTACHTYPE_PARAMETRIC;
+<a name="anchor-63"></a>        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select attachment point&quot;);
+        err = ProSelect ((char*)&quot;edge,curve,point,axis&quot;, 1, NULL, NULL, NULL, NULL,
+            &amp;sel, &amp;n_sel);
+        if (err != PRO_TK_NO_ERROR || n_sel != 1)
+            break;
+<a name="anchor-64"></a>        err = ProDtlattachAlloc (attach_type, NULL, NULL, sel[0], attach);
+        TEST_CALL_REPORT(&quot;ProDtlattachAlloc()&quot;,
+            &quot;ProTestAttachGet()&quot;, err, err != PRO_TK_NO_ERROR);
+          
+        break;
+<a name="anchor-65"></a>    default:
+        return PRO_TK_GENERAL_ERROR;   
+    }
+    ProArrayFree ((ProArray*)&amp;p_attaches);
+    
+<a name="anchor-66"></a>    return err; 
+}
+
+/*===========================================================================*\
+  Function : ProTestVarTextSet
+<a name="anchor-67"></a>  Purpose  : 
+\*===========================================================================*/
+ProError ProTestVarTextSet (ProDrawing drw,
+                            ProDtlsymdef symbol,
+                            ProDtlsyminstdata inst_data)
+<a name="anchor-68"></a>{
+    ProError err;
+    ProDtlnote *p_notes;
+    ProDtlnoteline *p_lines ;
+    ProDtlnotetext *p_texts ;
+<a name="anchor-69"></a>    ProLine line, value;
+    ProCharLine string, text;
+    ProDtlnotedata note_data;
+    ProDtlvartext var_text, *p_var_texts;
+    int n_notes = 0, n_lines = 0, n_texts = 0, n_var_texts = 0, i, j, k;
+<a name="anchor-70"></a>    
+    err = ProDrawingDtlnotesCollect (drw, &amp;symbol, PRO_VALUE_UNUSED, 
+        &amp;p_notes);
+    TEST_CALL_REPORT(&quot;ProDrawingDtlnotesCollect()&quot;,
+        &quot;ProTestVarTextSet()&quot;, err, err != PRO_TK_NO_ERROR 
+<a name="anchor-71"></a>        &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+    if (err != PRO_TK_NO_ERROR)
+            return (err);
+            
+    err = ProArrayAlloc (0, sizeof (ProDtlvartext), 1, (ProArray*)&amp;p_var_texts);
+<a name="anchor-72"></a>
+    err = ProArraySizeGet ((ProArray)p_notes, &amp;n_notes);
+    for (i = 0; i  &lt; n_notes; i++)
+    {
+        err = ProDtlnoteDataGet (&amp;p_notes[i], &amp;symbol, PRODISPMODE_NUMERIC,
+<a name="anchor-73"></a>            &amp;note_data);
+        TEST_CALL_REPORT(&quot;ProDtlnoteDataGet()&quot;,
+                &quot;ProTestVarTextSet()&quot;, err, err != PRO_TK_NO_ERROR);
+        if (err != PRO_TK_NO_ERROR)
+            return (err);
+<a name="anchor-74"></a>        err = ProDtlnotedataLinesCollect (note_data, &amp;p_lines);
+        TEST_CALL_REPORT(&quot;ProDtlnotedataLinesCollect()&quot;,
+                &quot;ProTestVarTextSet()&quot;, err, err != PRO_TK_NO_ERROR
+                &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+        if (err ==  PRO_TK_NO_ERROR)
+<a name="anchor-75"></a>        {   
+            err = ProArraySizeGet ((ProArray)p_lines, &amp;n_lines);
+            for (j = 0; j &lt; n_lines; j++)
+            {
+                err = ProDtlnotelineTextsCollect (p_lines[j], &amp;p_texts);
+<a name="anchor-76"></a>                TEST_CALL_REPORT(&quot;ProDtlnotelineTextsCollect()&quot;,
+                    &quot;ProTestVarTextSet()&quot;, err, err != PRO_TK_NO_ERROR
+                    &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+                if (err ==  PRO_TK_NO_ERROR)
+                {
+<a name="anchor-77"></a>                    err = ProArraySizeGet ((ProArray)p_texts, &amp;n_texts);
+                    for (k = 0; k &lt; n_texts; k++)
+                    {
+                        err = ProDtlnotetextStringGet (p_texts[k], line);
+                        TEST_CALL_REPORT(&quot;ProDtlnotetextStringGet()&quot;,
+<a name="anchor-78"></a>                            &quot;ProTestVarTextSet()&quot;, err, err != PRO_TK_NO_ERROR);
+                        ProWstringToString (string, line);
+                        if(string[3]=='\\' &amp;&amp; string[strlen(string)-2]=='\\')
+                        {
+                            ProTKSprintf (text,&quot;Enter instance text for %s&quot;,string);
+<a name="anchor-79"></a>                            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, text);
+                            ProStringToWstring (line, text);
+                            memset (text, '\0', sizeof (ProCharLine));
+                            ProStringToWstring (line, strncpy (text,
+                                &amp;string[4], strlen(&amp;string[4])-2));
+<a name="anchor-80"></a>                            if (ProMessageStringRead (PRO_LINE_SIZE, value) !=
+                                PRO_TK_NO_ERROR)
+                                break;
+                            err = ProDtlvartextAlloc (line, value, &amp;var_text);
+                            TEST_CALL_REPORT(&quot;ProDtlvartextAlloc()&quot;,
+<a name="anchor-81"></a>                            &quot;ProTestVarTextSet()&quot;, err, err != PRO_TK_NO_ERROR);
+                            err = ProArrayObjectAdd( (ProArray*)&amp;p_var_texts,
+                                PRO_VALUE_UNUSED, 1, &amp;var_text);
+                        }
+                    }
+<a name="anchor-82"></a>                    for (k = 0; k &lt; n_texts; k++)
+                    {
+                         err = ProDtlnotetextFree (p_texts[k]);
+                         TEST_CALL_REPORT(&quot;ProDtlnotetextFree()&quot;,
+                            &quot;ProTestVarTextSet()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-83"></a>                    }
+                    err = ProArrayFree ((ProArray*)&amp;p_texts);
+                }
+            }
+            for (j = 0; j &lt; n_lines; j++)
+<a name="anchor-84"></a>            {
+                err = ProDtlnotelineFree (p_lines[j]);
+                TEST_CALL_REPORT(&quot;ProDtlnotelineFree()&quot;,
+                    &quot;ProTestVarTextSet()&quot;, err, err != PRO_TK_NO_ERROR);
+            }
+<a name="anchor-85"></a>            err = ProArrayFree ((ProArray*)&amp;p_lines);
+        }
+    }
+    
+    err = ProArrayFree ((ProArray*)&amp;p_notes);
+<a name="anchor-86"></a>    
+    err = ProArraySizeGet ((ProArray)p_var_texts, &amp;n_var_texts);
+    if (err == PRO_TK_NO_ERROR &amp;&amp; n_var_texts != 0)
+    {
+        err = ProDtlsyminstdataVartextsSet (inst_data, p_var_texts);
+<a name="anchor-87"></a>        TEST_CALL_REPORT(&quot;ProDtlsyminstdataVartextsSet()&quot;,
+                &quot;ProTestVarTextSet()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProArrayFree ((ProArray*)&amp;p_var_texts);
+    }
+    else 
+<a name="anchor-88"></a>        return (PRO_TK_NO_CHANGE);
+    
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-89"></a>/*===========================================================================*\
+  Function : ProTestSymInstModify
+  Purpose  : 
+\*===========================================================================*/
+int ProTestSymInstModify (ProDrawing drw)
+<a name="anchor-90"></a>{
+    ProError err;
+    ProDtlsyminst sym_inst;
+    ProDtlsyminstdata sym_data;
+    ProColor color;
+<a name="anchor-91"></a>    int opt, n_leaders, i;
+    ProCharLine line;
+    ProBoolean flag;
+    double param = 0.0;
+    ProDtlsymdef sym_def;
+<a name="anchor-92"></a>    ProDtlsymdefdata def_data;
+    ProDtlsymdefdataHeighttype height_type;
+    ProDtlattach attach, *p_leaders = NULL;
+    ProDtlsymdefattachType def_at_type;
+    
+<a name="anchor-93"></a>    ProError ProTestLeadersGet ();
+    
+    static ProUtilMenuButtons inst_opt[] = { 
+        {&quot;Redefine&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Color&quot;, SYM_INST_COLOR, 0},
+<a name="anchor-94"></a>        {&quot;Elbow&quot;, SYM_INST_LENTH, 0},
+        {&quot;Angle&quot;, SYM_INST_ANGLE, 0},
+        {&quot;Leader&quot;, SYM_INST_LEADER, 0},
+        {&quot;Height&quot;, SYM_INST_HEIGHT, 0},
+        {&quot;Attach&quot;, SYM_INST_ATTACH, 0},
+<a name="anchor-95"></a>        {&quot;VarText&quot;, SYM_INST_VARTEXT, 0},
+        {&quot;&quot;,0,0}
+    };
+    
+    err = ProUtilMenuIntValueSelect(inst_opt, &amp;opt);
+<a name="anchor-96"></a>    
+    err = ProTestSymInstGet (drw, &amp;sym_inst);
+    if (err != PRO_TK_NO_ERROR)
+        return (0);
+        
+<a name="anchor-97"></a>    err = ProDtlsyminstDataGet (&amp;sym_inst, PRODISPMODE_NUMERIC, &amp;sym_data);
+    TEST_CALL_REPORT(&quot;ProDtlsyminstDataGet()&quot;,
+        &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+    err = ProDtlsyminstdataDefGet (sym_data, &amp;sym_def);
+<a name="anchor-98"></a>    TEST_CALL_REPORT(&quot;ProDtlsyminstdataDefGet()&quot;,
+            &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProDtlsymdefDataGet (&amp;sym_def, &amp;def_data);
+    TEST_CALL_REPORT(&quot;ProDtlsymdefDataGet()&quot;,
+            &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-99"></a>
+    switch (opt)
+    {
+    case  SYM_INST_COLOR :    
+        ProTestColorGet (&amp;color);
+<a name="anchor-100"></a>        err = ProDtlsyminstdataColorSet (sym_data, &amp;color);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataColorSet()&quot;,
+            &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+        break;
+<a name="anchor-101"></a>    case SYM_INST_LENTH :
+        ProDtlsyminstdataElbowlengthGet (sym_data, &amp;flag, &amp;param);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataElbowlengthGet()&quot;,
+            &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+        if (flag == PRO_B_TRUE)
+<a name="anchor-102"></a>        {
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Unable modify elblow lenth.&quot;);
+            return (0);
+        }
+        ProTKSprintf (line, &quot;Enter elblow lenth [%6.2f]: &quot;, param);
+<a name="anchor-103"></a>        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+        if (ProMessageDoubleRead (NULL, &amp;param) != PRO_TK_NO_ERROR)
+            return (0);
+        err = ProDtlsyminstdataElbowlengthSet (sym_data, PRO_B_FALSE, param);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataElbowlengthSet()&quot;,
+<a name="anchor-104"></a>            &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+        break;
+    case SYM_INST_ANGLE :
+        err = ProDtlsyminstdataAngleGet (sym_data, &amp;param);
+<a name="anchor-105"></a>        TEST_CALL_REPORT(&quot;ProDtlsyminstdataAngleGet()&quot;,
+            &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKSprintf (line, &quot;Enter angle [%6.2f]: &quot;, param);
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+        if (ProMessageDoubleRead (NULL, &amp;param) != PRO_TK_NO_ERROR)
+<a name="anchor-106"></a>            return (0);
+        err = ProDtlsyminstdataAngleSet (sym_data, param);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataAngleSet()&quot;,
+            &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+            
+<a name="anchor-107"></a>        break;
+    case SYM_INST_HEIGHT :
+        err = ProDtlsymdefdataHeighttypeGet (def_data, &amp;height_type);
+        TEST_CALL_REPORT(&quot;ProDtlsymdefdataHeighttypeGet()&quot;,
+        &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-108"></a>        if (height_type == PRODTLSYMDEFHGHTTYPE_VARIABLE)
+        {
+            err = ProDtlsyminstdataScaledheightGet (sym_data, &amp;param);
+             TEST_CALL_REPORT(&quot;ProDtlsyminstdataScaledheightGet()&quot;,
+                &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-109"></a>            ProTKSprintf (line, &quot;Enter height [%6.2f]: &quot;, param);
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+            if (ProMessageDoubleRead (NULL, &amp;param) != PRO_TK_NO_ERROR)
+                return (0);
+            err = ProDtlsyminstdataScaledheightSet (sym_data, param);
+<a name="anchor-110"></a>            TEST_CALL_REPORT(&quot;ProDtlsyminstdataScaledheightSet()&quot;,
+                &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+        }
+        else
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Unable modify height: &quot;);
+<a name="anchor-111"></a>              
+        break;
+    case SYM_INST_LEADER :
+        err = ProTestLeadersGet (&amp;p_leaders);
+        if (err == PRO_TK_NO_ERROR &amp;&amp; p_leaders != NULL)
+<a name="anchor-112"></a>        {
+            err = ProDtlsyminstdataLeadersSet (sym_data, p_leaders);
+            TEST_CALL_REPORT(&quot;ProDtlsyminstdataLeadersSet()&quot;,
+                &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+            err = ProArraySizeGet ((ProArray)p_leaders, &amp;n_leaders);
+<a name="anchor-113"></a>            for (i = 0; i &lt; n_leaders; i++)
+                err = ProDtlattachFree (p_leaders[i]);
+            err = ProArrayFree ((ProArray*)&amp;p_leaders);
+        }
+        break;
+<a name="anchor-114"></a>    case SYM_INST_ATTACH :
+        err = ProTestAttachGet (drw, def_data, &amp;def_at_type, &amp;attach);
+        err = ProDtlsyminstdataAttachtypeSet (sym_data, def_at_type);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataAttachtypeSet()&quot;,
+            &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-115"></a>        err = ProDtlsyminstdataAttachmentSet (sym_data, attach);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataAttachmentSet()&quot;,
+            &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProDtlattachFree (attach);
+        TEST_CALL_REPORT(&quot;ProDtlattachFree()&quot;,
+<a name="anchor-116"></a>            &quot;ProDtlattachFree()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        break;
+    case SYM_INST_VARTEXT :
+        err = ProTestVarTextSet (drw, sym_def, sym_data);
+<a name="anchor-117"></a>        if (err !=  PRO_TK_NO_ERROR)
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Unable modify var text. &quot;);
+        
+        break;
+    }
+<a name="anchor-118"></a>    err = ProDtlsyminstErase (&amp;sym_inst);
+    TEST_CALL_REPORT(&quot;ProDtlsyminstErase()&quot;,
+        &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProDtlsyminstModify (&amp;sym_inst, sym_data);
+    TEST_CALL_REPORT(&quot;ProDtlsyminstModify()&quot;,
+<a name="anchor-119"></a>        &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProDtlsyminstShow (&amp;sym_inst);
+    TEST_CALL_REPORT(&quot;ProDtlsyminstShow()&quot;,
+        &quot;ProTestSymInstModify()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-120"></a>    return (0);
+}
+
+/*===========================================================================*\
+  Function : ProTestSymInstGet
+<a name="anchor-121"></a>  Purpose  : 
+\*===========================================================================*/
+ProError ProTestSymInstGet (ProDrawing drw, ProDtlsyminst *sym_inst)
+{
+    ProError err;
+<a name="anchor-122"></a>    ProSelection *p_sel;
+    int n_sel;
+    
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select symbol instance&quot;);
+    err = ProSelect ((char*)&quot;dtl_symbol&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+<a name="anchor-123"></a>    if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+        return (PRO_TK_USER_ABORT);
+        
+    err = ProSelectionModelitemGet (p_sel[0], sym_inst);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+<a name="anchor-124"></a>        &quot;ProTestSymInstGet()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-125"></a>/*===========================================================================*\
+  Function : ProTestSymInstDisplay
+  Purpose  : 
+\*===========================================================================*/
+int ProTestSymInstDisplay (ProDrawing drw)
+<a name="anchor-126"></a>{
+    ProError err;
+    int opt = 0, size = 0, i;
+    ProDtlsyminst *p_sym_inst, sym_inst;
+    static ProUtilMenuButtons disp_sym_inst_opt[] = { 
+<a name="anchor-127"></a>        {&quot;Display&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Draw&quot;, SYM_INST_DRAW, 0},
+        {&quot;Remove&quot;, SYM_INST_REMOVE, 0},
+        {&quot;Erase&quot;, SYM_INST_ERASE, 0},
+        {&quot;Delete&quot;, SYM_INST_DELETE, 0},
+<a name="anchor-128"></a>        {&quot;&quot;,0,0}
+    };
+    err = ProUtilMenuIntValueSelect(disp_sym_inst_opt, &amp;opt);
+    switch (opt)
+    {
+<a name="anchor-129"></a>    case SYM_INST_DRAW :
+        err = ProDrawingDtlsyminstsCollect (drw, PRO_VALUE_UNUSED, &amp;p_sym_inst);
+        TEST_CALL_REPORT(&quot;ProDrawingDtlsyminstsCollect()&quot;,
+            &quot;ProTestSymInstDisplay()&quot;, err, err != PRO_TK_NO_ERROR
+            &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+<a name="anchor-130"></a>        if (err != PRO_TK_NO_ERROR)
+            return (0);
+        err = ProArraySizeGet ((ProArray)p_sym_inst, &amp;size);
+        for (i = 0; i &lt; size; i++)
+        {
+<a name="anchor-131"></a>            err = ProDtlsyminstDraw (&amp;p_sym_inst[i]);
+            TEST_CALL_REPORT(&quot;ProDtlsyminstDraw()&quot;,
+                &quot;ProTestSymInstDisplay()&quot;, err, err != PRO_TK_NO_ERROR);
+        }
+        err = ProArrayFree ((ProArray*)&amp;p_sym_inst);
+<a name="anchor-132"></a>        
+        break;
+    case SYM_INST_REMOVE :
+        err = ProTestSymInstGet (drw, &amp;sym_inst);
+        if (err != PRO_TK_NO_ERROR)
+<a name="anchor-133"></a>            return (0);
+        err = ProDtlsyminstRemove (&amp;sym_inst);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstRemove()&quot;,
+            &quot;ProTestSymInstDisplay()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+<a name="anchor-134"></a>        break;
+    case SYM_INST_ERASE :
+        err = ProTestSymInstGet (drw, &amp;sym_inst);
+        if (err != PRO_TK_NO_ERROR)
+            return (0);
+<a name="anchor-135"></a>        err = ProDtlsyminstErase (&amp;sym_inst);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstErase()&quot;,
+            &quot;ProTestSymInstDisplay()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+        break;
+<a name="anchor-136"></a>    case SYM_INST_DELETE :
+        err = ProTestSymInstGet (drw, &amp;sym_inst);
+        if (err != PRO_TK_NO_ERROR)
+            return (0);
+            
+<a name="anchor-137"></a>        err =  ProDtlsyminstErase(&amp;sym_inst);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstErase()&quot;,
+            &quot;ProTestSymInstDisplay()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProDtlsyminstDelete (&amp;sym_inst);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstDelete()&quot;,
+<a name="anchor-138"></a>            &quot;ProTestSymInstDisplay()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+        break;
+    }
+    return (0);
+<a name="anchor-139"></a>}
+
+/*===========================================================================*\
+  Function : ProTestSymInstInfo
+  Purpose  : 
+<a name="anchor-140"></a>\*===========================================================================*/
+int ProTestSymInstInfo (ProDrawing drw)
+{
+    ProDtlsyminst *p_sym_inst;
+    ProError err;
+<a name="anchor-141"></a>    FILE *fp;
+    int size = 0, i, text_size = 0, j;
+    ProCharLine fname, line;
+    ProDtlsyminstdata sym_data;
+    ProDtlsymdefattachType def_at_type;
+<a name="anchor-142"></a>    double param = 0.0;
+    ProBoolean  is_def = PRO_B_FALSE;
+    ProDtlvartext *p_vartexts;
+    ProColor color;
+    ProDtlsymdef sym_def;
+<a name="anchor-143"></a>    ProDtlsymdefdata def_data;
+    ProPath path;
+    ProName inst_name;
+    ProLine w_prompt, w_value;
+    
+<a name="anchor-144"></a>    
+    fp = ProUtilGenFilePtr((ProMdl)drw, (char*)DTL_SYM_INST_FILE, fname, (char*)&quot;w&quot;);
+    err = ProDrawingDtlsyminstsCollect (drw, PRO_VALUE_UNUSED, &amp;p_sym_inst);
+    TEST_CALL_REPORT(&quot;ProDrawingDtlsyminstsCollect()&quot;,
+        &quot;ProTestSymInstInfo()&quot;, err, err != PRO_TK_NO_ERROR
+<a name="anchor-145"></a>        &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+    if (err != PRO_TK_NO_ERROR)
+        return (0);        
+    err = ProArraySizeGet ((ProArray)p_sym_inst, &amp;size);
+    ProTKFprintf(fp, &quot;File name : %s\n&quot;, fname);
+<a name="anchor-146"></a>    for (i = 0; i &lt; size; i++)
+    {
+        err = ProDtlsyminstDataGet (&amp;p_sym_inst[i], PRODISPMODE_NUMERIC,
+            &amp;sym_data);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstDataGet()&quot;,
+<a name="anchor-147"></a>            &quot;ProTestSymInstInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProDtlsyminstdataDefGet (sym_data, &amp;sym_def);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataDefGet()&quot;,
+            &quot;ProTestSymInstInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProDtlsymdefDataGet (&amp;sym_def, &amp;def_data);
+<a name="anchor-148"></a>        TEST_CALL_REPORT(&quot;ProDtlsymdefDataGet()&quot;,
+            &quot;ProTestSymInstInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+
+        err = ProTestDtlsymdefNameGet (&amp;sym_def, inst_name);
+        ProTKFprintf (fp, &quot;\nId: %d. Name: %s. &quot;, p_sym_inst[i].id,
+<a name="anchor-149"></a>            ProWstringToString (line, inst_name));
+        err = ProDtlsyminstdataAttachtypeGet (sym_data, &amp;def_at_type);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataAttachtypeGet()&quot;,
+            &quot;ProTestSymInstInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot;Attach type: %d.\n&quot;, def_at_type);
+<a name="anchor-150"></a>        err = ProDtlsyminstdataElbowlengthGet (sym_data, &amp;is_def,
+            &amp;param);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataElbowlengthGet()&quot;,
+            &quot;ProTestSymInstInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot;Elbow length = %5.3f is def %d. &quot;, param, is_def);
+<a name="anchor-151"></a>        err = ProDtlsyminstdataAngleGet (sym_data, &amp;param);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataAngleGet()&quot;,
+            &quot;ProTestSymInstInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot;Angle = %5.3f. &quot;, param);
+        err = ProDtlsyminstdataScaledheightGet (sym_data, &amp;param);
+<a name="anchor-152"></a>        TEST_CALL_REPORT(&quot;ProDtlsyminstdataScaledheightGet()&quot;,
+            &quot;ProTestSymInstInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot;Height = %5.3f.&quot;, param);
+        err = ProDtlsyminstdataVartextsCollect (sym_data, &amp;p_vartexts);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataVartextsCollect()&quot;,
+<a name="anchor-153"></a>            &quot;ProTestSymInstInfo()&quot;, err, err != PRO_TK_NO_ERROR
+            &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+        if (err == PRO_TK_NO_ERROR)
+        {
+            ProTKFprintf (fp, &quot;\nVar text:&quot;);
+<a name="anchor-154"></a>            err = ProArraySizeGet ((ProArray)p_vartexts, &amp;text_size);
+            for (j = 0; j &lt; text_size; j++)
+            {
+                ProDtlvartextDataGet (p_vartexts[j], w_prompt, w_value);
+                ProTKFprintf (fp, &quot;\nprompt: %s.\t&quot;, ProWstringToString (line, w_prompt));
+<a name="anchor-155"></a>                ProTKFprintf (fp, &quot;value: %s&quot;, ProWstringToString (line, w_value));
+            }
+            for (j = 0; j &lt; text_size; j++)
+            {
+                ProDtlvartextFree (p_vartexts[j]);
+<a name="anchor-156"></a>                TEST_CALL_REPORT(&quot;ProDtlvartextFree()&quot;,
+                    &quot;ProTestSymInstInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+            }
+            err = ProArrayFree ((ProArray*)&amp;p_vartexts);
+        }
+<a name="anchor-157"></a>        err = ProDtlsyminstdataColorGet (sym_data, &amp;color);
+        TEST_CALL_REPORT(&quot;ProDtlsyminstdataColorGet()&quot;,
+            &quot;ProTestSymInstInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        ProTKFprintf (fp, &quot;\nColor: &quot;);
+        ProTestColorPrint (fp, color);
+<a name="anchor-158"></a>    }
+    fclose (fp);
+    err = ProArrayFree ((ProArray*)&amp;p_sym_inst);
+    ProStringToWstring(path, fname);
+    err = ProInfoWindowDisplay(path, NULL, NULL);
+<a name="anchor-159"></a>    return (0);
+}
+/*===========================================================================*\
+  Function : ProTestDtlsymdefNameGet
+  Purpose  : Temporary used, while ProDtlsymdefdataPathGet not implemented
+<a name="anchor-160"></a>\*===========================================================================*/
+ProError ProTestDtlsymdefNameGet (
+    ProDtlsymdef *p_sym_def,
+    ProName name
+    )
+<a name="anchor-161"></a>{
+	ProDtlsymdefdata data;
+	ProError err;
+
+    if (p_sym_def == NULL || p_sym_def->type != PRO_SYMBOL_DEFINITION)
+<a name="anchor-162"></a>       return (PRO_TK_BAD_INPUTS); 
+
+	err = ProDtlsymdefDataGet(p_sym_def, &amp;data);
+
+	err = ProDtlsymdefdataNameGet(data, name);
+<a name="anchor-163"></a>
+    return (PRO_TK_NO_ERROR);
+}
+</pre>
+</body>
+</html>

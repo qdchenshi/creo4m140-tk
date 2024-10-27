@@ -1,0 +1,269 @@
+<html>
+<head>
+<title>UgSectModelCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProSection.h&quot;
+#include &quot;ProSecdim.h&quot;
+<a name="anchor-2"></a>#include &quot;ProSecerror.h&quot;
+#include &quot;Pro2dEntdef.h&quot;
+#include &quot;ProSecdimType.h&quot;
+#include &quot;ProMdl.h&quot;
+#include &quot;UtilMath.h&quot;
+<a name="anchor-3"></a>#include &quot;ProMenu.h&quot;
+#include &quot;ProUtil.h&quot;
+
+/*---------------------- Application Includes ------------------------*/
+#include &quot;TestError.h&quot;
+<a name="anchor-4"></a>
+/*---------------------- Function Prototypes -------------------------*/
+ProError UserSectionCreateExample();
+ProError ProDemoSectCreate();
+
+<a name="anchor-5"></a>/*------------------------- Global Data -----------------------------*/
+typedef char ProUtilCname[PRO_NAME_SIZE];
+
+
+/*===========================================================*\
+<a name="anchor-6"></a>FUNCTION :  ProDemoSectCreate()
+PURPOSE  :  Creates a section model whose shape is a
+            rectangle with a semi-circular &quot;bite&quot; from 
+            the left side.
+\*===========================================================*/
+<a name="anchor-7"></a>
+ProError ProDemoSectCreate(
+    double         width,       /* (In)  The rectangle width */
+    double         height,      /* (In)  The rectangle height */
+    double         bite_radius, /* (In)  The radius of the bite */
+<a name="anchor-8"></a>    double         bite_height, /* (In)  The height of the bite */
+    ProUtilCname   name,        /* (In)  The sketch name */
+    ProBoolean     alloc,       /* (In)  mem Alloc specifier */
+    ProSection    *p_section)   /* (In/Out) The section handle for the
+                                         sketch */
+<a name="anchor-9"></a>{
+    ProError            status, solve_status;
+    ProSection          section;
+    ProName             wname;
+    Pro2dArcdef         arc;
+<a name="anchor-10"></a>    Pro2dLinedef        line;
+    int                 bottom_id, right_id, top_id, 
+                        left_top_id,left_bottom_id, arc_id; 
+    int                 width_dim, height_dim, bite_height_dim, 
+                        bite_radius_dim;
+<a name="anchor-11"></a>    ProSectionPointType pnt_types[2];
+    Pro2dPnt            point;
+    int                 n_errors, e;
+    ProWSecerror        errors;
+    ProMsg              wmsg;
+<a name="anchor-12"></a>    char                msg[PRO_PATH_SIZE];
+    int                 dims[2];
+/*-----------------------------------------------------------*\
+    Check that the dimensions are possible.
+\*-----------------------------------------------------------*/
+<a name="anchor-13"></a>    if (width &lt; EPSM6 || height &lt; EPSM6)
+        return (-1);
+    if (bite_height &lt;= bite_radius)
+        return (-1);
+    if (bite_height + bite_radius > height)
+<a name="anchor-14"></a>        return (-1);
+    if (bite_radius >= width)
+        return (-1);
+/*-----------------------------------------------------------*\
+    Allocate the handle for the 2-D section.
+<a name="anchor-15"></a>\*-----------------------------------------------------------*/
+    if (alloc == PRO_B_TRUE)
+      {
+	status = ProSection2DAlloc (&amp;section);
+      }
+<a name="anchor-16"></a>    else
+      section = *p_section;
+/*-----------------------------------------------------------*\
+    Set the name of the section.
+\*-----------------------------------------------------------*/
+<a name="anchor-17"></a>    pro_str_to_wstr (wname, name);
+    status = ProSectionNameSet (section, wname);
+/*-----------------------------------------------------------*\
+    Set the epsilon value.
+\*-----------------------------------------------------------*/
+<a name="anchor-18"></a>    status = ProSectionEpsilonSet (section, 0.5);
+/*-----------------------------------------------------------*\
+    Add a straight-line entity for the bottom of the rectangle.
+\*-----------------------------------------------------------*/
+    line.type    = PRO_2D_LINE;
+<a name="anchor-19"></a>    line.end1[0] = 0.0;
+    line.end1[1] = 0.0;
+    line.end2[0] = width + 0.1;
+    line.end2[1] = 0.0;
+    status = ProSectionEntityAdd (section,
+<a name="anchor-20"></a>             (Pro2dEntdef*)&amp;line, &amp;bottom_id);
+/*-----------------------------------------------------------*\
+    ...right
+\*-----------------------------------------------------------*/
+    line.type    = PRO_2D_LINE;
+<a name="anchor-21"></a>    line.end1[0] = width + 0.1;
+    line.end1[1] = 0.0;
+    line.end2[0] = width;
+    line.end2[1] = height;
+    status = ProSectionEntityAdd (section, 
+<a name="anchor-22"></a>             (Pro2dEntdef*)&amp;line, &amp;right_id);
+/*-----------------------------------------------------------*\
+    ...top
+\*-----------------------------------------------------------*/
+    line.type    = PRO_2D_LINE;
+<a name="anchor-23"></a>    line.end1[0] = width;
+    line.end1[1] = height;
+    line.end2[0] = 0.0;
+    line.end2[1] = height;
+    status = ProSectionEntityAdd (section, (Pro2dEntdef*)&amp;line,
+<a name="anchor-24"></a>             &amp;top_id);
+/*-----------------------------------------------------------*\
+    ...left above the bite
+\*-----------------------------------------------------------*/
+    line.type    = PRO_2D_LINE;
+<a name="anchor-25"></a>    line.end1[0] = 0.0;
+    line.end1[1] = bite_height - bite_radius;
+    line.end2[0] = 0.0;
+    line.end2[1] = 0.0;
+    status = ProSectionEntityAdd (section, (Pro2dEntdef*)&amp;line, 
+<a name="anchor-26"></a>                                  &amp;left_top_id);
+/*-----------------------------------------------------------*\
+    ...left below the bite
+\*-----------------------------------------------------------*/
+    line.type    = PRO_2D_LINE;
+<a name="anchor-27"></a>    line.end1[0] = 0.0;
+    line.end1[1] = height;
+    line.end2[0] = 0.0;
+    line.end2[1] = bite_height + bite_radius;
+    status = ProSectionEntityAdd (section, (Pro2dEntdef*)&amp;line,
+<a name="anchor-28"></a>                                  &amp;left_bottom_id);
+/*-----------------------------------------------------------*\
+    Add an arc entity for the bite itself.
+\*-----------------------------------------------------------*/
+    arc.type        = PRO_2D_ARC;
+<a name="anchor-29"></a>    arc.center[0]   = 0.0;
+    arc.center[1]   = bite_height;
+    arc.start_angle = PI * 1.5;   /* 270 degrees counterclockwise
+                                     from the X axis */
+    arc.end_angle   = PI / 2.0;   /* 90 degrees counterclockwise
+<a name="anchor-30"></a>                                     from the X axis */
+    arc.radius      = bite_radius;
+    status = ProSectionEntityAdd (section, (Pro2dEntdef*)&amp;arc,
+             &amp;arc_id);
+/*-----------------------------------------------------------*\
+<a name="anchor-31"></a>    Add a dimension for the width (the length of the top
+    entity).
+\*-----------------------------------------------------------*/
+    point[0] = width/2.0;
+    point[1] = height + 10.0;
+<a name="anchor-32"></a>    pnt_types[0] = PRO_ENT_WHOLE;
+    status = ProSecdimCreate (section, &amp;top_id, pnt_types, 1, 
+             PRO_TK_DIM_LINE, point, &amp;width_dim);
+/*-----------------------------------------------------------*\
+    Add a dimension for the height (the length of the 
+<a name="anchor-33"></a>    right entity).
+\*-----------------------------------------------------------*/
+    point[0] = width + 1.0;
+    point[1] = height/2.0;
+    pnt_types[0] = PRO_ENT_WHOLE;
+<a name="anchor-34"></a>    status = ProSecdimCreate (section, &amp;right_id, pnt_types, 1,
+             PRO_TK_DIM_LINE, point, &amp;height_dim);
+/*-----------------------------------------------------------*\
+    Add a dimension for the height of the bite.
+\*-----------------------------------------------------------*/
+<a name="anchor-35"></a>    point[0] = -1.0;
+    point[1] = bite_height/2.0;
+    dims[0]  = bottom_id;
+    dims[1]  = arc_id;
+    pnt_types[0] = PRO_ENT_WHOLE;
+<a name="anchor-36"></a>    pnt_types[1] = PRO_ENT_CENTER;
+    status = ProSecdimCreate (section, dims, pnt_types, 2,
+             PRO_TK_DIM_LINE_POINT, point, &amp;bite_height_dim);
+/*-----------------------------------------------------------*\
+    Add a dimension for the radius of the bite.
+<a name="anchor-37"></a>\*-----------------------------------------------------------*/
+    point[0] = bite_radius + 1.0;
+    point[1] = bite_height;
+    pnt_types[0] = PRO_ENT_WHOLE;
+    status = ProSecdimCreate (section, &amp;arc_id, pnt_types, 1,
+<a name="anchor-38"></a>             PRO_TK_DIM_RAD, point, &amp;bite_radius_dim);
+/*-----------------------------------------------------------*\
+    Claim memory for the error structure.
+\*-----------------------------------------------------------*/
+    status = ProSecerrorAlloc (&amp;errors);
+<a name="anchor-39"></a>/*-----------------------------------------------------------*\
+    Solve the section.
+\*-----------------------------------------------------------*/
+    solve_status = ProSectionSolve (section, &amp;errors);
+/*-----------------------------------------------------------*\
+<a name="anchor-40"></a>    If the solve failed, report error messages and exit.
+\*-----------------------------------------------------------*/
+    if (solve_status != PRO_TK_NO_ERROR)
+    {
+        status = ProSecerrorCount (&amp;errors, &amp;n_errors);
+<a name="anchor-41"></a>        for (e = 0; e &lt; n_errors; e++)
+        {
+             status = ProSecerrorMsgGet (errors, e, wmsg);
+             ProWstringToString (msg, wmsg);
+             ProTKPrintf (&quot;Error %d message : %s\n&quot;,e, msg);
+<a name="anchor-42"></a>        }
+        return (-1);
+    }
+    status = ProSecerrorFree (&amp;errors);
+/*-----------------------------------------------------------*\
+<a name="anchor-43"></a>    Save the section.
+\*-----------------------------------------------------------*/
+    status = ProMdlSave (section);
+/*-----------------------------------------------------------*\
+    Return the section handle
+<a name="anchor-44"></a>\*-----------------------------------------------------------*/
+    *p_section = section;
+    return (0);
+}
+
+<a name="anchor-45"></a>
+/*===========================================================*\
+FUNCTION :  UserSectionCreateExample()
+PURPOSE  :  Invokes the function to create the Section model 
+\*===========================================================*/
+<a name="anchor-46"></a>
+ProError UserSectionCreateExample()
+{
+    ProError status;
+    double width;
+<a name="anchor-47"></a>    double height;
+    double bite_radius;
+    double bite_height;
+    char *name = &quot;test&quot;; 
+    ProBoolean alloc;
+<a name="anchor-48"></a>    char filename[PRO_NAME_SIZE];
+    ProSection section;
+    int win_id;
+    ProMacro wmacro;
+    char *macro = &quot;#MODE;#SKETCHER;#SEARCH/RETR;#IN SESSION;#TEST.SEC;&quot;;
+<a name="anchor-49"></a>
+    width = 200;
+    height = 150;
+    bite_radius = 20;
+    bite_height = 30;
+<a name="anchor-50"></a>    alloc = PRO_B_TRUE;
+
+    status = ProDemoSectCreate( width, height, bite_radius, 
+                       bite_height, name, alloc, &amp;section );
+    ERROR_CHECK( &quot;UserSectionCreateExample&quot;, &quot;ProDemoSectCreate&quot;, status );
+<a name="anchor-51"></a>
+    ProStringToWstring( wmacro, macro );
+    ProMacroLoad(wmacro);
+
+    return ( PRO_TK_NO_ERROR );
+<a name="anchor-52"></a>}
+</pre>
+</body>
+</html>

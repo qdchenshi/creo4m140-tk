@@ -1,0 +1,864 @@
+<html>
+<head>
+<title>TestSymDefMenu.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>/*-------------------------------------------------------------*\
+    Pro/Toolkit includes
+\*-------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProDrawing.h>
+<a name="anchor-2"></a>#include &lt;ProDtlitem.h>
+#include &lt;ProDtlnote.h>
+#include &lt;ProDtlsymdef.h>
+#include &lt;ProDtlsyminst.h>
+#include &lt;ProDtlentity.h>
+<a name="anchor-3"></a>#include &lt;ProSelection.h>
+#include &lt;ProMessage.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMenu.h>
+#include &lt;ProWindows.h>
+<a name="anchor-4"></a>#include &lt;ProGraphic.h>
+
+/*-------------------------------------------------------------*\
+    Application includes
+\*-------------------------------------------------------------*/
+<a name="anchor-5"></a>#include &quot;TestError.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilNames.h&quot;
+#include &quot;UtilMenu.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilMath.h&quot;
+#include &lt;ProTKRunTime.h>
+
+/*-------------------------------------------------------------*\
+    Declaration some functions.
+<a name="anchor-7"></a>\*-------------------------------------------------------------*/
+ProError ProTestSymDefInfo();
+ProError ProTestSymDefRetrieve(ProDrawing drawing);
+ProError ProTestSymDefCreate(ProDrawing drawing);
+ProError ProTestSymDefModify(ProDrawing drawing);
+<a name="anchor-8"></a>ProError ProTestSymDefDelete(ProDrawing drawing);
+ProError ProTestSymDefGet(ProDrawing drawing, ProDtlsymdef *sym_def);
+
+/*=========================================================================*\
+    Function:	ProTestSymDefMenu()
+<a name="anchor-9"></a>    Purpose:	Make main menu for symdef test and demo.
+    Returns:	PRO_TK_NO_ERROR if success;
+\*=========================================================================*/
+int ProTestSymDefMenu(ProDrawing drawing)
+{
+<a name="anchor-10"></a>    ProError error;
+    int menu_id;
+/*-------------------------------------------------------------*\
+    Create main menu for this test
+\*-------------------------------------------------------------*/
+<a name="anchor-11"></a>    error = ProMenuFileRegister((char*)&quot;Symdef&quot;,(char*)&quot;tksymdef.mnu&quot;, &amp;menu_id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister()&quot;,
+	    &quot;ProTestSymDefMenu()&quot;, error, error != PRO_TK_NO_ERROR);
+    
+    error = ProMenubuttonActionSet((char*)&quot;Symdef&quot;,(char*)&quot;Info&quot;, 
+<a name="anchor-12"></a>	    (ProMenubuttonAction)ProTestSymDefInfo, NULL, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;ProTestSymDefMenu()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;Symdef&quot;,(char*)&quot;Retrieve&quot;, 
+<a name="anchor-13"></a>	    (ProMenubuttonAction)ProTestSymDefRetrieve, drawing, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;ProTestSymDefMenu()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;Symdef&quot;,(char*)&quot;Create&quot;, 
+<a name="anchor-14"></a>	    (ProMenubuttonAction)ProTestSymDefCreate, drawing, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;ProTestSymDefMenu()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;Symdef&quot;,(char*)&quot;Delete&quot;, 
+<a name="anchor-15"></a>	    (ProMenubuttonAction)ProTestSymDefDelete, drawing, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;ProTestSymDefMenu()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;Symdef&quot;,(char*)&quot;Symdef&quot;, 
+<a name="anchor-16"></a>	    (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;ProTestSymDefMenu()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenuCreate(PROMENUTYPE_MAIN,(char*) &quot;Symdef&quot;, &amp;menu_id);
+<a name="anchor-17"></a>    TEST_CALL_REPORT (&quot;ProMenuCreate()&quot;,
+	    &quot;ProTestSymDefMenu()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenuProcess((char*)&quot;&quot;, &amp;menu_id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess()&quot;,
+<a name="anchor-18"></a>            &quot;ProTestSymDefMenu()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-19"></a>/*=========================================================================*\
+    Function:	ProTestSymDefRetrieve()
+    Purpose:	Retrive symdef from disk.
+    Returns:	PRO_TK_NO_ERROR if success;
+\*=========================================================================*/
+<a name="anchor-20"></a>ProError ProTestSymDefRetrieve(ProDrawing drawing)
+{
+    ProError error;
+    ProDtlsymdef symdef;
+    ProLine buff;
+<a name="anchor-21"></a>    int version;
+    ProCharLine line, str;
+    ProPath *path_arr, sel_path, def_path;
+    ProName *path_lab_arr;
+	ProMdlName w_name;
+<a name="anchor-22"></a>	ProMdlExtension w_type;
+
+/*-------------------------------------------------------------*\
+    Check input
+\*-------------------------------------------------------------*/
+<a name="anchor-23"></a>    if(drawing==NULL)
+	return(PRO_TK_GENERAL_ERROR);
+
+/*-------------------------------------------------------------*\
+    Define mask for retrive symdef.
+<a name="anchor-24"></a>    By default symdef retrive from current directory.
+\*-------------------------------------------------------------*/
+    ProStringToWstring(buff,(char*) &quot;*.sym&quot;);
+    ProStringToWstring(def_path,(char*) &quot;.&quot;);
+
+<a name="anchor-25"></a>/*-------------------------------------------------------------*\
+    Allocate memory for path data
+\*-------------------------------------------------------------*/
+
+    error = ProArrayAlloc(0, sizeof(ProPath), 1, (ProArray*)&amp;path_arr);
+<a name="anchor-26"></a>    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProTestSymDefRetrieve()&quot;, 
+	    error, error != PRO_TK_NO_ERROR);
+
+    error = ProArrayAlloc(0, sizeof(ProPath), 1, (ProArray*)&amp;path_lab_arr);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProTestSymDefRetrieve()&quot;, 
+<a name="anchor-27"></a>	    error, error != PRO_TK_NO_ERROR);
+
+/*-------------------------------------------------------------*\
+    Call OpenFile dialog.
+\*-------------------------------------------------------------*/
+<a name="anchor-28"></a>    error = ProFileMdlnameOpen(NULL, buff, path_arr, path_lab_arr, 
+	def_path, NULL, sel_path);
+    TEST_CALL_REPORT(&quot;ProFileOpen()&quot;, &quot;ProTestSymDefRetrieve()&quot;, 
+	    error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-29"></a>    ProWstringToString(line, sel_path);
+
+    if (error == PRO_TK_NO_ERROR)
+    {
+
+<a name="anchor-30"></a>/*-------------------------------------------------------------*\
+    Call OpenFile dialog.
+\*-------------------------------------------------------------*/
+	error = ProFileMdlnameParse(sel_path, def_path, w_name, w_type, &amp;version);
+	TEST_CALL_REPORT(&quot;ProFileMdlnameParse()&quot;, &quot;ProTestSymDefRetrieve()&quot;, 
+<a name="anchor-31"></a>		error, error != PRO_TK_NO_ERROR);
+
+	ProWstringToString(str, sel_path);
+
+/*-------------------------------------------------------------*\
+<a name="anchor-32"></a>    Chect file type
+\*-------------------------------------------------------------*/
+	if(strcmp(&quot;sym&quot;, ProWstringToString(str, w_type))==0)
+	{ 
+	    ProStringToWstring(def_path,(char*)&quot;.&quot;);
+<a name="anchor-33"></a>	    error = ProDrawingDtlsymdefRetrieve(drawing, 
+		def_path, w_name, version, PRO_B_TRUE, &amp;symdef);
+	    TEST_CALL_REPORT(&quot;ProDrawingDtlsymdefRetrieve()&quot;, 
+		&quot;ProTestSymDefRetrieve()&quot;, error, error != PRO_TK_NO_ERROR);
+	} else ProTKPrintf(&quot;Bad inputs: %s, %s \n&quot;,str,line);
+<a name="anchor-34"></a>    }
+
+/*-------------------------------------------------------------*\
+    Free memory and refresh current window
+\*-------------------------------------------------------------*/
+<a name="anchor-35"></a>    error = ProArrayFree((ProArray*)&amp;path_arr);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestSymDefRetrieve()&quot;, 
+	    error, error != PRO_TK_NO_ERROR);
+
+    error = ProArrayFree((ProArray*)&amp;path_lab_arr);
+<a name="anchor-36"></a>    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestSymDefRetrieve()&quot;, 
+	    error, error != PRO_TK_NO_ERROR);
+
+    error = ProWindowRepaint(PRO_VALUE_UNUSED);
+    TEST_CALL_REPORT(&quot;ProWindowRepaint()&quot;, &quot;ProTestSymDefRetrieve()&quot;, 
+<a name="anchor-37"></a>			error, error != PRO_TK_NO_ERROR);
+    return (PRO_TK_NO_ERROR);
+}
+
+/*=========================================================================*\
+<a name="anchor-38"></a>    Function:	ProTestSymDef_attach_add()
+    Purpose:	Add new attache to symdef 
+    Returns:	PRO_TK_NO_ERROR if success;
+\*=========================================================================*/
+ProError ProTestSymDef_attach_add(ProDrawing drawing, ProDtlsymdef *symdef,
+<a name="anchor-39"></a>			  ProDtlsymdefattachType type, int entity_id,   
+			  double entity_param, ProVector pos)
+{
+    ProDtlsymdefdata entdata;
+    ProDtlsymdefattach attach;
+<a name="anchor-40"></a>    ProError error;
+
+/*-------------------------------------------------------------*\
+    Allocate memory for symdef data.
+    And setup data for add new attache.
+<a name="anchor-41"></a>\*-------------------------------------------------------------*/
+    error = ProDtlsymdefdataAlloc(drawing, &amp;entdata);
+    TEST_CALL_REPORT (&quot;ProDtlsymdefdataAlloc()&quot;,
+	    &quot;ProTestSymDef_attach_add()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-42"></a>    error = ProDtlsymdefDataGet(symdef, &amp;entdata);
+    TEST_CALL_REPORT (&quot;ProDtlsymdefDataGet()&quot;,
+	    &quot;ProTestSymDef_attach_add()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProDtlsymdefattachAlloc(type, entity_id,
+<a name="anchor-43"></a>		entity_param, pos, &amp;attach);
+    TEST_CALL_REPORT (&quot;ProDtlsymdefattachAlloc()&quot;,
+	    &quot;ProTestSymDef_attach_add()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProDtlsymdefdataAttachAdd(entdata, attach);
+<a name="anchor-44"></a>    TEST_CALL_REPORT (&quot;ProDtlsymdefdataAttachAdd()&quot;,
+	    &quot;ProTestSymDef_attach_add()&quot;, error, error != PRO_TK_NO_ERROR);
+
+/*-------------------------------------------------------------*\
+    Post information to the symdef data and free memory.
+<a name="anchor-45"></a>\*-------------------------------------------------------------*/
+    error = ProDtlsymdefModify(symdef, entdata);
+    TEST_CALL_REPORT (&quot;ProDtlsymdefModify()&quot;,
+	    &quot;ProTestSymDef_attach_add()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-46"></a>    error = ProDtlsymdefattachFree(attach);
+    TEST_CALL_REPORT (&quot;ProDtlsymdefattachFree()&quot;,
+	    &quot;ProTestSymDef_attach_add()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProDtlsymdefdataFree(entdata);
+<a name="anchor-47"></a>    TEST_CALL_REPORT (&quot;ProDtlsymdefdataFree()&quot;,
+	    &quot;ProTestSymDef_attach_add()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-48"></a>
+/*=========================================================================*\
+    Function:	ProTestSymDef_AddItem()
+    Purpose:	Copy entity or note from drawing to the symdef
+    Returns:	PRO_TK_NO_ERROR if success; 
+<a name="anchor-49"></a>		out - handle to the new entity or note
+\*=========================================================================*/
+ProError ProTestSymDef_AddItem(ProDrawing drawing, ProDtlsymdef *symdef, 
+			    ProDtlentity *entity, ProDtlentity *out)
+{
+<a name="anchor-50"></a>    ProDtlentitydata data;
+    ProDtlnotedata   ndata;
+    ProColor color;
+    ProError error;
+
+<a name="anchor-51"></a>/*-------------------------------------------------------------*\
+    Check input
+\*-------------------------------------------------------------*/
+    if((symdef==NULL)||(entity==NULL))
+	return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-52"></a>
+/*-------------------------------------------------------------*\
+    Add only entity or note
+\*-------------------------------------------------------------*/
+    if(((entity->type) == PRO_NOTE)||((entity->type) == PRO_DRAFT_ENTITY)) 
+<a name="anchor-53"></a>    {
+/*-------------------------------------------------------------*\
+    Add new entity to the symdef
+\*-------------------------------------------------------------*/
+	if((entity->type)  == PRO_DRAFT_ENTITY)
+<a name="anchor-54"></a>	{
+	    error = ProDtlentityDataGet (entity, NULL, &amp;data); 
+	    TEST_CALL_REPORT(&quot;ProDtlentityDataGet()&quot;, &quot;ProTestSymDef_AddItem()&quot;, 
+		error, error != PRO_TK_NO_ERROR);
+	    if(error!=PRO_TK_NO_ERROR)
+<a name="anchor-55"></a>		return(PRO_TK_GENERAL_ERROR);
+/*-------------------------------------------------------------*\
+	    Setup entity color.
+\*-------------------------------------------------------------*/
+	    error = ProDtlentitydataColorGet(data, &amp;color);
+<a name="anchor-56"></a>	    TEST_CALL_REPORT(&quot;ProDtlentitydataColorGet()&quot;, &quot;ProTestSymDef_AddItem()&quot;, 
+		error, error != PRO_TK_NO_ERROR);
+
+	    if (color.method == PRO_COLOR_METHOD_DEFAULT)
+		color.value.type = PRO_COLOR_LETTER;
+<a name="anchor-57"></a>
+	    error = ProDtlentitydataColorSet(data, &amp;color);
+	    TEST_CALL_REPORT(&quot;ProDtlentitydataColorSet()&quot;, &quot;ProTestSymDef_AddItem()&quot;, 
+		error, error != PRO_TK_NO_ERROR);
+/*-------------------------------------------------------------*\
+<a name="anchor-58"></a>	    Create new entity
+\*-------------------------------------------------------------*/
+	    error = ProDtlentityCreate (drawing, symdef, data,  out);
+	    TEST_CALL_REPORT(&quot;ProDtlentityCreate()&quot;, &quot;ProTestSymDef_AddItem()&quot;, 
+		error, error != PRO_TK_NO_ERROR);
+<a name="anchor-59"></a>
+	    if(error!=PRO_TK_NO_ERROR)
+		return(error);
+/*-------------------------------------------------------------*\
+	    if entity success create then show it.
+<a name="anchor-60"></a>\*-------------------------------------------------------------*/
+#if 0
+	    error = ProDtlentityShow(out);
+	    TEST_CALL_REPORT(&quot;ProDtlentityShow()&quot;, &quot;ProTestSymDef_AddItem()&quot;, 
+		    error, error != PRO_TK_NO_ERROR);
+<a name="anchor-61"></a>#endif
+	    error = ProDtlentitydataFree( data );
+	    TEST_CALL_REPORT(&quot;ProDtlentitydataFree()&quot;, &quot;ProTestSymDef_AddItem()&quot;, 
+		error, error != PRO_TK_NO_ERROR);
+	}
+<a name="anchor-62"></a>    else 
+	{
+/*-------------------------------------------------------------*\
+	    Add new note to the symdef
+\*-------------------------------------------------------------*/
+<a name="anchor-63"></a>	    error = ProDtlnoteDataGet((ProDtlnote*)entity, NULL, PRODISPMODE_SYMBOLIC, &amp;ndata);
+	    TEST_CALL_REPORT(&quot;ProDtlnoteDataGet()&quot;, &quot;ProTestSymDef_AddItem()&quot;, 
+		error, error != PRO_TK_NO_ERROR);
+
+	    if(error!=PRO_TK_NO_ERROR)
+<a name="anchor-64"></a>		return(error);
+
+/*-------------------------------------------------------------*\
+	    Note color setup
+\*-------------------------------------------------------------*/
+<a name="anchor-65"></a>	    error = ProDtlnotedataColorGet(ndata, &amp;color);
+	    TEST_CALL_REPORT(&quot;ProDtlnotedataColorGet()&quot;, &quot;ProTestSymDef_AddItem()&quot;, 
+		error, error != PRO_TK_NO_ERROR);
+
+	    if (color.method == PRO_COLOR_METHOD_DEFAULT)
+<a name="anchor-66"></a>		color.value.type =  PRO_COLOR_DRAWING;
+
+	    error = ProDtlnotedataColorSet(ndata, &amp;color);
+	    TEST_CALL_REPORT(&quot;ProDtlnotedataColorSet()&quot;, &quot;ProTestSymDef_AddItem()&quot;, 
+		error, error != PRO_TK_NO_ERROR);
+<a name="anchor-67"></a>
+/*-------------------------------------------------------------*\
+	    Add new note to the symdef
+\*-------------------------------------------------------------*/
+	    error = ProDtlnoteCreate(drawing, symdef, ndata, (ProDtlnote*)out);
+<a name="anchor-68"></a>	    TEST_CALL_REPORT(&quot;ProDtlnoteCreate()&quot;, &quot;ProTestSymDef_AddItem()&quot;, 
+		error, error != PRO_TK_NO_ERROR);
+	    ProDtlnotedataFree( ndata );
+	    TEST_CALL_REPORT(&quot;ProDtlnotedataFree()&quot;, &quot;ProTestSymDef_AddItem()&quot;, 
+		error, error != PRO_TK_NO_ERROR);
+<a name="anchor-69"></a>	}
+	return(error);
+    }
+    return(PRO_TK_GENERAL_ERROR);
+}
+<a name="anchor-70"></a>
+/*=========================================================================*\
+    Function:	TestAttachType()
+    Purpose:	Make menu for select symdef attache type
+    Returns:	Attach Type;
+<a name="anchor-71"></a>\*=========================================================================*/
+int TestAttachType()
+{
+    int menu_id, attach_type;
+    ProError error;
+<a name="anchor-72"></a>
+/*-------------------------------------------------------------*\
+    Make menu for select attache type 
+\*-------------------------------------------------------------*/
+    error = ProMenuFileRegister((char*)&quot;AttachType&quot;,(char*)&quot;tksymdefatac.mnu&quot;, &amp;menu_id);
+<a name="anchor-73"></a>    TEST_CALL_REPORT (&quot;ProMenuFileRegister()&quot;,
+	    &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+    
+    error = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;Free&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign, (ProAppData)&amp;attach_type, PROSYMDEFATTACHTYPE_FREE);
+<a name="anchor-74"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;Left Leader&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign, (ProAppData)&amp;attach_type, PROSYMDEFATTACHTYPE_LEFT_LEADER);
+<a name="anchor-75"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;Right Leader&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign, (ProAppData)&amp;attach_type, PROSYMDEFATTACHTYPE_RIGHT_LEADER);
+<a name="anchor-76"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;Radial Leader&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign, (ProAppData)&amp;attach_type, PROSYMDEFATTACHTYPE_RADIAL_LEADER);
+<a name="anchor-77"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;On item&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign, (ProAppData)&amp;attach_type, PROSYMDEFATTACHTYPE_ON_ITEM);
+<a name="anchor-78"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;Normal&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign, (ProAppData)&amp;attach_type, PROSYMDEFATTACHTYPE_NORM_ITEM);
+<a name="anchor-79"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;Done&quot;, 
+	    (ProMenubuttonAction)ProMenuDelete, NULL, 1);
+<a name="anchor-80"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonActionSet((char*)&quot;AttachType&quot;,(char*)&quot;AttachType&quot;, 
+	    (ProMenubuttonAction)ProMenuDelete, NULL, 1);
+<a name="anchor-81"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	    &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenuCreate(PROMENUTYPE_MAIN,(char*) &quot;AttachType&quot;, &amp;menu_id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate()&quot;,
+<a name="anchor-82"></a>	    &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenubuttonDeactivate((char*)&quot;AttachType&quot;,(char*)&quot;Done&quot;);
+    TEST_CALL_REPORT (&quot;ProMenubuttonDeactivate()&quot;,
+            &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+<a name="anchor-83"></a>
+    error = ProMenuProcess((char*)&quot;&quot;, &amp;menu_id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess()&quot;,
+            &quot;TestAttachType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-84"></a>    return(attach_type);
+}
+
+/*=========================================================================*\
+    Function:	TestHeightType()
+<a name="anchor-85"></a>    Purpose:	Make menu for select symdef height type
+    Returns:	Height Type;
+\*=========================================================================*/
+int TestHeightType()
+{
+<a name="anchor-86"></a>    ProError error;
+    int menu_id, height_type; 
+
+/*-------------------------------------------------------------*\
+    Create menu for select symdef height type
+<a name="anchor-87"></a>\*-------------------------------------------------------------*/
+    error = ProMenuFileRegister((char*)&quot;HeightType&quot;,(char*)&quot;tksymdefhgh.mnu&quot;, &amp;menu_id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister()&quot;,
+	    &quot;TestHeightType()&quot;, error, error != PRO_TK_NO_ERROR);
+    
+<a name="anchor-88"></a>    error = ProMenubuttonActionSet((char*)&quot;HeightType&quot;,(char*)&quot;Fixed&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign, (ProAppData)&amp;height_type, PRODTLSYMDEFHGHTTYPE_FIXED);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	&quot;TestHeightType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-89"></a>    error = ProMenubuttonActionSet((char*)&quot;HeightType&quot;,(char*)&quot;Variable&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign, (ProAppData)&amp;height_type, PRODTLSYMDEFHGHTTYPE_VARIABLE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	&quot;TestHeightType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-90"></a>    error = ProMenubuttonActionSet((char*)&quot;HeightType&quot;,(char*)&quot;Text related&quot;, 
+	    (ProMenubuttonAction)ProUtilAssign, (ProAppData)&amp;height_type, PRODTLSYMDEFHGHTTYPE_TEXTRELATED);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	&quot;TestHeightType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-91"></a>    error = ProMenubuttonActionSet((char*)&quot;HeightType&quot;,(char*)&quot;HeightType&quot;, 
+	    (ProMenubuttonAction)ProMenuDelete, (ProAppData)&amp;height_type, PROSYMDEFATTACHTYPE_FREE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;,
+	&quot;TestHeightType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-92"></a>    error = ProMenuCreate(PROMENUTYPE_MAIN,(char*) &quot;HeightType&quot;, &amp;menu_id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate()&quot;,
+	    &quot;TestHeightType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    error = ProMenuProcess((char*)&quot;&quot;, &amp;menu_id);
+<a name="anchor-93"></a>    TEST_CALL_REPORT (&quot;ProMenuProcess()&quot;,
+            &quot;TestHeightType()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    return(height_type);
+}
+<a name="anchor-94"></a>
+/*=========================================================================*\
+    Function:	ProTestSymDefCreate()
+    Purpose:	Create new symdef, copy some notes and entity from current
+                drawing, user select attache and symdef height type via menu. 
+<a name="anchor-95"></a>    Returns:	PRO_TK_NO_ERROR if success;
+\*=========================================================================*/
+ProError ProTestSymDefCreate(ProDrawing drawing)
+{
+    ProError error;
+<a name="anchor-96"></a>    ProDtlsymdef symdef;
+    ProDtlsymdefdata entdata;
+    ProDtlentity entity, *newent = NULL, *entitys = NULL, *p_entity;
+    ProCharLine astr, astr2;
+    ProPath symname;
+<a name="anchor-97"></a>    int n_sel, n, attach_type, dtype, height_type;
+    ProPoint3d pos;
+    ProMouseButton but;
+    double param;
+    ProSelection *p_sel;
+<a name="anchor-98"></a>    ProDtlentitydata dtl_entdata;
+    int flg = 1;
+    ProCurvedata curve;
+    ProUvParam uv_param;
+
+<a name="anchor-99"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;Symbol name [QUIT] : &quot;);
+/*-------------------------------------------------------------*\
+    Prompt user for input symdef name
+\*-------------------------------------------------------------*/
+   if(ProMessageStringRead(PRO_PATH_SIZE, symname)!=PRO_TK_NO_ERROR)
+<a name="anchor-100"></a>	    return(PRO_TK_GENERAL_ERROR);    
+
+    error = ProDtlsymdefdataAlloc(drawing, &amp;entdata);
+    TEST_CALL_REPORT(&quot;ProDtlsymdefdataAlloc()&quot;, &quot;ProTestSymDefCreate()&quot;, 
+	error, error != PRO_TK_NO_ERROR);
+<a name="anchor-101"></a>
+    if(error!=PRO_TK_NO_ERROR)
+    	return(PRO_TK_GENERAL_ERROR);
+#if 0
+/*-------------------------------------------------------------*\
+<a name="anchor-102"></a>    Setup symdef name and create new symdef
+\*-------------------------------------------------------------*/
+    error = ProDtlsymdefdataPathSet(entdata,symname);
+    TEST_CALL_REPORT(&quot;ProDtlsymdefdataPathSet()&quot;, &quot;ProTestSymDefCreate()&quot;, 
+	    error, error != PRO_TK_NO_ERROR);
+<a name="anchor-103"></a>#endif
+    error = ProDtlsymdefCreate(drawing, entdata,  &amp;symdef);
+    TEST_CALL_REPORT(&quot;ProDtlsymdefCreate()&quot;, &quot;ProTestSymDefCreate()&quot;, 
+	error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-104"></a>    if(error!=PRO_TK_NO_ERROR)
+    {
+	     ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s &quot;, &quot;Can't created symbol definition.&quot;);
+	     if(entdata!=NULL)
+	     {
+<a name="anchor-105"></a>	         error = ProDtlsymdefdataFree(entdata);
+	         TEST_CALL_REPORT(&quot;ProDtlsymdefdataFree()&quot;, &quot;ProTestSymDefCreate()&quot;, 
+		     error, error != PRO_TK_NO_ERROR);
+	     }
+	     return(PRO_TK_GENERAL_ERROR);
+<a name="anchor-106"></a>    }
+
+    ProTKSprintf(astr,&quot; Created symbol definition: %s&quot;, ProWstringToString(astr2, symname));
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s &quot;, astr);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;Select items to be in the symbol definition&quot;);
+<a name="anchor-107"></a>
+/*-------------------------------------------------------------*\
+    Copy some entity and note from drawing to the symdef.
+\*-------------------------------------------------------------*/
+
+<a name="anchor-108"></a>    ProSelect((char*)&quot;any_note,draft_ent&quot;,-1,  NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+    entitys = (ProDtlentity*)calloc(n_sel, sizeof(ProDtlentity));
+    newent  = (ProDtlentity*)calloc(n_sel, sizeof(ProDtlentity));
+
+/*-------------------------------------------------------------*\
+<a name="anchor-109"></a>    For all the selected items, remember the item type and id,
+    add it to the symbol definition, and remember the id it
+    has in the symbol.
+\*-------------------------------------------------------------*/
+    for(n=0;n&lt;n_sel;n++)
+<a name="anchor-110"></a>    {
+	error = ProSelectionModelitemGet(p_sel[n], (ProModelitem *)&amp;entity);
+
+	error = ProTestSymDef_AddItem(drawing, &amp;symdef, &amp;entity, &amp;newent[n]);
+	memcpy(&amp;entitys[n], &amp;entity, sizeof(ProDtlentity));  
+<a name="anchor-111"></a>    }
+
+/*-------------------------------------------------------------*\
+    Get attach type
+\*-------------------------------------------------------------*/
+<a name="anchor-112"></a>    attach_type = TestAttachType();
+
+    if (attach_type == -1)
+    	attach_type = PROSYMDEFATTACHTYPE_FREE;
+
+<a name="anchor-113"></a>    switch(attach_type)
+    {
+    case PROSYMDEFATTACHTYPE_FREE :
+/*-------------------------------------------------------------*\
+	Just select the (free) origin of the symbol definition
+<a name="anchor-114"></a>\*-------------------------------------------------------------*/
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;Select symbol origin&quot;);
+
+	error = ProMousePickGet(PRO_ANY_BUTTON, &amp;but, pos);
+        TEST_CALL_REPORT (&quot;ProMousePickGet()&quot;,
+<a name="anchor-115"></a>	       &quot;ProTestSymDef_attach()&quot;, error, error != PRO_TK_NO_ERROR);
+
+        if(error!=PRO_TK_NO_ERROR)
+	    return(PRO_TK_NO_ERROR);
+/*-------------------------------------------------------------*\
+<a name="anchor-116"></a>	Add free attach 
+\*-------------------------------------------------------------*/
+        ProTestSymDef_attach_add(drawing, &amp;symdef, (ProDtlsymdefattachType)attach_type, -1, 0.0, pos);
+	break;
+
+<a name="anchor-117"></a>    case PROSYMDEFATTACHTYPE_LEFT_LEADER :
+    case PROSYMDEFATTACHTYPE_RIGHT_LEADER :
+    case PROSYMDEFATTACHTYPE_ON_ITEM :
+    case PROSYMDEFATTACHTYPE_NORM_ITEM :
+/*-------------------------------------------------------------*\
+<a name="anchor-118"></a>	Select the entity in the sym defn. that represents the
+	attachment point.
+\*-------------------------------------------------------------*/
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;Select attachment point&quot;);
+	while(flg == 1)
+<a name="anchor-119"></a>	{
+	    p_entity = NULL;
+    	    
+		if(ProSelect((char*)&quot;draft_ent&quot;,1,NULL,NULL,NULL,NULL,&amp;p_sel,&amp;n_sel) &lt; 1) 
+			break;
+<a name="anchor-120"></a>		error = ProSelectionModelitemGet(p_sel[n], &amp;entity);
+
+		dtype = entity.type;
+
+		for(n=0; n&lt;n_sel; n++)
+<a name="anchor-121"></a>		{
+			if((entity.id == entitys[n].id)&amp;&amp;(dtype == entitys[n].type))
+			{
+				p_entity = &amp;newent[n];
+				break;
+<a name="anchor-122"></a>			}
+
+		}
+
+	    if(p_entity == NULL)
+<a name="anchor-123"></a>	    	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;That item is not part of the symbol&quot;);
+	    else
+		break;
+	}
+	if(p_entity == NULL)
+<a name="anchor-124"></a>	{
+/*-------------------------------------------------------------*\
+    Define all data for create new attach
+\*-------------------------------------------------------------*/
+		ProSelectionPoint3dGet(p_sel[0], pos);
+<a name="anchor-125"></a>		ProSelectionUvParamGet(p_sel[0], uv_param);
+		param = uv_param[0];
+	    ProTestSymDef_attach_add(drawing, &amp;symdef, (ProDtlsymdefattachType)attach_type, 
+		    p_entity->id, param, pos);
+	}
+<a name="anchor-126"></a>
+	break;
+    case PROSYMDEFATTACHTYPE_RADIAL_LEADER :
+/*-------------------------------------------------------------*\
+	The attachment type if RADIAL, so select a circle
+<a name="anchor-127"></a>\*-------------------------------------------------------------*/
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;Select circle&quot;);
+	while(flg == 1)
+	{
+	    p_entity = NULL;
+<a name="anchor-128"></a>
+	    if(ProSelect((char*)&quot;draft_ent&quot;,1,NULL,NULL,NULL,NULL,&amp;p_sel,&amp;n_sel) &lt; 1) 
+	    {
+		ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;Have't selected entity&quot;);
+		break;
+<a name="anchor-129"></a>	    }
+	
+		error = ProSelectionModelitemGet(p_sel[n], &amp;entity);
+
+		dtype = entity.type;
+<a name="anchor-130"></a>		
+		for(n=0;n&lt;n_sel;n++)
+		{
+			if((entity.id == entitys[n].id)&amp;&amp;(dtype == entitys[n].type))
+			{
+<a name="anchor-131"></a>				p_entity = &amp;newent[n];
+				break;
+			}
+
+		}
+<a name="anchor-132"></a>
+	    if(p_entity == NULL)
+	    	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;That item is not part of the symbol&quot;);
+	    else
+	    {
+<a name="anchor-133"></a>			ProDtlentityDataGet(&amp;entity, NULL, &amp;dtl_entdata);
+			ProDtlentitydataCurveGet(dtl_entdata, &amp;curve);
+
+/*-------------------------------------------------------------*\
+    Check - selected entity must be circle
+<a name="anchor-134"></a>\*-------------------------------------------------------------*/
+		if(curve.arc.type == PRO_ENT_ARC &amp;&amp;
+		   curve.arc.start_angle &lt;= EPSM10 &amp;&amp;
+		   curve.arc.end_angle >= (TWOPI - EPSM10))
+		    break;
+<a name="anchor-135"></a>		else
+		    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;That is not a circle&quot;);
+	    }
+	}
+	if(p_entity!=NULL)
+<a name="anchor-136"></a>	{
+
+/*-------------------------------------------------------------*\
+    Define all data for create new attach
+\*-------------------------------------------------------------*/
+<a name="anchor-137"></a>
+		ProSelectionPoint3dGet(p_sel[0], pos);
+		ProSelectionUvParamGet(p_sel[0], uv_param);
+		param = uv_param[0];
+
+<a name="anchor-138"></a>	    ProTestSymDef_attach_add(drawing, &amp;symdef, (ProDtlsymdefattachType)attach_type, 
+		    p_entity->id, param, pos);
+	}
+
+	break;
+<a name="anchor-139"></a>    } /* End of case statement */
+
+    error = ProMenubuttonActivate((char*)&quot;AttachType&quot;,(char*)&quot;Done&quot;);
+/*-------------------------------------------------------------*\
+    Setup ELBOW property for created symdef
+<a name="anchor-140"></a>\*-------------------------------------------------------------*/
+    if((attach_type == PROSYMDEFATTACHTYPE_RIGHT_LEADER)||(attach_type == PROSYMDEFATTACHTYPE_LEFT_LEADER))
+    {
+	ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enable elbow (y/n)&quot;);
+	error = ProDtlsymdefdataElbowSet(entdata, (ProBoolean)ProUtilYesnoGet((char*)&quot;Y&quot;));
+<a name="anchor-141"></a>	TEST_CALL_REPORT(&quot;ProDtlsymdefdataElbowSet()&quot;, &quot;ProTestSymDefCreate()&quot;, 
+		error, error != PRO_TK_NO_ERROR);
+    }
+
+/*-------------------------------------------------------------*\
+<a name="anchor-142"></a>    Select the type of height : FIXED, VARIABLE, or TEXT-RELATED
+\*-------------------------------------------------------------*/
+    height_type = TestHeightType();
+
+    if (height_type == -1) height_type = PRODTLSYMDEFHGHTTYPE_FIXED;
+<a name="anchor-143"></a>
+    error = ProDtlsymdefDataGet(&amp;symdef,&amp;entdata);
+    TEST_CALL_REPORT(&quot;ProDtlsymdefDataGet()&quot;, &quot;ProTestSymDefCreate()&quot;, 
+	error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-144"></a>/*-------------------------------------------------------------*\
+    If the height type is TEXT_RELATED, select the text
+\*-------------------------------------------------------------*/
+    if(error==PRO_TK_NO_ERROR)
+    {
+<a name="anchor-145"></a>	if(height_type == PRODTLSYMDEFHGHTTYPE_TEXTRELATED)
+	{
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;Select textl&quot;);
+	    while(flg == 1)
+	    {
+<a name="anchor-146"></a>		p_entity = NULL;
+		
+		if(ProSelect((char*)&quot;any_note&quot;,1,NULL,NULL,NULL,NULL,&amp;p_sel,&amp;n_sel) &lt; 1) 
+			break;
+/*-------------------------------------------------------------*\
+<a name="anchor-147"></a>    Check note, selected note must included in to the new symdef
+\*-------------------------------------------------------------*/
+		
+		error = ProSelectionModelitemGet(p_sel[n], &amp;entity);
+
+<a name="anchor-148"></a>		dtype = entity.type;
+
+		for(n=0;n&lt;n_sel;n++)
+		{
+			if((entity.id == entitys[n].id)&amp;&amp;(PRO_NOTE == entitys[n].type))
+<a name="anchor-149"></a>			{
+				p_entity = &amp;newent[n];
+				break;
+			}
+
+<a name="anchor-150"></a>		}
+
+		/* for n*/
+		if(p_entity == NULL)
+		    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;That note is not part of the symbol&quot;);
+<a name="anchor-151"></a>		else
+		    break;
+
+	    }/* while (1) */
+
+<a name="anchor-152"></a>	    if(p_entity!=NULL)
+	    {
+/*-------------------------------------------------------------*\
+    Setup text reference to the first text string in selected note. 
+\*-------------------------------------------------------------*/
+<a name="anchor-153"></a>		error = ProDtlsymdefdataTextrefSet(entdata, p_entity->id,0,0); 
+		TEST_CALL_REPORT(&quot;ProDtlsymdefdataTextrefSet()&quot;, 
+		&quot;ProTestSymDefCreate()&quot;, error, error != PRO_TK_NO_ERROR);
+	    } else 
+	    {   
+<a name="anchor-154"></a>		ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;,&quot;Set defaul height type: Fixed&quot;);
+		height_type = PRODTLSYMDEFHGHTTYPE_FIXED;
+	    }
+
+	}/* if PRODTLSYMDEFHGHTTYPE_TEXTRELATED */
+<a name="anchor-155"></a>
+	error = ProDtlsymdefdataHeighttypeSet(entdata, (ProDtlsymdefdataHeighttype)height_type);
+	TEST_CALL_REPORT(&quot;ProDtlsymdefdataHeighttypeSet()&quot;, &quot;ProTestSymDefCreate()&quot;, 
+	    error, error != PRO_TK_NO_ERROR);
+
+<a name="anchor-156"></a>/*-------------------------------------------------------------*\
+    Post all chenges to the new symdef
+\*-------------------------------------------------------------*/
+	error = ProDtlsymdefModify(&amp;symdef, entdata);
+	TEST_CALL_REPORT(&quot;ProDtlsymdefModify()&quot;, &quot;ProTestSymDefCreate()&quot;, 
+<a name="anchor-157"></a>	    error, error != PRO_TK_NO_ERROR);
+
+    }/* if PRO_TK_NO_ERROR */
+
+/*-------------------------------------------------------------*\
+<a name="anchor-158"></a>    Free all temporary variables
+\*-------------------------------------------------------------*/
+    if(entdata!=NULL)
+    {
+	error = ProDtlsymdefdataFree(entdata);
+<a name="anchor-159"></a>	TEST_CALL_REPORT(&quot;ProDtlsymdefdataFree()&quot;, &quot;ProTestSymDefCreate()&quot;, 
+	    error, error != PRO_TK_NO_ERROR);
+    }
+
+    if(entitys!=NULL)
+<a name="anchor-160"></a>    {
+	free(entitys);
+	entitys = NULL;
+    }
+
+<a name="anchor-161"></a>    if(newent!=NULL)
+    {
+	free(newent);
+	entitys = NULL;
+    }
+<a name="anchor-162"></a>
+    return(PRO_TK_NO_ERROR);
+}
+
+/*=========================================================================*\
+<a name="anchor-163"></a>    Function:	ProTestSymDefDelete()
+    Purpose:    Delete selected symdef from current drawing. 
+    Returns:	PRO_TK_NO_ERROR if success;
+\*=========================================================================*/
+ProError ProTestSymDefDelete(ProDrawing drawing)
+<a name="anchor-164"></a>{
+    ProError error;
+    ProDtlsymdef sym_def;
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Not implemented&quot; );
+<a name="anchor-165"></a>
+#if 0
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select Symdef for delete.&quot;);
+
+/*-------------------------------------------------------------*\
+<a name="anchor-166"></a>    Select symdef for delete.
+\*-------------------------------------------------------------*/
+    error = ProTestSymDefGet (drawing, &amp;sym_def);
+
+    if(error!=PRO_TK_NO_ERROR)
+<a name="anchor-167"></a>	return(PRO_TK_GENERAL_ERROR);
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Are you sure ? (y/n)&quot;);
+    if (!ProUtilYesnoGet(&quot;N&quot;))
+		return(PRO_TK_NO_ERROR); 
+<a name="anchor-168"></a>
+/*-------------------------------------------------------------*\
+    Delete selected symdef.
+\*-------------------------------------------------------------*/
+    error = ProDtlsymdefDelete(&amp;sym_def);
+<a name="anchor-169"></a>    TEST_CALL_REPORT(&quot;ProDtlsymdefDelete()&quot;,
+        &quot;ProTestSymDefDelete()&quot;, error, error != PRO_TK_NO_ERROR);
+
+    if(error==PRO_TK_NO_ERROR)
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Symdef success deleted&quot;);
+<a name="anchor-170"></a>    else
+	    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Error ! &quot;);
+#endif
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-171"></a>}
+</pre>
+</body>
+</html>

@@ -1,0 +1,189 @@
+<html>
+<head>
+<title>TestMeasure.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-2"></a>#include &quot;ProToolkit.h&quot;
+#include &quot;ProGeomitem.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProMdl.h&quot;
+#include &quot;ProSelection.h&quot;
+<a name="anchor-3"></a>#include &quot;ProUtil.h&quot;
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-4"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestFiletypes.h&quot;
+<a name="anchor-5"></a>#include &quot;UtilFiles.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;ProSurface.h>
+<a name="anchor-6"></a>/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+
+#define  USER_ANGLE_EVAL     0
+<a name="anchor-7"></a>#define  USER_DISTANCE_EVAL  1
+#define  USER_DIAMETER_EVAL  2
+
+/*====================================================================*\
+    FUNCTION :	ProTestMeasureMenu()
+<a name="anchor-8"></a>    PURPOSE  :	Commands for testing Geomitem...Eval in Pro/TOOLKIT
+\*====================================================================*/
+int ProTestMeasureMenu()
+{
+    ProMdl model;
+<a name="anchor-9"></a>    ProError status;
+    int action, menu_id;
+    int ProTestMeasure(ProAppData, int);
+
+    status = ProMdlCurrentGet(&amp;model);
+<a name="anchor-10"></a>    TEST_CALL_REPORT(&quot;ProMdlCurrentGet()&quot;, &quot;ProTestMeasureMenu()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+
+    status = ProMenuFileRegister((char*)&quot;TkMeasure&quot;, (char*)&quot;tkmeasure.mnu&quot;, &amp;menu_id);
+    TEST_CALL_REPORT(&quot;ProMenuFileRegister()&quot;, &quot;ProTestMeasureMenu()&quot;,
+<a name="anchor-11"></a>				    status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMeasure&quot;, (char*)&quot;Angle&quot;, (ProMenubuttonAction)ProTestMeasure,
+                                     model, USER_ANGLE_EVAL);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestMeasureMenu()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-12"></a>    status = ProMenubuttonActionSet((char*)&quot;TkMeasure&quot;, (char*)&quot;Distance&quot;, (ProMenubuttonAction)ProTestMeasure,
+                                     model, USER_DISTANCE_EVAL);
+    TEST_CALL_REPORT((char*)&quot;ProMenubuttonActionSet()&quot;, (char*)&quot;ProTestMeasureMenu()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMeasure&quot;, (char*)&quot;Diameter&quot;, (ProMenubuttonAction)ProTestMeasure,
+<a name="anchor-13"></a>                                     model, USER_DIAMETER_EVAL);
+    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestMeasureMenu()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet((char*)&quot;TkMeasure&quot;, (char*)&quot;TkMeasure&quot;, 
+			(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-14"></a>    TEST_CALL_REPORT(&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestMeasureMenu()&quot;,
+				    status, status != PRO_TK_NO_ERROR);
+    /* Display Menu and set it into action. */
+    status = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkMeasure&quot;, &amp;menu_id);
+    TEST_CALL_REPORT(&quot;ProMenuCreate()&quot;, &quot;ProTestMeasureMenu()&quot;,
+<a name="anchor-15"></a>                      status, status != PRO_TK_NO_ERROR);
+    status = ProMenuProcess((char*)&quot;TkTkMeasure&quot;, &amp;action);
+    TEST_CALL_REPORT(&quot;ProMenuProcess()&quot;, &quot;ProTestMeasureMenu()&quot;,
+		status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_FOUND);
+
+<a name="anchor-16"></a>    return(1);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestMeasure
+<a name="anchor-17"></a>    PURPOSE  :	Commands for testing Geomitem...Eval in Pro/TOOLKIT
+\*====================================================================*/
+int ProTestMeasure(ProAppData app_data, int option)
+{
+    ProMdl model = (ProMdl) app_data;
+<a name="anchor-18"></a>    ProError status;
+    int allow, p_count;
+    ProCharLine string;
+    char *ch;
+    double dist, diam;
+<a name="anchor-19"></a>    ProSelection *p_sel_arr;
+    ProModelitem mod_item;
+    ProSurface surf;
+    ProUvParam uv_par;
+    ProCharLine fname;
+<a name="anchor-20"></a>    FILE *fp;
+
+    ProTestQcrName(&amp;model, (char*)&quot;.msr&quot;, fname);
+    if ( (fp = PTApplsUnicodeFopen(fname,&quot;a&quot;)) == NULL )
+           return(-1);
+<a name="anchor-21"></a>
+    dist = 0.0;
+    switch(option)
+    {
+	case  USER_ANGLE_EVAL:
+<a name="anchor-22"></a>	    ch = (char*)&quot;edge&quot;;
+	    allow =2;
+	    break;
+        case  USER_DISTANCE_EVAL:
+	    ch =(char*)&quot;surface,point,axis&quot;;
+<a name="anchor-23"></a>	    allow = 2;
+	    break;
+        case  USER_DIAMETER_EVAL:
+	    ch = (char*)&quot;surface&quot;;
+	    allow = 1;
+<a name="anchor-24"></a>	    break;
+	default:
+	    return (-1);
+    }
+
+<a name="anchor-25"></a>    /*  Get the user's selection  */
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select a geometry&quot;);
+    status = ProSelect(ch, allow, NULL, NULL, NULL, NULL,
+		&amp;p_sel_arr, &amp;p_count);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestMeasure()&quot;,
+<a name="anchor-26"></a>                      status, status != PRO_TK_NO_ERROR);
+    if (status != PRO_TK_NO_ERROR || p_count &lt; allow)
+	return (0);
+
+    switch (option)
+<a name="anchor-27"></a>    {
+	case  USER_ANGLE_EVAL:
+	    status = ProGeomitemAngleEval(p_sel_arr[0], p_sel_arr[1], &amp;dist);
+	    TEST_CALL_REPORT(&quot;ProGeomitemAngleEval()&quot;, &quot;ProTestMeasure()&quot;,
+                        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-28"></a>	    ch = (char*)&quot;Angle&quot;;
+	    break;
+	case  USER_DISTANCE_EVAL:
+	    status = ProGeomitemDistanceEval(p_sel_arr[0], p_sel_arr[1], &amp;dist);
+	    TEST_CALL_REPORT(&quot;ProGeomitemDistanceEval()&quot;, &quot;ProTestMeasure()&quot;,
+<a name="anchor-29"></a>                        status, status != PRO_TK_NO_ERROR);
+	    ch = (char*)&quot;Distance&quot;;
+	    break;    
+	case  USER_DIAMETER_EVAL:
+          status =  ProSelectionModelitemGet(p_sel_arr[0], &amp;mod_item);
+<a name="anchor-30"></a>          TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestMeasure()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+
+          status =  ProSelectionUvParamGet(p_sel_arr[0], uv_par);
+          TEST_CALL_REPORT(&quot;ProSelectionUvParamGet()&quot;, &quot;ProTestMeasure()&quot;,
+<a name="anchor-31"></a>                      status, status != PRO_TK_NO_ERROR);
+
+          status = ProGeomitemToSurface((ProGeomitem*)&amp;mod_item, &amp;surf);
+          TEST_CALL_REPORT(&quot;ProGeomitemToSurface()&quot;, &quot;ProTestMeasure()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+<a name="anchor-32"></a>
+          status = ProSurfaceDiameterEval(surf, uv_par, &amp;diam);
+          TEST_CALL_REPORT(&quot;ProSurfaceDiameterEval()&quot;, &quot;ProTestMeasure()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-33"></a>          status = ProGeomitemDiameterEval(p_sel_arr[0], &amp;dist);
+          TEST_CALL_REPORT(&quot;ProGeomitemDiameterEval()&quot;, &quot;ProTestMeasure()&quot;,
+                      status, status != PRO_TK_NO_ERROR);	    
+	  if (dist != diam)
+	      ProTKFprintf(fp, &quot;Error: ProSurfaceDiameterEval and &quot;
+<a name="anchor-34"></a>		  &quot;ProGeomitemDiameterEval return different value!\n&quot;);
+	  ch = (char*)&quot;Diameter&quot;;
+	break;
+    }
+    ProTKSprintf(string, &quot;%s = %7.3f&quot;, ch, dist);
+<a name="anchor-35"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, string);
+
+    ProTKFprintf(fp, &quot;%s\n&quot;, string);
+    fclose(fp);
+    return (0);
+<a name="anchor-36"></a>}
+</pre>
+</body>
+</html>

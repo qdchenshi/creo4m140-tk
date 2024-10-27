@@ -1,0 +1,880 @@
+<HTML>
+<HEAD>
+<META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<TITLE>ProSelection.h</TITLE>
+</HEAD>
+<BODY BGCOLOR="#ffffff">
+<PRE>#ifndef <A HREF="proselection_h.html#PROSELECTION_H">PROSELECTION_H</A> 
+<A name="PROSELECTION_H"></A>#define PROSELECTION_H
+
+/* 
+   Creo Parametric TOOLKIT declarations for <A HREF="proselection_h.html#ProSelection">ProSelection</A>, ProSellist and 
+   ProCompPath related actions
+*/
+
+#include &lt;<A HREF="proobjects_h.html">ProObjects.h</A>&gt;
+#include &lt;<A HREF="proview_h.html">ProView.h</A>&gt;
+#include &lt;<A HREF="proasmcomppath_h.html">ProAsmcomppath.h</A>&gt;
+
+
+
+<A HREF="proansi_h.html#PRO_BEGIN_C_DECLS">PRO_BEGIN_C_DECLS</A>
+
+/* this is an opaque handle, which the user should not dereference */
+<A name="ProSelection"></A>typedef struct select3d *<A HREF="proselection_h.html#ProSelection">ProSelection</A>;
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3753.html">ProSelectionPreFilter</A>) ( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+					    <A HREF="proobjects_h.html#Pro3dPnt">Pro3dPnt</A>     point,
+					    <A HREF="proobjects_h.html#ProMatrix">ProMatrix</A>    transform,
+					    char        *option,
+					    int          level,
+					    <A HREF="proobjects_h.html#ProAppData">ProAppData</A>   app_data );
+/*
+    Purpose: This is the user-defined, pre-filter function. Every selection 
+             candidate will be called.
+
+    Input Arguments:
+        selection - The selection handle.
+        point - The selected point in screen coords.
+        transform - The current view matrix.
+        option - Tells how far through the Creo Parametric selection process to 
+                 go. The value is the same as is passed to &lt;b&gt;<A HREF="3772.html">ProSelect</A>()&lt;/b&gt; 
+                 with the addition to a view, part, or assembly.
+        level - The current depth of the assembly hierarchy.
+        app_data - The user data passed to &lt;b&gt;<A HREF="3772.html">ProSelect</A>()&lt;/b&gt;.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Accept the selection.
+        Other - Ignore the selection.
+
+*/
+
+
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3754.html">ProSelectionPostFilter</A>) ( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+					     <A HREF="proobjects_h.html#ProAppData">ProAppData</A>   app_data) ;
+/*
+    Purpose: This is the user-defined, post-filter function. Called before 
+             being added to the stack for QUERY_SELCT every potential selection 
+             is validated by calling the <A HREF="3754.html">ProSelectionPostFilter.</A>
+
+    Input Arguments:
+        selection - The handle to the selection made
+        app_data - The user data passed to &lt;b&gt;<A HREF="3772.html">ProSelect</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Accept the selection.
+        Other - Ignore the selection.
+
+*/
+	
+typedef <A HREF="protoolkiterrors_h.html#ProError">ProError</A> (*<A HREF="3755.html">ProSelectionPostSelact</A>) ( <A HREF="proobjects_h.html#Pro3dPnt">Pro3dPnt</A>     point,
+					     <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+					     <A HREF="proobjects_h.html#ProAppData">ProAppData</A>   app_data) ;
+/*
+    Purpose: This is the user-defined, post-selection callback function. Called 
+             on a selection after QUERY_SELECT
+
+    Input Arguments:
+        point - The selected point
+        selection - The handle to the selection made
+        app_data - The user data passed to &lt;b&gt;<A HREF="3772.html">ProSelect</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Accept the selection.
+        Other - Ignore the selection.
+
+*/
+
+<A name="ProSelFunctions"></A>typedef struct pro_sel_functions
+{
+   <A HREF="3753.html">ProSelectionPreFilter</A>   pre_filter;
+   <A HREF="3754.html">ProSelectionPostFilter</A>  post_filter;
+   <A HREF="3755.html">ProSelectionPostSelact</A>  post_selact;
+   <A HREF="proobjects_h.html#ProAppData">ProAppData</A>              app_data;
+} <A HREF="proselection_h.html#ProSelFunctions">ProSelFunctions</A>;
+
+typedef void (*<A HREF="3756.html">ProSelectionStartNotify</A>) ( <A HREF="proobjects_h.html#ProAppData">ProAppData</A>   ext_data) ;
+/*
+    Purpose: Allows applications to make their media ready for <A HREF="3772.html">ProSelect</A> 
+             interaction.This is called once upon entering <A HREF="3772.html">ProSelect</A>().
+
+    Input Arguments:
+        ext_data - The user data passed to &lt;b&gt;<A HREF="3772.html">ProSelect</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Accept the selection.
+        Other - Ignore the selection.
+
+*/
+
+
+typedef void (*<A HREF="3757.html">ProSelectionExtHighlightAct</A>) ( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+                                              <A HREF="protoolkit_h.html#ProBoolean">ProBoolean</A> highlight,
+                                             <A HREF="proobjects_h.html#ProAppData">ProAppData</A>   ext_data) ;
+/*
+    Purpose: This is called when an item is selected/unselected and asks 
+             external application to highlight/unhighlight an entry in their 
+             media corresponding to the passed selection. In case selection is 
+             NULL and highlight is <A HREF="protoolkit_h.html#PRO_B_FALSE">PRO_B_FALSE</A> application should clear all 
+             highlighting.
+
+    Input Arguments:
+        selection - The handle to the selection made
+        highlight - The user's choice to highlight/unhighlight
+        ext_data - The user data passed to &lt;b&gt;<A HREF="3772.html">ProSelect</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Accept the selection.
+        Other - Ignore the selection.
+
+*/
+
+					     
+typedef void (*<A HREF="3758.html">ProSelectionEndNotify</A>) ( <A HREF="proobjects_h.html#ProAppData">ProAppData</A>   ext_data) ;
+/*
+    Purpose: Allows applications to clean their media. Called once upon exiting 
+             <A HREF="3772.html">ProSelect</A>().
+
+    Input Arguments:
+        ext_data - The user data passed to &lt;b&gt;<A HREF="3772.html">ProSelect</A>()&lt;/b&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Accept the selection.
+        Other - Ignore the selection.
+
+*/
+
+<A name="ProSelectExternalhighlightFunctions"></A>typedef struct pro_select_ext_highlight_functions
+{
+   <A HREF="3756.html">ProSelectionStartNotify</A>   sel_start;
+   <A HREF="3757.html">ProSelectionExtHighlightAct</A>  highlight;
+   <A HREF="3758.html">ProSelectionEndNotify</A>    sel_end;
+   <A HREF="proobjects_h.html#ProAppData">ProAppData</A>              ext_data;
+} <A HREF="proselection_h.html#ProSelectExternalhighlightFunctions">ProSelectExternalhighlightFunctions</A>;
+
+<A name="ProSelectionEnvAttr"></A>typedef enum
+{
+<A name="PRO_SELECT_DONE_REQUIRED"></A>   PRO_SELECT_DONE_REQUIRED    = 50,
+<A name="PRO_SELECT_BY_MENU_ALLOWED"></A>   PRO_SELECT_BY_MENU_ALLOWED  = 51,
+<A name="PRO_SELECT_BY_BOX_ALLOWED"></A>   PRO_SELECT_BY_BOX_ALLOWED   = 52,
+<A name="PRO_SELECT_ACTIVE_COMPONENT_IGNORE"></A>   PRO_SELECT_ACTIVE_COMPONENT_IGNORE   = 53,
+<A name="PRO_SELECT_HIDE_SEL_DLG"></A>   PRO_SELECT_HIDE_SEL_DLG   = 54
+} <A HREF="proselection_h.html#ProSelectionEnvAttr">ProSelectionEnvAttr</A>;
+
+<A name="ProSelectionEnvOption"></A>typedef struct
+{
+   <A HREF="proselection_h.html#ProSelectionEnvAttr">ProSelectionEnvAttr</A>   attribute;
+   int                   value;
+} <A HREF="proselection_h.html#ProSelectionEnvOption">ProSelectionEnvOption</A>;
+
+<A name="ProSelectRecordAction"></A>typedef enum
+{
+<A name="PRO_SELECT_OVERRIDE"></A>  PRO_SELECT_OVERRIDE,
+<A name="PRO_SELECT_TOGGLE"></A>  PRO_SELECT_TOGGLE
+} <A HREF="proselection_h.html#ProSelectRecordAction">ProSelectRecordAction</A>;
+
+<A name="ProSelAppAction"></A>typedef void *<A HREF="proselection_h.html#ProSelAppAction">ProSelAppAction</A>;
+
+<A name="ProSelectionEnv"></A>typedef struct appl_sel_env* <A HREF="proselection_h.html#ProSelectionEnv">ProSelectionEnv</A>;
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3759.html">ProSelectionAlloc</A>( <A HREF="proobjects_h.html#ProAsmcomppath">ProAsmcomppath</A> *p_cmp_path,
+				   <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A> *p_mdl_itm,
+				   <A HREF="proselection_h.html#ProSelection">ProSelection</A> *p_selection );
+/*
+    Purpose: Allocates and optionally fills in a selection object. 
+             &lt;p&gt; The allowed combinations of input arguments are as follows: 
+             &lt;table&gt; 
+             &lt;tr&gt; &lt;td&gt;&lt;b&gt;p_cmp_path&lt;/b&gt;&lt;/td&gt; &lt;td&gt;&lt;b&gt;p_mdl_itm&lt;/b&gt;&lt;/td&gt; &lt;/tr&gt; 
+             &lt;tr&gt; &lt;td&gt;!NULL&lt;/td&gt;&lt;td&gt;!NULL&lt;/td&gt; &lt;/tr&gt; 
+             &lt;tr&gt; &lt;td&gt;NULL&lt;/td&gt;&lt;td&gt;!NULL&lt;/td&gt; &lt;/tr&gt; 
+             &lt;tr&gt; &lt;td&gt;NULL&lt;/td&gt;&lt;td&gt;NULL&lt;/td&gt; &lt;/tr&gt; &lt;/table&gt;
+
+    Input Arguments:
+        p_cmp_path - The component path. Can be NULL only in case of parts. 
+                     Cannot be NULL in case of assemblies.
+        p_mdl_itm - The model item (can be NULL)
+
+    Output Arguments:
+        p_selection - The allocated selection object
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully allocated the selection.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The allocation failed.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3760.html">ProSelectionCopy</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A>  from_selection,
+				  <A HREF="proselection_h.html#ProSelection">ProSelection</A>  *p_to_selection );
+/*
+    Purpose: Copies a selection object.
+
+    Input Arguments:
+        from_selection - The selection object to copy
+
+    Output Arguments:
+        p_to_selection - The copied selection object
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully copied the selection.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The copy failed.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3761.html">ProSelectionFree</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> *p_selection );
+/*
+    Purpose: Frees a preallocated selection object.
+
+    Input Arguments:
+        p_selection - The address of the selection object
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully freed the selection.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The supplied inputs were incorrect.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3762.html">ProSelectionarrayFree</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> *sel_array );
+/*
+    Purpose: Frees a <A HREF="proarray_h.html#ProArray">ProArray</A> of allocated selection objects (also frees each 
+             member <A HREF="proselection_h.html#ProSelection">ProSelection</A>).
+
+    Input Arguments:
+        sel_array - The selection object array.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully freed the selection.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The supplied inputs were incorrect.
+
+*/
+
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3763.html">ProSelectionSet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A>  selection,
+				 <A HREF="proobjects_h.html#ProAsmcomppath">ProAsmcomppath</A> *p_cmp_path,
+				 <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A> *p_mdl_itm );
+/*
+    Purpose: Sets the model item (and optionally a component path) for a 
+             selection object.
+
+    Input Arguments:
+        selection - The selection object
+        p_cmp_path - The component path (can be null)
+        p_mdl_itm - The model item
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully set the component path.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The supplied inputs were incorrect.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3764.html">ProSelectionAsmcomppathGet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A>  selection,
+					    <A HREF="proobjects_h.html#ProAsmcomppath">ProAsmcomppath</A> *p_cmp_path );
+/*
+    Purpose: Gets the component path from a selection object.
+
+    Input Arguments:
+        selection - The selection object.
+        p_cmp_path - The component path. You must allocate the memory for this 
+                     structure.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the component 
+                          path.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The supplied inputs were incorrect.
+
+*/
+
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3765.html">ProSelectionModelitemGet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+					  <A HREF="proobjects_h.html#ProModelitem">ProModelitem</A> *p_mdl_item );
+/*
+    Purpose: Gets the model item from a selection object.
+
+    Input Arguments:
+        selection - The selection object.
+
+    Output Arguments:
+        p_mdl_item - The model item.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the model item.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NOT_EXIST">PRO_TK_NOT_EXIST</A> - The model item doesn't exist.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The supplied inputs were incorrect.
+
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3766.html">ProSelectionUvParamSet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+					<A HREF="proobjects_h.html#ProUvParam">ProUvParam</A> uv_param );
+/*
+    Purpose: Sets the UV-parameters to a selection object. 
+             &lt;p&gt; NOTE: 
+             &lt;p&gt; This applies to surface selections only.
+
+    Input Arguments:
+        selection - The selection object
+        uv_param - The UV-parameters
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully set the UV-parameters
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The supplied inputs were incorrect.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3767.html">ProSelectionUvParamGet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+					<A HREF="proobjects_h.html#ProUvParam">ProUvParam</A> uv_param );
+/*
+    Purpose: Gets the UV-parameters from a selection object.
+
+    Input Arguments:
+        selection - The selection object
+        uv_param - The UV-parameters
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the UV-paramters.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The supplied inputs were incorrect.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3768.html">ProSelectionViewGet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+				     <A HREF="proview_h.html#ProView">ProView</A>* p_view );
+/*
+    Purpose: Gets the handle to the view from the selection object.
+
+    Input Arguments:
+        selection - The selection object
+
+    Output Arguments:
+        p_view - The view handle
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The supplied inputs were incorrect.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3769.html">ProSelectionPoint3dGet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+					<A HREF="proobjects_h.html#ProPoint3d">ProPoint3d</A>   point  );
+/*
+    Purpose: Retrieves the coordinates of the selected point in the member 
+             coordinate system.
+
+    Input Arguments:
+        selection - The selection object
+
+    Output Arguments:
+        point - The point coordinates
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The selection or depth is NULL.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_INVALID_PTR">PRO_TK_INVALID_PTR</A> - The selection argument is an invalid pointer.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3770.html">ProSelectionWindowIdGet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+					 int*         window_id  );
+/*
+    Purpose: Retrieves the window id in which selection was made.
+
+    Input Arguments:
+        selection - The selection object
+
+    Output Arguments:
+        window_id - The window id
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The selection or depth is NULL.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_INVALID_PTR">PRO_TK_INVALID_PTR</A> - The selection argument is an invalid pointer.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3771.html">ProSelectionDepthGet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+				      double*      depth  );
+/*
+    Purpose: Gets the selection depth, in screen coordinates.
+
+    Input Arguments:
+        selection - The selection object
+
+    Output Arguments:
+        depth - The selection depth, in screen coordinates
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully retrieved the information.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The selection or depth is NULL.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_INVALID_PTR">PRO_TK_INVALID_PTR</A> - The selection argument is an invalid pointer.
+
+*/
+ 
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3772.html">ProSelect</A>( char              option[],
+			   int               max_count,
+			   <A HREF="proselection_h.html#ProSelection">ProSelection</A>     *p_in_sel,
+			   <A HREF="proselection_h.html#ProSelFunctions">ProSelFunctions</A>  *sel_func,
+			   <A HREF="proselection_h.html#ProSelectionEnv">ProSelectionEnv</A>   sel_env,
+			   <A HREF="proselection_h.html#ProSelAppAction">ProSelAppAction</A>   appl_act_data,
+			   <A HREF="proselection_h.html#ProSelection">ProSelection</A>    **p_sel_array,
+			   int              *p_n_sels );
+/*
+    Purpose: Selects an object in a Creo Parametric window. 
+             &lt;p&gt; NOTE: If the user ends the selection without actually making 
+             any, <A HREF="3772.html">ProSelect</A> will return <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> with (*p_n_sels) as 
+             zero and p_sel_array as NULL. 
+             &lt;p&gt;
+
+    Input Arguments:
+        option - The selection filter. See the &lt;i&gt;Creo Parametric TOOLKIT 
+                 User's Guide&lt;/i&gt; for more information.
+        max_count - The maximum number of selections allowed.
+        p_in_sel - A &lt;i&gt;<A HREF="proarray_h.html#ProArray">ProArray</A>&lt;/i&gt; of pointers to &lt;i&gt;<A HREF="proselection_h.html#ProSelection">ProSelection</A>&lt;/i&gt; 
+                   structures (from a previous call to selection) used to 
+                   initialize the array of selections. This can be NULL.
+        sel_func - A pointer to a structure of filter functions. This can be 
+                   NULL.
+        sel_env - Use <A HREF="3777.html">ProSelectionEnvAlloc</A>() to allocate this argument. Can be 
+                  NULL.
+        appl_act_data - NULL in Release 18 and higher.
+
+    Output Arguments:
+        p_sel_array - A pointer to an array of &lt;i&gt;<A HREF="proselection_h.html#ProSelection">ProSelection</A>&lt;/i&gt; structures. 
+                      This argument points to static memory allocated by the 
+                      function. It is reallocated on subsequent calls to this 
+                      function.
+        p_n_sels - The actual number of selections made.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The user made a selection, or chose &lt;b&gt;Done&lt;/b&gt;.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_USER_ABORT">PRO_TK_USER_ABORT</A> - The user chose &lt;b&gt;Quit&lt;/b&gt;.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_PICK_ABOVE">PRO_TK_PICK_ABOVE</A> - Selection was interrupted by a user's pick on any 
+                            button from above menus.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_DEADLOCK">PRO_TK_E_DEADLOCK</A> - The Creo Parametric user interface is not prepared 
+                            to handle this request (because it is blocked by 
+                            another process such as an OLE container 
+                            activation).
+
+    See Also:
+        <A HREF="3777.html">ProSelectionEnvAlloc</A>()
+*/
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3773.html">ProSelectionVerify</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection  );
+/*
+    Purpose: Verifies the validity of the &lt;i&gt;<A HREF="proselection_h.html#ProSelection">ProSelection</A>&lt;/i&gt;.
+
+    Input Arguments:
+        selection - The selection to verify
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully verified the selection.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_INVALID_TYPE">PRO_TK_INVALID_TYPE</A> - Selection is invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The verification failed.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3774.html">ProSelectionHighlight</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,
+				       <A HREF="protoolkit_h.html#ProColortype">ProColortype</A> color );
+/*
+    Purpose: Highlights the selection in the current window. The selection 
+             remains highlighted until you call the function 
+             &lt;b&gt;<A HREF="3776.html">ProSelectionUnhighlight</A>()&lt;/b&gt;.
+
+    Input Arguments:
+        selection - The selection to highlight
+        color - The highlight color
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully highlighted the selection.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the arguments are invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3775.html">ProSelectionDisplay</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection  );
+/*
+    Purpose: Displays the selection. Note that this is a one-time action (the 
+             next repaint will erase this display).
+
+    Input Arguments:
+        selection - The selection to display
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully displayed the selection.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The input argument is invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3776.html">ProSelectionUnhighlight</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection  );
+/*
+    Purpose: Removes the highlighting from the selection, which was highlighted 
+             by a previous call to &lt;b&gt;<A HREF="3774.html">ProSelectionHighlight</A>()&lt;/b&gt;.
+
+    Input Arguments:
+        selection - The selection from which to remove the highlighting
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully removed the highlighting.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The argument is invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3777.html">ProSelectionEnvAlloc</A>( <A HREF="proselection_h.html#ProSelectionEnvOption">ProSelectionEnvOption</A>*  sel_env_array,
+				      int                     count,
+				      <A HREF="proselection_h.html#ProSelectionEnv">ProSelectionEnv</A>*        p_sel_env );
+/*
+    Purpose: Allocates a &lt;i&gt;<A HREF="proselection_h.html#ProSelectionEnv">ProSelectionEnv</A>&lt;/i&gt;, which is a set of attributes 
+             that can be passed to &lt;b&gt;<A HREF="3772.html">ProSelect</A>()&lt;/b&gt;.
+
+    Input Arguments:
+        sel_env_array - An array of the attributes (the type and value) 
+                        assigned to it
+        count - The number of items in &lt;i&gt;sel_env_array&lt;/i&gt;
+
+    Output Arguments:
+        p_sel_env - The handle to the &lt;i&gt;<A HREF="proselection_h.html#ProSelectionEnv">ProSelectionEnv</A>&lt;/i&gt;
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully allocated the structure.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The specified attributes are invalid.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3778.html">ProSelectionEnvFree</A>( <A HREF="proselection_h.html#ProSelectionEnv">ProSelectionEnv</A> p_sel_env  );
+/*
+    Purpose: Frees the &lt;i&gt;<A HREF="proselection_h.html#ProSelectionEnv">ProSelectionEnv</A>&lt;/i&gt; allocated by 
+             &lt;b&gt;<A HREF="3777.html">ProSelectionEnvAlloc</A>()&lt;/b&gt;.
+
+    Input Arguments:
+        p_sel_env - A valid handle to the &lt;i&gt;<A HREF="proselection_h.html#ProSelectionEnv">ProSelectionEnv</A>&lt;/i&gt;
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully freed the memory.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - The argument &lt;i&gt;p_sel_env&lt;/i&gt; is NULL.
+
+*/
+
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A>  <A HREF="3779.html">ProSelectionViewSet</A>( <A HREF="proview_h.html#ProView">ProView</A> view, 
+                                      <A HREF="proselection_h.html#ProSelection">ProSelection</A> *p_prosel);
+/*
+    Purpose: Sets the view of the <A HREF="proselection_h.html#ProSelection">ProSelection</A> to the user provided <A HREF="proview_h.html#ProView">ProView.</A>
+
+    Input Arguments:
+        view - user-provided <A HREF="proview_h.html#ProView">ProView.</A>
+        p_prosel - pointer to user-provided <A HREF="proselection_h.html#ProSelection">ProSelection.</A>
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully set the view.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One of the arguments is NULL.
+
+*/
+
+
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3780.html">ProSelectionPoint3dSet</A>( <A HREF="proobjects_h.html#ProPoint3d">ProPoint3d</A> point, 
+                                        <A HREF="proselection_h.html#ProSelection">ProSelection</A> *p_prosel);
+/*
+    Purpose: Uses user-provided <A HREF="proobjects_h.html#ProPoint3d">ProPoint3d</A> to set the selected-point of the 
+             <A HREF="proselection_h.html#ProSelection">ProSelection.</A>
+
+    Input Arguments:
+        point - User-provided <A HREF="proobjects_h.html#ProPoint3d">ProPoint3d.</A>
+        p_prosel - Pointer to user-provided <A HREF="proselection_h.html#ProSelection">ProSelection.</A>
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully set the selected-point of 
+                          the <A HREF="proselection_h.html#ProSelection">ProSelection.</A>
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One of the arguments is NULL.
+
+*/
+  
+                                      
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3781.html">ProSelectionDwgtblcellGet</A>(<A HREF="proselection_h.html#ProSelection">ProSelection</A> selection, 
+                                          int *table_segment, 
+                                          int *row, 
+                                          int *column);
+/*
+    Purpose: For a <A HREF="proselection_h.html#ProSelection">ProSelection</A> representing a cell of a drawing table, returns 
+             the table segment, row and column of the cell. 
+             &lt;p&gt; This function returns row and column indices starting from 
+             0.0. Add one to these values to obtain the correct row and column 
+             indices for use with other <A HREF="proobjects_h.html#ProDwgtable">ProDwgtable</A> functions.
+
+    Input Arguments:
+        selection - <A HREF="proselection_h.html#ProSelection">ProSelection</A> representing a cell of a drawing table.
+
+    Output Arguments:
+        table_segment - Corresponding table segment, equals sel_elem_id of 
+                        selection.
+        row - row of table which contains the cell.
+        column - column of the table which contains the cell.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully set the selected-point of 
+                          the <A HREF="proselection_h.html#ProSelection">ProSelection.</A>
+
+*/
+
+
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3782.html">ProSelectionDwgtableGet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection, 
+                                         <A HREF="proobjects_h.html#ProDwgtable">ProDwgtable</A> * table);
+/*
+    Purpose: For a <A HREF="proselection_h.html#ProSelection">ProSelection</A> representing a cell of a drawing table, returns 
+             the table from which the cell was selected.
+
+    Input Arguments:
+        selection - <A HREF="proselection_h.html#ProSelection">ProSelection</A> representing a cell of a drawing table.
+
+    Output Arguments:
+        table - The table from which the cell was selected.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - selection not provided, selection not a table cell, 
+                            or <A HREF="proobjects_h.html#ProDwgtable">ProDwgtable</A> for output not provided.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Successfully found table corresponding to the table 
+                          cell.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3783.html">ProSelectionDrawingGet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> selection, 
+                                        <A HREF="proobjects_h.html#ProDrawing">ProDrawing</A> * drawing);
+/*
+    Purpose: For a <A HREF="proselection_h.html#ProSelection">ProSelection</A> representing a entities selected in a drawing 
+             returns the drawing model handle from which the entities were 
+             selected
+
+    Input Arguments:
+        selection - <A HREF="proselection_h.html#ProSelection">ProSelection</A> representing an entity selected in a drawing
+
+    Output Arguments:
+        drawing - The drawing model handle from which the selection was made
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - invalid inputs
+        <A HREF="protoolkiterrors_h.html#PRO_TK_E_NOT_FOUND">PRO_TK_E_NOT_FOUND</A> - no associated drawing found
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - Successfully in finding the drawing for the selection
+
+*/
+
+
+extern  <A HREF="protoolkiterrors_h.html#ProError">ProError</A>  <A HREF="3784.html">ProSelectionCollectionGet</A>( <A HREF="proselection_h.html#ProSelection">ProSelection</A> sel,
+                                             <A HREF="proobjects_h.html#ProCollection">ProCollection</A>* collection );
+/*
+    Purpose: Get the <A HREF="proobjects_h.html#ProCollection">ProCollection</A> object from a <A HREF="proselection_h.html#ProSelection">ProSelection.</A>
+
+    Input Arguments:
+        sel - The selection object
+
+    Output Arguments:
+        collection - The collection object
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function succeeded.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more arguments was invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_INVALID_TYPE">PRO_TK_INVALID_TYPE</A> - The selection object does not contain a 
+                              collection.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_INVALID_PTR">PRO_TK_INVALID_PTR</A> - The selection object contains a chain, but this 
+                             chain reference is no longer valid. Chain 
+                             references contained in ProSelections are only 
+                             valid for as long as the chain is selected in the 
+                             selection buffer.
+
+    See Also:
+        <A HREF="3752.html">ProSelbufferCollectionAdd</A>()
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3785.html">ProSelectionDistanceEval</A> (<A HREF="proselection_h.html#ProSelection">ProSelection</A> p_selection1,
+					  <A HREF="proselection_h.html#ProSelection">ProSelection</A> p_selection2,
+					  <A HREF="proobjects_h.html#Pro2dPnt">Pro2dPnt</A> param_1,
+					  <A HREF="proobjects_h.html#Pro2dPnt">Pro2dPnt</A> param_2,
+					  <A HREF="proobjects_h.html#Pro3dPnt">Pro3dPnt</A> pnt_1,
+					  <A HREF="proobjects_h.html#Pro3dPnt">Pro3dPnt</A> pnt_2,
+					  double *p_result );
+/*
+    Purpose: Evaluate the distance between two items. Objects can be surfaces, 
+             entities, surface-curves, surface-nodes, or points. The selected 
+             points on the objects are used as the initial guesses. In case of 
+             error, p_result will be set to -1.0 and all params will be set to 
+             0.0. &lt;b&gt;Note: &lt;/b&gt; This function works incorrectly for datum 
+             planes and axes. The resulted distance is measured to the selected 
+             point instead of the projection to the datum/axis. Please use 
+             instead <A HREF="3786.html">ProSelectionWithOptionsDistanceEval.</A>
+
+    Input Arguments:
+        p_selection1 - The first selection.
+        p_selection2 - The second selection.
+
+    Output Arguments:
+        param_1 - UV params of the critical point on the first item.
+        param_2 - UV params of the critical point on the second item.
+        pnt_1 - Critical point on the first item.
+        pnt_2 - Critical point on the second item.
+        p_result - The resulting distance between the two items.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully evaluated the distance.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_CONTEXT">PRO_TK_BAD_CONTEXT</A> - Not applicable to the input selections.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3786.html">ProSelectionWithOptionsDistanceEval</A> (
+                   <A HREF="proselection_h.html#ProSelection">ProSelection</A> p_selection1,
+                   <A HREF="protoolkit_h.html#ProBool">ProBool</A> option1, 
+                   <A HREF="proselection_h.html#ProSelection">ProSelection</A> p_selection2,
+                   <A HREF="protoolkit_h.html#ProBool">ProBool</A> option2,
+                   <A HREF="proobjects_h.html#Pro2dPnt">Pro2dPnt</A> param_1,
+                   <A HREF="proobjects_h.html#Pro2dPnt">Pro2dPnt</A> param_2,
+                   <A HREF="proobjects_h.html#Pro3dPnt">Pro3dPnt</A> pnt_1,
+                   <A HREF="proobjects_h.html#Pro3dPnt">Pro3dPnt</A> pnt_2,
+                   double *p_result );
+/*
+    Purpose: Evaluate the distance between two items. Objects can be surfaces, 
+             edges, entities, vertices, datums or quilts. The selected points 
+             on the objects are used as the initial guesses. In case of error, 
+             p_result will be set to -1.0 and all parameters will be set to 
+             0.0. option1 and option2 can be specified to alter the desired 
+             behavior for the corresponded selection.
+
+    Input Arguments:
+        p_selection1 - The first selection.
+        option1 - The option related to the first selection. The usage is 
+                  analogical to the checkbox in the measure distance UI. For 
+                  the <A HREF="protoolkit_h.html#PRO_B_TRUE">PRO_B_TRUE</A> value:
+        p_selection2 - The second selection.
+        option2 - The option related to the second selection analogical to 
+                  option1.
+
+    Output Arguments:
+        param_1 - UV parameters of the critical point on the first item. Not 
+                  applicable for quilts.
+        param_2 - UV parameters of the critical point on the second item. Not 
+                  applicable for quilts.
+        pnt_1 - Critical point on the first item.
+        pnt_2 - Critical point on the second item.
+        p_result - The resulting distance between the two items.
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully evaluated the distance.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_OUT_OF_RANGE">PRO_TK_OUT_OF_RANGE</A> - The function successfully evaluated the distance, 
+                              but UV parameters could not be evaluated. It may 
+                              happen when dealing with borderless items and the 
+                              calculated critical point is outside of the item 
+                              boundaries.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_CONTEXT">PRO_TK_BAD_CONTEXT</A> - Not applicable to the input selections.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A>  <A HREF="3787.html">ProSelectExternalselectionRecord</A> (<A HREF="proselection_h.html#ProSelection">ProSelection</A> selection,  
+                                              <A HREF="proselection_h.html#ProSelectRecordAction">ProSelectRecordAction</A>  action);
+/*
+    Purpose: Places external selection into <A HREF="3772.html">ProSelect</A>() buffer. Together with 
+             <A HREF="3788.html">ProSelectExternalhighlightRegister</A>() provides interaction between 
+             external application media like a tree and <A HREF="3772.html">ProSelect</A>(). Upon an 
+             object selection in their media, applications should create 
+             <A HREF="proselection_h.html#ProSelection">ProSelection</A> and use <A HREF="3787.html">ProSelectExternalselectionRecord</A> to pass it 
+             to <A HREF="3772.html">ProSelect</A>().
+
+    Input Arguments:
+        selection - Created by an external application.
+        action - <A HREF="proselection_h.html#PRO_SELECT_OVERRIDE">PRO_SELECT_OVERRIDE</A> for unmodified selection. 
+                 PRO_SELECT_TOGGLE for CTRL modified selection.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully placed selection.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_BAD_INPUTS">PRO_TK_BAD_INPUTS</A> - One or more of the input arguments are invalid.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_INVALID_ITEM">PRO_TK_INVALID_ITEM</A> - Rejected by <A HREF="3772.html">ProSelect</A>() filters.
+
+*/
+
+extern <A HREF="protoolkiterrors_h.html#ProError">ProError</A> <A HREF="3788.html">ProSelectExternalhighlightRegister</A> (
+                                <A HREF="proselection_h.html#ProSelectExternalhighlightFunctions">ProSelectExternalhighlightFunctions</A> *show_func);
+/*
+    Purpose: Register external application highlighting callbacks in order to 
+             let application media like a tree react on selections made while 
+             <A HREF="3772.html">ProSelect</A>() is active. Together with 
+             <A HREF="3787.html">ProSelectExternalselectionRecord</A>() provides interaction between 
+             external application media and <A HREF="3772.html">ProSelect</A>().
+
+    Input Arguments:
+        show_func - callbacks.
+
+    Output Arguments:
+        none
+
+    Return Values:
+        <A HREF="protoolkiterrors_h.html#PRO_TK_NO_ERROR">PRO_TK_NO_ERROR</A> - The function successfully registered callbacks.
+        <A HREF="protoolkiterrors_h.html#PRO_TK_GENERAL_ERROR">PRO_TK_GENERAL_ERROR</A> - The function failed to register callbacks.
+
+*/
+<A HREF="proansi_h.html#PRO_END_C_DECLS">PRO_END_C_DECLS</A>
+#endif /* <A HREF="proselection_h.html#PROSELECTION_H">PROSELECTION_H</A> */
+</PRE>
+</BODY>
+</HTML>

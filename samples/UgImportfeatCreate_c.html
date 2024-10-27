@@ -1,0 +1,1274 @@
+<html>
+<head>
+<title>UgImportfeatCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProArray.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProImportfeat.h>
+<a name="anchor-2"></a>#include &lt;ProToolkitDll.h> /* for ProArgument */
+#include &lt;ProWstring.h>
+#include &lt;UtilString.h>
+#include &lt;ProUtil.h> 
+
+<a name="anchor-3"></a>/*--------------------------------------------------------------------*\
+	Prototypes
+\*--------------------------------------------------------------------*/
+ProIntfData*  PTTestPrismCreate (double x_value, double y_value, double z_value, ProSolid solid);
+ProIntfData*  PTTestSphereCreate (double, ProMdl);
+<a name="anchor-4"></a>
+typedef enum
+{
+	USER_IMPFEATOPT_PRISM,
+	USER_IMPFEATOPT_SPHERE
+<a name="anchor-5"></a>} UserImpfeatopt;
+
+typedef struct 
+{
+	double length;
+<a name="anchor-6"></a>	double width;
+	double height;
+} UserPrismdata;
+
+typedef struct 
+<a name="anchor-7"></a>{
+	double radius;
+} UserSpheredata;
+			
+typedef struct 
+<a name="anchor-8"></a>{
+	UserImpfeatopt  type;
+	union
+	{
+		UserPrismdata prism;
+<a name="anchor-9"></a>		UserSpheredata sphere;
+	} dims;
+	
+	ProCsys csys;
+	ProImportfeatAttr attr;
+<a name="anchor-10"></a>
+} UserImportfeatOption;
+
+int UserImportfeatOptionsGet (UserImportfeatOption** options)
+{
+<a name="anchor-11"></a>	UserImportfeatOption* tmp_opt;
+	UserImportfeatOption* opt;
+	/* tmp */
+	ProArrayAlloc (3, sizeof (UserImportfeatOption), 1, (ProArray*)&amp;tmp_opt);
+
+<a name="anchor-12"></a>	opt = &amp;tmp_opt [0];
+	opt->type = USER_IMPFEATOPT_PRISM;
+	opt->dims.prism.height = 20;
+	opt->dims.prism.length = 30;
+	opt->dims.prism.width = 40;
+<a name="anchor-13"></a>		
+	opt->csys = NULL;
+	opt->attr.join_surfaces = 1;
+	opt->attr.attempt_make_solid = 1;
+	opt->attr.cut_or_add = 0;
+<a name="anchor-14"></a>
+    opt = &amp;tmp_opt[1];
+
+	opt->type = USER_IMPFEATOPT_PRISM;
+	opt->dims.prism.height = -10;
+<a name="anchor-15"></a>	opt->dims.prism.length = -20;
+	opt->dims.prism.width = 30;
+		
+	opt->csys = NULL;
+	opt->attr.join_surfaces = 0;
+<a name="anchor-16"></a>	opt->attr.attempt_make_solid = 0;
+	opt->attr.cut_or_add = 0;
+
+	opt = &amp;tmp_opt [2];
+
+<a name="anchor-17"></a>
+	opt->type = USER_IMPFEATOPT_SPHERE;
+	opt->dims.sphere.radius = 22.5;
+		
+	opt->csys = NULL;
+<a name="anchor-18"></a>	opt->attr.join_surfaces = 1;
+	opt->attr.attempt_make_solid = 1;
+	opt->attr.cut_or_add = 1;
+
+	*options = tmp_opt;
+<a name="anchor-19"></a>
+	return PRO_TK_NO_ERROR;
+}
+
+ProError UserArgumentByLabelGet (ProArgument* args, ProName name, ProValueData* data)
+<a name="anchor-20"></a>{
+	int size, i;
+	ProError status;
+
+
+<a name="anchor-21"></a>	status = ProArraySizeGet (args, &amp;size);
+	if (status != PRO_TK_NO_ERROR)
+		return PRO_TK_INVALID_TYPE;
+
+	for (i = 0; i &lt; size; i++)
+<a name="anchor-22"></a>	{
+		status = ProUtilWstrcmp (args [i].label, name);
+		if (status == 0)
+		{
+			*data = args [i].value;
+<a name="anchor-23"></a>			return PRO_TK_NO_ERROR;
+		}
+	}
+	return PRO_TK_E_NOT_FOUND;
+}
+<a name="anchor-24"></a>
+
+/* 
+
+  The following example function demonstrates how to set up and implement a 
+<a name="anchor-25"></a>  Pro/TOOLKIT task function accessible from other Pro/ENGINEER auxiliary 
+  applications.  It uses the required signature and macro for task functions.
+  It parses the input argument array searching for parameters required by 
+  the task.
+
+<a name="anchor-26"></a>*/
+
+/*====================================================================*\
+FUNCTION: UserCreateImpfeatTask
+PURPOSE:  Example task function in a Pro/TOOLKIT DLL
+<a name="anchor-27"></a>\*====================================================================*/
+PRO_TK_DLL_EXPORT ProError   UserCreateImpfeatTask (ProArgument* inputs, ProArgument** outputs)
+{
+	ProError status;
+	ProSolid solid;
+<a name="anchor-28"></a>	ProArgument arg;
+	ProValueData data;
+	UserImpfeatopt type;
+	ProMdlType model_type;
+	ProIntfData *interface_data;
+<a name="anchor-29"></a>	ProImportfeatAttr  attr;
+	ProCsys csys = NULL;
+	ProIntfDataSource data_source;
+    	ProFeature feature;
+	ProSelection sel;
+<a name="anchor-30"></a>
+	attr.join_surfaces = PRO_B_TRUE;
+	attr.attempt_make_solid = PRO_B_TRUE;
+	attr.cut_or_add = PRO_B_FALSE;
+
+<a name="anchor-31"></a>	status = ProMdlCurrentGet ((ProMdl*)&amp;solid);
+	if (status != PRO_TK_NO_ERROR)
+		return PRO_TK_BAD_CONTEXT;
+
+	status = ProMdlTypeGet (solid, &amp;model_type);
+<a name="anchor-32"></a>	if (model_type != PRO_MDL_PART)
+		return PRO_TK_INVALID_TYPE;
+		
+/*--------------------------------------------------------------------*\
+	Look up required input arguments (by name)
+<a name="anchor-33"></a>\*--------------------------------------------------------------------*/
+/*	status = ProArgumentByLabelGet (inputs, L&quot;IMPGEOMTYPE&quot;, &amp;data);*/
+	status = UserArgumentByLabelGet (inputs, L&quot;IMPGEOMTYPE&quot;, &amp;data);
+	if (status != PRO_TK_NO_ERROR)
+		return PRO_TK_EMPTY;
+<a name="anchor-34"></a>
+	type = (UserImpfeatopt)data.v.i;
+
+	switch (type)
+	{
+<a name="anchor-35"></a>		case USER_IMPFEATOPT_PRISM:
+			{
+				double length, width, height;
+
+				/* Characteristic inputs: L, W, H */
+<a name="anchor-36"></a>				/* status = ProArgumentByLabelGet (inputs, L&quot;LENGTH&quot;, &amp;data); */
+				status = UserArgumentByLabelGet (inputs, L&quot;LENGTH&quot;, &amp;data);
+				if (status != PRO_TK_NO_ERROR)
+					return PRO_TK_BAD_INPUTS;
+
+<a name="anchor-37"></a>				length = data.v.d;
+
+				/* status = ProArgumentByLabelGet (inputs, L&quot;WIDTH&quot;, &amp;data); */
+				status = UserArgumentByLabelGet (inputs, L&quot;WIDTH&quot;, &amp;data);
+				if (status != PRO_TK_NO_ERROR)
+<a name="anchor-38"></a>					return PRO_TK_BAD_INPUTS;
+
+				width = data.v.d;
+
+				/* status = ProArgumentByLabelGet (inputs, L&quot;HEIGHT&quot;, &amp;data); */
+<a name="anchor-39"></a>				status = UserArgumentByLabelGet (inputs, L&quot;HEIGHT&quot;, &amp;data); 
+				if (status != PRO_TK_NO_ERROR)
+					return PRO_TK_BAD_INPUTS;
+
+				height = data.v.d;
+<a name="anchor-40"></a>
+/*--------------------------------------------------------------------*\
+	Create interface data describing a rectangular prism with given dimensions
+\*--------------------------------------------------------------------*/
+				interface_data =  PTTestPrismCreate (length, width, height, solid);
+<a name="anchor-41"></a>				
+				break;
+			}
+
+		case USER_IMPFEATOPT_SPHERE:
+<a name="anchor-42"></a>			{
+				double radius;
+
+				/* status = ProArgumentByLabelGet (inputs, L&quot;RADIUS&quot;, &amp;data); */
+				status = UserArgumentByLabelGet (inputs, L&quot;RADIUS&quot;, &amp;data);
+<a name="anchor-43"></a>				if (status != PRO_TK_NO_ERROR)
+					return PRO_TK_BAD_INPUTS;
+
+				radius = data.v.d;
+
+<a name="anchor-44"></a>/*--------------------------------------------------------------------*\
+	Create interface data describing a spherical boundary with given dimension
+\*--------------------------------------------------------------------*/
+				interface_data = PTTestSphereCreate (radius, solid);
+
+<a name="anchor-45"></a>				break;
+			}
+	}
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-46"></a>	Look up coordinate system (optional argument to this task)
+\*--------------------------------------------------------------------*/	
+	/* status = ProArgumentByLabelGet (inputs, L&quot;CSYS&quot;, &amp;data); */
+	status = UserArgumentByLabelGet (inputs, L&quot;CSYS&quot;, &amp;data);
+	if (status == PRO_TK_NO_ERROR)
+<a name="anchor-47"></a>	{
+		ProSelection sel;
+		ProModelitem item;
+		
+		sel = data.v.r;
+<a name="anchor-48"></a>		ProSelectionModelitemGet (sel, &amp;item);
+		ProGeomitemToCsys (&amp;item, &amp;csys);
+	}
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-49"></a>	Look for cut flag
+\*--------------------------------------------------------------------*/
+	/* status = ProArgumentByLabelGet (inputs, L&quot;CUT&quot;, &amp;data); */
+	status = UserArgumentByLabelGet (inputs, L&quot;CUT&quot;, &amp;data);
+	if (status == PRO_TK_NO_ERROR)
+<a name="anchor-50"></a>	{
+		if (data.v.b)
+			attr.cut_or_add = 1;
+	}
+
+<a name="anchor-51"></a>/*--------------------------------------------------------------------*\
+	Create import feature with parameters
+\*--------------------------------------------------------------------*/
+	status = ProIntfDataSourceInit (PRO_INTF_NEUTRAL, interface_data, &amp;data_source);
+
+<a name="anchor-52"></a>	status = ProImportfeatCreate ( solid, &amp;data_source, csys, &amp;attr, &amp;feature);
+
+	if (status != PRO_TK_NO_ERROR)
+		return PRO_TK_GENERAL_ERROR;
+
+<a name="anchor-53"></a>	/* status = ProArgumentByLabelGet (inputs, L&quot;NAME&quot;, &amp;data); */
+	status = UserArgumentByLabelGet (inputs, L&quot;NAME&quot;, &amp;data);
+	if (status == PRO_TK_NO_ERROR)
+	{
+		ProModelitemNameSet (&amp;feature, data.v.w);
+<a name="anchor-54"></a>	}
+
+/*--------------------------------------------------------------------*\
+	Note that function does not free input arguments (memory belongs
+		to calling application)
+<a name="anchor-55"></a>\*--------------------------------------------------------------------*/
+
+
+/*--------------------------------------------------------------------*\
+	Send output arguments containing selection of created feature
+<a name="anchor-56"></a>\*--------------------------------------------------------------------*/
+	status = ProArrayAlloc (0, sizeof (ProArgument), 1, (ProArray*)outputs);
+	if (status == PRO_TK_NO_ERROR)
+	{
+		ProSelectionAlloc (NULL, &amp;feature, &amp;sel);
+<a name="anchor-57"></a>		
+		ProStringToWstring (arg.label, &quot;NEW_FEATURE&quot;);
+		arg.value.type = PRO_VALUE_TYPE_SELECTION;
+		arg.value.v.r = sel;
+
+<a name="anchor-58"></a>		ProArrayObjectAdd( (ProArray*)outputs, -1, 1, &amp;arg );
+
+		return PRO_TK_NO_ERROR;
+	}
+	else
+<a name="anchor-59"></a>		return PRO_TK_GENERAL_ERROR;
+}
+
+
+int UserCreateImportFeatures()
+<a name="anchor-60"></a>{
+    int status;
+    ProName proname, model_proname;
+    ProMdlType type;
+    char name[100];
+<a name="anchor-61"></a>    ProIntfData *interface_data;
+    ProIntfDataSource data_source;
+    ProFeature feature_1, feature_2, feature_3;
+
+    ProImportfeatRedefSource redefine_source;
+<a name="anchor-62"></a>	ProMdl solid;
+	UserImportfeatOption* options;
+	int i_opt;
+	UserImportfeatOption opt;
+
+<a name="anchor-63"></a>	status = ProMdlCurrentGet (&amp;solid);
+	if (status != PRO_TK_NO_ERROR)
+		return PRO_TK_BAD_CONTEXT;
+
+	status = ProMdlTypeGet (solid, &amp;type);
+<a name="anchor-64"></a>	if (type != PRO_MDL_PART)
+		return PRO_TK_INVALID_TYPE;
+
+	UserImportfeatOptionsGet (&amp;options);
+
+<a name="anchor-65"></a>	for (i_opt = 0; i_opt &lt; 3; i_opt ++)
+
+	{
+		opt = options [i_opt];
+		if (opt.type  == USER_IMPFEATOPT_PRISM)
+<a name="anchor-66"></a>		{
+		/*--------------------------------------------------
+			Creating the import feature: Prism of Size:40x30x20
+			---------------------------------------------------*/
+		interface_data =  PTTestPrismCreate (opt.dims.prism.length, opt.dims.prism.width, opt.dims.prism.height, solid);
+<a name="anchor-67"></a>		}
+
+		if (opt.type == USER_IMPFEATOPT_SPHERE)
+		{
+    interface_data =  PTTestSphereCreate (opt.dims.sphere.radius, solid);
+<a name="anchor-68"></a>		}
+	status = ProIntfDataSourceInit (PRO_INTF_NEUTRAL, interface_data, &amp;data_source);
+    ProTKPrintf (&quot;status of ProIntfDataSourceInit is %d \n&quot;, status);
+
+	status = ProImportfeatCreate ( solid, &amp;data_source, opt.csys, &amp;opt.attr, &amp;feature_2);
+<a name="anchor-69"></a>    ProTKPrintf (&quot;status of ProImportfeatCreate is %d \n&quot;, status);
+
+	}
+    return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-70"></a>
+
+ProIntfData* PTTestSphereCreate (double rad, ProMdl solid)
+{
+
+<a name="anchor-71"></a>    ProSrftype surface_type;
+    ProUvParam uvsurf_min, uvsurf_max;
+    ProSurfaceOrient surf_orient;
+    ProSurfaceshapedata shape_data;
+    int surf_id;
+<a name="anchor-72"></a>    ProSurfacedata surface_data;
+    ProVector vector1, vector2, vector3;
+
+    ProVector vector_1, vector_2, vector_3, origin;
+    double radius, radius1, radius2;
+<a name="anchor-73"></a> 
+    ProIntfData   *interfacedata;
+    ProCurvedata  *curve_data;
+    ProEdgedata   *edge_data;
+    ProFeature    feature;
+<a name="anchor-74"></a>    int status;
+
+    int        i, edge_id, surface_id[2];
+    ProEdgeDir edge_dir[2];
+    ProUvParam (*edge_uvpt)[2];
+<a name="anchor-75"></a>    Pro3dPnt   point1, point2;
+    int        num_edges;
+
+    double start_angle, end_angle;
+
+<a name="anchor-76"></a>    ProContourdata *contour, *array_contours;
+    ProContourTraversal traversal;
+    int *array_edge_ids;
+
+    ProIntfDataSource data_source;
+<a name="anchor-77"></a>    ProFeature feature_1;
+
+    /* double PI = 3.141593; */
+    ProUvParam (*array_uv_points)[2];
+    
+<a name="anchor-78"></a>    status = ProIntfDataAlloc( &amp;interfacedata);
+    ProTKPrintf (&quot;status ofmProIntfDataAlloc is %d \n&quot;, status);
+
+    status = ProEdgedataAlloc (&amp;edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataAlloc is %d \n&quot;, status);
+<a name="anchor-79"></a>
+
+/*------
+Edge-1
+------*/
+<a name="anchor-80"></a>    edge_id = 1;
+    surface_id[0] = 100, surface_id[1] = 101;
+    edge_dir[0]   = 0, edge_dir[1]   = 1;
+
+    status = ProCurvedataAlloc (&amp;curve_data);
+<a name="anchor-81"></a>    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+
+    vector_1[0]= 0.0, vector_1[1]= -1.0, vector_1[2]=0.0;
+    vector_2[0]= 1.0, vector_2[1]= 0.0, vector_2[2] =0.0;
+    origin[0]  = 0.0, origin[1]  = 0.0, origin[2]   =0.0;
+<a name="anchor-82"></a>    start_angle = 0.0;
+    end_angle   = 3.1451593;
+    radius      = rad;
+
+    status = ProArcdataInit ( vector_1, vector_2, origin, start_angle, end_angle,
+<a name="anchor-83"></a>	radius, curve_data);
+    ProTKPrintf (&quot;status of ProArcdataInit is %d \n&quot;, status);
+
+    status = ProArrayAlloc (23, (sizeof (ProUvParam) * 2), 1, (ProArray *) &amp;array_uv_points);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+<a name="anchor-84"></a>
+    for (i=0; i&lt;23; i++)
+    {
+	array_uv_points[i][0][0] = -1 * PI;       
+	array_uv_points[i][0][1] = PI * 0.5 *(1 - i/11);       
+<a name="anchor-85"></a>	array_uv_points[i][1][0] = -1 * PI;       
+	array_uv_points[i][1][1] =  array_uv_points[i][0][1];       
+    }
+
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, array_uv_points, NULL,
+<a name="anchor-86"></a>        curve_data, edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+
+    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+<a name="anchor-87"></a>
+    status = ProCurvedataFree ( curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+
+/*------
+<a name="anchor-88"></a>Edge-2
+------*/
+    edge_id = 2;
+    surface_id[0] = 100, surface_id[1] = 101;
+    edge_dir[0]   = 1, edge_dir[1]   = 0;
+<a name="anchor-89"></a>
+    status = ProCurvedataAlloc (&amp;curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+
+    vector_1[0]= 0.0,  vector_1[1]= -1.0, vector_1[2] =0.0;
+<a name="anchor-90"></a>    vector_2[0]= -1.0, vector_2[1]= 0.0,  vector_2[2] =0.0;
+    origin[0]  = 0.0,  origin[1]  = 0.0,  origin[2]   =0.0;
+    start_angle = 0.0;
+    end_angle   = 3.1451593;
+    radius      = rad;
+<a name="anchor-91"></a>
+    status = ProArcdataInit ( vector_1, vector_2, origin, start_angle, end_angle,
+	radius, curve_data);
+    ProTKPrintf (&quot;status of ProArcdataInit is %d \n&quot;, status);
+
+<a name="anchor-92"></a>    status = ProArrayAlloc (23, (sizeof (ProUvParam) * 2), 1, (ProArray *) &amp;array_uv_points);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+
+    for (i=0; i&lt;23; i++)
+    {
+<a name="anchor-93"></a>	array_uv_points[i][0][0] = -2 * PI;       
+	array_uv_points[i][0][1] = PI * 0.5 * (1 - i/11);       
+	array_uv_points[i][1][0] = 0;       
+	array_uv_points[i][1][1] =  array_uv_points[i][0][1];       
+    }
+<a name="anchor-94"></a>
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, array_uv_points, NULL,
+        curve_data, edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+
+<a name="anchor-95"></a>    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+    status = ProCurvedataFree ( curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+<a name="anchor-96"></a>
+/*-----------------------
+   Surface -1
+-----------------------*/
+    surface_type = PRO_SRF_TORUS;
+<a name="anchor-97"></a>    uvsurf_min[0] = -3.204425, uvsurf_min[1] = -1.570796;
+    uvsurf_max[0] = 0.062832, uvsurf_max[1]= 1.570796;
+    surf_orient = 1;
+    
+    vector1[0] = -1.0, vector1[1]= 0.0,  vector1[2] =0.0;
+<a name="anchor-98"></a>    vector2[0] =  0.0, vector2[1]= 0.0,  vector2[2] =-1.0;
+    vector3[0] =  0.0, vector3[1]= -1.0, vector3[2] =0.0;
+    origin[0]  = 0.0, origin[1]= 0.0, origin[2] = 0.0;
+    radius1 = 0.0;
+    radius2 = rad;
+<a name="anchor-99"></a>
+    status = ProTorusdataInit (vector1, vector2, vector3, origin, radius1, radius2, &amp;shape_data);
+    ProTKPrintf (&quot;status of ProPlanedataInit is %d \n&quot;, status);
+
+    surf_id = 101;
+<a name="anchor-100"></a>
+    status = ProArrayAlloc (2, sizeof(int), 1, (ProArray *) &amp;array_edge_ids);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+
+    array_edge_ids[0]= 1, array_edge_ids[1] = 2;
+<a name="anchor-101"></a>
+    status = ProArrayAlloc (1, sizeof (ProContourdata), 1, (ProArray *) &amp;array_contours);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+
+    status = ProContourdataAlloc (&amp;contour);
+<a name="anchor-102"></a>    ProTKPrintf (&quot;status of ProContourdataAlloc is %d \n&quot;, status);
+    
+    traversal = 1;
+
+    status = ProContourdataInit ( traversal, contour);
+<a name="anchor-103"></a>    ProTKPrintf (&quot;status of ProContourdataInit is %d \n&quot;, status);
+
+    status = ProContourdataEdgeIdArraySet (contour, array_edge_ids);
+    ProTKPrintf (&quot;status of ProContourdataEdgeIdArraySet is %d \n&quot;, status);
+
+<a name="anchor-104"></a>    array_contours[0] =  *contour;
+ 
+    status = ProSurfacedataInit (surface_type,  uvsurf_min, uvsurf_max, surf_orient,
+        &amp;shape_data, surf_id, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProSurfacedataInit is %d \n&quot;, status);
+<a name="anchor-105"></a>
+    status = ProSurfacedataContourArraySet (&amp;surface_data, array_contours);
+    ProTKPrintf (&quot;status of ProSurfacedataContourArraySet is %d \n&quot;, status);
+
+    status = ProIntfDataSurfaceAppend (interfacedata, &amp;surface_data);
+<a name="anchor-106"></a>    ProTKPrintf (&quot;status of ProIntfDataSurfaceAppend is %d \n&quot;, status);
+
+/*-----------------------
+   Surface -2
+-----------------------*/
+<a name="anchor-107"></a>
+    surface_type = PRO_SRF_TORUS;
+    uvsurf_min[0] = -6.346017, uvsurf_min[1] = -1.570796;
+    uvsurf_max[0] = -3.078761, uvsurf_max[1]=  1.570796;
+    surf_orient = 1;
+<a name="anchor-108"></a>    
+    vector1[0] = -1.0, vector1[1]= 0.0,  vector1[2] =0.0;
+    vector2[0] =  0.0, vector2[1]= 0.0,  vector2[2] =-1.0;
+    vector3[0] =  0.0, vector3[1]= -1.0, vector3[2] =0.0;
+    origin[0]  = 0.0, origin[1]= 0.0, origin[2] = 0.0;
+<a name="anchor-109"></a>    radius1 = 0.0;
+    radius2 = rad;
+
+    status = ProTorusdataInit (vector1, vector2, vector3, origin, radius1, radius2, &amp;shape_data);
+    ProTKPrintf (&quot;status of ProPlanedataInit is %d \n&quot;, status);
+<a name="anchor-110"></a>
+    surf_id = 102;
+
+    status = ProArrayAlloc (2, sizeof(int), 1, (ProArray *) &amp;array_edge_ids);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+<a name="anchor-111"></a>
+    array_edge_ids[0]= 1, array_edge_ids[1] = 2;
+
+    status = ProArrayAlloc (1, sizeof (ProContourdata), 1, (ProArray *) &amp;array_contours);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+<a name="anchor-112"></a>
+
+    status = ProContourdataAlloc (&amp;contour);
+    ProTKPrintf (&quot;status of ProContourdataAlloc is %d \n&quot;, status);
+    
+<a name="anchor-113"></a>    traversal = 1;
+
+    status = ProContourdataInit ( traversal, contour);
+    ProTKPrintf (&quot;status of ProContourdataInit is %d \n&quot;, status);
+
+<a name="anchor-114"></a>    status = ProContourdataEdgeIdArraySet (contour, array_edge_ids);
+    ProTKPrintf (&quot;status of ProContourdataEdgeIdArraySet is %d \n&quot;, status);
+
+    array_contours[0] =  *contour;
+ 
+<a name="anchor-115"></a>    status = ProSurfacedataInit (surface_type,  uvsurf_min, uvsurf_max, surf_orient,
+        &amp;shape_data, surf_id, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProSurfacedataInit is %d \n&quot;, status);
+
+    status = ProSurfacedataContourArraySet (&amp;surface_data, array_contours);
+<a name="anchor-116"></a>    ProTKPrintf (&quot;status of ProSurfacedataContourArraySet is %d \n&quot;, status);
+
+    status = ProIntfDataSurfaceAppend (interfacedata, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProIntfDataSurfaceAppend is %d \n&quot;, status);
+
+<a name="anchor-117"></a>    return ( interfacedata);
+
+}
+
+
+<a name="anchor-118"></a>ProIntfData*  PTTestPrismCreate (double x_value, double y_value, double z_value, ProSolid solid)
+{
+    ProSrftype surface_type;
+    ProUvParam uvsurf_min, uvsurf_max;
+    ProSurfaceOrient surf_orient;
+<a name="anchor-119"></a>    ProSurfaceshapedata shape_data;
+    int surf_id;
+    ProSurfacedata surface_data;
+    ProVector vector1, vector2, vector3, origin;
+ 
+<a name="anchor-120"></a>    ProContourdata *contour, *array_contours;
+    ProContourTraversal traversal;
+    int *array_edge_ids;
+
+    int edge_id, surface_id[2];
+<a name="anchor-121"></a>    ProEdgeDir edge_dir[2];
+    ProUvParam (*edge_uvpt)[2];
+    Pro3dPnt point1, point2;
+    int num_edges;
+
+<a name="anchor-122"></a>    ProIntfData *interfacedata;
+    ProCurvedata  *curve_data;
+    ProEdgedata *edge_data;
+    ProFeature feature;
+    int status;
+<a name="anchor-123"></a>
+
+    status = ProIntfDataAlloc( &amp;interfacedata);
+    ProTKPrintf (&quot;status ofmProIntfDataAlloc is %d \n&quot;, status);
+
+<a name="anchor-124"></a>    status = ProEdgedataAlloc (&amp;edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataAlloc is %d \n&quot;, status);
+
+
+/*------
+<a name="anchor-125"></a>Edge-1
+------*/
+    edge_id = 1;
+    surface_id[0] = 1, surface_id[1] = 2;
+    edge_dir[0]   = 0, edge_dir[1]   = 1;
+<a name="anchor-126"></a>
+    status = ProCurvedataAlloc (&amp;curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+
+    point1[0] = 0.0, point1[1] = 0.0, point1[2] = 0.0;
+<a name="anchor-127"></a>    point2[0] = x_value, point2[1] = 0.0, point2[2] =0.0;
+
+    status = ProLinedataInit (point1, point2, curve_data);
+    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+
+<a name="anchor-128"></a>    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+        curve_data, edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+
+    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+<a name="anchor-129"></a>    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+    status = ProCurvedataFree ( curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+
+<a name="anchor-130"></a>/*------
+Edge-2
+------*/
+    edge_id = 2;
+    surface_id[0] = 1, surface_id[1] = 5;
+<a name="anchor-131"></a>    edge_dir[0]   = 0, edge_dir[1]   = 1;
+
+    status = ProCurvedataAlloc (&amp;curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+
+<a name="anchor-132"></a>    point1[0] = x_value, point1[1] = 0.0, point1[2] = 0.0;
+    point2[0] = x_value, point2[1] = y_value, point2[2] =0.0;
+
+    status = ProLinedataInit (point1, point2, curve_data);
+    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+<a name="anchor-133"></a>
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+        curve_data, edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+
+<a name="anchor-134"></a>    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+    status = ProCurvedataFree ( curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+<a name="anchor-135"></a>
+/*------
+Edge-3
+------*/
+    edge_id = 3;
+<a name="anchor-136"></a>    surface_id[0] = 1, surface_id[1] = 4;
+    edge_dir[0]   = 0, edge_dir[1]   = 1;
+
+    status = ProCurvedataAlloc (&amp;curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+<a name="anchor-137"></a>
+    point1[0] = x_value, point1[1] = y_value, point1[2] = 0.0;
+    point2[0] = 0.0,   point2[1] = y_value, point2[2] = 0.0;
+
+    status = ProLinedataInit (point1, point2, curve_data);
+<a name="anchor-138"></a>    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+        curve_data, edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+<a name="anchor-139"></a>
+    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+    status = ProCurvedataFree ( curve_data);
+<a name="anchor-140"></a>    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+/*------
+Edge-4
+------*/
+    edge_id = 4;
+<a name="anchor-141"></a>    surface_id[0] = 1, surface_id[1] = 3;
+    edge_dir[0]   = 0, edge_dir[1]   = 1;
+
+    status = ProCurvedataAlloc (&amp;curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+<a name="anchor-142"></a>
+    point1[0] = 0.0, point1[1] = y_value, point1[2] = 0.0;
+    point2[0] = 0.0, point2[1] = 0.0, point2[2] = 0.0;
+
+    status = ProLinedataInit (point1, point2, curve_data);
+<a name="anchor-143"></a>    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+        curve_data, edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+<a name="anchor-144"></a>
+    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+    status = ProCurvedataFree ( curve_data);
+<a name="anchor-145"></a>    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+
+/*------
+Edge-5
+------*/
+<a name="anchor-146"></a>    edge_id = 5;
+    surface_id[0] = 6, surface_id[1] = 2;
+    edge_dir[0]   = 1, edge_dir[1]   = 0;
+
+    status = ProCurvedataAlloc (&amp;curve_data);
+<a name="anchor-147"></a>    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+
+    point1[0] = 0.0, point1[1] = 0.0, point1[2] = z_value;
+    point2[0] = x_value, point2[1] = 0.0, point2[2] =z_value;
+
+<a name="anchor-148"></a>    status = ProLinedataInit (point1, point2, curve_data);
+    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+        curve_data, edge_data);
+<a name="anchor-149"></a>    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+
+    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+<a name="anchor-150"></a>    status = ProCurvedataFree ( curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+/*------
+Edge-6
+------*/
+<a name="anchor-151"></a>    edge_id = 6;
+    surface_id[0] = 6, surface_id[1] = 5;
+    edge_dir[0]   = 1, edge_dir[1]   = 0;
+
+    status = ProCurvedataAlloc (&amp;curve_data);
+<a name="anchor-152"></a>    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+
+    point1[0] = x_value, point1[1] = 0.0, point1[2] = z_value;
+    point2[0] = x_value, point2[1] = y_value, point2[2] =z_value;
+
+<a name="anchor-153"></a>    status = ProLinedataInit (point1, point2, curve_data);
+    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+        curve_data, edge_data);
+<a name="anchor-154"></a>    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+
+    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+<a name="anchor-155"></a>    status = ProCurvedataFree ( curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+/*------
+Edge-7
+------*/
+<a name="anchor-156"></a>    edge_id = 7;
+    surface_id[0] = 6, surface_id[1] = 4;
+    edge_dir[0]   = 1, edge_dir[1]   = 0;
+
+    status = ProCurvedataAlloc (&amp;curve_data);
+<a name="anchor-157"></a>    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+
+    point1[0] = x_value, point1[1] = y_value, point1[2] = z_value;
+    point2[0] = 0.0, point2[1] = y_value, point2[2] =z_value;
+
+<a name="anchor-158"></a>    status = ProLinedataInit (point1, point2, curve_data);
+    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+        curve_data, edge_data);
+<a name="anchor-159"></a>    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+
+    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+<a name="anchor-160"></a>    status = ProCurvedataFree ( curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+
+/*------
+Edge-8
+<a name="anchor-161"></a>------*/
+    edge_id = 8;
+    surface_id[0] = 6, surface_id[1] = 3;
+    edge_dir[0]   = 1, edge_dir[1]   = 0;
+
+<a name="anchor-162"></a>    status = ProCurvedataAlloc (&amp;curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+
+    point1[0] = 0.0, point1[1] = y_value, point1[2] = z_value;
+    point2[0] = 0.0, point2[1] = 0.0, point2[2] =z_value;
+<a name="anchor-163"></a>
+    status = ProLinedataInit (point1, point2, curve_data);
+    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+<a name="anchor-164"></a>        curve_data, edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+
+    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+<a name="anchor-165"></a>
+    status = ProCurvedataFree ( curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+
+/*------
+<a name="anchor-166"></a>Edge-9
+------*/
+    edge_id = 9;
+    surface_id[0] = 2, surface_id[1] = 3;
+    edge_dir[0]   = 0, edge_dir[1]   = 1;
+<a name="anchor-167"></a>
+    status = ProCurvedataAlloc (&amp;curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+
+    point1[0] = 0.0, point1[1] = 0.0, point1[2] = 0.0;
+<a name="anchor-168"></a>    point2[0] = 0.0, point2[1] = 0.0, point2[2] =z_value;
+
+    status = ProLinedataInit (point1, point2, curve_data);
+    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+
+<a name="anchor-169"></a>    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+        curve_data, edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+
+    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+<a name="anchor-170"></a>    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+    status = ProCurvedataFree ( curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+    
+<a name="anchor-171"></a>/*------
+Edge-10
+------*/
+    edge_id = 10;
+    surface_id[0] = 5, surface_id[1] = 2;
+<a name="anchor-172"></a>    edge_dir[0]   = 0, edge_dir[1]   = 1;
+
+    status = ProCurvedataAlloc (&amp;curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+
+<a name="anchor-173"></a>    point1[0] = x_value, point1[1] = 0.0, point1[2] = 0.0;
+    point2[0] = x_value, point2[1] = 0.0, point2[2] = z_value;
+
+    status = ProLinedataInit (point1, point2, curve_data);
+    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+<a name="anchor-174"></a>
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+        curve_data, edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+
+<a name="anchor-175"></a>    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+    status = ProCurvedataFree ( curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+<a name="anchor-176"></a>
+/*------
+Edge-11
+------*/
+    edge_id = 11;
+<a name="anchor-177"></a>    surface_id[0] = 4, surface_id[1] = 5;
+    edge_dir[0]   = 0, edge_dir[1]   = 1;
+
+    status = ProCurvedataAlloc (&amp;curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+<a name="anchor-178"></a>
+    point1[0] = x_value, point1[1] = y_value, point1[2] = 0.0;
+    point2[0] = x_value, point2[1] = y_value, point2[2] = z_value;
+
+    status = ProLinedataInit (point1, point2, curve_data);
+<a name="anchor-179"></a>    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+        curve_data, edge_data);
+    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+<a name="anchor-180"></a>
+    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+    status = ProCurvedataFree ( curve_data);
+<a name="anchor-181"></a>    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+
+/*------
+Edge-12
+------*/
+<a name="anchor-182"></a>    edge_id = 12;
+    surface_id[0] = 3, surface_id[1] = 4;
+    edge_dir[0]   = 0, edge_dir[1]   = 1;
+
+    status = ProCurvedataAlloc (&amp;curve_data);
+<a name="anchor-183"></a>    ProTKPrintf (&quot;status of ProCurvedataAlloc is %d \n&quot;, status);
+
+    point1[0] = 0.0, point1[1] = y_value, point1[2] = 0.0;
+    point2[0] = 0.0, point2[1] = y_value, point2[2] = z_value;
+
+<a name="anchor-184"></a>    status = ProLinedataInit (point1, point2, curve_data);
+    ProTKPrintf (&quot;status of ProLinedataInit is %d \n&quot;, status);
+
+    status = ProEdgedataInit ( edge_id, surface_id, edge_dir, NULL, NULL,
+        curve_data, edge_data);
+<a name="anchor-185"></a>    ProTKPrintf (&quot;status of ProEdgedataInit is %d \n&quot;, status);
+
+    status = ProIntfDataEdgeAppend (interfacedata, edge_data);
+    ProTKPrintf (&quot;status of ProIntfDataEdgeAppend is %d \n&quot;, status);
+
+<a name="anchor-186"></a>    status = ProCurvedataFree ( curve_data);
+    ProTKPrintf (&quot;status of ProCurvedataFree is %d \n&quot;, status);
+
+/*-----------------------
+   Surface -1
+<a name="anchor-187"></a>-----------------------*/
+    surface_type = PRO_SRF_PLANE;
+
+    uvsurf_min[0] = 0 ,  uvsurf_min[1] = 0; /*-- 1--*/
+    /* uvsurf_max[0] = x_value, uvsurf_max[1]= y_value; */
+<a name="anchor-188"></a>    uvsurf_max[0] = 0, uvsurf_max[1]= 0;
+    surf_orient = -1;
+    
+    vector1[0] = 1.0, vector1[1]= 0.0, vector1[2] =0.0;
+    vector2[0] = 0.0, vector2[1]= 1.0, vector2[2] =0.0;
+<a name="anchor-189"></a>    vector3[0] = 0.0, vector3[1]= 0.0, vector3[2] =1.0;
+    origin[0]  = 0.0, origin[1]=0.0, origin[2] = 0.0;
+
+    status = ProPlanedataInit (vector1, vector2, vector3, origin, &amp;shape_data);
+    ProTKPrintf (&quot;status of ProPlanedataInit is %d \n&quot;, status);
+<a name="anchor-190"></a>
+    surf_id = 1;
+
+    status = ProArrayAlloc (4, sizeof(int), 1, (ProArray *) &amp;array_edge_ids);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+<a name="anchor-191"></a>
+    array_edge_ids[0]= 1, array_edge_ids[1] = 2, array_edge_ids[2] =3, array_edge_ids[3]=4;
+
+    status = ProArrayAlloc (1, sizeof (ProContourdata), 1, (ProArray *) &amp;array_contours);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+<a name="anchor-192"></a>
+    status = ProContourdataAlloc (&amp;contour);
+    ProTKPrintf (&quot;status of ProContourdataAlloc is %d \n&quot;, status);
+    
+    traversal = 1;
+<a name="anchor-193"></a>
+    status = ProContourdataInit ( traversal, contour);
+    ProTKPrintf (&quot;status of ProContourdataInit is %d \n&quot;, status);
+
+    status = ProContourdataEdgeIdArraySet (contour, array_edge_ids);
+<a name="anchor-194"></a>    ProTKPrintf (&quot;status of ProContourdataEdgeIdArraySet is %d \n&quot;, status);
+
+    array_contours[0] =  *contour;
+
+    status = ProSurfacedataInit (surface_type,  uvsurf_min, uvsurf_max, surf_orient,
+<a name="anchor-195"></a>        &amp;shape_data, surf_id, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProSurfacedataInit is %d \n&quot;, status);
+
+    status = ProSurfacedataContourArraySet (&amp;surface_data, array_contours);
+    ProTKPrintf (&quot;status of ProSurfacedataContourArraySet is %d \n&quot;, status);
+<a name="anchor-196"></a>
+    status = ProIntfDataSurfaceAppend (interfacedata, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProIntfDataSurfaceAppend is %d \n&quot;, status);
+
+/*-----------------------
+<a name="anchor-197"></a>   Surface -2
+-----------------------*/
+
+    surface_type = PRO_SRF_PLANE;
+    uvsurf_min[0] = 0, uvsurf_min[1] = 0;
+<a name="anchor-198"></a>    /* uvsurf_max[0] = x_value, uvsurf_max[1]= y_value; */
+    uvsurf_max[0] = 0, uvsurf_max[1]= 0;
+    surf_orient = 1;
+    
+    vector1[0] = 1.0, vector1[1]= 0.0, vector1[2] =0.0;
+<a name="anchor-199"></a>    vector2[0] = 0.0, vector2[1]= 0.0, vector2[2] =1.0;
+    vector3[0] = 0.0, vector3[1]= -1.0, vector3[2] =0.0;
+    origin[0]  = 0.0, origin[1]=0.0, origin[2] = 0.0;
+
+    status = ProPlanedataInit (vector1, vector2, vector3, origin, &amp;shape_data);
+<a name="anchor-200"></a>    ProTKPrintf (&quot;status of ProPlanedataInit is %d \n&quot;, status);
+
+    surf_id = 2;
+
+    status = ProArrayAlloc (4, sizeof(int), 1, (ProArray *) &amp;array_edge_ids);
+<a name="anchor-201"></a>    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+
+    array_edge_ids[0]= 1, array_edge_ids[1] = 9, array_edge_ids[2] =5, array_edge_ids[3]=10;
+
+    status = ProArrayAlloc (1, sizeof (ProContourdata), 1, (ProArray *) &amp;array_contours);
+<a name="anchor-202"></a>    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+
+
+    status = ProContourdataAlloc (&amp;contour);
+    ProTKPrintf (&quot;status of ProContourdataAlloc is %d \n&quot;, status);
+<a name="anchor-203"></a>    
+    traversal = 1;
+
+    status = ProContourdataInit ( traversal, contour);
+    ProTKPrintf (&quot;status of ProContourdataInit is %d \n&quot;, status);
+<a name="anchor-204"></a>
+    status = ProContourdataEdgeIdArraySet (contour, array_edge_ids);
+    ProTKPrintf (&quot;status of ProContourdataEdgeIdArraySet is %d \n&quot;, status);
+
+    array_contours[0] =  *contour;
+<a name="anchor-205"></a> 
+
+    status = ProSurfacedataInit (surface_type,  uvsurf_min, uvsurf_max, surf_orient,
+        &amp;shape_data, surf_id, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProSurfacedataInit is %d \n&quot;, status);
+<a name="anchor-206"></a>
+    status = ProSurfacedataContourArraySet (&amp;surface_data, array_contours);
+    ProTKPrintf (&quot;status of ProSurfacedataContourArraySet is %d \n&quot;, status);
+
+    status = ProIntfDataSurfaceAppend (interfacedata, &amp;surface_data);
+<a name="anchor-207"></a>    ProTKPrintf (&quot;status of ProIntfDataSurfaceAppend is %d \n&quot;, status);
+
+/*-----------------------
+   Surface -3
+-----------------------*/
+<a name="anchor-208"></a>
+    surface_type = PRO_SRF_PLANE;
+    uvsurf_min[0] = 0.0, uvsurf_min[1] = 0.0;
+    /* uvsurf_max[0] = y_value, uvsurf_max[1]=  z_value; */
+    uvsurf_max[0] = 0,  uvsurf_max[1]=  0;
+<a name="anchor-209"></a>    surf_orient = 1;
+    
+    vector1[0] = 0.0, vector1[1]= -1.0, vector1[2] =0.0;
+    vector2[0] = 0.0, vector2[1]= 0.0, vector2[2] =1.0;
+    vector3[0] = -1.0, vector3[1]= 0.0, vector3[2] =0.0;
+<a name="anchor-210"></a>    origin[0]  = 0.0, origin[1]=y_value, origin[2] = 0.0;
+
+    status = ProPlanedataInit (vector1, vector2, vector3, origin, &amp;shape_data);
+    ProTKPrintf (&quot;status of ProPlanedataInit is %d \n&quot;, status);
+
+<a name="anchor-211"></a>    surf_id = 3;
+
+    status = ProArrayAlloc (4, sizeof(int), 1, (ProArray *) &amp;array_edge_ids);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+
+<a name="anchor-212"></a>    array_edge_ids[0]= 4, array_edge_ids[1] = 12, array_edge_ids[2] =8, array_edge_ids[3]=9;
+
+    status = ProArrayAlloc (1, sizeof (ProContourdata), 1, (ProArray *) &amp;array_contours);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+
+<a name="anchor-213"></a>
+    status = ProContourdataAlloc (&amp;contour);
+    ProTKPrintf (&quot;status of ProContourdataAlloc is %d \n&quot;, status);
+    
+    traversal = 1;
+<a name="anchor-214"></a>
+    status = ProContourdataInit ( traversal, contour);
+    ProTKPrintf (&quot;status of ProContourdataInit is %d \n&quot;, status);
+
+    status = ProContourdataEdgeIdArraySet (contour, array_edge_ids);
+<a name="anchor-215"></a>    ProTKPrintf (&quot;status of ProContourdataEdgeIdArraySet is %d \n&quot;, status);
+
+    array_contours[0] =  *contour;
+ 
+
+<a name="anchor-216"></a>    status = ProSurfacedataInit (surface_type,  uvsurf_min, uvsurf_max, surf_orient,
+        &amp;shape_data, surf_id, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProSurfacedataInit is %d \n&quot;, status);
+
+    status = ProSurfacedataContourArraySet (&amp;surface_data, array_contours);
+<a name="anchor-217"></a>    ProTKPrintf (&quot;status of ProSurfacedataContourArraySet is %d \n&quot;, status);
+
+    status = ProIntfDataSurfaceAppend (interfacedata, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProIntfDataSurfaceAppend is %d \n&quot;, status);
+
+<a name="anchor-218"></a>/*-----------------------
+   Surface -4
+-----------------------*/
+
+    surface_type = PRO_SRF_PLANE;
+<a name="anchor-219"></a>    uvsurf_min[0] = 0.0, uvsurf_min[1] = 0.0;
+    /* uvsurf_max[0] = x_value, uvsurf_max[1]= z_value; */
+    uvsurf_max[0] = 0, uvsurf_max[1]= 0;
+    surf_orient = 1;
+    
+<a name="anchor-220"></a>    vector1[0] = -1.0, vector1[1]= 0.0, vector1[2] =0.0;
+    vector2[0] = 0.0, vector2[1]= 0.0, vector2[2] =1.0;
+    vector3[0] = 0.0, vector3[1]= 1.0, vector3[2] =0.0;
+    origin[0]  = x_value, origin[1]=y_value, origin[2] = 0.0;
+
+<a name="anchor-221"></a>    status = ProPlanedataInit (vector1, vector2, vector3, origin, &amp;shape_data);
+    ProTKPrintf (&quot;status of ProPlanedataInit is %d \n&quot;, status);
+
+    surf_id = 4;
+
+<a name="anchor-222"></a>    status = ProArrayAlloc (4, sizeof(int), 1, (ProArray *) &amp;array_edge_ids);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+
+    array_edge_ids[0]= 3, array_edge_ids[1] = 11, array_edge_ids[2] =7, array_edge_ids[3]=12;
+
+<a name="anchor-223"></a>    status = ProArrayAlloc (1, sizeof (ProContourdata), 1, (ProArray *) &amp;array_contours);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+
+
+    status = ProContourdataAlloc (&amp;contour);
+<a name="anchor-224"></a>    ProTKPrintf (&quot;status of ProContourdataAlloc is %d \n&quot;, status);
+    
+    traversal = 1;
+
+    status = ProContourdataInit ( traversal, contour);
+<a name="anchor-225"></a>    ProTKPrintf (&quot;status of ProContourdataInit is %d \n&quot;, status);
+
+    status = ProContourdataEdgeIdArraySet (contour, array_edge_ids);
+    ProTKPrintf (&quot;status of ProContourdataEdgeIdArraySet is %d \n&quot;, status);
+
+<a name="anchor-226"></a>    array_contours[0] =  *contour;
+ 
+
+    status = ProSurfacedataInit (surface_type,  uvsurf_min, uvsurf_max, surf_orient,
+        &amp;shape_data, surf_id, &amp;surface_data);
+<a name="anchor-227"></a>    ProTKPrintf (&quot;status of ProSurfacedataInit is %d \n&quot;, status);
+
+    status = ProSurfacedataContourArraySet (&amp;surface_data, array_contours);
+    ProTKPrintf (&quot;status of ProSurfacedataContourArraySet is %d \n&quot;, status);
+
+<a name="anchor-228"></a>    status = ProIntfDataSurfaceAppend (interfacedata, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProIntfDataSurfaceAppend is %d \n&quot;, status);
+    
+/*-----------------------
+   Surface -5
+<a name="anchor-229"></a>-----------------------*/
+
+    surface_type = PRO_SRF_PLANE;
+    uvsurf_min[0] = 0.0, uvsurf_min[1] = 0.0;
+    /* uvsurf_max[0] = y_value, uvsurf_max[1]= z_value; */
+<a name="anchor-230"></a>    uvsurf_max[0] = 0, uvsurf_max[1]= 0;
+    surf_orient = 1;
+    
+    vector1[0] = 0.0, vector1[1]= 1.0, vector1[2] =0.0;
+    vector2[0] = 0.0, vector2[1]= 0.0, vector2[2] =1.0;
+<a name="anchor-231"></a>    vector3[0] = 1.0, vector3[1]= 0.0, vector3[2] =0.0;
+    origin[0]  = x_value, origin[1]= 0.0, origin[2] = 0.0;
+
+    status = ProPlanedataInit (vector1, vector2, vector3, origin, &amp;shape_data);
+    ProTKPrintf (&quot;status of ProPlanedataInit is %d \n&quot;, status);
+<a name="anchor-232"></a>
+    surf_id = 5;
+
+    status = ProArrayAlloc (4, sizeof(int), 1, (ProArray *) &amp;array_edge_ids);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+<a name="anchor-233"></a>
+    array_edge_ids[0]= 2, array_edge_ids[1] = 10, array_edge_ids[2] =6, array_edge_ids[3]=11;
+
+    status = ProArrayAlloc (1, sizeof (ProContourdata), 1, (ProArray *) &amp;array_contours);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+<a name="anchor-234"></a>
+
+    status = ProContourdataAlloc (&amp;contour);
+    ProTKPrintf (&quot;status of ProContourdataAlloc is %d \n&quot;, status);
+    
+<a name="anchor-235"></a>    traversal = 1;
+
+    status = ProContourdataInit ( traversal, contour);
+    ProTKPrintf (&quot;status of ProContourdataInit is %d \n&quot;, status);
+
+<a name="anchor-236"></a>    status = ProContourdataEdgeIdArraySet (contour, array_edge_ids);
+    ProTKPrintf (&quot;status of ProContourdataEdgeIdArraySet is %d \n&quot;, status);
+
+    array_contours[0] =  *contour;
+ 
+<a name="anchor-237"></a>
+    status = ProSurfacedataInit (surface_type,  uvsurf_min, uvsurf_max, surf_orient,
+        &amp;shape_data, surf_id, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProSurfacedataInit is %d \n&quot;, status);
+
+<a name="anchor-238"></a>    status = ProSurfacedataContourArraySet (&amp;surface_data, array_contours);
+    ProTKPrintf (&quot;status of ProSurfacedataContourArraySet is %d \n&quot;, status);
+
+    status = ProIntfDataSurfaceAppend (interfacedata, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProIntfDataSurfaceAppend is %d \n&quot;, status);
+<a name="anchor-239"></a>
+/*-----------------------
+   Surface -6
+-----------------------*/
+
+<a name="anchor-240"></a>    surface_type = PRO_SRF_PLANE;
+    uvsurf_min[0] = 0.0, uvsurf_min[1] = 0.0;
+    /* uvsurf_max[0] = x_value, uvsurf_max[1]= y_value; */
+    uvsurf_max[0] = 0, uvsurf_max[1]= 0;
+    surf_orient = 1;
+<a name="anchor-241"></a>    
+    vector1[0] = 1.0, vector1[1]= 0.0, vector1[2] =0.0;
+    vector2[0] = 0.0, vector2[1]= 1.0, vector2[2] =0.0;
+    vector3[0] = 0.0, vector3[1]= 0.0, vector3[2] =1.0;
+    origin[0]  = 0.0, origin[1]= 0.0, origin[2] = z_value;
+<a name="anchor-242"></a>
+    status = ProPlanedataInit (vector1, vector2, vector3, origin, &amp;shape_data);
+    ProTKPrintf (&quot;status of ProPlanedataInit is %d \n&quot;, status);
+
+    surf_id = 6;
+<a name="anchor-243"></a>
+    status = ProArrayAlloc (4, sizeof(int), 1, (ProArray *) &amp;array_edge_ids);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+
+    array_edge_ids[0]= 5, array_edge_ids[1] = 8, array_edge_ids[2] =7, array_edge_ids[3]=6;
+<a name="anchor-244"></a>
+    status = ProArrayAlloc (1, sizeof (ProContourdata), 1, (ProArray *) &amp;array_contours);
+    ProTKPrintf (&quot;status of ProArrayAlloc is %d \n&quot;, status);
+
+
+<a name="anchor-245"></a>    status = ProContourdataAlloc (&amp;contour);
+    ProTKPrintf (&quot;status of ProContourdataAlloc is %d \n&quot;, status);
+    
+    traversal = 1;
+
+<a name="anchor-246"></a>    status = ProContourdataInit ( traversal, contour);
+    ProTKPrintf (&quot;status of ProContourdataInit is %d \n&quot;, status);
+
+    status = ProContourdataEdgeIdArraySet (contour, array_edge_ids);
+    ProTKPrintf (&quot;status of ProContourdataEdgeIdArraySet is %d \n&quot;, status);
+<a name="anchor-247"></a>
+    array_contours[0] =  *contour;
+
+    status = ProSurfacedataInit (surface_type,  uvsurf_min, uvsurf_max, surf_orient,
+        &amp;shape_data, surf_id, &amp;surface_data);
+<a name="anchor-248"></a>    ProTKPrintf (&quot;status of ProSurfacedataInit is %d \n&quot;, status);
+
+    status = ProSurfacedataContourArraySet (&amp;surface_data, array_contours);
+    ProTKPrintf (&quot;status of ProSurfacedataContourArraySet is %d \n&quot;, status);
+
+<a name="anchor-249"></a>    status = ProIntfDataSurfaceAppend (interfacedata, &amp;surface_data);
+    ProTKPrintf (&quot;status of ProIntfDataSurfaceAppend is %d \n&quot;, status);
+
+    return (interfacedata);
+/*
+<a name="anchor-250"></a>    status = ProIntfDataSourceInit (PRO_INTF_NEUTRAL, interfacedata, &amp;data_source);
+    printf (&quot;status of ProIntfDataSourceInit is %d \n&quot;, status);
+
+    status = ProImportfeatCreate ( solid, &amp;data_source, NULL, NULL, &amp;feature);
+    printf (&quot;status of ProImportfeatCreate is %d \n&quot;, status);
+<a name="anchor-251"></a>
+
+    status = ProImportfeatRedefSourceInit (PRO_IMPORT_FEAT_REDEF_SUBSTITUTE, interfacedata,
+	&amp;redefine_source);
+    printf (&quot;status of ProImportfeatRedefSourceInit is %d \n&quot;, status);
+<a name="anchor-252"></a>
+    status = ProImportfeatRedefine ( &amp;feature, &amp;redefine_source);
+    printf (&quot;status of ProImportfeatRedefine is %d \n&quot;, status);
+*/
+
+<a name="anchor-253"></a>}
+</pre>
+</body>
+</html>

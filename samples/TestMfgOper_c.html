@@ -1,0 +1,317 @@
+<html>
+<head>
+<title>TestMfgOper.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#ifndef lint
+static char TestMfgOper_h [] = &quot;@(#)TestMfgOper.c	1.4 11/26/96&quot;;
+#endif
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-2"></a>System includes
+\*--------------------------------------------------------------------*/
+#include &lt;math.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-3"></a>Pro/Toolkit  includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProSelection.h>
+<a name="anchor-4"></a>#include &lt;ProMdl.h>
+#include &lt;ProElement.h>
+#include &lt;ProElemId.h>
+#include &lt;ProElempath.h>
+#include &lt;ProFeature.h>
+<a name="anchor-5"></a>#include &lt;ProFeatType.h>
+#include &lt;ProSolid.h>
+#include &lt;ProCsys.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-6"></a>Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestConsts.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;MfgMenu.h&quot;
+<a name="anchor-7"></a>#include &quot;TestMfgNew.h&quot;
+#include &quot;UtilTree.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilGeom.h&quot;
+<a name="anchor-8"></a>#include &lt;ProTKRunTime.h>
+#include &lt;ProUtil.h>
+
+/*--------------------------------------------------------------------*\
+Local functions
+<a name="anchor-9"></a>\*--------------------------------------------------------------------*/
+
+ProError ProTestOperationCreate(MfgMenuChoice*);
+
+/*====================================================================*\
+<a name="anchor-10"></a>FUNCTION : ProTestOperationCreate
+PURPOSE  : ProTestOperationCreate
+\*====================================================================*/
+ProError ProTestOperationCreate(MfgMenuChoice *obj_action)
+{
+<a name="anchor-11"></a>    ProMfg       mfg_model = NULL;
+    ProSolid     mfg_solid = NULL;
+    ProFeature   op_feature;
+    ProAsmcomppath  comp_path;
+    ProError     status = PRO_TK_NO_ERROR;
+<a name="anchor-12"></a>    ProSelection *sel;
+    int sel_num, wcell_id = -1;
+    ProModelitem sel_obj;
+    wchar_t      wname[PRO_LINE_SIZE];
+    wchar_t      oper_wname[PRO_LINE_SIZE];
+<a name="anchor-13"></a>    Operation    oper;
+    ProError ProTestWkcellId(ProAppData p_wcell,
+                                     ProAppData app_data, int ts);
+
+        /* Choose Wcell name. */
+<a name="anchor-14"></a>    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Enter MFG Operation name: &quot;);
+    if(!ProUtilStringGet(oper_wname, NULL, PRO_LINE_SIZE))
+        return(PRO_TK_BAD_INPUTS);
+        
+	oper.wname = oper_wname;
+<a name="anchor-15"></a>
+       /* Select Operation CSYS */
+    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Select Operation CSYS.&quot;);
+
+    status = ProSelect((char*)&quot;csys&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;sel_num);
+<a name="anchor-16"></a>    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestOperationCreate()&quot;,
+                      status, status == PRO_TK_COMM_ERROR);
+
+    if( status != PRO_TK_NO_ERROR || sel_num &lt;= 0 )
+        return((ProError)-1);
+<a name="anchor-17"></a>
+    ProSelectionHighlight(sel[0], PRO_COLOR_ERROR);
+    status = ProSelectionModelitemGet(sel[0], &amp;sel_obj);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestOperationCreate()&quot;,
+                      status, status != PRO_TK_NO_ERROR);
+<a name="anchor-18"></a>    oper.csys_id = sel_obj.id;
+
+
+       /* Get Operation Workcell */
+    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Enter Workcell name that Operation belongs to: &quot;);
+<a name="anchor-19"></a>    if(!ProUtilStringGet(wname, NULL, PRO_LINE_SIZE))
+        return(PRO_TK_BAD_INPUTS);
+
+    status = ProTestGetModels(&amp;mfg_model, &amp;mfg_solid, &amp;comp_path);
+
+<a name="anchor-20"></a>    status = ProUtilMfgobjAction(obj_action, MFGOBJ_WKCELL, 1,
+                                             ProTestWkcellId, &amp;wcell_id, 0 );
+    oper.wcell_id = wcell_id;
+
+    ProTKFprintf(stderr, (char*)&quot;In ProTestOperationCreate()\n&quot;);
+<a name="anchor-21"></a>    ProTKFprintf(stderr, (char*)&quot;Workcell id  = %d\n&quot;, wcell_id);
+    
+    if(wcell_id == -1)
+        return((ProError)-1);
+
+<a name="anchor-22"></a>    status = ProTempOperationCreate(oper, &amp;op_feature);
+
+    return ((ProError)1);
+}
+
+<a name="anchor-23"></a>/*====================================================================*\
+FUNCTION : ProTestCreateOper
+PURPOSE  : Create an operation op_name using specified wcell
+\*====================================================================*/
+ProError ProTempOperationCreate(
+<a name="anchor-24"></a>    Operation oper, 
+    ProFeature *p_op_feature)
+{
+    ProElement     oper_elem_tree = (ProElement)NULL; /* Entire tree        */
+    ProElement     oper_elem      = (ProElement)NULL; /* Individual element */
+<a name="anchor-25"></a>    ProSelection   selection;
+    ProValueData   value_data;
+    ProValue       value = (ProValue)NULL;
+    ProErrorlist   errors;
+    ProError       status = PRO_TK_NO_ERROR;
+<a name="anchor-26"></a>    int            i = 0;
+    ProFeatureCreateOptions *opts = 0;
+	ProReference   ref1;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-27"></a>    Set up the top level element values and sizes
+\*--------------------------------------------------------------------*/
+    static ElemTable  oper_elem_table[] =  {
+		{ PRO_E_FEATURE_TYPE,     PRO_VALUE_TYPE_INT },
+		{ PRO_E_STD_FEATURE_NAME, PRO_VALUE_TYPE_WSTRING },
+<a name="anchor-28"></a>		{ PRO_E_OPER_CSYS,        PRO_VALUE_TYPE_SELECTION },
+        { PRO_E_MFG_WCELL_REF,    PRO_VALUE_TYPE_SELECTION}
+		};	
+    int            wc_elem_type_size = sizeof(oper_elem_table)/
+                                sizeof(ElemTable);
+<a name="anchor-29"></a>
+/*--------------------------------------------------------------------*\
+    Allocate space for operation element tree
+\*--------------------------------------------------------------------*/
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-30"></a>    {
+	status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;oper_elem_tree );
+	TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;, &quot;ProTestCreateOper()&quot;,
+					status, (status != PRO_TK_NO_ERROR));
+    }
+<a name="anchor-31"></a>
+/*--------------------------------------------------------------------*\
+    Set all of the top level elements
+\*--------------------------------------------------------------------*/
+    for (i =0; i &lt; wc_elem_type_size; i++)
+<a name="anchor-32"></a>    {
+	if (status == PRO_TK_NO_ERROR)
+	{
+	    status = ProElementAlloc(oper_elem_table[i].elem_type,
+	    							&amp;oper_elem);
+<a name="anchor-33"></a>	    TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;, &quot;ProTestCreateOper()&quot;,
+				    status, (status != PRO_TK_NO_ERROR));
+	}
+
+        switch (oper_elem_table[i].elem_type)
+<a name="anchor-34"></a>	{
+	    case PRO_E_FEATURE_TYPE:
+		 status = ProElementIntegerSet ( oper_elem, PRO_FEAT_OPERATION);
+         TEST_CALL_REPORT(&quot;ProElementIntegerSet()&quot;, &quot;ProTestCreateOper()&quot;,
+				    status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-35"></a>		break;
+
+	    case PRO_E_MFG_WCELL_REF:
+			ProTestCreateSelection(oper.wcell_id, PRO_FEATURE, &amp;selection);
+
+<a name="anchor-36"></a>			status = ProSelectionToReference(selection, &amp;ref1);
+			TEST_CALL_REPORT(&quot;ProSelectionToReference()&quot;, &quot;ProTestCreateOper()&quot;,
+				status, (status != PRO_TK_NO_ERROR));
+
+			status = ProElementReferenceSet(oper_elem, ref1);
+<a name="anchor-37"></a>			TEST_CALL_REPORT(&quot;ProElementReferenceSet()&quot;, &quot;ProTestCreateOper()&quot;,
+				status, (status != PRO_TK_NO_ERROR));
+
+		break;
+
+<a name="anchor-38"></a>	    case PRO_E_OPER_CSYS:
+		ProTestCreateSelection(oper.csys_id, PRO_CSYS, &amp;selection);
+		
+		status = ProSelectionToReference(selection, &amp;ref1 );
+		TEST_CALL_REPORT(&quot;ProSelectionToReference()&quot;, &quot;ProTestCreateOper()&quot;,
+<a name="anchor-39"></a>				    status, (status != PRO_TK_NO_ERROR));
+		
+        status = ProElementReferenceSet(oper_elem, ref1);
+        TEST_CALL_REPORT(&quot;ProElementReferenceSet()&quot;, &quot;ProTestCreateOper()&quot;,
+				    status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-40"></a>		break;
+
+	    case PRO_E_STD_FEATURE_NAME:
+		status=ProElementWstringSet(oper_elem, oper.wname);
+		TEST_CALL_REPORT(&quot;ProElementWstringSet()&quot;, &quot;ProTestCreateOper()&quot;,
+<a name="anchor-41"></a>				    status, (status != PRO_TK_NO_ERROR));
+		break;
+
+	    default:
+	        ProTKFprintf(stderr, (char*)&quot;Error finding element type\n&quot;);
+<a name="anchor-42"></a>		return PRO_TK_GENERAL_ERROR;
+	}
+
+
+	if ( status == PRO_TK_NO_ERROR )
+<a name="anchor-43"></a>	{
+	    status = ProElemtreeElementAdd (oper_elem_tree, NULL, oper_elem );
+	    TEST_CALL_REPORT(&quot;ProElemtreeElementAdd()&quot;,&quot;ProTestCreateOper()&quot;,
+				status, (status != PRO_TK_NO_ERROR));
+	}
+<a name="anchor-44"></a>    
+    }
+
+    status = ProUtilElementtreePrint(oper_elem_tree, PRO_TEST_INFO_WINDOW,NULL);
+
+<a name="anchor-45"></a>    status = ProTestCreateSelection(PRO_TK_NOT_USED,
+					PRO_TYPE_UNUSED, &amp;selection);
+    if (status == PRO_TK_NO_ERROR)
+    {
+	status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+<a name="anchor-46"></a>		1, (ProArray*)&amp;opts);
+
+	opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+	status = ProFeatureWithoptionsCreate( selection, oper_elem_tree,
+<a name="anchor-47"></a>		opts, PRO_REGEN_NO_FLAGS, p_op_feature, &amp;errors);
+	TEST_CALL_REPORT(&quot;ProFeatureWithoptionsCreate()&quot;, &quot;ProTestCreateOper()&quot;,
+				    status, (status != PRO_TK_NO_ERROR));
+
+	status = ProArrayFree((ProArray*)&amp;opts);
+<a name="anchor-48"></a>    }
+    
+    status = ProElementFree(&amp;oper_elem_tree);
+    TEST_CALL_REPORT(&quot;ProElementFree()&quot;, &quot;ProTestCreateOper()&quot;,
+			    status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-49"></a>
+    return(status);   
+}
+
+
+<a name="anchor-50"></a>/*====================================================================*\
+FUNCTION : ProTestOperationDisplay
+PURPOSE  : Top level function to display a tool path of an operation
+\*====================================================================*/
+ProError ProTestOperationDisplay(
+<a name="anchor-51"></a>    MfgMenuChoice *obj_action)
+{
+    ProError status;
+    double   dval = 0;
+    int      ival = 0;
+<a name="anchor-52"></a>    ProMfg mfg_model;
+    ProSolid mfg_solid;
+    ProAsmcomppath comp_path;
+    ProMfgoper oper;
+    char oper_name[PRO_NAME_SIZE] = &quot;&quot;;
+<a name="anchor-53"></a>    ProName name;
+    
+    status = ProTestGetModels (&amp;mfg_model, &amp;mfg_solid, &amp;comp_path);
+             
+    status = ProMfgoperActiveGet (mfg_solid, &amp;oper);
+<a name="anchor-54"></a>    TEST_CALL_REPORT(&quot;ProMfgoperActiveGet()&quot;, 
+        &quot;ProTestOperationDisplay&quot;, status, (status != PRO_TK_NO_ERROR)&amp;&amp;
+        (status != PRO_TK_E_NOT_FOUND));             
+
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-55"></a>    {
+	status = ProModelitemNameGet (&amp;oper, name);
+	TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, &quot;ProTestOperationDisplay()&quot;,
+	    status, (status != PRO_TK_NO_ERROR));
+    
+<a name="anchor-56"></a>	ProWstringToString(oper_name, (wchar_t*)&amp;name);       
+    }
+
+    ProTKPrintf((char*)&quot;\n Current operation : %s \n&quot;, oper_name);
+
+<a name="anchor-57"></a>    status = ProUtilMfgobjAction (obj_action, MFGOBJ_OPER, 1,
+            ProTestOperToolPathDisp, &amp;dval, ival);
+
+    return status;
+}
+<a name="anchor-58"></a>
+
+/*====================================================================*\
+FUNCTION : ProTestOperToolPathDisp
+PURPOSE  : Display a tool path of a given operation
+<a name="anchor-59"></a>\*====================================================================*/
+ProError ProTestOperToolPathDisp(
+    ProAppData p_oper,
+    ProAppData app_data,
+    int dummy)
+<a name="anchor-60"></a>{
+    ProError status;
+    
+    status = ProMfgoperToolpathDisplay((ProMfgoper *) p_oper);
+    TEST_CALL_REPORT(&quot;ProMfgoperToolpathDisplay()&quot;, 
+<a name="anchor-61"></a>             &quot;ProTestOperToolPathDisp&quot;, status, status != PRO_TK_NO_ERROR);
+  
+    return status;
+}
+</pre>
+</body>
+</html>

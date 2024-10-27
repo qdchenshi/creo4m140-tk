@@ -1,0 +1,419 @@
+<html>
+<head>
+<title>TestDrwSheets.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProDrawing.h>
+#include &lt;ProSelection.h>
+<a name="anchor-2"></a>#include &lt;ProMessage.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMdl.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProWindows.h>
+<a name="anchor-3"></a>#include &lt;ProDwgtable.h>
+
+/*--------------------------------------------------------------------*\
+Pro/DEVELOP includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-4"></a>
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;UtilString.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilFiles.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &lt;ProTKRunTime.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-7"></a>Application macros
+\*--------------------------------------------------------------------*/
+#define NEXT_SHEET 0
+#define PREV_SHEET 1
+#define SET_SHEET  2
+<a name="anchor-8"></a>
+/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-9"></a>/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+/*--------------------------------------------------------------------*\
+Functions prototype
+<a name="anchor-10"></a>\*--------------------------------------------------------------------*/
+int ProTestDrwSheetAdd      (ProDrawing* drawing);
+int ProTestDrwSheetDel      (ProDrawing* drawing);
+int ProTestDrwSheetReorder  (ProDrawing* drawing);
+int ProTestDrwSheetSet      (ProDrawing* drawing, int val);
+<a name="anchor-11"></a>int ProTestDrwSheetFormat   (ProDrawing* drawing);
+int ProTestDrwSheetScale    (ProDrawing* drawing);
+
+/*====================================================================*\
+Function:  ProTestDrwSheets                               
+<a name="anchor-12"></a>Purpose:   Make user menu
+\*====================================================================*/
+int ProTestDrwSheets  (ProDrawing* drawing)
+{
+    int             menu_id;
+<a name="anchor-13"></a>    ProError        status;
+
+    /* Setup the menus for test */
+    status = ProMenuFileRegister((char*)&quot;-Sheets&quot;,(char*)&quot;tksheet.mnu&quot;, &amp;menu_id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister()&quot;, &quot;ProTestDrwSheets()&quot;,
+<a name="anchor-14"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet ((char*)&quot;-Sheets&quot;, (char*)&quot;-Previous&quot;,
+                (ProMenubuttonAction)ProTestDrwSheetSet, drawing, PREV_SHEET);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestDrwSheets()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-15"></a>    status = ProMenubuttonActionSet ((char*)&quot;-Sheets&quot;, (char*)&quot;-Next&quot;,
+                (ProMenubuttonAction)ProTestDrwSheetSet, drawing, NEXT_SHEET);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestDrwSheets()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet ((char*)&quot;-Sheets&quot;, (char*)&quot;-Set Current&quot;,
+<a name="anchor-16"></a>                (ProMenubuttonAction)ProTestDrwSheetSet, drawing, SET_SHEET);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestDrwSheets()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet ((char*)&quot;-Sheets&quot;, (char*)&quot;-Add&quot;,
+                (ProMenubuttonAction)ProTestDrwSheetAdd, drawing, 0);
+<a name="anchor-17"></a>    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestDrwSheets()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet ((char*)&quot;-Sheets&quot;, (char*)&quot;-Remove&quot;,
+                (ProMenubuttonAction)ProTestDrwSheetDel, drawing, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestDrwSheets()&quot;,
+<a name="anchor-18"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet ((char*)&quot;-Sheets&quot;, (char*)&quot;-Reorder&quot;,
+                (ProMenubuttonAction)ProTestDrwSheetReorder, drawing, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestDrwSheets()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-19"></a>    status = ProMenubuttonActionSet ((char*)&quot;-Sheets&quot;, (char*)&quot;-Add Format&quot;,
+                (ProMenubuttonAction)ProTestDrwSheetFormat, drawing, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestDrwSheets()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProMenubuttonActionSet ((char*)&quot;-Sheets&quot;, (char*)&quot;-Scale&quot;,
+<a name="anchor-20"></a>                (ProMenubuttonAction)ProTestDrwSheetScale, drawing, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestDrwSheets()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProMenubuttonActionSet ((char*)&quot;-Sheets&quot;, (char*)&quot;-Sheets&quot;,
+<a name="anchor-21"></a>                (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestDrwSheets()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProMenuCreate(PROMENUTYPE_MAIN,(char*)&quot;-Sheets&quot;, &amp;menu_id);
+<a name="anchor-22"></a>    TEST_CALL_REPORT (&quot;ProMenuCreate()&quot;, &quot;ProTestDrwSheets()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProMenuProcess((char*)&quot;&quot;, &amp;menu_id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess()&quot;, &quot;ProTestDrwSheets()&quot;,
+<a name="anchor-23"></a>        status, status != PRO_TK_NO_ERROR);
+
+    return(0);
+}
+
+<a name="anchor-24"></a>/*====================================================================*\
+Function:  ProTestDrwSheetAdd                                    
+Purpose:   Add sheet to the drawing 
+\*====================================================================*/
+int ProTestDrwSheetAdd  (ProDrawing* drawing)
+<a name="anchor-25"></a>{
+    int             sheet_num;
+    ProError        status;
+    ProCharLine     c_name;
+
+<a name="anchor-26"></a>    status = ProDrawingSheetCreate (*drawing, &amp;sheet_num);
+    TEST_CALL_REPORT (&quot;ProDrawingSheetCreate()&quot;, &quot;ProTestDrwSheetAdd()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-27"></a>    {
+        ProTKSprintf (c_name, &quot;Sheet %0d added to drawing.&quot;, sheet_num);
+    }
+    else
+    {
+<a name="anchor-28"></a>        ProTKSprintf (c_name, &quot;Cant add sheet to drawing.&quot;);
+    }
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, c_name);
+
+    /* repaint the current window */
+<a name="anchor-29"></a>    status = ProWindowRepaint (PRO_VALUE_UNUSED);
+    TEST_CALL_REPORT (&quot;ProWindowRepaint()&quot;, &quot;ProTestDrwSheetAdd()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    return (sheet_num);
+<a name="anchor-30"></a>}
+
+/*====================================================================*\
+Function:  ProTestDrwSheetPrompt                                    
+Purpose:   Read sheet number 
+<a name="anchor-31"></a>\*====================================================================*/
+int ProTestDrwSheetPrompt (ProDrawing drawing, char *prompt)
+{
+    int             sheet_num, num_sheets;
+    int             i_range[2] = {1, 1};
+<a name="anchor-32"></a>    ProError        status;
+    ProCharLine     c_line;
+
+    status = ProDrawingSheetsCount (drawing, &amp;num_sheets);
+    TEST_CALL_REPORT (&quot;ProDrawingSheetsCount()&quot;, &quot;ProTestDrwSheetPrompt()&quot;,
+<a name="anchor-33"></a>        status, status != PRO_TK_NO_ERROR);
+    
+    if(status == PRO_TK_NO_ERROR)
+    {
+        i_range[1] = num_sheets;
+<a name="anchor-34"></a>
+        ProTKSprintf (c_line, &quot;%s [1-%0d]:&quot;, prompt, i_range[1]);
+        ProUtilMsgPrint (&quot;gen&quot;, &quot;TEST %0s&quot;, c_line);
+
+        status = ProMessageIntegerRead (i_range, &amp;sheet_num);
+<a name="anchor-35"></a>
+        if (status == PRO_TK_NO_ERROR)
+            return sheet_num;
+
+#if 0
+<a name="anchor-36"></a>        if (status == PRO_TK_MSG_USER_QUIT)
+        {
+            status = ProDrawingCurrentSheetGet(drawing, &amp;sheet_num);
+            TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;,
+                &quot;ProTestDrwSheetPrompt()&quot;, status, status != PRO_TK_NO_ERROR);
+<a name="anchor-37"></a>
+            if (status == PRO_TK_NO_ERROR)
+                return sheet_num;
+        }
+#endif
+<a name="anchor-38"></a>    }
+
+    return -1;
+}
+
+<a name="anchor-39"></a>/*====================================================================*\
+Function:  ProTestDrwSheetDel                                    
+Purpose:   Delete sheet from the drawing 
+\*====================================================================*/
+int ProTestDrwSheetDel (ProDrawing* drawing)
+<a name="anchor-40"></a>{
+    int             sheet_num;
+    ProError        status;
+    ProCharLine     c_line;
+
+<a name="anchor-41"></a>    /* get sheet number on which to create view */
+    sheet_num = ProTestDrwSheetPrompt (*drawing,
+                    (char*)&quot;Enter sheet number for delete&quot;);
+    if (sheet_num == -1)
+        return(-1);
+<a name="anchor-42"></a>
+    status = ProDrawingSheetDelete (*drawing, sheet_num);
+    TEST_CALL_REPORT (&quot;ProDrawingSheetDelete()&quot;, &quot;ProTestDrwSheetDel()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-43"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+        ProTKSprintf(c_line, &quot; Sheet No. %0d deleted from drawing.&quot;, sheet_num);
+    } 
+    else
+<a name="anchor-44"></a>    {
+        ProTKSprintf (c_line, &quot;Cant delete sheet %0d from drawing.&quot;, sheet_num);
+    }
+
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, c_line);
+<a name="anchor-45"></a>
+    /* repaint the currentwindow */
+    status = ProWindowRepaint(PRO_VALUE_UNUSED);
+    TEST_CALL_REPORT (&quot;ProWindowRepaint()&quot;, &quot;ProTestDrwSheetDel()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-46"></a>
+    return (sheet_num);
+}
+
+/*====================================================================*\
+<a name="anchor-47"></a>Function:  ProTestDrwSheetReorder                                    
+Purpose:   Reorder sheet in the drawing 
+\*====================================================================*/
+int ProTestDrwSheetReorder (ProDrawing* drawing)
+{
+<a name="anchor-48"></a>    int         from_sheet, to_sheet;
+    ProError    status;
+
+    from_sheet = ProTestDrwSheetPrompt (*drawing, (char*)&quot;Enter sheet number to reorder&quot;);
+    if (from_sheet == -1)
+<a name="anchor-49"></a>        return (-1);
+
+    to_sheet = ProTestDrwSheetPrompt (*drawing, (char*)&quot;Enter new number&quot;);
+    if (to_sheet == -1)
+        return (-1);
+<a name="anchor-50"></a>
+    status = ProDrawingSheetsReorder (*drawing, from_sheet, to_sheet);
+    TEST_CALL_REPORT (&quot;ProDrawingSheetCreate()&quot;, &quot;ProTestDrwSheetReorder()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-51"></a>    /* repaint the current window */
+    status = ProWindowRepaint(PRO_VALUE_UNUSED);
+    TEST_CALL_REPORT (&quot;ProWindowRepaint()&quot;, &quot;ProTestDrwSheetReorder()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-52"></a>    return (0);
+}
+
+/*====================================================================*\
+Function:  ProTestDrwSheetSet                                    
+<a name="anchor-53"></a>Purpose:   Setup current sheet in the drawing 
+\*====================================================================*/
+int ProTestDrwSheetSet (ProDrawing* drawing, int val)
+{
+    int         num_sheets, cur_sheet;
+<a name="anchor-54"></a>    ProError    status;
+
+    status = ProDrawingSheetsCount (*drawing, &amp;num_sheets);
+    TEST_CALL_REPORT (&quot;ProDrawingSheetsCount()&quot;, &quot;ProTestDrwSheetSet()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-55"></a>
+    if(val == SET_SHEET)
+    {
+        cur_sheet = ProTestDrwSheetPrompt(*drawing,
+                        (char*)&quot;Enter new number of sheet&quot;);
+<a name="anchor-56"></a>        
+        if (cur_sheet == -1)
+            return(-1);
+    }
+    else
+<a name="anchor-57"></a>    {
+        status = ProDrawingCurrentSheetGet(*drawing, &amp;cur_sheet);
+        TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;, &quot;ProTestDrwSheetSet()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-58"></a>        cur_sheet+=(val==NEXT_SHEET)?(+1):(-1);
+        cur_sheet =(cur_sheet>num_sheets)?(1):
+                        ((cur_sheet&lt;1)?(num_sheets):cur_sheet);
+    }
+
+<a name="anchor-59"></a>    status = ProDrawingCurrentSheetSet (*drawing, cur_sheet);
+    TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;, &quot;ProTestDrwSheetSet()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProWindowRepaint(PRO_VALUE_UNUSED);
+<a name="anchor-60"></a>    TEST_CALL_REPORT (&quot;ProWindowRepaint()&quot;, &quot;ProTestDrwSheetSet()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    return (0);
+}
+
+<a name="anchor-61"></a>/*====================================================================*\
+Function:  ProTestDrwSheetReorder                                    
+Purpose:   Add/Replace drawing format in the current sheet
+\*====================================================================*/
+int ProTestDrwSheetFormat (ProDrawing* drawing)
+<a name="anchor-62"></a>{
+    int             version;
+    ProError        status;
+    ProMdl          format;
+    ProLine         filter = {'*','.','f','r','m','\0'};
+<a name="anchor-63"></a>    ProPath         *path_arr, sel_path, path;
+    ProName         *name_arr;
+	ProMdlName      w_name;
+	ProMdlExtension w_type;
+    ProType         type = (ProType)PRO_MDL_DWGFORM;
+<a name="anchor-64"></a>
+    /* No default dirs */
+    status = ProArrayAlloc (0, sizeof(ProPath), 1, (ProArray*)&amp;path_arr);
+    TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;, &quot;ProTestDrwSheetFormat()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-65"></a>
+    status = ProArrayAlloc (0, sizeof(ProName), 1, (ProArray*)&amp;name_arr);
+    TEST_CALL_REPORT (&quot;ProArrayAlloc()&quot;, &quot;ProTestDrwSheetFormat()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-66"></a>    /* Open file */
+    status = ProFileMdlnameOpen (NULL, filter, path_arr, name_arr,
+                         NULL, NULL, sel_path);
+    TEST_CALL_REPORT (&quot;ProFileMdlnameOpen()&quot;, &quot;ProTestDrwSheetFormat()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-67"></a>
+    if (status == PRO_TK_NO_ERROR)
+    {        
+        status = ProFileMdlnameParse (sel_path, path, w_name, w_type, &amp;version);
+        TEST_CALL_REPORT (&quot;ProFileMdlnameParse()&quot;, &quot;ProTestDrwSheetFormat()&quot;,
+<a name="anchor-68"></a>            status, status != PRO_TK_NO_ERROR);
+
+        status = ProPathMdlnameCreate (NULL, w_name, w_type, PRO_VALUE_UNUSED, path);
+        TEST_CALL_REPORT (&quot;ProPathMdlnameCreate()&quot;, &quot;ProTestDrwSheetFormat()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+<a name="anchor-69"></a>        
+        status = ProMdlnameRetrieve (w_name, (ProMdlfileType)type, &amp;format);
+        TEST_CALL_REPORT (&quot;ProMdlnameRetrieve()&quot;, &quot;ProTestDrwSheetFormat()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-70"></a>        status = ProDrawingFormatAdd (*drawing, 0, NULL, format, 0);
+        TEST_CALL_REPORT (&quot;ProDrawingFormatAdd()&quot;, &quot;ProTestDrwSheetFormat()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+    }
+
+<a name="anchor-71"></a>    status = ProArrayFree((ProArray*)&amp;path_arr);
+    TEST_CALL_REPORT (&quot;ProArrayFree()&quot;, &quot;ProTestDrwSheetFormat()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProArrayFree((ProArray*)&amp;name_arr);
+<a name="anchor-72"></a>    TEST_CALL_REPORT (&quot;ProArrayFree()&quot;, &quot;ProTestDrwSheetFormat()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProWindowRepaint (PRO_VALUE_UNUSED);
+    TEST_CALL_REPORT (&quot;ProWindowRepaint()&quot;, &quot;ProTestDrwSheetFormat()&quot;,
+<a name="anchor-73"></a>        status, status != PRO_TK_NO_ERROR);
+        
+    return (0);
+}
+
+<a name="anchor-74"></a>/*====================================================================*\
+Function:  ProTestDrwSheetScale                                    
+Purpose:   Set scale for the current sheet
+\*====================================================================*/
+int ProTestDrwSheetScale (ProDrawing* drawing)
+<a name="anchor-75"></a>{
+    int             sheet;
+    double          scale;
+    double          range[2] = {1e-3, 1e3};
+    ProCharLine     line;
+<a name="anchor-76"></a>    ProError        status;
+
+    status = ProDrawingCurrentSheetGet (*drawing, &amp;sheet);
+    TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;, &quot;ProTestDrwSheetScale()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-77"></a>
+    status = ProDrawingScaleGet (*drawing, NULL, sheet, &amp;scale);
+    TEST_CALL_REPORT (&quot;ProDrawingScaleGet()&quot;, &quot;ProTestDrwSheetScale()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-78"></a>    ProTKSprintf(line, &quot; Input scale(%2.2f) for sheet[%d] (%2.2f...%2.2f): &quot;,
+            scale, sheet, range[0], range[1]);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, line);
+
+    if (ProMessageDoubleRead (range, &amp;scale) != PRO_TK_NO_ERROR)
+<a name="anchor-79"></a>        return (0);
+
+    status = ProDrawingScaleSet (*drawing, NULL, sheet, scale);
+    TEST_CALL_REPORT (&quot;ProDrawingScaleSet()&quot;, &quot;ProTestDrwSheetScale()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-80"></a>
+    status = ProDwgDraftRegenerate (*drawing);
+    TEST_CALL_REPORT (&quot;ProDwgDraftRegenerate()&quot;, &quot;ProTestDrwSheetScale()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-81"></a>    status = ProWindowRepaint(PRO_VALUE_UNUSED);
+    TEST_CALL_REPORT (&quot;ProWindowRepaint()&quot;, &quot;ProTestDrwSheetScale()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    return(0);
+<a name="anchor-82"></a>}
+</pre>
+</body>
+</html>

@@ -1,0 +1,888 @@
+<html>
+<head>
+<title>TestDrwView.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*----------------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*----------------------------------------------------------------------------*/
+#include &quot;ProSelection.h&quot;
+<a name="anchor-2"></a>#include &quot;ProMessage.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProMdl.h&quot;
+#include &quot;ProDrawing.h&quot;
+#include &quot;ProUtil.h&quot;
+<a name="anchor-3"></a>#include &quot;ProWindows.h&quot;
+#include &quot;ProCsys.h&quot;
+#include &quot;ProDwgtable.h&quot;
+#include &quot;ProDrawingView.h&quot;
+/*----------------------------------------------------------------------------*\
+<a name="anchor-4"></a>Application includes
+\*----------------------------------------------------------------------------*/
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilMenu.h&quot;
+#include &quot;UtilFiles.h&quot;
+<a name="anchor-5"></a>#include &lt;ProTKRunTime.h>
+#include &lt;UtilMatrix.h>
+
+/*----------------------------------------------------------------------------*\
+Application macros
+<a name="anchor-6"></a>\*----------------------------------------------------------------------------*/
+#define    SET_SCALE	    1
+#define    MOVE		    2
+#define    DELETE_VIEW	    3
+#define    DISPLAY_STATUS   4
+<a name="anchor-7"></a>
+#define    VIEW_PROJECTION   0
+#define    VIEW_GENERAL      1
+
+#define    DISPLAY_STYLE    0
+<a name="anchor-8"></a>#define    QUILT_HRL        1
+#define    TAN_DISPLAY      2
+#define    CABLE_DISPLAY    3
+#define    CONCEPT_MODEL    4
+#define    WELD_XSEC        5
+<a name="anchor-9"></a>
+#define DRAWING_VIEWS	    &quot;.dvw&quot;
+
+
+ProError ProTestViewVisibleAreaFull();
+<a name="anchor-10"></a>ProError ProTestViewVisibleAreaHalf();
+ProError ProTestViewMenuDeleteAndPop();
+
+/*===========================================================================*\
+  Function : ProTestDrawingView
+<a name="anchor-11"></a>  Purpose  : 
+\*===========================================================================*/
+int ProTestDrawingView(ProMdl *mod)
+{
+    int menu_id;
+<a name="anchor-12"></a>    ProDrawing drawing;
+    ProError err;
+    int ProTestDwgInfo(ProDrawing drawing);
+    int ProTestDwgViewModify(ProDrawing drawing, int arg);
+    int ProTestViewCreate(ProDrawing drawing);
+<a name="anchor-13"></a>    ProError ProTestDwgViewName(ProDrawing drawing);
+    ProError ProTestViewVisibleAreaSetup();
+
+    if (mod == NULL)
+        err = ProMdlCurrentGet ((ProMdl*)&amp;drawing);
+<a name="anchor-14"></a>    else
+        drawing = (ProDrawing)*mod;
+        
+    err = ProMenuFileRegister((char*)&quot;DrawView&quot;,(char*)&quot;tkdrwview.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;DrawView&quot;,(char*)&quot;Info&quot;, 
+<a name="anchor-15"></a>		(ProMenubuttonAction)ProTestDwgInfo, drawing, 0);
+    err = ProMenubuttonActionSet((char*)&quot;DrawView&quot;,(char*)&quot;Set Scale&quot;, 
+		(ProMenubuttonAction)ProTestDwgViewModify, drawing, SET_SCALE);
+    err = ProMenubuttonActionSet((char*)&quot;DrawView&quot;,(char*)&quot;Move&quot;, 
+		(ProMenubuttonAction)ProTestDwgViewModify, drawing, MOVE);
+<a name="anchor-16"></a>    err = ProMenubuttonActionSet((char*)&quot;DrawView&quot;,(char*)&quot;Delete&quot;, 
+		(ProMenubuttonAction)ProTestDwgViewModify, drawing, DELETE_VIEW);
+    err = ProMenubuttonActionSet((char*)&quot;DrawView&quot;,(char*)&quot;SetDisplay&quot;, 
+		(ProMenubuttonAction)ProTestDwgViewModify, drawing, DISPLAY_STATUS);
+    err = ProMenubuttonActionSet((char*)&quot;DrawView&quot;,(char*)&quot;Create&quot;,  
+<a name="anchor-17"></a>                (ProMenubuttonAction)ProTestViewCreate, drawing, 0);
+    err = ProMenubuttonActionSet((char*)&quot;DrawView&quot;,(char*)&quot;SetView Name&quot;, 
+		(ProMenubuttonAction)ProTestDwgViewName, drawing, 0);
+    err = ProMenubuttonActionSet((char*)&quot;DrawView&quot;,(char*)&quot;Set Visible area&quot;, 
+		(ProMenubuttonAction)ProTestViewVisibleAreaSetup, NULL, 0);
+<a name="anchor-18"></a>    err = ProMenubuttonActionSet((char*)&quot;DrawView&quot;,(char*)&quot;DrawView&quot;, 
+		(ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;DrawView&quot;,&amp;menu_id);
+    err = ProMenuProcess((char*)&quot;&quot;, &amp;menu_id);
+
+<a name="anchor-19"></a>    return (0);
+}
+
+
+/*===========================================================================*\
+<a name="anchor-20"></a>  Function : ProTestViewInfoPrint
+  Purpose  : 
+\*===========================================================================*/
+int ProTestViewInfoPrint (ProDrawing drawing, ProView view,  FILE *fp_dview)
+{
+<a name="anchor-21"></a>    ProSolid solid;
+    ProError err;
+    ProPoint3d out_line[2];
+    ProMdldata data;
+    ProName name;
+<a name="anchor-22"></a>	ProMdlName modelName;
+	ProMdlExtension modelExtension;
+    ProCharLine  model_name, type;
+    double scale = 0.0;
+    ProDrawingViewDisplay disp_status;
+<a name="anchor-23"></a>    
+    char* ProTesDisplayStyleToStr(ProDisplayStyle );
+    char* ProTestTanedgeDisplayToStr(ProTanedgeDisplay );
+    char* ProTestCableDisplayToStr(ProCableDisplay );
+    
+<a name="anchor-24"></a>    err = ProDrawingViewSolidGet(drawing, view, &amp;solid);
+    TEST_CALL_REPORT (&quot;ProDrawingViewSolidGet()&quot;,
+        &quot;ProTestDwgInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+	err = ProMdlMdlnameGet (ProSolidToMdl(solid), modelName);
+	err = ProMdlExtensionGet (ProSolidToMdl(solid), modelExtension);
+<a name="anchor-25"></a>    
+    ProWstringToString(model_name, modelName);
+    ProWstringToString(type, modelExtension);
+    ProTKFprintf(fp_dview, &quot;Model displayed in a view:\t%s.%s\t\n&quot;, 
+        model_name, type);
+<a name="anchor-26"></a>    err = ProDrawingViewNameGet (drawing, view, name);
+    TEST_CALL_REPORT (&quot;ProDrawingViewNameGet()&quot;,
+        &quot;ProTestDwgInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp_dview, &quot;View name: %s\n&quot;, 
+        ProWstringToString (model_name, name));
+<a name="anchor-27"></a>    
+    err = ProDrawingViewScaleGet(drawing, view, &amp;scale);
+    TEST_CALL_REPORT (&quot;ProDrawingViewScaleGet()&quot;,
+        &quot;ProTestDwgInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-28"></a>    err = ProDrawingViewDisplayGet (drawing, view, &amp;disp_status);
+    TEST_CALL_REPORT (&quot;ProDrawingViewDisplayGet()&quot;,
+        &quot;ProTestDwgInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp_dview, &quot;Display Style: %s\n&quot;, 
+        ProTesDisplayStyleToStr (disp_status.style));
+<a name="anchor-29"></a>    ProTKFprintf(fp_dview, &quot;Tanedge Display: %s\n&quot;, 
+        ProTestTanedgeDisplayToStr (disp_status.tangent_edge_display));
+    ProTKFprintf(fp_dview, &quot;Cable Display: %s\n&quot;,
+        ProTestCableDisplayToStr (disp_status.cable_display));
+    ProTKFprintf(fp_dview, &quot;Quilt Hlr: %s\n&quot;, 
+<a name="anchor-30"></a>        disp_status.quilt_hlr ? &quot;TRUE&quot; : &quot;FALSE&quot; );
+    ProTKFprintf(fp_dview, &quot;Concept Model: %s\n&quot;, 
+        disp_status.concept_model ? &quot;TRUE&quot; : &quot;FALSE&quot; );
+    ProTKFprintf(fp_dview, &quot;Weld Xsec: %s\n&quot;, 
+        disp_status.weld_xsec ? &quot;TRUE&quot; : &quot;FALSE&quot; );
+<a name="anchor-31"></a>        
+    err = ProDrawingViewOutlineGet (drawing, view, out_line);
+    TEST_CALL_REPORT (&quot;ProDrawingViewOutlineGet()&quot;,
+        &quot;ProTestDwgInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp_dview, &quot;Out line: x_pnt[1] = %6.1f x_pnt[2] = %6.1f &quot;
+<a name="anchor-32"></a>        &quot;x_pnt[3] = %6.1f\n&quot;, out_line[0][0], out_line[0][1], 
+        out_line[0][2]);
+    ProTKFprintf(fp_dview, &quot;Out line: y_pnt[1] = %6.1f y_pnt[2] = %6.1f &quot;
+        &quot;y_pnt[3] = %6.1f\n&quot;, out_line[1][0], out_line[1][1], 
+        out_line[1][2]);
+<a name="anchor-33"></a>        
+    return(0);
+} 
+
+
+<a name="anchor-34"></a>/*===========================================================================*\
+  Function :   ProTestDwgInfo
+  Purpose  :   
+\*===========================================================================*/
+int ProTestDwgInfo(ProDrawing drawing)
+<a name="anchor-35"></a>{
+    ProCharLine  fname; 
+    ProName  wfname;
+    FILE *fp_dview;
+    ProError err;
+<a name="anchor-36"></a>    int n_views = 0, i;
+    ProView *views = NULL;
+
+    fp_dview = ProUtilGenFilePtr((ProMdl)drawing, (char*)DRAWING_VIEWS, fname, (char*)&quot;w&quot;);
+    if (fp_dview == NULL)
+<a name="anchor-37"></a>        return (-1);
+    
+    ProTKFprintf(fp_dview, &quot;File name : %s\n&quot;, fname);
+    err = ProDrawingViewsCollect(drawing, &amp;views);
+    TEST_CALL_REPORT (&quot;ProDrawingViewsCollect()&quot;,
+<a name="anchor-38"></a>        &quot;ProTestDwgInfo()&quot;, err, err != PRO_TK_NO_ERROR 
+        &amp;&amp; err != PRO_TK_E_NOT_FOUND);
+    if (err == PRO_TK_NO_ERROR)
+    {
+        err = ProArraySizeGet(views, &amp;n_views);
+<a name="anchor-39"></a>        TEST_CALL_REPORT (&quot;ProArraySizeGet()&quot;,
+        &quot;ProTestDwgInfo()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+        for(i = 0; i &lt; n_views; i++)
+        {
+<a name="anchor-40"></a>            ProTKFprintf(fp_dview, &quot;\nView(%d) &quot;, i);
+            ProTestViewInfoPrint (drawing, views[i], fp_dview);
+        }
+    }
+    err = ProArrayFree ((ProArray*)&amp;views);
+<a name="anchor-41"></a>    fclose(fp_dview);
+    ProStringToWstring(wfname, fname);
+    err = ProInfoWindowDisplay(wfname, NULL, NULL);
+    
+    return (0);
+<a name="anchor-42"></a>}
+
+
+/*===========================================================================*\
+  Function : ProTestViewDispChoose
+<a name="anchor-43"></a>  Purpose  : 
+\*===========================================================================*/
+int ProTestViewDispChoose (ProDrawingViewDisplay *disp_status)
+{
+    ProError err;
+<a name="anchor-44"></a>    int menu_id;
+    void ProTestViewDispSet (ProDrawingViewDisplay *, int );
+    
+    err = ProMenuFileRegister((char*)&quot;ViewDisplay&quot;,(char*)&quot;tkviewdisp.mnu&quot;, &amp;menu_id);
+    err = ProMenubuttonActionSet((char*)&quot;ViewDisplay&quot;,(char*)&quot;ViewDisplay&quot;, 
+<a name="anchor-45"></a>        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+    err = ProMenubuttonActionSet((char*)&quot;ViewDisplay&quot;,(char*)&quot;DispStyle&quot;, 
+        (ProMenubuttonAction)ProTestViewDispSet, disp_status, DISPLAY_STYLE);
+    err = ProMenubuttonActionSet((char*)&quot;ViewDisplay&quot;,(char*)&quot;QuiltHrl&quot;, 
+        (ProMenubuttonAction)ProTestViewDispSet, disp_status, QUILT_HRL);
+<a name="anchor-46"></a>    err = ProMenubuttonActionSet((char*)&quot;ViewDisplay&quot;,(char*)&quot;TanDisplay&quot;, 
+        (ProMenubuttonAction)ProTestViewDispSet, disp_status, TAN_DISPLAY);
+    err = ProMenubuttonActionSet((char*)&quot;ViewDisplay&quot;,(char*)&quot;CableDisplay&quot;, 
+        (ProMenubuttonAction)ProTestViewDispSet, disp_status, CABLE_DISPLAY);
+    err = ProMenubuttonActionSet((char*)&quot;ViewDisplay&quot;,(char*)&quot;ConceptModel&quot;,  
+<a name="anchor-47"></a>        (ProMenubuttonAction)ProTestViewDispSet, disp_status, CONCEPT_MODEL);
+    err = ProMenubuttonActionSet((char*)&quot;ViewDisplay&quot;,(char*)&quot;WeldXsec&quot;,  
+        (ProMenubuttonAction)ProTestViewDispSet, disp_status, WELD_XSEC);
+    err = ProMenubuttonActionSet((char*)&quot;ViewDisplay&quot;,(char*)&quot;Done&quot;, 
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+<a name="anchor-48"></a>    err = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;ViewDisplay&quot;,&amp;menu_id);
+    err = ProMenuProcess((char*)&quot;ViewDisplay&quot;, &amp;menu_id);
+    
+    return (0);
+    
+<a name="anchor-49"></a>}
+
+/*===========================================================================*\
+  Function :  ProTestDwgViewModify 
+  Purpose  :   
+<a name="anchor-50"></a>\*===========================================================================*/
+int ProTestDwgViewModify(ProDrawing drawing, int arg)
+{
+    double scale;
+    ProCharLine message, astr;
+<a name="anchor-51"></a>    ProModelitem sel_item;
+    ProBoolean delete_children;
+    ProSelection *sel;
+    ProView view;
+    ProError err;
+<a name="anchor-52"></a>    ProSolid solid;
+    int n_sel, view_id = 0;
+    ProPoint3d pnt, to_pnt, sel_pnt;
+    ProVector tvec;
+    ProMatrix trans;
+<a name="anchor-53"></a>    ProMouseButton btn;
+    ProDrawingViewDisplay disp_status;
+        
+    /* Pick the view */
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select a feature to identify a view&quot;);
+<a name="anchor-54"></a>    err = ProSelect((char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+    if (n_sel &lt;= 0 || err!=PRO_TK_NO_ERROR)
+        return (0);
+
+    err = ProSelectionViewGet(sel[0], &amp;view);
+<a name="anchor-55"></a>    TEST_CALL_REPORT (&quot;ProSelectionViewGet()&quot;,
+                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+    err = ProSelectionPoint3dGet (sel[0], pnt);
+    TEST_CALL_REPORT (&quot;ProSelectionViewGet()&quot;,
+        &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+<a name="anchor-56"></a>    err = ProSelectionModelitemGet (sel[0], &amp;sel_item);
+    TEST_CALL_REPORT (&quot;ProSelectionViewGet()&quot;,
+                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+
+	err = ProDrawingViewIdGet(drawing, view, &amp;view_id);
+<a name="anchor-57"></a>
+    err = ProDrawingViewTransformGet (drawing, view, PRO_B_TRUE, trans);
+    TEST_CALL_REPORT (&quot;ProDrawingViewTransformGet()&quot;,
+                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-58"></a>    err = ProPntTrfEval (pnt, trans, sel_pnt);
+    TEST_CALL_REPORT (&quot;ProPntTrfEval()&quot;,
+                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+
+    switch (arg)
+<a name="anchor-59"></a>    {
+    case SET_SCALE :            /* Set the view scale  */
+         /* Get the current scale to use as a default */
+	 err = ProDrawingViewScaleGet(drawing, view, &amp;scale);
+         TEST_CALL_REPORT (&quot;ProDrawingViewScaleGet()&quot;,
+<a name="anchor-60"></a>                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+         ProTKSprintf(message,&quot;scale [%5.2f] &quot;,scale);
+	 ProTKSprintf(astr, &quot;Enter  %s: &quot;, message);
+         ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, astr);
+         if(ProMessageDoubleRead(NULL, &amp;scale) != PRO_TK_NO_ERROR)
+<a name="anchor-61"></a>             return (0);
+	 err = ProDrawingViewScaleSet(drawing, view, scale);
+         TEST_CALL_REPORT (&quot;ProDrawingViewScaleSet()&quot;,
+                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-62"></a>         break;
+    case MOVE :            /* Translate the view   */
+         ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select the new position: &quot;);
+	 err = ProMousePickGet(PRO_LEFT_BUTTON, &amp;btn, to_pnt);
+         TEST_CALL_REPORT (&quot;ProMousePickGet()&quot;,
+<a name="anchor-63"></a>                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+                     
+         tvec[0] = to_pnt[0] - sel_pnt[0];
+         tvec[1] = to_pnt[1] - sel_pnt[1];
+         tvec[2] = to_pnt[2] - sel_pnt[2];
+<a name="anchor-64"></a>	 err = ProDrawingViewMove(drawing, view, tvec);
+         TEST_CALL_REPORT (&quot;ProDrawingViewMove()&quot;,
+                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+
+         break;
+<a name="anchor-65"></a>    case DELETE_VIEW :
+         ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Delete children too [N] ?&quot;);
+         delete_children = (ProBoolean)ProUtilYesnoGet((char*)&quot;No&quot;);
+         
+         err = ProDrawingViewSolidGet (drawing, view, &amp;solid);
+<a name="anchor-66"></a>         TEST_CALL_REPORT (&quot;ProDrawingViewSolidGet()&quot;,
+                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+                              
+	 err = ProDrawingViewDelete(drawing, view, delete_children);
+         TEST_CALL_REPORT (&quot;ProDrawingViewDelete()&quot;,
+<a name="anchor-67"></a>                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+                     
+         break;
+    case DISPLAY_STATUS :
+         err = ProDrawingViewDisplayGet (drawing, view, &amp;disp_status);
+<a name="anchor-68"></a>         TEST_CALL_REPORT (&quot;ProDrawingViewDisplayGet()&quot;,
+                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+        
+         ProTestViewDispChoose (&amp;disp_status);
+         
+<a name="anchor-69"></a>         err = ProDrawingViewDisplaySet (drawing, view, &amp;disp_status);
+         TEST_CALL_REPORT (&quot;ProDrawingViewDisplaySet()&quot;,
+                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+                                          
+         break;
+<a name="anchor-70"></a>    default:
+         break;
+    }
+    
+    err = ProWindowRepaint (PRO_VALUE_UNUSED);
+<a name="anchor-71"></a>    TEST_CALL_REPORT (&quot;ProWindowRepaint()&quot;,
+                     &quot;ProTestDwgViewModify()&quot;, err, err != PRO_TK_NO_ERROR);
+                     
+    return (0);
+}
+<a name="anchor-72"></a>
+
+/*===========================================================================*\
+  Function : ProTestViewDispSet
+  Purpose  : 
+<a name="anchor-73"></a>\*===========================================================================*/
+void ProTestViewDispSet (ProDrawingViewDisplay *disp_status, int action)
+{
+    ProError err;
+    
+<a name="anchor-74"></a>    static ProUtilMenuButtons disp_style[] = { 
+        {&quot;DisplayStyle&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Default&quot;, PRO_DISPSTYLE_DEFAULT, 0},
+        {&quot;Wireframe&quot;, PRO_DISPSTYLE_WIREFRAME, 0},
+        {&quot;HiddenLine&quot;, PRO_DISPSTYLE_HIDDEN_LINE, 0},
+<a name="anchor-75"></a>        {&quot;NoHidden&quot;, PRO_DISPSTYLE_NO_HIDDEN, 0},
+        {&quot;Shaded&quot;, PRO_DISPSTYLE_SHADED, 0},
+	{&quot;FollowEnvironment&quot;, PRO_DISPSTYLE_FOLLOW_ENVIRONMENT, 0},
+        {&quot;&quot;,0,0}
+    };
+<a name="anchor-76"></a>    static ProUtilMenuButtons cab_disp[] = { 
+        {&quot;CableDisplay&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Default&quot;, PRO_CABLEDISP_DEFAULT, 0},
+        {&quot;Centerline&quot;, PRO_CABLEDISP_CENTERLINE, 0},
+        {&quot;Thick&quot;, PRO_CABLEDISP_THICK, 0},
+<a name="anchor-77"></a>        {&quot;&quot;,0,0}
+    };
+    static ProUtilMenuButtons tang_disp[] = { 
+        {&quot;TanedgeDisplay&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;Default&quot;, PRO_TANEDGE_DEFAULT, 0},
+<a name="anchor-78"></a>        {&quot;None&quot;, PRO_TANEDGE_NONE, 0},
+        {&quot;Centerline&quot;, PRO_TANEDGE_CENTERLINE, 0},
+        {&quot;Phantom&quot;, PRO_TANEDGE_PHANTOM, 0},
+        {&quot;Dimmed&quot;, PRO_TANEDGE_DIMMED, 0},
+        {&quot;Solid&quot;, PRO_TANEDGE_SOLID, 0},
+<a name="anchor-79"></a>        {&quot;&quot;,0,0}
+    };
+        
+    switch (action)
+    {
+<a name="anchor-80"></a>    case DISPLAY_STYLE:
+        err = ProUtilMenuIntValueSelect(disp_style, 
+            (int*)&amp;disp_status->style);
+             
+        break;
+<a name="anchor-81"></a>    case QUILT_HRL:
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Quilt hrl (Yes/No)? [N]:&quot;); 
+            disp_status->quilt_hlr = (ProBoolean)ProUtilYesnoGet ((char*)&quot;No&quot;);
+        
+        break;
+<a name="anchor-82"></a>    case TAN_DISPLAY:
+        err = ProUtilMenuIntValueSelect(tang_disp, 
+            (int*)&amp;disp_status->tangent_edge_display);
+        
+        break;
+<a name="anchor-83"></a>    case CABLE_DISPLAY:
+        err = ProUtilMenuIntValueSelect(cab_disp, 
+            (int*)&amp;disp_status->cable_display);
+            
+        break;
+<a name="anchor-84"></a>    case CONCEPT_MODEL:
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Concept Model (Yes/No)? [N]:&quot;); 
+            disp_status->concept_model = (ProBoolean)ProUtilYesnoGet ((char*)&quot;No&quot;);
+        
+        break;
+<a name="anchor-85"></a>    case WELD_XSEC:
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Weld Xsec (Yes/No)? [N]:&quot;); 
+            disp_status->weld_xsec = (ProBoolean)ProUtilYesnoGet ((char*)&quot;No&quot;);
+        
+        break;
+<a name="anchor-86"></a>    default: break;
+    }
+}
+
+/*===========================================================================*\
+<a name="anchor-87"></a>  Function : ProTestViewCreate
+  Purpose  : 
+\*===========================================================================*/
+int ProTestViewCreate(ProDrawing drawing)
+{
+<a name="anchor-88"></a>    ProError err;
+    ProSolid solid;
+    ProModelitem sel_item;
+    ProSelection *sel;
+    int n_sheet = 0, view_type = 0, n_sel = 0, win_id, old_win_id;
+<a name="anchor-89"></a>    ProBoolean exploded = PRO_B_FALSE;
+    ProPoint3d sel_pnt;
+    double     scale = 0.0;
+    ProView    view, parent_view;
+    ProCharLine sel_path, line;
+<a name="anchor-90"></a>    ProPath current_dir, ch_dir, def_path;
+    ProType type;
+    ProMdlName w_name;
+	ProMdlExtension w_type;
+    ProMouseButton btn;
+<a name="anchor-91"></a>    ProCsys csys;
+	ProBoolean tree_flag=PRO_B_FALSE;
+    ProMatrix orientation;
+    ProMatrix  def_matrix = 
+    {
+<a name="anchor-92"></a>        { 0.921061,    0.000000,    0.389418,    0.000000}, 
+        {-0.305042,    0.621610,    0.721492,    0.000000}, 
+        {-0.242066,   -0.783327,    0.572541,    0.000000}, 
+        { 0.000000,    0.000000,    0.000000,    1.000000} 
+    };
+<a name="anchor-93"></a>	ProGeomitemdata* p_csys_data_ptr;
+
+    static ProUtilMenuButtons create_opt[] = { 
+        {&quot;CreateOpt&quot;, 0, TEST_CALL_PRO_MENU_DELETE},
+        {&quot;General&quot;, VIEW_GENERAL, 0},
+<a name="anchor-94"></a>        {&quot;Projection&quot;, VIEW_PROJECTION, 0},
+        {&quot;&quot;,0,0}
+    };
+    err = ProUtilMenuIntValueSelect(create_opt, &amp;view_type);
+    err = ProDrawingCurrentSheetGet (drawing, &amp;n_sheet);
+<a name="anchor-95"></a>    TEST_CALL_REPORT (&quot;ProDrawingCurrentSheetGet()&quot;,
+          &quot;ProTestViewCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+          
+    if (view_type)
+    {
+<a name="anchor-96"></a>        err = ProUtilFileOpen ((char*)&quot;*.*&quot;, sel_path);
+        if (err != PRO_TK_NO_ERROR)
+            return (0);
+        err = ProDirectoryCurrentGet(current_dir);
+        ProStringToWstring (ch_dir, sel_path);
+<a name="anchor-97"></a>        err = ProFileMdlnameParse(ch_dir, def_path, w_name, w_type, NULL);
+        err = ProDirectoryChange(def_path);
+        err = ProPathMdlnameCreate(NULL, w_name, w_type, PRO_VALUE_UNUSED, def_path);
+        ProWstringToString(line, def_path);
+        if(ProUtilConfirmNameType(line, sel_path, &amp;type) != PRO_TK_BAD_INPUTS)
+<a name="anchor-98"></a>        {
+            err = ProMdlnameRetrieve(w_name, (ProMdlfileType)type, (ProMdl*)&amp;solid);
+            TEST_CALL_REPORT (&quot;ProMdlnameRetrieve()&quot;,
+                &quot;ProTestViewCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+        }
+<a name="anchor-99"></a>        err = ProDirectoryChange(current_dir);
+        err = ProDrawingSolidAdd(drawing, solid);
+        TEST_CALL_REPORT (&quot;ProDrawingSolidAdd()&quot;,
+            &quot;ProTestViewCreate()&quot;, err, err != PRO_TK_NO_ERROR &amp;&amp;
+             err != PRO_TK_E_IN_USE);
+<a name="anchor-100"></a>        
+        if (type ==  PRO_ASSEMBLY)
+        {
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Create exploded view? [N]:&quot;); 
+            exploded = (ProBoolean)ProUtilYesnoGet ((char*)&quot;No&quot;);
+<a name="anchor-101"></a>        }
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick point for view&quot;);
+        while(ProMousePickGet(PRO_LEFT_BUTTON, &amp;btn, sel_pnt) !=
+            PRO_TK_NO_ERROR);
+        sel_pnt[2] = 0;
+<a name="anchor-102"></a>        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter view scale factor&quot;);
+        if (ProMessageDoubleRead(NULL, &amp;scale) != PRO_TK_NO_ERROR)
+            return (0);
+        
+        err = ProWindowCurrentGet(&amp;old_win_id);
+<a name="anchor-103"></a>       	err=ProAccessorywindowWithTreeCreate(w_name,type,tree_flag, &amp;win_id);
+        err = ProMdlDisplay(solid);
+        err = ProWindowCurrentSet(win_id);
+        
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select csys&quot;);
+<a name="anchor-104"></a>        err = ProSelect((char*)&quot;csys&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+        if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+             ProUtilMatrixCopy (def_matrix, orientation);
+        else 
+        {
+<a name="anchor-105"></a>            ProUtilMatrixCopy (NULL, orientation);
+            err = ProSelectionModelitemGet (sel[0], &amp;sel_item);
+            err = ProCsysInit (solid, sel_item.id, &amp;csys);
+
+            err = ProCsysDataGet(csys, &amp;p_csys_data_ptr);
+<a name="anchor-106"></a>
+	       p_csys_data_ptr->data.p_csys_data->origin[0] = 
+	       p_csys_data_ptr->data.p_csys_data->origin[1] = 
+	       p_csys_data_ptr->data.p_csys_data->origin[2] = 0.0;
+
+<a name="anchor-107"></a>	     err = ProMatrixInit(p_csys_data_ptr->data.p_csys_data->x_vector, 
+			p_csys_data_ptr->data.p_csys_data->y_vector, 
+			p_csys_data_ptr->data.p_csys_data->z_vector, 
+			p_csys_data_ptr->data.p_csys_data->origin, orientation);
+        }
+<a name="anchor-108"></a>        ProWindowCurrentSet(old_win_id);
+        ProWindowDelete(win_id);
+        err = ProDrawingGeneralviewCreate (drawing, solid, n_sheet, exploded, 
+            sel_pnt, scale, orientation, &amp;view);
+        TEST_CALL_REPORT (&quot;ProDrawingGeneralviewCreate()&quot;,
+<a name="anchor-109"></a>            &quot;ProTestViewCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+    else
+    {
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select a parent view.&quot;);
+<a name="anchor-110"></a>        err = ProSelect((char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+        if (err != PRO_TK_NO_ERROR || n_sel &lt; 1)
+            return (0);
+        err = ProSelectionViewGet(sel[0], &amp;parent_view);
+        TEST_CALL_REPORT (&quot;ProSelectionViewGet()&quot;,
+<a name="anchor-111"></a>            &quot;ProTestViewCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProSelectionModelitemGet (sel[0], &amp;sel_item);
+        TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;,
+            &quot;ProTestViewCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+        err = ProMdlTypeGet (sel_item.owner, (ProMdlType*)&amp;type);
+<a name="anchor-112"></a>        TEST_CALL_REPORT (&quot;ProMdlTypeGet()&quot;,
+            &quot;ProTestViewCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+        if (type == PRO_ASSEMBLY)
+        {
+            ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Create exploded view? [N]:&quot;); 
+<a name="anchor-113"></a>            exploded = (ProBoolean)ProUtilYesnoGet ((char*)&quot;No&quot;);
+        }
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Pick point for view&quot;);
+        while (ProMousePickGet(PRO_LEFT_BUTTON, &amp;btn, sel_pnt) != 
+            PRO_TK_NO_ERROR);
+<a name="anchor-114"></a>        err = ProDrawingProjectedviewCreate (drawing, parent_view, exploded, 
+            sel_pnt, &amp;view); 
+        TEST_CALL_REPORT (&quot;ProDrawingProjectedviewCreate()&quot;,
+            &quot;ProTestViewCreate()&quot;, err, err != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-115"></a>    
+    return (0);    
+}
+
+/*===========================================================================*\
+<a name="anchor-116"></a>  Function : ProTesDisplayStyleToStr
+  Purpose  : 
+\*===========================================================================*/
+char* ProTesDisplayStyleToStr(
+    ProDisplayStyle type
+<a name="anchor-117"></a>)
+{
+    switch (type)
+    {
+    case PRO_DISPSTYLE_DEFAULT : return (char*)&quot;DEFAULT&quot;;
+<a name="anchor-118"></a>    case PRO_DISPSTYLE_WIREFRAME  : return (char*)&quot;WIREFRAME&quot;;
+    case PRO_DISPSTYLE_HIDDEN_LINE  : return (char*)&quot;HIDDEN_LINE&quot;;
+    case PRO_DISPSTYLE_NO_HIDDEN: return (char*)&quot;NO_HIDDEN&quot;;
+    case PRO_DISPSTYLE_SHADED  : return (char*)&quot;SHADED&quot;;
+    case PRO_DISPSTYLE_FOLLOW_ENVIRONMENT: return (char*)&quot;FOLLOW ENVIRONMENT&quot;;
+<a name="anchor-119"></a>    default : return (char*)&quot;INVALID&quot;;
+    }
+}
+
+/*===========================================================================*\
+<a name="anchor-120"></a>  Function : ProTestTanedgeDisplayToStr
+  Purpose  : 
+\*===========================================================================*/
+char* ProTestTanedgeDisplayToStr(
+    ProTanedgeDisplay type
+<a name="anchor-121"></a>)
+{
+    switch (type)
+    {
+    case PRO_TANEDGE_DEFAULT : return (char*)&quot;DEFAULT&quot;;
+<a name="anchor-122"></a>    case PRO_TANEDGE_NONE  : return (char*)&quot;NONE&quot;;
+    case PRO_TANEDGE_CENTERLINE  : return (char*)&quot;CENTERLINE&quot;;
+    case PRO_TANEDGE_PHANTOM: return (char*)&quot;PHANTOM&quot;;
+    case PRO_TANEDGE_DIMMED  : return (char*)&quot;DIMMED&quot;;
+    case PRO_TANEDGE_SOLID  : return (char*)&quot;SOLID&quot;;
+<a name="anchor-123"></a>    default : return (char*)&quot;INVALID&quot;;
+    }
+}
+
+/*===========================================================================*\
+<a name="anchor-124"></a>  Function : ProTesDisplayStyleToStr
+  Purpose  : 
+\*===========================================================================*/
+char* ProTestCableDisplayToStr(
+    ProCableDisplay type
+<a name="anchor-125"></a>)
+{
+    switch (type)
+    {
+    case PRO_CABLEDISP_DEFAULT : return (char*)&quot;DEFAULT&quot;;
+<a name="anchor-126"></a>    case PRO_CABLEDISP_CENTERLINE  : return (char*)&quot;CENTERLINE&quot;;
+    case PRO_CABLEDISP_THICK: return (char*)&quot;THICK&quot;;
+    default : return (char*)&quot;INVALID&quot;;
+    }
+}
+<a name="anchor-127"></a>
+
+/*====================================================================*
+  Function : ProTestDwgViewName
+  Purpose  : To set view name
+<a name="anchor-128"></a>\*====================================================================*/
+ProError ProTestDwgViewName (ProDrawing drawing)
+{
+   ProSelection *view_sel;
+   int num_sel,max_length = 32;
+<a name="anchor-129"></a>   ProName string;
+   ProView view; 
+   ProError status;
+
+   ProFileName WMSGFIL = {'u','s','e','r','m','s','g','.','t','x','t','\0'};
+<a name="anchor-130"></a>
+   /*------------------------------------------------------------*\
+      Get the current model
+   \*------------------------------------------------------------*/
+   status = ProMdlCurrentGet ((ProMdl*)&amp;drawing);
+<a name="anchor-131"></a>   TEST_CALL_REPORT (&quot;ProMdlCurrentGet&quot;, &quot;ProTestDwgViewName&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+   if (status != PRO_TK_NO_ERROR) return(status);
+
+   /*------------------------------------------------------------*\
+<a name="anchor-132"></a>      Get view to set view name 
+   \*------------------------------------------------------------*/
+   status = ProMessageDisplay (WMSGFIL, (char*)&quot;USER %0s&quot;,
+				&quot;Select view to set view name&quot;);
+   TEST_CALL_REPORT (&quot;ProMessageDisplay&quot;, &quot;ProTestDwgViewName&quot;,
+<a name="anchor-133"></a>		status, status != PRO_TK_NO_ERROR);
+
+   status = ProSelect ((char*)&quot;dwg_view&quot;, 1, NULL, NULL, NULL, NULL, &amp;view_sel, &amp;num_sel);
+   TEST_CALL_REPORT (&quot;ProSelect&quot;, &quot;ProTestDwgViewName&quot;, status, status != PRO_TK_NO_ERROR);
+   if (status != PRO_TK_NO_ERROR) return(status);
+<a name="anchor-134"></a>
+   status = ProSelectionViewGet (view_sel[0], &amp;view);
+   TEST_CALL_REPORT (&quot;ProSelectionViewGet&quot;, &quot;ProTestDwgViewName&quot;,
+		status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-135"></a>   /*------------------------------------------------------------*\
+      Get view name to set 
+   \*------------------------------------------------------------*/
+   status = ProMessageDisplay (WMSGFIL, (char*)&quot;USER %0s&quot;,
+		&quot;Enter view name to set&quot;);
+<a name="anchor-136"></a>   TEST_CALL_REPORT (&quot;ProMessageDisplay&quot;, &quot;ProTestDwgViewName&quot;, status,
+		 status != PRO_TK_NO_ERROR);
+
+   status = ProMessageStringRead (max_length, string);
+   TEST_CALL_REPORT (&quot;ProMessageStringRead&quot;, &quot;ProTestDwgViewName&quot;,
+<a name="anchor-137"></a>		status, status != PRO_TK_NO_ERROR);
+
+   status = ProDrawingViewNameSet (drawing, view, string);
+   TEST_CALL_REPORT (&quot;ProDrawingViewNameSet&quot;, &quot;ProTestDwgViewName&quot;,
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-138"></a> 
+   status = ProDrawingtreeRefresh (drawing, PRO_VALUE_UNUSED);
+   TEST_CALL_REPORT (&quot;ProDrawingtreeRefresh&quot;, &quot;ProTestDwgViewName&quot;,
+		status, status != PRO_TK_NO_ERROR);
+  
+<a name="anchor-139"></a>   return (status);
+}
+
+
+/*====================================================================*
+<a name="anchor-140"></a>Function : ProTestViewMenuDeleteAndPop()
+Purpose  : Deletes the current menu and pops up its parent
+\*====================================================================*/
+ProError ProTestViewMenuDeleteAndPop()
+{
+<a name="anchor-141"></a>  ProError status;
+
+  status = ProMenuDelete();
+  TEST_CALL_REPORT (&quot;ProMenuDelete&quot;, &quot;ProTestViewMenuDeleteAndPop&quot;, status, 
+		status != PRO_TK_NO_ERROR );
+<a name="anchor-142"></a>
+  status = ProMenuPop();
+  TEST_CALL_REPORT (&quot;ProMenuPop&quot;, &quot;ProTestViewMenuDeleteAndPop&quot;, status,
+		status != PRO_TK_NO_ERROR );
+
+<a name="anchor-143"></a>  return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*
+Function : ProTestViewVisibleAreaSetup
+<a name="anchor-144"></a>Purpose  : Setup the Visible area menu of the User Guide example
+\*====================================================================*/
+ProError ProTestViewVisibleAreaSetup ()
+{
+  int menu_id, action;
+<a name="anchor-145"></a>  ProError status;
+
+  status = ProMenuFileRegister ((char*)&quot;TKViewVisibleArea&quot;, (char*)&quot;tkviewvisiblearea.mnu&quot;,
+	      &amp;menu_id);
+  TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestViewVisibleAreaSetup&quot;,  
+<a name="anchor-146"></a>  	      status, status != PRO_TK_NO_ERROR);
+
+  status = ProMenubuttonActionSet ((char*)&quot;TKViewVisibleArea&quot;, (char*)&quot;Full View&quot;,
+              (ProMenubuttonAction)ProTestViewVisibleAreaFull, NULL, 0);
+  TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestViewVisibleAreaSetup&quot;,
+<a name="anchor-147"></a>	      status, status != PRO_TK_NO_ERROR );
+
+  status = ProMenubuttonActionSet ((char*)&quot;TKViewVisibleArea&quot;, (char*)&quot;Half View&quot;,
+              (ProMenubuttonAction)ProTestViewVisibleAreaHalf, NULL, 0);
+  TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestViewVisibleAreaSetup&quot;, 
+<a name="anchor-148"></a>	      status, status != PRO_TK_NO_ERROR );
+
+  status = ProMenubuttonActionSet ((char*)&quot;TKViewVisibleArea&quot;, (char*)&quot;Done/Return&quot;,
+              (ProMenubuttonAction)ProTestViewMenuDeleteAndPop, NULL, 0);
+  TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestViewVisibleAreaSetup&quot;,
+<a name="anchor-149"></a>	      status, status != PRO_TK_NO_ERROR );
+
+  status = ProMenubuttonActionSet ((char*)&quot;TKViewVisibleArea&quot;, (char*)&quot;TKViewVisibleArea&quot;,
+              (ProMenubuttonAction)ProTestViewMenuDeleteAndPop, NULL, 0);
+  TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestViewVisibleAreaSetup&quot;,
+<a name="anchor-150"></a>	       status, status != PRO_TK_NO_ERROR );  
+
+  status = ProMenuPush();
+  TEST_CALL_REPORT (&quot;ProMenuPush&quot;, &quot;ProTestViewVisibleAreaSetup&quot;, status,
+	      status != PRO_TK_NO_ERROR );
+<a name="anchor-151"></a>
+  status = ProMenuCreate (PROMENUTYPE_MAIN, (char*)&quot;TKViewVisibleArea&quot;, &amp;menu_id);
+  TEST_CALL_REPORT (&quot;ProMenuCreate&quot;, &quot;ProTestViewVisibleAreaSetup&quot;, status,
+	      status != PRO_TK_NO_ERROR );
+ 
+<a name="anchor-152"></a>  status = ProMenuProcess ((char*)&quot;TKViewVisibleArea&quot;, &amp;action);
+  TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProTestViewVisibleAreaSetup&quot;, status,
+	      status != PRO_TK_NO_ERROR);
+
+  return (status);
+<a name="anchor-153"></a>}
+
+/*====================================================================*
+ Function : ProTestViewVisibleAreaFull
+ Purpose  : To set full visible area for view
+<a name="anchor-154"></a>\*====================================================================*/
+ProError ProTestViewVisibleAreaFull ()
+{
+   ProError status;
+   ProDrawing drawing;
+<a name="anchor-155"></a>   ProView view;
+   ProSelection *view_sel;
+   int num_sel;
+
+   ProFileName WMSGFIL = {'u','s','e','r','m','s','g','.','t','x','t','\0'};
+<a name="anchor-156"></a>
+   /*------------------------------------------------------------*\
+      Get the current model
+   \*------------------------------------------------------------*/
+   status = ProMdlCurrentGet ((ProMdl*)&amp;drawing);
+<a name="anchor-157"></a>   TEST_CALL_REPORT (&quot;ProMdlCurrentGet&quot;, &quot;ProTestViewVisibleAreaFull&quot;, status,
+            status != PRO_TK_NO_ERROR);
+   if (status != PRO_TK_NO_ERROR) return(status);
+
+   /*------------------------------------------------------------*\
+<a name="anchor-158"></a>      Get view to set visible 
+   \*------------------------------------------------------------*/
+   status = ProMessageDisplay (WMSGFIL, (char*)&quot;USER %0s&quot;,
+	    &quot;Select view to set visible area&quot;);
+   TEST_CALL_REPORT (&quot;ProMessageDisplay&quot;, &quot;ProTestViewVisibleAreaFull&quot;, status,
+<a name="anchor-159"></a>            status != PRO_TK_NO_ERROR);
+
+   status = ProSelect ((char*)&quot;dwg_view&quot;, 1, NULL, NULL, NULL, NULL, &amp;view_sel, &amp;num_sel);
+   TEST_CALL_REPORT (&quot;ProSelect&quot;, &quot;ProTestViewVisibleAreaFull&quot;, status,
+	    status != PRO_TK_NO_ERROR);
+<a name="anchor-160"></a>   if (status != PRO_TK_NO_ERROR) return(status);
+
+   status = ProSelectionViewGet (view_sel[0], &amp;view);
+   TEST_CALL_REPORT (&quot;ProSelectionViewGet&quot;, &quot;ProTestViewVisibleAreaFull&quot;, status,
+            status != PRO_TK_NO_ERROR);
+<a name="anchor-161"></a>
+   status = ProDrawingViewFullVisibleAreaSet (drawing, view);
+   TEST_CALL_REPORT (&quot;ProDrawingViewFullVisibleAreaSet&quot;, &quot;ProTestViewVisibleAreaFull&quot;,
+	    status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-162"></a>   status = ProDrawingViewRegenerate (drawing, view);
+   TEST_CALL_REPORT (&quot;ProDrawingViewRegenerate&quot;, &quot;ProTestViewVisibleAreaFull&quot;, status,
+            status != PRO_TK_NO_ERROR);
+
+  return (status);
+<a name="anchor-163"></a>}
+
+/*====================================================================*
+ Function : ProTestViewVisibleAreaHalf
+ Purpose  : To set half visible area for view
+<a name="anchor-164"></a>\*====================================================================*/
+ProError ProTestViewVisibleAreaHalf ()
+{
+  ProDrawing drawing;
+  ProSelection *view_sel,*plane_sel;
+<a name="anchor-165"></a>  int num_sel,num_plane;
+  ProView view;
+  ProError status;
+
+  ProFileName WMSGFIL = {'u','s','e','r','m','s','g','.','t','x','t','\0'};
+<a name="anchor-166"></a>
+  /*------------------------------------------------------------*\
+      Get the current model
+  \*------------------------------------------------------------*/
+  status = ProMdlCurrentGet ((ProMdl*)&amp;drawing);
+<a name="anchor-167"></a>  TEST_CALL_REPORT (&quot;ProMdlCurrentGet&quot;, &quot;ProTestViewVisibleAreaHalf&quot;, status,
+           status != PRO_TK_NO_ERROR);
+  if (status != PRO_TK_NO_ERROR) return(status);
+
+  /*------------------------------------------------------------*\
+<a name="anchor-168"></a>      Get view to set visible 
+  \*------------------------------------------------------------*/
+  status = ProMessageDisplay(WMSGFIL, (char*)&quot;USER %0s&quot;,
+				&quot;Select view to set visible area&quot;);
+  TEST_CALL_REPORT (&quot;ProMessageDisplay&quot;, &quot;ProTestViewVisibleAreaHalf&quot;, status,
+<a name="anchor-169"></a>	   status != PRO_TK_NO_ERROR);
+
+  status = ProSelect ((char*)&quot;dwg_view&quot;, 1, NULL, NULL, NULL, NULL, &amp;view_sel, &amp;num_sel);
+  TEST_CALL_REPORT (&quot;ProSelect&quot;, &quot;ProTestViewVisibleAreaHalf&quot;, status,
+           status != PRO_TK_NO_ERROR);
+<a name="anchor-170"></a>  if (status != PRO_TK_NO_ERROR) return(status);
+
+  status = ProSelectionViewGet (view_sel[0], &amp;view);
+  TEST_CALL_REPORT (&quot;ProSelectionViewGet&quot;, &quot;ProTestViewVisibleAreaHalf&quot;, status,
+	   status != PRO_TK_NO_ERROR);
+<a name="anchor-171"></a>
+  /*------------------------------------------------------------*\
+      Get plane to set visible 
+  \*------------------------------------------------------------*/
+  status = ProMessageDisplay (WMSGFIL,(char*)&quot;USER %0s&quot;, 
+<a name="anchor-172"></a>				    &quot;Select plane&quot;);
+  TEST_CALL_REPORT (&quot;ProMessageDisplay&quot;, &quot;ProTestViewVisibleAreaHalf&quot;, status,
+           status != PRO_TK_NO_ERROR);
+  		
+  status = ProSelect ((char*)&quot;datum&quot;, 1, NULL, NULL, NULL, NULL, &amp;plane_sel, &amp;num_plane );
+<a name="anchor-173"></a>  TEST_CALL_REPORT (&quot;ProSelect&quot;, &quot;ProTestViewVisibleAreaHalf&quot;, status, 
+	   status != PRO_TK_NO_ERROR);
+  if (status != PRO_TK_NO_ERROR) return(status);
+
+  status = ProDrawingViewHalfVisibleAreaSet (drawing, view, plane_sel[0],
+<a name="anchor-174"></a>	        PRO_B_TRUE, PRO_HVL_SOLID);
+  TEST_CALL_REPORT (&quot;ProDrawingViewHalfVisibleAreaSet&quot;,&quot;ProTestViewVisibleAreaHalf&quot;,
+	   status, status != PRO_TK_NO_ERROR);
+
+  status = ProDrawingViewRegenerate (drawing, view);
+<a name="anchor-175"></a>  TEST_CALL_REPORT (&quot;ProDrawingViewRegenerate&quot;, &quot;ProTestViewVisibleAreaHalf&quot;, status,
+           status != PRO_TK_NO_ERROR);
+
+  return (status);
+}
+</pre>
+</body>
+</html>

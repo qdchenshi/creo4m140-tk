@@ -1,0 +1,889 @@
+<html>
+<head>
+<title>PTMfgProcTable.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#ifndef PTTEST_DEBUG
+#line 3 &quot;PTMfgProcTable.c&quot;
+#endif
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-2"></a>Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProParameter.h>
+<a name="anchor-3"></a>#include &lt;ProUIDialog.h>
+#include &lt;ProUtil.h>
+#include &lt;ProUITree.h>
+#include &lt;ProSolid.h>
+#include &lt;ProUI.h>
+<a name="anchor-4"></a>#include &lt;ProUIPushbutton.h>
+#include &lt;ProUISpinbox.h>
+#include &lt;ProUISlider.h>
+#include &lt;ProUIInputpanel.h>
+#include &lt;ProArray.h>
+<a name="anchor-5"></a>#include &lt;ProUtil.h>
+#include &lt;ProMfg.h>
+#include &lt;ProElement.h>
+#include &lt;ProMfgproctable.h>
+#include &lt;ProMaterial.h>
+<a name="anchor-6"></a>#include &lt;ProFeature.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProWstring.h>
+#include &lt;ProUILabel.h>
+<a name="anchor-7"></a>#include &lt;stdlib.h>
+#include &lt;ProTKRunTime.h>
+
+/*--------------------------------------------------------------------*\
+Pro/DEVELOP includes
+<a name="anchor-8"></a>\*--------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-9"></a>
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-10"></a>
+/*--------------------------------------------------------------------*\
+Function Prototypes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-11"></a>#define DIALOG_NAME &quot;Mfg-ProcItem-Dialog&quot;
+#define UPDATE &quot;Update&quot;
+#define CANCEL &quot;Cancel&quot;
+
+
+<a name="anchor-12"></a>/*--------------------------------------------------------------------*\
+ Global Variables used
+\*--------------------------------------------------------------------*/
+static ProError status;
+static ProName tool_id,material_name;
+<a name="anchor-13"></a>static int count;
+static double cut_feed,spindle_speed;
+static int FLAG;
+static ProMfgprocItem *sel_items;
+static ProElement complete_tree;
+<a name="anchor-14"></a>static ProElement p_element;
+static double hole_dep_1;
+static double hole_dep_2;
+static ProBoolean found = PRO_B_FALSE;
+
+<a name="anchor-15"></a>#define PT_TEST_LOG(func,status,err) \
+if (err) \
+{ \
+    ProTKPrintf (&quot; LOG Error: %s\t%d\n&quot;, func, status); \
+} \
+<a name="anchor-16"></a>else \
+ProTKPrintf (&quot; LOG %s\t%d\n&quot;, func, status);
+
+#define PT_TEST_LOG_SUCC(func) \
+PT_TEST_LOG (func, status, status != PRO_TK_NO_ERROR)
+<a name="anchor-17"></a>
+void PTMfgUsrUpdateAction(char *dialog, char *component, ProAppData data);
+void PTMfgUsrCancelAction(char *dialog, char *component, ProAppData data);
+static ProError PTMfgMaterialGet (ProFeature* feat, ProAppData data);
+static ProError PTMfgHoledepth (ProFeature* feat, ProAppData data);
+<a name="anchor-18"></a>static ProError PTMfgProcitemElemtreeGet(ProElement *elem_tree);
+static ProError PTMfgProctableItemActionHoleSet (ProMfg mfg, char* button_name, ProAppData appdata);
+static ProError PTMfgProctableItemActionPreReq (ProMfg mfg, char* button_name, ProAppData appdata);
+static ProError PTMfgProctableItemFeedSpeed (ProMfg mfg, char* button_name, ProAppData appdata);
+static ProError PTMfgProctableItemStepCreate (ProMfg mfg, char* button_name, ProAppData appdata);
+<a name="anchor-19"></a>static ProError PTMfgDialogCreate(ProElement elem_tree);
+static  ProError PTMfgParameterVisit(ProParameter* param, ProError status, ProAppData data);
+static ProError PTMfgElemtreeWalkthroughAction ( ProElement elem_tree,
+						 ProElement  element, ProElempath elem_path,
+						 ProAppData app_data );
+<a name="anchor-20"></a>
+static ProError PTMfgElemtreePreReqAction ( ProElement elem_tree,
+					    ProElement  element, ProElempath elem_path,
+					    ProAppData app_data );
+
+<a name="anchor-21"></a>static ProError PTTestMfgProcItemVisit ( ProMfgprocItem* item, ProError error, ProAppData app_data);
+static ProError PTMfgProcitemToolNameGet(ProElement element);
+
+typedef struct input_data {
+  double cut_feed;
+<a name="anchor-22"></a>  double spindle_speed;
+} 
+Data_Input;
+
+void PTUtilInitCounters(void)
+<a name="anchor-23"></a>{
+  count =0;
+  cut_feed =0.0; 
+  spindle_speed=0.0;
+  FLAG =0;
+<a name="anchor-24"></a>  ProStringToWstring(tool_id,&quot; &quot;);
+  ProStringToWstring(material_name,&quot; &quot;);
+}
+
+/*====================================================================*\
+<a name="anchor-25"></a>  FUNCTION : user_initialize()
+  PURPOSE  : 
+\*====================================================================*/
+int user_initialize(
+                    int argc,        
+<a name="anchor-26"></a>                    char *argv[],
+                    char *version, 
+                    char *build,
+                    wchar_t errbuf[80])
+{
+<a name="anchor-27"></a>  uiCmdCmdId    cmd_id;
+  
+  
+  PTUtilInitCounters();
+  
+<a name="anchor-28"></a>  status = ProMfgproctableMenuAdd ( &quot;APISubMenu&quot;, L&quot;Advanced&quot;, &quot;Tools&quot; );
+  PT_TEST_LOG_SUCC(&quot;ProMfgproctableMenuAdd&quot;)
+  
+  status = ProMfgproctablePushbuttonAdd (&quot;APISubMenu&quot;,&quot;Adjust Drill&quot;, L&quot;Adjust Drill&quot;,
+                                         L&quot;button_helptext&quot;,NULL,
+<a name="anchor-29"></a>                                         PTMfgProctableItemActionHoleSet,
+					 &quot;Callback on the new submenu added in  existing menu&quot;);
+  PT_TEST_LOG_SUCC(&quot;ProMfgproctablePushbuttonAdd&quot;);
+  
+  status = ProMfgproctablePushbuttonAdd (&quot;APISubMenu&quot;,&quot;Highlight Prereq&quot;, L&quot;Highlight Prereq&quot;,
+<a name="anchor-30"></a>                                         L&quot;button_helptext&quot;,NULL,
+                                         PTMfgProctableItemActionPreReq,
+					 &quot;Callback on the new submenu added in  existing menu&quot;);
+  PT_TEST_LOG_SUCC(&quot;ProMfgproctablePushbuttonAdd&quot;);
+  
+<a name="anchor-31"></a>  
+  status = ProMfgproctablePushbuttonAdd (&quot;APISubMenu&quot;,&quot;Update Feed &amp; Speed&quot;, L&quot;Update Feed &amp; Speed&quot;,
+                                         L&quot;button_helptext&quot;,NULL,
+                                         PTMfgProctableItemFeedSpeed,
+					 &quot;Callback on the new submenu added in  existing menu&quot;);
+<a name="anchor-32"></a>  PT_TEST_LOG_SUCC(&quot;ProMfgproctablePushbuttonAdd&quot;);
+  
+  status = ProMfgproctablePushbuttonAdd (&quot;APISubMenu&quot;,&quot;Fixture Part&quot;, L&quot;Fixture Part&quot;,
+                                         L&quot;button_helptext&quot;,NULL,
+                                         PTMfgProctableItemStepCreate,
+<a name="anchor-33"></a>					 &quot;Callback on the new submenu added in  existing menu&quot;);
+  PT_TEST_LOG_SUCC(&quot;ProMfgproctablePushbuttonAdd&quot;);
+  
+  
+  return (PRO_TK_NO_ERROR);
+<a name="anchor-34"></a>  
+}
+
+
+/*====================================================================*\
+<a name="anchor-35"></a>    FUNCTION :  PTMfgProctableItemActionHoleSet 
+    PURPOSE  :  Execute  HoleSet
+\*====================================================================*/
+
+ProError PTMfgProctableItemActionHoleSet (ProMfg mfg, char* button_name, ProAppData appdata)
+<a name="anchor-36"></a>{
+  
+  ProMdl mfg_mdl_under_test;
+  
+  status =ProMdlCurrentGet(&amp;mfg_mdl_under_test);
+<a name="anchor-37"></a>  PT_TEST_LOG_SUCC(&quot;ProMdlCurrentGet&quot;);
+  
+  status = ProMfgProctableVisit (mfg_mdl_under_test,
+                                 PRO_MFGPROCTABLE_PROCESS,
+                                 (ProMfgprocitemVisitAction) PTTestMfgProcItemVisit,
+<a name="anchor-38"></a>                                 NULL,
+                                 NULL);
+  PT_TEST_LOG_SUCC( &quot;ProMfgProctableVisit&quot;);
+  
+  return PRO_TK_NO_ERROR;
+<a name="anchor-39"></a>}
+
+/*====================================================================*\
+    FUNCTION :  PTMfgProctableItemActionPreReq 
+    PURPOSE  :  Execute Highlighting of Pre-Requisite steps 
+<a name="anchor-40"></a>\*====================================================================*/
+
+ProError PTMfgProctableItemActionPreReq (ProMfg mfg, char* button_name, ProAppData appdata)
+{
+  
+<a name="anchor-41"></a>  ProElement elem_tree;
+  
+  status = PTMfgProcitemElemtreeGet(&amp;elem_tree);
+  PT_TEST_LOG_SUCC(&quot;PTMfgProcitemElemtreeGet&quot;);
+  
+<a name="anchor-42"></a>  if ( status == PRO_TK_NO_ERROR)
+    {
+      status = ProElemtreeWrite (elem_tree, PRO_ELEMTREE_XML, L&quot;selecteditem_prereq.inf&quot;);
+      PT_TEST_LOG_SUCC (&quot; ProElemtreeWrite &quot;);
+      
+<a name="anchor-43"></a>      if ( status == PRO_TK_NO_ERROR )
+	{
+	  status = ProElemtreeElementVisit( elem_tree, ( ProElempath )NULL ,
+					    ( ProElemtreeVisitFilter) NULL,
+					    ( ProElemtreeVisitAction) PTMfgElemtreePreReqAction,
+<a name="anchor-44"></a>					    NULL );
+	  PT_TEST_LOG_SUCC (&quot; ProElemtreeElementVisit &quot;);
+	}
+      
+    }
+<a name="anchor-45"></a>  
+  return PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+<a name="anchor-46"></a>    FUNCTION :  PTMfgProctableItemFeedSpeed()
+    PURPOSE  :  Execute Feed/Speed 
+\*====================================================================*/
+
+
+<a name="anchor-47"></a>ProError PTMfgProctableItemFeedSpeed (ProMfg mfg, char* button_name, ProAppData appdata)
+{
+  ProAssembly r_solid_obj;
+  ProMdl mfg_mdl_under_test;
+  ProElempath epath;
+<a name="anchor-48"></a>  ProElement params_element;
+  ProElempathItem  p_items[3];
+  ProElemId elem_id;
+  ProValueDataType value_type = -1;
+  ProValue     value = (ProValue)NULL;
+<a name="anchor-49"></a>  ProValueData value_data;
+  
+  
+  status =ProMdlCurrentGet(&amp;mfg_mdl_under_test);
+  PT_TEST_LOG_SUCC(&quot;ProMdlCurrentGet&quot;);
+<a name="anchor-50"></a>  
+  status = PTMfgProcitemElemtreeGet(&amp;complete_tree);
+  PT_TEST_LOG_SUCC(&quot;PTMfgProcitemElemtreeGet&quot;);
+  
+  if (status  == PRO_TK_NO_ERROR)
+<a name="anchor-51"></a>    PTMfgProcitemToolNameGet(complete_tree);
+  
+  if  (status  == PRO_TK_NO_ERROR)
+    {
+      status = ProElempathAlloc(&amp;epath);
+<a name="anchor-52"></a>      PT_TEST_LOG_SUCC (&quot;ProElempathAlloc ()&quot;);
+      
+      p_items[0].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+      p_items[0].path_item.elem_id = PRO_E_MFG_PARAMS ;
+      
+<a name="anchor-53"></a>      status = ProElempathDataSet(epath, p_items, 1);
+      PT_TEST_LOG_SUCC (&quot;ProElempathDataSet()&quot;);
+      
+      status= ProElemtreeElementGet(complete_tree, epath, &amp;params_element);
+      PT_TEST_LOG_SUCC (&quot;ProElemtreeElementGet()&quot;);
+<a name="anchor-54"></a>      
+      if ( status == PRO_TK_NO_ERROR )
+	{
+	  status = ProElemtreeElementVisit( params_element,NULL,
+					    ( ProElemtreeVisitFilter) NULL,
+<a name="anchor-55"></a>					    ( ProElemtreeVisitAction) PTMfgElemtreeWalkthroughAction,
+					    NULL );
+	  PT_TEST_LOG_SUCC (&quot; ProElemtreeElementVisit &quot;);
+	}
+      
+<a name="anchor-56"></a>      ProElempathFree(&amp;epath);
+    }
+  
+  status = ProMfgAssemGet(mfg_mdl_under_test,&amp;r_solid_obj);
+  PT_TEST_LOG_SUCC (&quot;ProMfgAssemGet&quot;);
+<a name="anchor-57"></a>  
+  status = ProSolidFeatVisit ((ProSolid)r_solid_obj,
+                              (ProFeatureVisitAction)PTMfgMaterialGet,
+                              NULL,
+                              NULL);
+<a name="anchor-58"></a>  PT_TEST_LOG_SUCC (&quot;ProSolidFeatureVisit()&quot;);
+  
+  
+  
+  status  = PTMfgDialogCreate(params_element);
+<a name="anchor-59"></a>  
+  PTUtilInitCounters();
+  
+  return PRO_TK_NO_ERROR;
+}
+<a name="anchor-60"></a>
+/*====================================================================*\
+    FUNCTION :  PTMfgProctableItemStepCreate()
+    PURPOSE  :  Execute Customized step creation 
+\*====================================================================*/
+<a name="anchor-61"></a>
+ProError PTMfgProctableItemStepCreate (ProMfg mfg, char* button_name, ProAppData appdata)
+{
+  return PRO_TK_NO_ERROR;
+}
+<a name="anchor-62"></a>
+/**********************************ACTION FUNCTIONS*************************/
+
+/*--------------------------------------------------------*\
+    FUNCTION :  PTMfgElemtreeWalkthroughAction()
+<a name="anchor-63"></a>    PURPOSE  :  Action function for PTUtilElemtreeWalkthroug
+\*--------------------------------------------------------*/
+
+ProError PTMfgElemtreeWalkthroughAction ( ProElement params_element,
+					  ProElement  element, ProElempath elem_path,
+<a name="anchor-64"></a>					  ProAppData app_data )
+{
+  
+  ProElempathItem  p_items[3];
+  ProValueDataType value_type = -1;
+<a name="anchor-65"></a>  ProElemId  elem_id,p_elem_id;
+  char *  actual_value;
+  ProValue     value = (ProValue)NULL;
+  ProValueData value_data;
+  Data_Input *my_data;
+<a name="anchor-66"></a>  ProElempath      epath;
+
+  my_data = (Data_Input*) app_data;
+
+
+<a name="anchor-67"></a>  status = ProElementIdGet( element, &amp;elem_id);
+  PT_TEST_LOG_SUCC(&quot;ProElementIdGet&quot;);
+  
+  if ( elem_id == PRO_E_MFG_PARAM_NAME )
+    {
+<a name="anchor-68"></a>      status = ProElementValuetypeGet ( element, &amp;value_type );
+      PT_TEST_LOG(&quot; ProElementValuetypeGet &quot;, status,
+                  status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_INVALID_TYPE &amp;&amp;
+                  status != PRO_TK_EMPTY  );
+      
+<a name="anchor-69"></a>      if(value_type ==PRO_VALUE_TYPE_STRING)
+	{
+	  status = ProElementStringGet( element,( ProElementStringOptions) NULL, &amp;actual_value);
+          PT_TEST_LOG_SUCC (&quot; ProElementStringGet &quot;);
+	  
+<a name="anchor-70"></a>          if (  (strcmp ( &quot;CUT_FEED&quot;,actual_value)      == 0)
+		||( strcmp ( &quot;SPINDLE_SPEED&quot;,actual_value) == 0))
+            {
+	      
+	      status = ProElempathAlloc(&amp;epath);
+<a name="anchor-71"></a>              PT_TEST_LOG_SUCC (&quot;ProElempathAlloc ()&quot;);
+	      
+	      p_items[0].type = PRO_ELEM_PATH_ITEM_TYPE_INDEX;
+	      p_items[0].path_item.elem_index = count;
+	      p_items[1].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+<a name="anchor-72"></a>	      p_items[1].path_item.elem_id = PRO_E_MFG_PARAMVAL;
+	      
+	      status = ProElempathDataSet(epath, p_items, 2);
+	      PT_TEST_LOG_SUCC (&quot;ProElempathDataSet()&quot;);
+	      
+<a name="anchor-73"></a>	      status= ProElemtreeElementGet(params_element, epath, &amp;p_element);
+	      PT_TEST_LOG_SUCC (&quot;ProElemtreeElementGet()&quot;);
+	      
+	      status = ProElementIdGet( p_element, &amp;p_elem_id);
+	      PT_TEST_LOG_SUCC (&quot; ProElementIdGet &quot;);
+<a name="anchor-74"></a>	      
+	      if (p_elem_id ==PRO_E_MFG_PARAMVAL)
+		{
+		  
+		  status = ProElementValueGet ( p_element, &amp;value);
+<a name="anchor-75"></a>		  PT_TEST_LOG_SUCC(&quot;ProElementValueGet&quot;);
+		  
+		  status = ProValueDataGet (value, &amp;value_data);
+		  PT_TEST_LOG(&quot;ProValueDataGet()&quot;, status, (status != PRO_TK_NO_ERROR));
+		  
+<a name="anchor-76"></a>                  if (strcmp ( &quot;CUT_FEED&quot;,actual_value) == 0)
+		    {
+		      cut_feed = value_data.v.d;
+		      
+		      if (FLAG == 1)
+<a name="anchor-77"></a>			{
+			  value_data.v.d = my_data->cut_feed;
+			  status = ProValueDataSet (value, &amp;value_data);
+			  PT_TEST_LOG(&quot;ProValueDataSet()&quot;, status, (status != PRO_TK_NO_ERROR));
+			  
+<a name="anchor-78"></a>			  status = ProElementValueSet ( p_element, value);
+			  PT_TEST_LOG_SUCC(&quot;ProElementValueGet&quot;);
+			  
+			}
+		    }
+<a name="anchor-79"></a>		  
+                  if (strcmp ( &quot;SPINDLE_SPEED&quot;,actual_value) == 0)
+		    {
+		      spindle_speed = value_data.v.d;
+		      
+<a name="anchor-80"></a>		      if (FLAG == 1)
+			{
+			  value_data.v.d = my_data->spindle_speed;
+			  status = ProValueDataSet (value, &amp;value_data);
+			  PT_TEST_LOG(&quot;ProValueDataSet()&quot;, status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-81"></a>			  
+			  status = ProElementValueSet (p_element, value);
+			  PT_TEST_LOG_SUCC(&quot;ProElementValueGet&quot;);
+			  
+			}
+<a name="anchor-82"></a>		    }
+		  count++;  
+		}
+	      
+	      ProElempathFree(&amp;epath);
+<a name="anchor-83"></a>	      
+	    }
+	}
+      
+      
+<a name="anchor-84"></a>      
+      status =  ProMfgproctableDisplayUpdate ();
+      PT_TEST_LOG_SUCC (&quot;ProMfgproctableDisplayUpdate&quot;);
+      
+    }
+<a name="anchor-85"></a>  
+  return PRO_TK_NO_ERROR;
+}
+
+/*--------------------------------------------------------*\
+<a name="anchor-86"></a>  FUNCTION : PTMfgUsrUpdateAction
+  PURPOSE  : Action function for the File Selection
+\*--------------------------------------------------------*/
+
+void PTMfgUsrUpdateAction(char *dialog, char *component, ProAppData data)
+<a name="anchor-87"></a>{
+  ProElement params_element; 
+  ProCharName str;
+  ProCharName str2;
+  double cut_feed_value;
+<a name="anchor-88"></a>  double spindle_speed_value;
+  Data_Input data1;
+  wchar_t* wstr;
+  wchar_t* wstr2;
+  ProErrorlist    p_errors;
+<a name="anchor-89"></a>
+  params_element = (ProElement) data; 
+  
+  ProUIInputpanelValueGet(DIALOG_NAME,&quot;cut_feed&quot;,&amp;wstr);
+  ProWstringToString(str, wstr);
+<a name="anchor-90"></a>  cut_feed_value= atof(str);
+  
+  ProUIInputpanelValueGet(DIALOG_NAME,&quot;spindle_speed&quot;,&amp;wstr2);
+  ProWstringToString(str2, wstr2);
+  spindle_speed_value= atof(str2);
+<a name="anchor-91"></a>  
+  data1.cut_feed = cut_feed_value;
+  data1.spindle_speed = spindle_speed_value;
+  
+  count =0;
+<a name="anchor-92"></a>  FLAG =1;
+  
+  status = ProElemtreeWrite (params_element, PRO_ELEMTREE_XML, L&quot;before_redef.inf&quot;);
+  PT_TEST_LOG_SUCC (&quot; ProElemtreeWrite &quot;);
+  
+<a name="anchor-93"></a>  
+  status = ProElemtreeElementVisit( params_element, ( ProElempath )NULL ,
+				    ( ProElemtreeVisitFilter) NULL,
+				    ( ProElemtreeVisitAction) PTMfgElemtreeWalkthroughAction,
+				    (ProAppData)&amp;data1 );
+<a name="anchor-94"></a>  PT_TEST_LOG_SUCC (&quot; ProElemtreeElementVisit &quot;);
+  
+  
+  status = ProMfgprocitemRedefine (sel_items,complete_tree,&amp;p_errors);
+  PT_TEST_LOG_SUCC (&quot;ProMfgprocitemRedefine&quot;);
+<a name="anchor-95"></a>  
+  status =  ProMfgproctableDisplayUpdate ();
+  PT_TEST_LOG_SUCC (&quot;ProMfgproctableDisplayUpdate&quot;);
+  
+  PTUtilInitCounters();
+<a name="anchor-96"></a>  
+  status = ProUIDialogExit(DIALOG_NAME, 0);
+  PT_TEST_LOG_SUCC(&quot;ProUIDialogExit&quot;); 
+}
+
+<a name="anchor-97"></a>
+/*--------------------------------------------------------*\
+  FUNCTION : PTMfgUsrCancelAction
+  PURPOSE  : Action function for the Directory Selection
+\*--------------------------------------------------------*/
+<a name="anchor-98"></a>
+void PTMfgUsrCancelAction(char *dialog, char *component, ProAppData data)
+{
+  ProError status;
+  
+<a name="anchor-99"></a>  PTUtilInitCounters();
+  
+  status = ProUIDialogExit(DIALOG_NAME, 0);
+  PT_TEST_LOG_SUCC(&quot;ProUIDialogExit&quot;);
+  
+<a name="anchor-100"></a>}
+/*--------------------------------------------------------*\
+    FUNCTION :  PTMfgElemtreePreReqAction()
+    PURPOSE  :  Get the material 
+\*--------------------------------------------------------*/
+<a name="anchor-101"></a>
+ProError PTMfgMaterialGet (ProFeature* feat, ProAppData data)
+{
+  ProAsmcompType f_type;
+  ProMaterial p_material;
+<a name="anchor-102"></a>  ProFeattype  feat_type;
+  ProSolid part;
+  ProMdl p_mdl_handle; 
+  ProCharName c_name;
+  ProMdl mfg_mdl_under_test;
+<a name="anchor-103"></a>  
+  status =ProMdlCurrentGet(&amp;mfg_mdl_under_test);
+  PT_TEST_LOG_SUCC(&quot;ProMdlCurrentGet&quot;);
+  
+  status = ProFeatureTypeGet(feat,&amp;feat_type);
+<a name="anchor-104"></a>  PT_TEST_LOG_SUCC(&quot;ProFeatureTypeGet&quot;);
+  
+  if(feat_type==PRO_FEAT_COMPONENT)
+    {
+      status = ProAsmcompTypeGet ((ProAsmcomp*)feat,feat->owner, &amp;f_type);
+<a name="anchor-105"></a>      PT_TEST_LOG_SUCC(&quot;ProAsmcompTypeGet&quot;); 
+      
+      if ( f_type ==  PRO_ASM_COMP_TYPE_REF_MODEL)
+	{
+	  status = ProAsmcompMdlGet ((ProAsmcomp*)feat,&amp;p_mdl_handle);
+<a name="anchor-106"></a>	  PT_TEST_LOG_SUCC(&quot;ProAsmcompMdlGet&quot;);
+	  
+	  status = ProMaterialCurrentGet ((ProSolid)p_mdl_handle,&amp;p_material);
+	  PT_TEST_LOG_SUCC(&quot;ProMaterialCurrentGet&quot;);
+	  
+<a name="anchor-107"></a>	  ProWstringToString (c_name, p_material.matl_name);
+	  
+	  ProWstringCopy(p_material.matl_name,material_name,PRO_VALUE_UNUSED);
+	  
+	}
+<a name="anchor-108"></a>      
+    }
+  
+  return PRO_TK_NO_ERROR;
+}
+<a name="anchor-109"></a>
+
+/*--------------------------------------------------------*\
+    FUNCTION :  PTMfgElemtreePreReqAction()
+    PURPOSE  :  Action function for PTUtilElemtreeWalkthroug
+<a name="anchor-110"></a>\*--------------------------------------------------------*/
+
+ProError PTMfgElemtreePreReqAction ( ProElement elem_tree,
+				     ProElement  element, ProElempath elem_path,
+				     ProAppData app_data )
+<a name="anchor-111"></a>{
+  ProElemId  elem_id;
+  ProMfgprocItem *item_p_arr=NULL;
+  ProAssembly r_solid_obj; 
+  int mfg_prereq_arr_count = 0;
+<a name="anchor-112"></a>    
+  ProMdl mfg_mdl_under_test;
+  
+  status =ProMdlCurrentGet(&amp;mfg_mdl_under_test);
+  PT_TEST_LOG_SUCC(&quot;ProMdlCurrentGet&quot;);
+<a name="anchor-113"></a>  
+  status = ProMfgAssemGet(mfg_mdl_under_test,&amp;r_solid_obj);
+  PT_TEST_LOG_SUCC (&quot;ProMfgAssemGet&quot;);
+  
+  status = ProElementIdGet( element, &amp;elem_id);
+<a name="anchor-114"></a>  PT_TEST_LOG_SUCC(&quot;ProElementIdGet&quot;); 
+  
+  if (elem_id == PRO_E_MFG_PREREQUISITE_ARR)
+  {    	
+    status = ProElementArrayCount(elem_tree,elem_path,&amp;mfg_prereq_arr_count);
+<a name="anchor-115"></a>    PT_TEST_LOG_SUCC(&quot;ProElementArrayCount&quot;);
+
+    {   
+     ProElempath p_elem_path;
+     ProElempathItem elempath_data_arr[]={
+<a name="anchor-116"></a>                                          {PRO_ELEM_PATH_ITEM_TYPE_INDEX,0},
+                                          {PRO_ELEM_PATH_ITEM_TYPE_ID ,PRO_E_MFG_PREREQUISITE_ID}
+                                         };
+     int ii=0;
+     ProElement pre_req_elems;
+<a name="anchor-117"></a>     int pre_req_value;
+     
+     status   = ProArrayAlloc((mfg_prereq_arr_count), sizeof(ProMfgprocItem),(mfg_prereq_arr_count),
+                               (ProArray *)&amp;item_p_arr );
+     PT_TEST_LOG_SUCC(&quot;ProArrayAlloc()&quot;);
+<a name="anchor-118"></a>
+	   for(ii=0;ii&lt;mfg_prereq_arr_count;ii++)   
+     {      
+       status = ProElempathAlloc(&amp;p_elem_path);
+       PT_TEST_LOG_SUCC(&quot;ProElempathAlloc&quot;); 
+<a name="anchor-119"></a>      
+       elempath_data_arr[0].path_item.elem_index=ii;  
+       
+       status = ProElempathDataSet(p_elem_path,elempath_data_arr,2);
+       PT_TEST_LOG_SUCC(&quot;ProElempathDataSet&quot;);
+<a name="anchor-120"></a>       
+       status = ProElemtreeElementGet(element,p_elem_path,&amp;pre_req_elems);
+       PT_TEST_LOG_SUCC(&quot;ProElemtreeElementGet&quot;);
+       
+       status = ProElementIntegerGet(pre_req_elems,NULL, &amp;pre_req_value);
+<a name="anchor-121"></a>       PT_TEST_LOG_SUCC(&quot;ProElementIntegerGet&quot;);
+       
+       item_p_arr[ii].type = PRO_NC_STEP_OBJECT;
+       item_p_arr[ii].id  = pre_req_value;
+	     item_p_arr[ii].owner  = r_solid_obj;
+<a name="anchor-122"></a>     }
+     
+     status = ProMfgproctableSelecteditemsSet (PRO_MFGPROCTABLE_PROCESS,item_p_arr);
+     PT_TEST_LOG_SUCC (&quot;ProMfgproctableSelecteditemsSet&quot;);
+      
+<a name="anchor-123"></a>     status =  ProMfgproctableDisplayUpdate ();
+     PT_TEST_LOG_SUCC (&quot;ProMfgproctableDisplayUpdate&quot;);
+        
+     status = ProArrayFree ( (ProArray *)&amp;item_p_arr );
+     PT_TEST_LOG_SUCC (&quot;ProArrayFree&quot;);  
+<a name="anchor-124"></a>
+	  }    
+   
+}
+    
+<a name="anchor-125"></a>  return PRO_TK_NO_ERROR;
+}
+/*--------------------------------------------------------*\
+    FUNCTION : PTMfgDialogCreate 
+    PURPOSE  : Creates the dialog 
+<a name="anchor-126"></a>\*--------------------------------------------------------*/
+
+ProError PTMfgDialogCreate(ProElement params_element)
+{
+  
+<a name="anchor-127"></a>  int choice;
+  ProCharName str;
+  ProName wstr;
+  
+  
+<a name="anchor-128"></a>  status = ProUIDialogCreate(DIALOG_NAME,DIALOG_NAME);
+  PT_TEST_LOG_SUCC(&quot;ProUIPTMfgDialogCreate&quot;);
+  
+  status = ProUIDialogWidthSet(DIALOG_NAME,300);
+  PT_TEST_LOG_SUCC(&quot;ProUIPTMfgDialogCreate&quot;);
+<a name="anchor-129"></a>  
+  status = ProUIDialogHeightSet(DIALOG_NAME,160);
+  PT_TEST_LOG_SUCC(&quot;ProUIPTMfgDialogCreate&quot;);
+  
+  status = ProUIDialogTitleSet (DIALOG_NAME,L&quot;Feed/Speed database access&quot;);
+<a name="anchor-130"></a>  PT_TEST_LOG_SUCC (&quot;ProUIDialogTitleSet()&quot;);
+  
+  status = ProUILabelTextSet (DIALOG_NAME, &quot;tool_id_val&quot;, tool_id);
+  PT_TEST_LOG_SUCC (&quot;ProUILabelTextSet()&quot;);
+  
+<a name="anchor-131"></a>  status = ProUILabelTextSet (DIALOG_NAME, &quot;material_val&quot;, material_name);
+  PT_TEST_LOG_SUCC (&quot;ProUILabelTextSet()&quot;);
+
+  ProTKSprintf(str,&quot;%f&quot;,cut_feed);
+  ProStringToWstring(wstr, str);
+<a name="anchor-132"></a>
+  ProUIInputpanelValueSet(DIALOG_NAME,&quot;cut_feed&quot;,wstr);
+  PT_TEST_LOG_SUCC(&quot;ProUIInputpanelValueSet&quot;);
+
+  ProTKSprintf(str,&quot;%f&quot;,spindle_speed);
+<a name="anchor-133"></a>  ProStringToWstring(wstr, str);
+
+  ProUIInputpanelValueSet(DIALOG_NAME,&quot;spindle_speed&quot;,wstr);
+  PT_TEST_LOG_SUCC(&quot;ProUIInputpanelValueSet&quot;);
+
+<a name="anchor-134"></a>  status = ProUIPushbuttonActivateActionSet(DIALOG_NAME, UPDATE, PTMfgUsrUpdateAction, params_element);
+  PT_TEST_LOG_SUCC(&quot;ProUIPushbuttonActivateActionSet&quot;);
+
+  status = ProUIPushbuttonActivateActionSet(DIALOG_NAME, CANCEL, PTMfgUsrCancelAction, NULL);
+  PT_TEST_LOG_SUCC(&quot;ProUIPushbuttonActivateActionSet&quot;);
+<a name="anchor-135"></a>
+  status = ProUIDialogActivate(DIALOG_NAME, &amp;choice);
+  PT_TEST_LOG_SUCC(&quot;ProUIDialogActivate&quot;);
+
+  status = ProUIDialogDestroy(DIALOG_NAME);
+<a name="anchor-136"></a>  PT_TEST_LOG_SUCC(&quot;ProUIDialogDestroy&quot;);
+
+  return status;
+
+}
+<a name="anchor-137"></a>
+/*--------------------------------------------------------*\
+    FUNCTION : PTMfgProcitemElemtreeGet 
+    PURPOSE  : Gets the elem tree of selected item 
+\*--------------------------------------------------------*/
+<a name="anchor-138"></a>
+ ProError  PTMfgProcitemElemtreeGet(ProElement *elem_tree)
+ {
+
+   status = ProMfgproctableSelecteditemsGet (PRO_MFGPROCTABLE_PROCESS,&amp;sel_items);
+<a name="anchor-139"></a>   PT_TEST_LOG_SUCC (&quot;ProMfgproctableSelecteditemsGet&quot;);
+   
+   
+   /*TBD : Currently one one ( fitst item is checked here...
+     To be updated with multiple selections of items in ui ..*/
+<a name="anchor-140"></a>   
+   status = ProMfgprocitemElemtreeGet (&amp;sel_items[0], elem_tree);
+   PT_TEST_LOG_SUCC(&quot;ProMfgprocitsmElemtreeGet&quot;);
+   
+   return status;
+<a name="anchor-141"></a>   
+ }
+
+/*--------------------------------------------------------*\
+    FUNCTION : PTTestMfgProcItemVisit 
+<a name="anchor-142"></a>    PURPOSE  : Action function for ProMfgProctableVisit 
+\*--------------------------------------------------------*/
+
+ProError PTTestMfgProcItemVisit ( ProMfgprocItem* item, ProError error, ProAppData app_data)
+{
+<a name="anchor-143"></a>
+  ProAnnotation annotation;
+  ProMfgstepHolesetEndType end_type;
+  ProDrillDepthType depth_type;
+  
+<a name="anchor-144"></a>  status = ProMfgprocitemAnnotationGet (item, &amp;annotation);
+  PT_TEST_LOG_SUCC (&quot;ProMfgprocitemAnnotationGet&quot;);
+  
+  if ( status == PRO_TK_NO_ERROR) 
+    {
+<a name="anchor-145"></a>      status = ProParameterVisit (&amp;annotation,NULL,PTMfgParameterVisit,&quot;HOLE_ADJUST&quot;);
+      PT_TEST_LOG_SUCC(&quot;ProParameterVisit&quot;);
+    }
+  
+  if ( found == PRO_B_TRUE)
+<a name="anchor-146"></a>    
+    {
+      status = ProParameterVisit (&amp;annotation,NULL,PTMfgParameterVisit,&quot;HOLE_DEP_1&quot;);
+      PT_TEST_LOG_SUCC(&quot;ProParameterVisit&quot;);
+      
+<a name="anchor-147"></a>      status = ProParameterVisit (&amp;annotation,NULL,PTMfgParameterVisit,&quot;HOLE_DEP_2&quot;);
+      PT_TEST_LOG_SUCC(&quot;ProParameterVisit&quot;);
+      
+    }
+  
+<a name="anchor-148"></a>  status =  ProMfgprocitemHolesetdepthtypeGet (item,&amp;depth_type,&amp;end_type);
+  PT_TEST_LOG_SUCC(&quot;ProMfgprocitemHolesetdepthtypeGet&quot;);
+  
+  if ((end_type == PRO_MFGSTEP_HOLESETEND_ALONG_AXIS) &amp;&amp; (depth_type ==PRO_DRILL_BLIND))
+    
+<a name="anchor-149"></a>    {
+      
+      status =  ProMfgprocitemHolesetdepthSet (item ,hole_dep_1);
+      PT_TEST_LOG_SUCC (&quot;ProMfgprocitemHolesetdepthSet&quot;);
+    }
+<a name="anchor-150"></a>  
+  if (end_type ==PRO_MFGSTEP_HOLESETEND_REFERENCE)
+    {
+      status =  ProMfgprocitemHolesetdepthSet (item ,hole_dep_2);
+      PT_TEST_LOG_SUCC (&quot;ProMfgprocitemHolesetdepthSet&quot;);
+<a name="anchor-151"></a>    }
+  
+  
+  return PRO_TK_NO_ERROR;
+  
+<a name="anchor-152"></a>}
+
+/*--------------------------------------------------------*\
+    FUNCTION :  PTMfgParameterVisit
+    PURPOSE  :  Visit the param.
+<a name="anchor-153"></a>\*--------------------------------------------------------*/
+
+ProError PTMfgParameterVisit(ProParameter* param, ProError status, ProAppData data)
+{
+
+<a name="anchor-154"></a>  ProCharName str;
+  ProParamvalue value;
+  ProParamvalueType  type;
+  short   l_val;
+  
+<a name="anchor-155"></a>  ProWstringToString(str,param->id);
+  
+  if ( strcmp (str, data) == 0)
+    
+    {
+<a name="anchor-156"></a>      status = ProParameterValueGet (param, &amp;value);
+      PT_TEST_LOG_SUCC (&quot;ProParameterValueGet()&quot;);
+      
+      status = ProParamvalueTypeGet (&amp;value, &amp;type);
+      PT_TEST_LOG_SUCC (&quot;ProParamvalueTypeGet()&quot;);
+<a name="anchor-157"></a>      
+      if (type ==  PRO_PARAM_BOOLEAN)
+	{
+	  status = ProParamvalueValueGet (&amp;value, type, (void *) &amp;l_val);
+	  PT_TEST_LOG_SUCC (&quot;ProParamvalueValueGet()&quot;);
+<a name="anchor-158"></a>	  
+          if (l_val == 1)
+	    found  = PRO_B_TRUE;
+	  
+        }
+<a name="anchor-159"></a>      
+      if (type ==  PRO_PARAM_DOUBLE)
+	{
+	  if ( strcmp (str,&quot;HOLE_DEP_1&quot;) == 0) 
+	    {
+<a name="anchor-160"></a>	      status = ProParamvalueValueGet (&amp;value, type, (void *) &amp;hole_dep_1);
+	      PT_TEST_LOG_SUCC (&quot;ProParamvalueValueGet()&quot;);
+	    }
+	  
+	  if ( strcmp (str,&quot;HOLE_DEP_2&quot;) == 0) 
+<a name="anchor-161"></a>	    {
+              status = ProParamvalueValueGet (&amp;value, type, (void *) &amp;hole_dep_2);
+              PT_TEST_LOG_SUCC (&quot;ProParamvalueValueGet()&quot;);
+	    }
+	  
+<a name="anchor-162"></a>	}
+    }
+  
+  return PRO_TK_NO_ERROR;
+}
+<a name="anchor-163"></a>/*--------------------------------------------------------*\
+    FUNCTION :  PTMfgProcitemToolNameGet 
+    PURPOSE  :  Get the tool name from elem tree.
+\*--------------------------------------------------------*/
+
+<a name="anchor-164"></a>
+ProError PTMfgProcitemToolNameGet(ProElement elem)
+{
+  ProElempath epath;
+  ProElement tool_element;
+<a name="anchor-165"></a>  ProElempathItem  p_items[3];
+  ProElemId elem_id;
+  ProValueDataType value_type = -1;
+  ProValue     value = (ProValue)NULL;
+  ProValueData value_data;
+<a name="anchor-166"></a>  char toolname[100];
+
+
+  status = ProElemtreeWrite (elem, PRO_ELEMTREE_XML, L&quot;selecteditem_feed.inf&quot;);
+  PT_TEST_LOG_SUCC (&quot; ProElemtreeWrite &quot;);
+<a name="anchor-167"></a>  
+  status = ProElempathAlloc(&amp;epath);
+  PT_TEST_LOG_SUCC (&quot;ProElempathAlloc ()&quot;);
+  
+  p_items[0].type = PRO_ELEM_PATH_ITEM_TYPE_ID;
+<a name="anchor-168"></a>  p_items[0].path_item.elem_id = PRO_E_TOOL ;
+  
+  status = ProElempathDataSet(epath, p_items, 1);
+  PT_TEST_LOG_SUCC (&quot;ProElempathDataSet()&quot;);
+  
+<a name="anchor-169"></a>  status= ProElemtreeElementGet(complete_tree, epath, &amp;tool_element);
+  PT_TEST_LOG_SUCC (&quot;ProElemtreeElementGet()&quot;);
+  
+  status = ProElementIdGet( tool_element, &amp;elem_id);
+  PT_TEST_LOG_SUCC(&quot;ProElementIdGet&quot;);
+<a name="anchor-170"></a>
+  if ( elem_id == PRO_E_TOOL )
+    {
+      status = ProElementValueGet (tool_element, &amp;value);
+      PT_TEST_LOG_SUCC(&quot;ProElementValueGet&quot;);
+<a name="anchor-171"></a>      
+      status = ProValueDataGet (value, &amp;value_data);
+      PT_TEST_LOG_SUCC(&quot;ProValueDataGet()&quot;);
+      
+      if (value_data.v.w == NULL)
+<a name="anchor-172"></a>          ProStringToWstring(tool_id,&quot;TOOL_NOT_SET&quot;);
+
+       else
+          ProWstringCopy(value_data.v.w,tool_id,PRO_VALUE_UNUSED);
+             
+<a name="anchor-173"></a>    }
+
+  ProElempathFree(&amp;epath);
+
+ return PRO_TK_NO_ERROR;
+<a name="anchor-174"></a>
+}
+
+/*====================================================================*\
+  FUNCTION : user_terminate()
+<a name="anchor-175"></a>  PURPOSE  : To handle any termination actions
+\*====================================================================*/
+
+void user_terminate()
+{
+<a name="anchor-176"></a>}
+</pre>
+</body>
+</html>

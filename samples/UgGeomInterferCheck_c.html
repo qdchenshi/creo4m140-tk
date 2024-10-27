@@ -1,0 +1,390 @@
+<html>
+<head>
+<title>UgGeomInterferCheck.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*---------------------- Pro/Toolkit Includes ------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProUtil.h>
+<a name="anchor-2"></a>#include &lt;ProFit.h>
+
+#include &quot;PTApplsUnicodeUtils.h&quot;
+/*---------------------- Function Prototypes -------------------------*/
+ProError user_surf_clear ();
+<a name="anchor-3"></a>ProError user_dist_manifolds ();
+ProError user_part_interference ();
+ProError user_global_interference ();
+int user_dump_interferences ();
+int user_dump_mdl();
+<a name="anchor-4"></a>
+/*------------------------- External Data ----------------------------*/
+extern char *UserUtilGenFilename(ProMdl p_obj, char *filext, char *filename);
+
+
+<a name="anchor-5"></a>/*================================================================*\
+FUNCTION  : user_surf_clear
+PURPOSE   : Computes the clearance between two surfaces.
+\*================================================================*/
+ProError user_surf_clear ()
+<a name="anchor-6"></a>{
+    ProError    status;
+    ProBoolean  interf;
+    double      distance;
+    Pro3dPnt    coord[2];
+<a name="anchor-7"></a>    ProSelection *sel;
+    int         n_sel;
+    ProFileName msg_fil;
+
+    ProStringToWstring( msg_fil, &quot;msg_uggeom.txt&quot; );
+<a name="anchor-8"></a>    while (1)
+    {
+        status = ProMessageDisplay (msg_fil, &quot;USER Select a face&quot;);
+        ERROR_CHECK(&quot;user_surf_clear&quot;,&quot;ProMessageDisplay&quot;,status);
+        status = ProSelect(&quot;face&quot;, 2, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+<a name="anchor-9"></a>        if (n_sel &lt;= 1)
+            return (PRO_TK_GENERAL_ERROR);
+/*----------------------------------------------------------------*\
+        Computes the clearance between the two selected surfaces.
+\*----------------------------------------------------------------*/
+<a name="anchor-10"></a>        status = ProFitClearanceCompute(sel[0], PRO_FIT_INCLUDE_NONE, 
+                                        sel[1], PRO_FIT_INCLUDE_NONE,
+                                        PRO_FIT_WHOLE_SURFACE, NULL, PRO_B_FALSE,
+                                        &amp;distance, NULL, &amp;interf, coord);
+        ERROR_CHECK(&quot;user_surf_clear&quot;,&quot;ProFitClearanceCompute&quot;, status);
+<a name="anchor-11"></a>
+        status = ProMessageDisplay (msg_fil, &quot;USER Distance is %0(5.3)f&quot;, &amp;distance);
+        ERROR_CHECK(&quot;user_surf_clear&quot;,&quot;ProMessageDisplay&quot;,status);
+
+        if (interf)
+<a name="anchor-12"></a>        {
+            status = ProMessageDisplay (msg_fil, &quot;USER Interference exists&quot;);
+	        ERROR_CHECK(&quot;user_surf_clear&quot;,&quot;ProMessageDisplay&quot;,status);
+        }
+    }
+<a name="anchor-13"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*================================================================*\
+FUNCTION  : user_dist_manifolds
+<a name="anchor-14"></a>PURPOSE   : Computes the critical distance between two objects.
+\*================================================================*/
+ProError user_dist_manifolds ()
+{
+    ProError    status;
+<a name="anchor-15"></a>    ProSelection *sel;
+    int          n_sel;
+    double       distance;
+    Pro2dPnt uv1, uv2;
+    Pro3dPnt xyz1, xyz2;
+<a name="anchor-16"></a>    ProFileName msg_fil;
+
+    ProStringToWstring( msg_fil, &quot;msg_uggeom.txt&quot; );
+   
+    status = ProMessageDisplay (msg_fil, &quot;USER %0s&quot;, &quot;Select two entities&quot;);
+<a name="anchor-17"></a>    ERROR_CHECK(&quot;user_dist_manifolds&quot;,&quot;ProMessageDisplay&quot;,status);
+
+    status = ProSelect(&quot;point,edge,curve,surface&quot;, 2, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+    if (n_sel &lt; 2)
+        return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-18"></a>
+/*----------------------------------------------------------------*\
+    Compute the distance between the two manifolds.
+\*----------------------------------------------------------------*/
+    status = ProSelectionDistanceEval(sel[0], sel[1], uv1, uv2, xyz1, xyz2, &amp;distance);  
+<a name="anchor-19"></a>    ERROR_CHECK(&quot;user_dist_manifolds&quot;,&quot;ProSelectionDistanceEval&quot;,status);
+
+    if (status)
+    {
+        status = ProMessageDisplay (msg_fil, &quot;USER Distance is %0(5.3)f&quot;, 
+<a name="anchor-20"></a>				&amp;distance);
+        ERROR_CHECK(&quot;user_dist_manifolds&quot;,&quot;ProMessageDisplay&quot;,status);
+    }
+    else
+    {
+<a name="anchor-21"></a>        status = ProMessageDisplay (msg_fil, &quot;USER %0s&quot;, 
+					&quot;No min/max distances found&quot;);
+        ERROR_CHECK(&quot;user_dist_manifolds&quot;,&quot;ProMessageDisplay&quot;,status);
+    }
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-22"></a>}
+
+/*================================================================*\
+FUNCTION  : user_part_interference
+PURPOSE   : Computes the interference between two parts.
+<a name="anchor-23"></a>\*================================================================*/
+ProError user_part_interference ()
+{
+    ProError      status;
+    ProSelection *sel;
+<a name="anchor-24"></a>    int           n_sel;
+    wchar_t       w_str[5];
+    char          str[100], a_str[5];
+    double        volume;
+    FILE         *fp;
+<a name="anchor-25"></a>    char          fname[PRO_NAME_SIZE+4];
+    wchar_t       w_fname[PRO_NAME_SIZE+4];
+    ProMdl        p_model;
+    ProFileName   msg_fil;
+    ProInterferenceData interf_data;
+<a name="anchor-26"></a>
+    status = ProMdlCurrentGet(&amp;p_model);
+    ERROR_CHECK(&quot;user_part_interference&quot;,&quot;pro_get_current_object&quot;,
+			(p_model == NULL));
+    if (p_model == NULL) return (PRO_TK_E_NOT_FOUND);
+<a name="anchor-27"></a>
+    ProStringToWstring( msg_fil, &quot;msg_uggeom.txt&quot; );
+    status = ProMessageDisplay (msg_fil, &quot;USER %0s&quot;, &quot;Select two parts&quot;);
+    ERROR_CHECK(&quot;user_part_interference&quot;,&quot;ProMessageDisplay&quot;,status);
+
+<a name="anchor-28"></a>    status = ProSelect(&quot;part&quot;, 2, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+/*----------------------------------------------------------------*\
+    Compute the interference between the two parts.
+\*----------------------------------------------------------------*/
+    status = ProFitInterferenceCompute(sel[0], sel[1], PRO_B_FALSE, PRO_B_FALSE, &amp;interf_data);
+<a name="anchor-29"></a>    ERROR_CHECK(&quot;user_part_interference&quot;,&quot;ProFitInterferenceCompute&quot;,status);
+    if (status != PRO_TK_NO_ERROR)
+        return (PRO_TK_GENERAL_ERROR);
+
+    if (NULL == interf_data)
+<a name="anchor-30"></a>    {
+        status = ProMessageDisplay (msg_fil, &quot;USER %0s&quot;, 
+				&quot;No interference was detected.&quot;);
+        ERROR_CHECK(&quot;user_part_interference&quot;,&quot;ProMessageDisplay&quot;,status);
+        return (PRO_TK_NO_ERROR);
+<a name="anchor-31"></a>    }
+
+    ProTKSprintf (str, &quot;Interference found. Display? [Y]:&quot;);
+    status = ProMessageDisplay (msg_fil,&quot;USER %0s&quot;, str);
+    ERROR_CHECK(&quot;user_part_interference&quot;,&quot;ProMessageDisplay&quot;,status);
+<a name="anchor-32"></a>
+    if (!ProMessageStringRead (4, w_str))
+    {
+        ProWstringToString (a_str, w_str);
+        if (a_str[0] != 'y' || a_str[0] != 'Y')
+<a name="anchor-33"></a>            return (PRO_TK_NO_ERROR);
+    }
+
+    UserUtilGenFilename (p_model, &quot;.intf&quot;, fname);
+    if ((fp = PTApplsUnicodeFopen (fname, &quot;w&quot;)) == NULL)
+<a name="anchor-34"></a>        return (PRO_TK_GENERAL_ERROR);
+    ProTKFprintf (fp, &quot;Interference in &quot;);
+    user_dump_mdl (fp, p_model);
+    ProTKFprintf (fp, &quot;\n\n&quot;);
+
+<a name="anchor-35"></a>/*----------------------------------------------------------------*\
+    Compute the interference volume.
+\*----------------------------------------------------------------*/
+    status = ProFitInterferencevolumeCompute(interf_data, &amp;volume);
+    ERROR_CHECK(&quot;user_part_interference&quot;,&quot;pro_compute_volume&quot;,status);
+<a name="anchor-36"></a>    user_dump_interferences (fp, sel, volume);
+
+/*----------------------------------------------------------------*\
+    Highlight the interference regions.
+\*----------------------------------------------------------------*/
+<a name="anchor-37"></a>    status = ProFitInterferencevolumeDisplay(interf_data, PRO_COLOR_EDGE_HIGHLIGHT);
+    ERROR_CHECK(&quot;user_part_interference&quot;,&quot;pro_display_interf_volume&quot;,status);
+
+    ProTKSprintf (str, &quot;Total Interference Volume = %lf&quot;, volume);
+    status = ProMessageDisplay (msg_fil, &quot;USER %0s&quot;, str);
+<a name="anchor-38"></a>    ERROR_CHECK(&quot;user_part_interference&quot;,&quot;ProMessageDisplay&quot;,status);
+
+/*----------------------------------------------------------------*\
+    Release the memory for the interference volume.
+\*----------------------------------------------------------------*/
+<a name="anchor-39"></a>    fclose (fp);
+
+    ProStringToWstring (w_fname, fname);
+    status = ProInfoWindowDisplay (w_fname, NULL, NULL);
+    ERROR_CHECK(&quot;user_part_interference&quot;,&quot;ProInfoWindowDisplay&quot;,status);
+<a name="anchor-40"></a>
+    status = ProInterferenceDataFree(interf_data);
+    ERROR_CHECK(&quot;user_part_interference&quot;,&quot;ProInterferenceDataFree&quot;,status);
+
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-41"></a>}
+
+/*================================================================*\
+FUNCTION  : user_global_interference
+PURPOSE   : Computes the global interference within an assembly.
+<a name="anchor-42"></a>\*================================================================*/
+ProError user_global_interference ()
+{
+    ProError               status;
+    ProSelection          *sel;
+<a name="anchor-43"></a>    int                    n_intf_parts, *n_part_surfs, i;
+    wchar_t                w_str[5];
+    char                   str[100], a_str[5];
+    double                 volume;
+    FILE                  *fp;
+<a name="anchor-44"></a>    char                   fname[PRO_NAME_SIZE+4];
+    wchar_t                w_fname[PRO_NAME_SIZE+4];
+    ProFileName            msg_fil;
+    ProMdl                 p_model;
+    ProInterferenceInfo   *interf_info_arr;
+<a name="anchor-45"></a>
+    ProStringToWstring( msg_fil, &quot;msg_uggeom.txt&quot; );
+
+    status = ProMdlCurrentGet(&amp;p_model);
+    ERROR_CHECK(&quot;user_global_interference&quot;,&quot;pro_get_current_object&quot;,
+<a name="anchor-46"></a>                        (p_model == NULL));
+    if (p_model == NULL) return (PRO_TK_E_NOT_FOUND);
+
+/*----------------------------------------------------------------*\
+    Compute the interference within the assembly.
+<a name="anchor-47"></a>\*----------------------------------------------------------------*/
+    status = ProFitGlobalinterferenceCompute((ProAssembly)p_model, PRO_FIT_SUB_ASSEMBLY, 
+                                             PRO_B_FALSE, PRO_B_FALSE, PRO_B_FALSE, 
+                                             &amp;interf_info_arr);
+    ERROR_CHECK(&quot;user_global_interference&quot;,&quot;ProFitGlobalinterferenceCompute&quot;,status);
+<a name="anchor-48"></a>
+    if (status != PRO_TK_NO_ERROR)
+        return (PRO_TK_GENERAL_ERROR);
+
+    status = ProArraySizeGet(interf_info_arr, &amp;n_intf_parts);
+<a name="anchor-49"></a>    if (n_intf_parts == 0)
+    {
+       status = ProMessageDisplay (msg_fil, &quot;USER %0s&quot;, 
+				&quot;No interference was detected.&quot;);
+       ERROR_CHECK(&quot;user_global_interference&quot;,&quot;ProMessageDisplay&quot;,status);
+<a name="anchor-50"></a>    }
+
+    ProTKSprintf (str, 
+     &quot;%d interfering part pairs found. Display interference pair volumes? [Y]:&quot;,
+     n_intf_parts);
+<a name="anchor-51"></a>
+    ProMessageDisplay (msg_fil, &quot;USER %0s&quot;, str);
+    if (!ProMessageStringRead (4, w_str))
+    {
+        ProWstringToString (a_str, w_str);
+<a name="anchor-52"></a>        if (a_str[0] != 'y' || a_str[0] != 'Y')
+            return (PRO_TK_NO_ERROR);
+    }
+    UserUtilGenFilename (p_model, &quot;.intf&quot;, fname);
+    if ((fp = PTApplsUnicodeFopen (fname, &quot;w&quot;)) == NULL)
+<a name="anchor-53"></a>        return (PRO_TK_GENERAL_ERROR);
+    ProTKFprintf (fp, &quot;Interference in &quot;);
+    user_dump_mdl (fp, p_model);
+    ProTKFprintf (fp, &quot;\n\n&quot;);
+    for (i = 0; i &lt; n_intf_parts; i++)
+<a name="anchor-54"></a>    {
+
+/*----------------------------------------------------------------*\
+        Compute the interference volumes.
+\*----------------------------------------------------------------*/
+<a name="anchor-55"></a>      status = ProFitInterferencevolumeCompute(interf_info_arr[i].interf_data, 
+                                               &amp;volume);
+        ERROR_CHECK(&quot;user_global_interference&quot;,&quot;ProFitInterferencevolumeCompute&quot;,status);
+        user_dump_interferences (fp, interf_info_arr[i].part_1, 
+                                     interf_info_arr[i].part_2, volume);
+<a name="anchor-56"></a>
+/*----------------------------------------------------------------*\
+        Highlight the interference regions.
+\*----------------------------------------------------------------*/
+        status = ProFitInterferencevolumeDisplay(interf_info_arr[i].interf_data, 
+<a name="anchor-57"></a>                                                 PRO_COLOR_EDGE_HIGHLIGHT);
+        ERROR_CHECK(&quot;user_global_interference&quot;,&quot;ProFitInterferencevolumeDisplay&quot;,status);
+
+        ProTKSprintf (str, &quot;Interference pair %d of %d: Volume = %0.2lf: Continue? [y]:&quot;, i+1, n_intf_parts, volume);
+        status = ProMessageDisplay (msg_fil, &quot;USER %0s&quot;, str);
+<a name="anchor-58"></a>        ERROR_CHECK(&quot;user_global_interference&quot;,&quot;ProMessageDisplay&quot;,status);
+
+        if (!ProMessageStringRead (4, w_str))
+        {
+            ProWstringToString (a_str, w_str);
+<a name="anchor-59"></a>            if (a_str[0] != 'y' || a_str[0] != 'Y')
+            {
+                fclose (fp);
+                return (PRO_TK_NO_ERROR);
+            }
+<a name="anchor-60"></a>        }
+
+/*----------------------------------------------------------------*\
+        Release the memory for the interference volume.
+\*----------------------------------------------------------------*/
+<a name="anchor-61"></a>    }
+    fclose (fp);
+
+    ProStringToWstring (w_fname, fname);
+    status = ProInfoWindowDisplay (w_fname, NULL, NULL);
+<a name="anchor-62"></a>    ERROR_CHECK(&quot;user_global_interference&quot;,&quot;ProInfoWindowDisplay&quot;,status);
+
+    status = ProInterferenceInfoProarrayFree(interf_info_arr);
+
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-63"></a>}
+
+
+/*================================================================*\
+FUNCTION  : user_dump_interferences
+<a name="anchor-64"></a>PURPOSE   : Writes the interference information into a file.
+\*================================================================*/
+int user_dump_interferences (fp, part_1, part_2, volume)
+FILE          *fp;
+ProSelection   part_1, part_2;
+<a name="anchor-65"></a>double         volume;
+{
+    int m;
+    ProMdl mdl;
+    ProModelitem modelitem;
+<a name="anchor-66"></a>    ProAsmcomppath cmp_path;
+    ProError status;
+
+    ProTKFprintf (fp, &quot;Interfering Parts:\n&quot;);
+    ProTKFprintf (fp, &quot;\t &quot;);
+<a name="anchor-67"></a>    status = ProSelectionModelitemGet(part_1, &amp;modelitem);
+    user_dump_mdl (fp, modelitem.owner);
+
+    status = ProSelectionAsmcomppathGet(part_1, &amp;cmp_path);
+    ProTKFprintf (fp, &quot;\tmemb_id_tab[&quot;);
+<a name="anchor-68"></a>    for (m = 0; m &lt; cmp_path.table_num; m++)
+    {
+        ProTKFprintf (fp, &quot;%d&quot;, cmp_path.comp_id_table[m]);
+        if (m &lt; cmp_path.table_num-1)
+            ProTKFprintf (fp, &quot;,&quot;);
+<a name="anchor-69"></a>    }
+    ProTKFprintf (fp, &quot;]\n&quot;);
+    ProTKFprintf (fp, &quot;\t &quot;);
+    status = ProSelectionModelitemGet(part_2, &amp;modelitem);
+    user_dump_mdl (fp, modelitem.owner);
+<a name="anchor-70"></a>
+    status = ProSelectionAsmcomppathGet(part_2, &amp;cmp_path);
+    ProTKFprintf (fp, &quot;\tmemb_id_tab[&quot;);
+    for (m = 0; m &lt; cmp_path.table_num; m++)
+    {
+<a name="anchor-71"></a>        ProTKFprintf (fp, &quot;%d&quot;, cmp_path.comp_id_table[m]);
+        if (m &lt; cmp_path.table_num-1)
+            ProTKFprintf (fp, &quot;,&quot;);
+    }
+    ProTKFprintf (fp, &quot;]\n&quot;);
+<a name="anchor-72"></a>    ProTKFprintf (fp, &quot;\tInterfering Volume: %0.2lf\n\n&quot;, volume);
+    return(0);
+}
+
+int user_dump_mdl (fp, p_model)
+<a name="anchor-73"></a>FILE          *fp;
+ProMdl         p_model;
+{    
+    char                 name[PRO_MDLNAME_SIZE], type[PRO_MDLEXTENSION_SIZE];
+	ProMdlName           modelName;
+<a name="anchor-74"></a>	ProMdlExtension      modelExtension;
+
+    if (p_model == NULL)
+        return (0);
+    
+<a name="anchor-75"></a>	ProMdlMdlnameGet(p_model, modelName);        
+	
+    ProMdlExtensionGet(p_model, modelExtension);
+    ProTKFprintf (fp, &quot;%s.%s:&quot;, ProWstringToString (name, modelName),
+        ProWstringToString (type, modelExtension));
+<a name="anchor-76"></a>    return (0);
+}
+</pre>
+</body>
+</html>

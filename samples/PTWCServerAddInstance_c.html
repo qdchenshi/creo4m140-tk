@@ -1,0 +1,222 @@
+<html>
+<head>
+<title>PTWCServerAddInstance.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProWorkspace.h>
+#include &lt;ProWTUtils.h>
+#include &lt;ProBrowser.h>
+#include &lt;ProUtil.h>
+<a name="anchor-2"></a>#include &lt;ProMenuBar.h>
+#include &lt;ProMode.h>
+#include &lt;ProParameter.h>
+#include &lt;ProFamtable.h>
+#include &lt;ProFaminstance.h>
+<a name="anchor-3"></a>#include &lt;ProWstring.h>
+
+#include &lt;PTWCServer.h>
+
+#define LOCATION_PARAM_NAME L&quot;PTC_WM_LOCATION&quot;
+<a name="anchor-4"></a>#define INSTANCE_PARAM_NAME L&quot;PROTK_INSTANCE_PARAM&quot;
+#define VERSION_PARAM_NAME L&quot;PTC_WM_VERSION&quot;
+
+/*====================================================================*\
+  FUNCTION: PTWCAddInstance
+<a name="anchor-5"></a>  PURPOSE:  Add a new instance to the current object, save it, and 
+			check it in
+\*====================================================================*/
+int PTWCAddInstance ()
+{
+<a name="anchor-6"></a>	ProMdl model;
+	ProBoolean can_modify;
+	ProModelitem item;
+	wchar_t* server;
+	int length;
+<a name="anchor-7"></a>	ProPath target_folder;
+	ProParamvalue value;
+	ProParameter param, ver_param;
+	ProFamtable f_table;
+	ProFamtableItem ft_item;
+<a name="anchor-8"></a>	ProFaminstance ft_instance;
+	ProMdlName inst_name;
+	int i, root_length, ver_length;
+	ProSolid instance;
+	ProServerCheckinConflicts conflicts;
+<a name="anchor-9"></a>
+/*--------------------------------------------------------------------*\
+	Check if the current object is modifiable.  If not, by using the UI
+	option = PRO_B_TRUE, the user will be presented with an option to
+	check out the object to allow the modification. If they deny this
+<a name="anchor-10"></a>	request, skip the operation.
+\*--------------------------------------------------------------------*/
+	status = ProMdlCurrentGet (&amp;model);
+	PT_TEST_LOG_SUCC (&quot;ProMdlCurrentGet()&quot;);
+
+<a name="anchor-11"></a>	status = ProMdlToModelitem (model, &amp;item);
+	PT_TEST_LOG_SUCC (&quot;ProMdlToModelitem()&quot;);
+
+	status = ProParameterInit (&amp;item, LOCATION_PARAM_NAME, &amp;param);
+	PT_TEST_LOG_SUCC (&quot;ProParameterInit()&quot;);
+<a name="anchor-12"></a>
+	ProStringToWstring (target_folder, &quot;&quot;);
+
+	if (status == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-13"></a>		status = ProParameterValueGet (&amp;param, &amp;value);
+		PT_TEST_LOG_SUCC (&quot;ProParameterValueGet()&quot;);
+
+		ProWstringLengthGet (value.value.s_val, &amp;length);
+
+<a name="anchor-14"></a>		if (length > 0)
+		{
+			status = ProServerActiveGet (&amp;server);
+			PT_TEST_LOG_SUCC (&quot;ProServerActiveGet()&quot;);
+	
+<a name="anchor-15"></a>			PTWCUtilBuildServerFolder (server, value.value.s_val, 
+									target_folder);
+		}
+	}
+	
+<a name="anchor-16"></a>	status = ProMdlIsModifiable (model, PRO_B_TRUE, &amp;can_modify);
+	PT_TEST_LOG_SUCC (&quot;ProMdlIsModifiable()&quot;);
+
+	if (can_modify)
+	{	
+<a name="anchor-17"></a>/*--------------------------------------------------------------------*\
+		Look for a parameter used by this example.  If its not in the
+		model, create it.
+\*--------------------------------------------------------------------*/
+	
+<a name="anchor-18"></a>		status = ProParameterInit (&amp;item, INSTANCE_PARAM_NAME, &amp;param);
+		PT_TEST_LOG_SUCC (&quot;ProParameterInit()&quot;);
+
+		if (status != PRO_TK_NO_ERROR)
+		{
+<a name="anchor-19"></a>			value.type = PRO_PARAM_STRING;
+			ProStringToWstring (value.value.s_val, &quot;Generic&quot;);
+
+			status = ProParameterCreate (&amp;item, INSTANCE_PARAM_NAME, &amp;value, &amp;param);
+			PT_TEST_LOG_SUCC (&quot;ProParameterCreate()&quot;);
+<a name="anchor-20"></a>		}
+
+/*--------------------------------------------------------------------*\
+		Add the parameter to the family table.  If the parameter is
+		already in the family table, the ProFamtableItemAdd() call
+<a name="anchor-21"></a>		has no effect.
+\*--------------------------------------------------------------------*/
+		status = ProFamtableInit (model, &amp;f_table);
+		PT_TEST_LOG_SUCC (&quot;ProFamtableInit()&quot;);
+
+<a name="anchor-22"></a>		status = ProParameterToFamtableItem (&amp;param, &amp;ft_item);
+		PT_TEST_LOG_SUCC (&quot;ProParameterToFamtableItem()&quot;);
+	
+		status = ProFamtableItemAdd (&amp;f_table, &amp;ft_item);
+		PT_TEST_LOG_SUCC (&quot;ProFamtableItemAdd()&quot;);
+<a name="anchor-23"></a>
+/*--------------------------------------------------------------------*\
+		Use the version of the model to construct a unique new instance
+		name for this example.
+\*--------------------------------------------------------------------*/
+<a name="anchor-24"></a>		status = ProParameterInit (&amp;item, VERSION_PARAM_NAME, &amp;ver_param);
+		PT_TEST_LOG_SUCC (&quot;ProParameterInit()&quot;);
+
+		status = ProParameterValueGet (&amp;ver_param, &amp;value);
+		PT_TEST_LOG_SUCC (&quot;ProParameterValueGet()&quot;);
+<a name="anchor-25"></a>
+		status = ProMdlMdlnameGet (model, inst_name);
+		PT_TEST_LOG_SUCC (&quot;ProMdlMdlnameGet()&quot;);
+
+		ProWstringLengthGet (inst_name, &amp;root_length);
+<a name="anchor-26"></a>		ProWstringLengthGet (value.value.s_val, &amp;ver_length);
+		
+		for (i = 0; i &lt; ver_length; i++)
+		{
+			if (value.value.s_val[i] == L'.')
+<a name="anchor-27"></a>				value.value.s_val[i] = L'_';
+		}
+
+		if (root_length + ver_length + 1 > PRO_MDLNAME_SIZE - 1)
+		{
+<a name="anchor-28"></a>			ProWstringCopy (value.value.s_val, inst_name, PRO_VALUE_UNUSED);
+		}
+		else
+		{
+			ProWstringConcatenate (L&quot;_&quot;, inst_name, PRO_VALUE_UNUSED);
+<a name="anchor-29"></a>			ProWstringConcatenate (value.value.s_val, inst_name, PRO_VALUE_UNUSED);
+		}
+
+/*--------------------------------------------------------------------*\
+		Add the new instance and set the value of the example parameter
+<a name="anchor-30"></a>		for this instance.
+\*--------------------------------------------------------------------*/
+		status = ProFaminstanceInit (inst_name, &amp;f_table, &amp;ft_instance);
+		PT_TEST_LOG_SUCC (&quot;ProFaminstanceInit()&quot;);
+
+<a name="anchor-31"></a>		status = ProFaminstanceAdd (&amp;ft_instance);
+		PT_TEST_LOG_SUCC (&quot;ProFaminstanceAdd()&quot;);
+
+		ProStringToWstring (value.value.s_val, &quot;Instance &quot;);
+		ProWstringConcatenate (inst_name, value.value.s_val, PRO_VALUE_UNUSED);
+<a name="anchor-32"></a>
+		status = ProFaminstanceValueSet (&amp;ft_instance, &amp;ft_item, &amp;value);
+		PT_TEST_LOG_SUCC (&quot;ProFaminstanceValueSet()&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-33"></a>		Instantiate the instance.  This also serves to verify the
+		instance, allowing it to be checked in.
+\*--------------------------------------------------------------------*/
+		status = ProFaminstanceCreate (&amp;ft_instance, (ProMdl*)&amp;instance);
+		PT_TEST_LOG_SUCC (&quot;ProFaminstanceCreate()&quot;);
+<a name="anchor-34"></a>
+		status = ProMdlErase (instance);
+		PT_TEST_LOG_SUCC (&quot;ProMdlErase()&quot;);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-35"></a>		Save and checkin the changed model.
+\*--------------------------------------------------------------------*/
+		status = ProMdlSave (model);
+		PT_TEST_LOG_SUCC (&quot;ProMdlSave()&quot;);
+
+<a name="anchor-36"></a>		status = ProServerObjectsCheckin (model, NULL, &amp;conflicts);
+		PT_TEST_LOG_SUCC (&quot;ProServerObjectsCheckin()&quot;);
+
+		if (status == PRO_TK_CHECKOUT_CONFLICT)
+		{
+<a name="anchor-37"></a>			PTWCUtilConflictReport (conflicts);
+			ProServerconflictsFree (conflicts);
+		}
+	}
+
+<a name="anchor-38"></a>	return  PRO_TK_NO_ERROR;
+}
+
+/*====================================================================*\
+  FUNCTION: PTWCAccessAddInstance
+<a name="anchor-39"></a>  PURPOSE:  Access function for the Add Instance example.
+\*====================================================================*/
+uiCmdAccessState PTWCAccessAddInstance (uiCmdAccessMode m)
+{
+	ProMode mode;
+<a name="anchor-40"></a>	wchar_t* server;
+	wchar_t* server_class;
+	int result;
+
+	status = ProModeCurrentGet (&amp;mode);
+<a name="anchor-41"></a>	
+	if (mode != PRO_MODE_PART &amp;&amp; mode != PRO_MODE_ASSEMBLY)
+		return ACCESS_REMOVE;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-42"></a>	Ensure that there is an active Windchill server
+\*--------------------------------------------------------------------*/
+	return (PTWCUtilAccessIfWCServer ());
+}
+</pre>
+</body>
+</html>

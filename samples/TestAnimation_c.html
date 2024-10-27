@@ -1,0 +1,975 @@
+<html>
+<head>
+<title>TestAnimation.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+
+
+/*--------------------------------------------------------------------*\
+    Pro/TOOLKIT includes
+<a name="anchor-2"></a>\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProSelection.h&quot;
+#include &quot;ProModelitem.h&quot;
+<a name="anchor-3"></a>#include &quot;ProMdl.h&quot;
+#include &quot;ProArray.h&quot;
+#include &quot;ProUtil.h&quot;
+#include &quot;ProAnimate.h&quot;
+#include &quot;ProTKRunTime.h&quot;
+<a name="anchor-4"></a>
+/*--------------------------------------------------------------------*\
+    Pro/DEVELOP includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-5"></a>
+/*--------------------------------------------------------------------*\
+    C System includes
+\*--------------------------------------------------------------------*/
+#include &lt;math.h>
+<a name="anchor-6"></a>
+
+/*--------------------------------------------------------------------*\
+    Application includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-7"></a>#include &quot;TestError.h&quot;
+#include &quot;TestAnimation.h&quot;
+#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilCollect.h&quot;
+<a name="anchor-8"></a>
+/*--------------------------------------------------------------------*\
+    Macros
+\*--------------------------------------------------------------------*/
+#define ANI_OBJECT( i, f )  (ani_obj_seq[i].anims[f])
+<a name="anchor-9"></a>#define PI		    (3.1451)
+#define MAX_FRAMES_NUM	    30
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-10"></a>    Data types
+\*--------------------------------------------------------------------*/
+/*---------------------------------------------------------------*\
+    This structure contains information about animation objects 
+    associated with the model. Macro ANI_OBJECT(i,f) is used to 
+<a name="anchor-11"></a>    get animation object handle (ProAnimObj) of the model i in
+    the frame f.
+\*---------------------------------------------------------------*/
+typedef struct tag_AniObjectInstance
+	{
+<a name="anchor-12"></a>	    ProMdl	    model;	/* Handle to the animated model */
+	    ProAsmcomppath  comp_path;	/* Component path of the object */
+	    ProAnimObj	    anims[ MAX_FRAMES_NUM ]; /* Array of the ani objs */
+	} AniObjectInstance;
+
+<a name="anchor-13"></a>
+/*--------------------------------------------------------------------*\
+    Application global/external data
+\*--------------------------------------------------------------------*/
+static AniObjectInstance*   ani_obj_seq = NULL; /* Array of  of ani objs */
+<a name="anchor-14"></a>static int		    n_objects = 0;  /* Current number of ani objs */
+#if 0
+static ProAnimFrame	    frames[ MAX_FRAMES_NUM ]; /* Animation frames */
+#endif
+static ProAnimFrame	    *frames; /* Animation frames */
+<a name="anchor-15"></a>static int		    n_frames; /* Current number of frames */
+
+
+/*---------------------------------------------------------------------*\
+    Functions declaration
+<a name="anchor-16"></a>\*---------------------------------------------------------------------*/
+ProError    ProUtilSelectedMdlGet( ProSelection* , ProMdl* );
+ProError    ProUtilAniObjectSelect( char option[], ProSelection**, 
+				    AniObjectInstance* );
+ProBoolean  ProUtilMdlEqual( ProMdl, ProMdl );
+<a name="anchor-17"></a>int    ProUtilAniObjectFind( ProArray, AniObjectInstance );
+ProError    ProUtilAniObjectInstanceInit( ProSelection**, AniObjectInstance* );
+ProError    ProTestBatchAnimAct( ProAnimFrame, int, ProAppData );
+void	    ProUtilRotX( double angle, ProMatrix mx );
+
+<a name="anchor-18"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProTestAnimation()
+    Purpose:	Top-level function. Initialize some data, 
+<a name="anchor-19"></a>		create and run ANIMATION menu, then free used resources.
+    Returns:	0 - success; -1 - error. Now ignored.
+\*---------------------------------------------------------------------*/
+int ProTestAnimation( void* p_dummy, int int_dummy )
+{
+<a name="anchor-20"></a>    ProError	    status;
+    int		    menu_id;    /* The identifier of the created menu */
+    int		    action;
+
+
+<a name="anchor-21"></a>    /* Init the array of animation objects */
+    n_objects = 0;
+    status = ProArrayAlloc( 0, sizeof(AniObjectInstance), 1, (ProArray *)&amp;ani_obj_seq );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-22"></a>    if( status != PRO_TK_NO_ERROR )
+	return -1;
+
+    /* Init the array of animation frames */
+    n_frames = 0;
+<a name="anchor-23"></a>    status = ProArrayAlloc( 0, sizeof(ProAnimFrame), 1, (ProArray *)&amp;frames );
+    TEST_CALL_REPORT( &quot;ProArrayAlloc()&quot;, &quot;ProTestAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+<a name="anchor-24"></a>    status = ProArraySizeSet( (ProArray *)&amp;frames, MAX_FRAMES_NUM );
+    TEST_CALL_REPORT( &quot;ProArraySizeSet()&quot;, &quot;ProTestAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+<a name="anchor-25"></a>
+    /*-----------------------------*\
+	Create new menu ANIMATION
+    \*-----------------------------*/
+
+<a name="anchor-26"></a>    /* Load base menu from file */
+    status = ProMenuFileRegister((char *)&quot;Animation&quot;, (char *)&quot;tkanim.mnu&quot;,
+               &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuFileRegister()&quot;, &quot;ProTestAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-27"></a>
+    /* Define menu buttons */
+    ProMenubuttonActionSet((char *)&quot;Animation&quot;, (char *)&quot;Create&quot;, 
+       (ProMenubuttonAction)ProTestAnimframeCreate, NULL, 0 );
+    ProMenubuttonActionSet((char *)&quot;Animation&quot;, (char *)&quot;Delete&quot;, 
+<a name="anchor-28"></a>       (ProMenubuttonAction)ProTestAnimframeDelete, NULL, 0 );
+    ProMenubuttonActionSet((char *)&quot;Animation&quot;, (char *)&quot;AddObject&quot;, 
+       (ProMenubuttonAction)ProTestAniObjectAdd, NULL, 0 );
+    ProMenubuttonActionSet((char *)&quot;Animation&quot;, (char *)&quot;DeleteObject&quot;,
+       (ProMenubuttonAction)ProTestSelAniObjectDelete, NULL, 0 );
+<a name="anchor-29"></a>    ProMenubuttonActionSet((char *)&quot;Animation&quot;, (char *)&quot;PlaySingle&quot;,
+       (ProMenubuttonAction)ProTestSingleAnimation, NULL, 0 );
+    ProMenubuttonActionSet((char *)&quot;Animation&quot;, (char *)&quot;PlayBatch&quot;,
+       (ProMenubuttonAction)ProTestBatchAnimation, NULL, 0 );
+    ProMenubuttonActionSet((char *)&quot;Animation&quot;, (char *)&quot;Animation&quot;, 
+<a name="anchor-30"></a>       (ProMenubuttonAction)ProMenuDelete, NULL, 0 );
+
+
+    /*-----------------------*\
+	Run menu ANIMATION
+<a name="anchor-31"></a>    \*-----------------------*/
+
+    status = ProMenuCreate( PROMENUTYPE_MAIN, (char *)&quot;Animation&quot;, &amp;menu_id );
+    TEST_CALL_REPORT( &quot;ProMenuCreate()&quot;, &quot;ProTestAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-32"></a>    if( status == PRO_TK_NO_ERROR )
+    {
+	status = ProMenuProcess( (char *)&quot;Animation&quot;, &amp;action );
+	TEST_CALL_REPORT( &quot;ProMenuProcess()&quot;, &quot;ProTestAnimation()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-33"></a>    }
+
+    status = ProArrayFree( (ProArray *)&amp;ani_obj_seq );
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-34"></a>    n_objects = 0;
+    status = ProArrayFree( (ProArray *)&amp;frames );
+    TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    n_frames = 0;
+<a name="anchor-35"></a>
+    return 0;
+}
+
+
+<a name="anchor-36"></a>
+/*---------------------------------------------------------------------*\
+    Function:	ProTestAnimframeCreate()
+    Purpose:	On-button function. Initialize frames sequence structure.
+    Returns:	0 - success; -1 - error. Now ignored.
+<a name="anchor-37"></a>\*---------------------------------------------------------------------*/
+int ProTestAnimframeCreate( void* p_dummy, int int_dummy )
+{
+    ProError	    status;
+    int		    i;
+<a name="anchor-38"></a>    ProMatrix	    m_frame_view = {
+				    {1.0, 0.0, 0.0, 0.0},
+				    {0.0, 1.0, 0.0, 0.0},
+				    {0.0, 0.0, 1.0, 0.0},
+				    {0.0, 0.0, 0.0, 1.0} 
+<a name="anchor-39"></a>				   };
+    ProVector	    v_x = {1.0, 0.0, 0.0};
+    ProVector	    v_y = {0.0, 1.0, 0.0};
+    ProVector	    v_z = {0.0, 0.0, 1.0};
+    ProPoint3d	    origin = {0.0, 0.0, 1.0};
+<a name="anchor-40"></a>
+
+    /* Check animation frames */
+    if( n_frames > 0 )
+    {
+<a name="anchor-41"></a>	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Animation already exists&quot; );
+	return -1;
+    }
+
+    /* Get a number of frames */
+<a name="anchor-42"></a>    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter a number of frames: &quot; );
+    if( !ProUtilIntGet( NULL, NULL, &amp;n_frames ) )
+	n_frames = MAX_FRAMES_NUM;
+    if( n_frames > MAX_FRAMES_NUM )
+	n_frames = MAX_FRAMES_NUM;
+<a name="anchor-43"></a>
+
+    /* Init the frame view matrix */
+    status = ProMatrixInit( v_x, v_y, v_z, origin, m_frame_view );
+    TEST_CALL_REPORT( &quot;ProMatrixInit()&quot;, &quot;ProTestAnimframeCreate()&quot;, 
+<a name="anchor-44"></a>			status, status != PRO_TK_NO_ERROR );
+
+    /* Initialize the frames */
+    for( i=0; i&lt;n_frames; i++ )
+    {
+<a name="anchor-45"></a>	status = ProAnimframeCreate( m_frame_view, &amp;(frames[i]) );
+	TEST_CALL_REPORT( &quot;ProAnimframeCreate()&quot;, &quot;ProTestAnimframeCreate()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	if( status != PRO_TK_NO_ERROR )
+	    return -1;
+<a name="anchor-46"></a>    }
+
+
+    return 0; /* Upon success */
+}
+<a name="anchor-47"></a>
+
+
+/*---------------------------------------------------------------------*\
+    Function:	ProTestAnimframeDelete()
+<a name="anchor-48"></a>    Purpose:	On-button function. Remove animation objects from the frames, 
+		delete animation frames and free an array of the handles of
+		the frames.
+    Returns:	0 - success; -1 - error. Now ignored.
+    Note:	Arguments are ignored.
+<a name="anchor-49"></a>\*---------------------------------------------------------------------*/
+int ProTestAnimframeDelete( void* p_dummy, int int_dummy )
+{
+    ProError	    status;
+    int		    i;
+<a name="anchor-50"></a>
+
+    /* Check animation frames */
+    if( n_frames &lt; 1 )
+	return -1;
+<a name="anchor-51"></a>
+    /* Delete the animation objects */
+    for( i=n_objects-1; i>=0; i-- )
+	ProTestAniObjectDelete( i );
+
+<a name="anchor-52"></a>    /* Delete animation frames */
+    for( i=0; i&lt;n_frames; i++ )
+    {
+	status = ProAnimframeDelete( frames[i] );
+	TEST_CALL_REPORT( &quot;ProAnimframeDelete()&quot;, &quot;ProTestAnimframeDelete()&quot;, 
+<a name="anchor-53"></a>			    status, status != PRO_TK_NO_ERROR );
+    }
+
+    n_frames = 0;
+
+<a name="anchor-54"></a>
+    return 0;
+}
+
+
+<a name="anchor-55"></a>
+/*---------------------------------------------------------------------*\
+    Function:	ProTestAniObjectAdd()
+    Purpose:	On-button function. Select an animation object and add it 
+		to the animation frames.
+<a name="anchor-56"></a>    Returns:	0 - success; -1 - error. Now ignored.
+    Note:	Arguments are ignored.
+\*---------------------------------------------------------------------*/
+int ProTestAniObjectAdd( void* p_dummy, int int_dummy )
+{
+<a name="anchor-57"></a>    ProError		status;
+    ProSelection*	p_selection;
+    AniObjectInstance	ani_object;	/* Created animation object */
+    int			i_frame;
+    double		angle;
+<a name="anchor-58"></a>    double		add_angle;
+    ProMode             mode;
+    ProMatrix		m_transform = {
+					{1.0, 0.0, 0.0, 0.0},
+					{0.0, 1.0, 0.0, 0.0},
+<a name="anchor-59"></a>					{0.0, 0.0, 1.0, 0.0},
+					{0.0, 0.0, 0.0, 1.0} 
+				      };
+
+
+<a name="anchor-60"></a>    /* Check animation frames */
+    if( n_frames &lt; 1 )
+    {
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;First, create an animation&quot; );
+	return -1;
+<a name="anchor-61"></a>    }
+
+    /* Select ONE element to animate */
+    status = ProUtilAniObjectSelect( (char *)&quot;prt_or_asm&quot;, &amp;p_selection, &amp;ani_object );
+    if( status == PRO_TK_USER_ABORT )
+<a name="anchor-62"></a>	return -1;
+    if( status != PRO_TK_E_NOT_FOUND )
+    {
+	/* User have selected already animated object */
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;The item is already animated&quot; );
+<a name="anchor-63"></a>	return -1;
+    }
+
+    /* Insert object to the array of the animated elements */
+    status = ProArrayObjectAdd( (ProArray *)&amp;ani_obj_seq, 0, 1, (void*)&amp;ani_object );
+<a name="anchor-64"></a>    TEST_CALL_REPORT( &quot;ProArrayObjectAdd()&quot;, &quot;ProTestAniObjectAdd()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+	n_objects++;
+    else
+<a name="anchor-65"></a>	return -1;
+        
+    status = ProModeCurrentGet(&amp;mode);
+    TEST_CALL_REPORT( &quot;ProModeCurrentGet()&quot;, &quot;ProTestAniObjectAdd()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-66"></a>    if (mode == PRO_MODE_ASSEMBLY)
+    {
+        /* Retrieve the transformation matrix */
+        status = ProAsmcomppathTrfGet( &amp;ani_obj_seq[0].comp_path, 
+				    PRO_B_TRUE, m_transform );
+<a name="anchor-67"></a>        TEST_CALL_REPORT( &quot;ProAsmcomppathTrfGet()&quot;, &quot;ProTestAniObjectAdd()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+
+        /* Assign the transformation matrix. Used for test only */
+        status = ProAsmcomppathTrfSet( &amp;ani_obj_seq[0].comp_path, 
+<a name="anchor-68"></a>				    PRO_B_TRUE, m_transform );
+        TEST_CALL_REPORT( &quot;ProAsmcomppathTrfSet()&quot;, &quot;ProTestAniObjectAdd()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    }
+    /* Init rotate angle */
+<a name="anchor-69"></a>    angle = 0.0;
+    add_angle = 360.0 / (double)n_frames;
+
+    /* Create animation objects and add it to the frames */
+    for( i_frame=0; i_frame&lt;n_frames; i_frame++ )
+<a name="anchor-70"></a>    {
+	/* Add rotation to the transformation matrix */
+	angle += add_angle;
+	ProUtilRotX( angle, m_transform );
+
+<a name="anchor-71"></a>	/* Create an animation object... */
+	status = ProAnimobjectCreate( *p_selection, m_transform, 
+					&amp;ANI_OBJECT(0, i_frame) );
+	TEST_CALL_REPORT( &quot;ProAnimobjectCreate()&quot;, &quot;ProTestAniObjectAdd()&quot;,
+			    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-72"></a>	if( status != PRO_TK_NO_ERROR )
+	    return -1;
+
+	/* ...and add it to the frame */
+	status = ProAnimframeObjAdd( frames[i_frame], ANI_OBJECT(0, i_frame) );
+<a name="anchor-73"></a>	TEST_CALL_REPORT( &quot;ProAnimframeObjAdd()&quot;, &quot;ProTestAniObjectAdd()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	if( status != PRO_TK_NO_ERROR )
+	    return -1;
+    }
+<a name="anchor-74"></a>
+
+    return 0;
+}
+
+<a name="anchor-75"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProTestSelAniObjectDelete()
+    Purpose:	On-button function. Select ani object and delete it.
+<a name="anchor-76"></a>    Returns:	0 - success; -1 - error. Now ignored.
+    Note:	Arguments are ignored.
+\*---------------------------------------------------------------------*/
+int ProTestSelAniObjectDelete( void* p_dummy, int int_dummy )
+{
+<a name="anchor-77"></a>    ProSelection*	p_selection;
+    int			i_obj;
+
+
+    /* Select an animation object */
+<a name="anchor-78"></a>    i_obj = ProUtilAniObjectSelect( (char *)&quot;prt_or_asm&quot;, &amp;p_selection, NULL );
+    if( i_obj &lt; PRO_TK_NO_ERROR )
+    {
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Invalid selection&quot; );
+	return -1;
+<a name="anchor-79"></a>    }
+
+    /* Delete specified animation object */
+    if( ProTestAniObjectDelete( i_obj ) != PRO_TK_NO_ERROR )
+	return -1;
+<a name="anchor-80"></a>    else
+	return 0;
+}
+
+
+<a name="anchor-81"></a>
+/*---------------------------------------------------------------------*\
+    Function:	ProTestAniObjectDelete()
+    Purpose:	Delete specified animation object 
+		and removes it from the array..
+<a name="anchor-82"></a>    Returns:	0 - success; -1 - error. Now ignored.
+    Note:	Arguments are ignored.
+\*---------------------------------------------------------------------*/
+int ProTestAniObjectDelete( 
+    int i_obj )	    /* (In)	The object index in the sequence of the ani
+<a name="anchor-83"></a>				objects */
+{
+    ProError	    status;
+    int		    i_frame;
+
+<a name="anchor-84"></a>
+    /* Check index */
+    if( (i_obj &lt; 0) || (i_obj >= n_objects) )
+	return -1;
+
+<a name="anchor-85"></a>    /* Delete the animation objects */
+    for( i_frame=0; i_frame&lt;n_frames; i_frame++ )
+    {
+	/* Remove the animation object from the frame */
+	status = ProAnimframeObjRemove( frames[i_frame], 
+<a name="anchor-86"></a>					ANI_OBJECT(i_obj, i_frame) );
+	TEST_CALL_REPORT( &quot;ProAnimframeObjRemove()&quot;, 
+			    &quot;ProTestAniObjectDelete()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-87"></a>	/* Delete the animation object */
+	status = ProAnimobjectDelete( ANI_OBJECT(i_obj, i_frame) );
+	TEST_CALL_REPORT( &quot;ProAnimobjectDelete()&quot;, &quot;ProTestAniObjectDelete()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+<a name="anchor-88"></a>
+    /* Remove the animation object from the array */
+    status = ProArrayObjectRemove( (ProArray *)&amp;ani_obj_seq, i_obj, 1 );
+    TEST_CALL_REPORT( &quot;ProArrayObjectRemove()&quot;, &quot;ProTestAniObjectDelete()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+<a name="anchor-89"></a>    if( status == PRO_TK_NO_ERROR )
+	n_objects--;
+    else
+	return -1;
+
+<a name="anchor-90"></a>
+    return 0;
+}
+
+
+<a name="anchor-91"></a>
+/*---------------------------------------------------------------------*\
+    Function:	ProTestSingleAnimationAct()
+    Purpose:	This is the generic function for visiting animation objects.
+    Returns:	1 - success;
+<a name="anchor-92"></a>    Note:	I also use this function as a filter one.
+\*---------------------------------------------------------------------*/
+ProError ProTestSingleAnimAct( 
+    ProAnimObj ani_object,	/* (In)	The handle to the animation object */
+    ProAppData app_data )	/* (In)	The pointer to the frame number */
+<a name="anchor-93"></a>{
+    TEST_CALL_REPORT (&quot;ProAnimObjAct()&quot;,&quot;ProTestSingleAnimAct()&quot;, PRO_TK_NO_ERROR, 0);
+    if( app_data != NULL )
+    {
+	ProTKPrintf( &quot;Single frame %d, object %X\n&quot;, *(int*)app_data, ani_object );
+<a name="anchor-94"></a>    }
+
+
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-95"></a>
+/*---------------------------------------------------------------------*\
+    Function:	ProTestSingleAnimation()
+    Purpose:	On-button function. 
+    Returns:	0 - success; -1 - error. Now ignored.
+<a name="anchor-96"></a>    Note:	Arguments are ignored.
+\*---------------------------------------------------------------------*/
+int ProTestSingleAnimation( void* p_dummy, int int_dummy )
+{
+    ProError	    status;
+<a name="anchor-97"></a>    ProSingleAnim   single_animation;
+    int		    i_frame;
+    int		    i_obj;
+    ProAnimObj	    *anim_objects;
+    int             anim_obj_num, i;
+<a name="anchor-98"></a>
+
+    /* Check animation frames */
+    if( n_frames &lt; 1 )
+    {
+<a name="anchor-99"></a>	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;First, create an animation&quot; );
+	return -1;
+    }
+
+    /* At least one animation object must exist */
+<a name="anchor-100"></a>    if( n_objects &lt; 1 )
+    {
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;First, add objects to animate&quot; );
+	return -1;
+    }
+<a name="anchor-101"></a>
+    /* Initialize an animation in single mode. */
+    status = ProSingleAnimationInit( ani_obj_seq[0].model,
+			frames[0], &amp;single_animation );
+    TEST_CALL_REPORT( &quot;ProSingleAnimationInit()&quot;, &quot;ProTestSingleAnimation()&quot;, 
+<a name="anchor-102"></a>			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+
+    /* Play back the animation frame by frame */
+<a name="anchor-103"></a>    for( i_frame=0; i_frame&lt;n_frames; i_frame++ )
+    {
+	/* Play back the frame */
+	status = ProSingleAnimationPlay( single_animation, frames[i_frame] );
+	TEST_CALL_REPORT( &quot;ProSingleAnimationPlay()&quot;, 
+<a name="anchor-104"></a>			    &quot;ProTestSingleAnimation()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	if( status != PRO_TK_NO_ERROR )
+	    return -1;
+    }
+<a name="anchor-105"></a>
+    /* Visit objects in the frames */
+    puts( &quot;Visit objects in the frames:&quot; );
+    for( i_frame=0; i_frame&lt;n_frames; i_frame++ )
+	for( i_obj=0; i_obj&lt;n_objects; i_obj++ )
+<a name="anchor-106"></a>	{				
+	    status = ProUtilCollectAnimObjects (frames[i_frame], &amp;anim_objects);
+	    if (status == PRO_TK_NO_ERROR)
+	    {
+                status = ProArraySizeGet ((ProArray)anim_objects, &amp;anim_obj_num);
+<a name="anchor-107"></a>	        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestSingleAnimation()&quot;, 
+				status, status != PRO_TK_NO_ERROR );
+                for (i = 0; i &lt; anim_obj_num; i++)
+	        {
+                    status = ProTestSingleAnimAct (anim_objects[i],
+<a name="anchor-108"></a>	                (ProAppData)&amp;i_frame);
+                }
+                status = ProArrayFree ((ProArray*)&amp;anim_objects);
+                TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestSingleAnimation()&quot;, 
+                    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-109"></a>            }
+	}
+
+    /* Clear the data generated for single mode animation.*/
+    status = ProSingleAnimationClear( single_animation );
+<a name="anchor-110"></a>    TEST_CALL_REPORT( &quot;ProSingleAnimationClear()&quot;, 
+			&quot;ProTestSingleAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+<a name="anchor-111"></a>
+
+    return 0;
+}
+
+<a name="anchor-112"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProTestAnimFrameAct()
+    Purpose:	This is the generic function for visiting animation objects.
+<a name="anchor-113"></a>    Returns:	1 - success;
+\*---------------------------------------------------------------------*/
+ProError ProTestAnimFrameAct( 
+    ProAnimFrame ani_frame,	/* (In)	The handle to the animation frame */
+    ProAppData app_data )	/* (In)	The pointer to the frame number */
+<a name="anchor-114"></a>{
+    TEST_CALL_REPORT (&quot;ProAnimFrameAct()&quot;, &quot;ProTestAnimFrameAct()&quot;,
+        PRO_TK_NO_ERROR, 0);
+    if( app_data != NULL )
+    {
+<a name="anchor-115"></a>	ProTKPrintf( &quot;Movie frame %d: %X\n&quot;, *(int*)app_data, ani_frame );
+    }
+
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-116"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProTestBatchAnimAct()
+    Purpose:	This is the generic function for callbacks in the
+<a name="anchor-117"></a>		middle of a batch animation.
+    Returns:	PRO_TK_NO_ERROR - success;
+    Note:
+\*---------------------------------------------------------------------*/
+ProError ProTestBatchAnimAct( ProAnimFrame  animation_frame, int frame_no, 
+<a name="anchor-118"></a>				ProAppData app_data )
+{
+    TEST_CALL_REPORT (&quot;ProBatchAnimAct()&quot;, &quot;ProTestBatchAnimAct()&quot;,
+        PRO_TK_NO_ERROR, 0);
+    ProTKPrintf( &quot;Batch frame %d\n&quot;, frame_no );
+<a name="anchor-119"></a>
+    return PRO_TK_NO_ERROR;
+}
+
+
+<a name="anchor-120"></a>
+/*---------------------------------------------------------------------*\
+    Function:	ProTestBatchAnimation()
+    Purpose:	On-button function. 
+    Returns:	0 - success; -1 - error. Now ignored.
+<a name="anchor-121"></a>    Note:	Arguments are ignored.
+\*---------------------------------------------------------------------*/
+int ProTestBatchAnimation( void* p_dummy, int int_dummy )
+{
+    ProError		status;
+<a name="anchor-122"></a>    ProAnimMovie	animation_movie;
+    int			i_frame;
+    ProAnimFrame        *anim_frames;
+    int                 anim_frm_num;
+    int			i;
+<a name="anchor-123"></a>
+    /* Check animation frames */
+    if( n_frames &lt; 1 )
+    {
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;First, create an animation&quot; );
+<a name="anchor-124"></a>	return -1;
+    }
+
+    /* Check the number of the objects to be abimated */
+    if( n_objects &lt; 1 )
+<a name="anchor-125"></a>    {
+	ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;First, add objects to animate&quot; );
+	return -1;
+    }
+
+<a name="anchor-126"></a>    /* Create an animation movie */
+    status = ProAnimmovieCreate( ani_obj_seq[0].model, &amp;animation_movie );
+    TEST_CALL_REPORT( &quot;ProAnimmovieCreate()&quot;, &quot;ProTestBatchAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+<a name="anchor-127"></a>	return -1;
+
+    /* Add frames to the movie */
+    for( i_frame=0; i_frame&lt;n_frames; i_frame++ )
+    {
+<a name="anchor-128"></a>	status = ProAnimmovieFrameAdd( animation_movie, frames[i_frame] );
+	TEST_CALL_REPORT( &quot;ProAnimmovieFrameAdd()&quot;, &quot;ProTestBatchAnimation()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+	if( status != PRO_TK_NO_ERROR )
+	    return -1;
+<a name="anchor-129"></a>    }
+
+    /* Visit animation frames in the movie */
+/*    status = ProAnimmovieFrameVisit( animation_movie,
+					(ProAnimFrameAct)ProTestAnimFrameAct,
+<a name="anchor-130"></a>					(ProAnimFrameAct)ProTestAnimFrameFilter,
+					NULL );
+    TEST_CALL_REPORT( &quot;ProAnimmovieFrameVisit()&quot;, 
+			&quot;ProTestBatchAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR );*/
+<a name="anchor-131"></a>    status = ProUtilCollectAnimFrames (animation_movie, &amp;anim_frames);
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)anim_frames, &amp;anim_frm_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestBatchAnimation()&quot;, 
+<a name="anchor-132"></a>            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; anim_frm_num; i++)
+        {
+            status = ProTestAnimFrameAct (anim_frames[i],
+	        (ProAppData)NULL);
+<a name="anchor-133"></a>        }
+        status = ProArrayFree ((ProArray*)&amp;anim_frames);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestBatchAnimation()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+    }
+<a name="anchor-134"></a>
+
+    /* Allow spinning */
+    ProAnimmovieSpinflagSet(animation_movie, PRO_B_TRUE);
+    /* Start a batch animation process */
+<a name="anchor-135"></a>    status = ProBatchAnimationStart( animation_movie, 
+					(ProBatchAnimAct)ProTestBatchAnimAct, NULL );
+    TEST_CALL_REPORT( &quot;ProBatchAnimationStart()&quot;, &quot;ProTestBatchAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR &amp;&amp;
+                        status != PRO_TK_GENERAL_ERROR);
+<a name="anchor-136"></a>    
+    /* Remove frames from the movie */
+    for( i_frame=0; i_frame&lt;n_frames; i_frame++ )
+    {
+	status = ProAnimmovieFrameRemove( animation_movie, frames[i_frame] );
+<a name="anchor-137"></a>	TEST_CALL_REPORT( &quot;ProAnimmovieFrameRemove()&quot;, &quot;ProTestBatchAnimation()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+    }
+
+    /* remove movie */
+<a name="anchor-138"></a>    status = ProAnimmovieDelete( animation_movie );
+    TEST_CALL_REPORT( &quot;ProAnimmovieDelete()&quot;, &quot;ProTestBatchAnimation()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return -1;
+<a name="anchor-139"></a>
+
+    return 0;
+}
+
+<a name="anchor-140"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProUtilSelectedMdlGet()
+    Purpose:	Retrieves a handle of the model from the selection object.
+<a name="anchor-141"></a>    Returns:	PRO_TK_NO_ERROR - The function successfully get 
+				    the model name.
+		PRO_TK_GENERAL_ERROR - Error.
+    Note:	
+\*---------------------------------------------------------------------*/
+<a name="anchor-142"></a>ProError ProUtilSelectedMdlGet( ProSelection* p_selection, ProMdl* p_model )
+{
+    ProError	    status;
+    ProModelitem    model_item;
+
+<a name="anchor-143"></a>
+    /* Check out the input parameters */
+    if( !p_selection || !p_model )
+	return PRO_TK_GENERAL_ERROR;
+
+<a name="anchor-144"></a>    /* Get the model item from a selection object. */
+    status = ProSelectionModelitemGet( *p_selection, &amp;model_item );
+    TEST_CALL_REPORT( &quot;ProSelectionModelitemGet()&quot;, &quot;ProUtilSelectedMdlGet()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status == PRO_TK_NO_ERROR )
+<a name="anchor-145"></a>    {
+	/* Retrieve the model the owns the specified item. */
+	status = ProModelitemMdlGet( &amp;model_item, p_model );
+        TEST_CALL_REPORT( &quot;ProModelitemMdlGet()&quot;, &quot;ProUtilSelectedMdlGet()&quot;, 
+			    status, status != PRO_TK_NO_ERROR );
+<a name="anchor-146"></a>	if( status == PRO_TK_NO_ERROR )
+	    return PRO_TK_NO_ERROR;
+    }
+
+
+<a name="anchor-147"></a>    return PRO_TK_GENERAL_ERROR;
+}
+
+
+
+<a name="anchor-148"></a>/*---------------------------------------------------------------------*\
+    Function:	ProUtilMdlEqual()
+    Purpose:	Compares two models.
+    Returns:	PRO_B_TRUE - The models are equal.
+		PRO_B_FALSE - The models are different.
+<a name="anchor-149"></a>    Note:	Here I compare models names, types and ids although 
+		possibly it's enough to use only the types and ids.
+\*---------------------------------------------------------------------*/
+ProBoolean ProUtilMdlEqual( ProMdl model1, ProMdl model2 )
+{
+<a name="anchor-150"></a>    ProError	    status;
+    ProMdlName	    name1;
+    ProMdlName	    name2;
+    ProType	    type1;
+    ProType	    type2;
+<a name="anchor-151"></a>    int		    id1;	
+    int		    id2;	
+
+
+    /* Get and compare types of the models. */
+<a name="anchor-152"></a>    status = ProMdlTypeGet( model1, (ProMdlType *)&amp;type1 );
+    TEST_CALL_REPORT( &quot;ProMdlTypeGet()&quot;, &quot;ProUtilMdlEqual()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    status = ProMdlTypeGet( model2, (ProMdlType *)&amp;type2 );
+    TEST_CALL_REPORT( &quot;ProMdlTypeGet()&quot;, &quot;ProUtilMdlEqual()&quot;, 
+<a name="anchor-153"></a>			status, status != PRO_TK_NO_ERROR );
+    if( type1 != type2 )
+	    return PRO_B_FALSE;
+    
+    /* Get and compare ids of the models. */
+<a name="anchor-154"></a>    status = ProMdlIdGet( model1, &amp;id1 );
+    TEST_CALL_REPORT( &quot;ProMdlIdGet()&quot;, &quot;ProUtilMdlEqual()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    status = ProMdlIdGet( model2, &amp;id2 );
+    TEST_CALL_REPORT( &quot;ProMdlIdGet()&quot;, &quot;ProUtilMdlEqual()&quot;, 
+<a name="anchor-155"></a>			status, status != PRO_TK_NO_ERROR );
+    if( id1 != id2 )
+	    return PRO_B_FALSE;
+
+    /* Get and compare names of the models. */
+<a name="anchor-156"></a>    status = ProMdlMdlnameGet( model1, name1 );
+    TEST_CALL_REPORT( &quot;ProMdlMdlnameGet()&quot;, &quot;ProUtilMdlEqual()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    status = ProMdlMdlnameGet( model2, name2 );
+    TEST_CALL_REPORT( &quot;ProMdlMdlnameGet()&quot;, &quot;ProUtilMdlEqual()&quot;, 
+<a name="anchor-157"></a>			status, status != PRO_TK_NO_ERROR );
+    if( ProUtilWstrCmp( name1, name2 ) != 0 )
+	    return PRO_B_FALSE;
+
+    
+<a name="anchor-158"></a>    return PRO_B_TRUE;
+}
+
+
+
+<a name="anchor-159"></a>/*---------------------------------------------------------------------*\
+    Function:	ProUtilAsmcomppathEqual()
+    Purpose:	Compares two component pathes.
+    Returns:	PRO_B_TRUE - The pathes are equal.
+		PRO_B_FALSE - The pathes are different.
+<a name="anchor-160"></a>    Note:	
+\*---------------------------------------------------------------------*/
+ProBoolean ProUtilAsmcomppathEqual( ProAsmcomppath path1, ProAsmcomppath path2 )
+{
+    int		    i;
+<a name="anchor-161"></a>
+
+    /* Compare owners handles and number of the component ids */
+    if( (path1.owner != path2.owner) || (path1.table_num != path2.table_num) )
+	return PRO_B_FALSE;
+<a name="anchor-162"></a>
+    /* Compare path ids */
+    for( i=0; i&lt;path1.table_num; i++ )
+	if( path1.comp_id_table[i] != path2.comp_id_table[i] )
+	    return PRO_B_FALSE;
+<a name="anchor-163"></a>
+
+    return PRO_B_TRUE;
+}
+
+<a name="anchor-164"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProUtilAniObjectSelect()
+    Purpose:	Select an animation object.
+<a name="anchor-165"></a>    Returns:	If the element is successfuly selected and found 
+		in the array index is returned.
+		PRO_TK_E_NOT_FOUND - The selected element is not 
+					an animation object.
+		PRO_TK_USER_ABORT - Selection was interrupted by a user.
+<a name="anchor-166"></a>
+    Note:	When I used ProSelection* p_selection calling ProSelect
+		with &amp;p_selection...
+\*---------------------------------------------------------------------*/
+ProError ProUtilAniObjectSelect( 
+<a name="anchor-167"></a>    char option[],		    /* (In)	The selection filter. */
+    ProSelection** p_selection,	    /* (Out)	The pointer to selected item */
+    AniObjectInstance* p_ani_object )	/* (Out)    Animation object to 
+					initialize. Can be NULL */
+{
+<a name="anchor-168"></a>    ProError	    status;
+    int		    n_selected = 0;	/* Actual number of sections made. */
+    AniObjectInstance	ani_object;
+
+
+<a name="anchor-169"></a>    /* Check arguments */
+    if( !p_selection )
+	return PRO_TK_USER_ABORT;
+
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select an object&quot; );
+<a name="anchor-170"></a>
+    /* Select ONE object. */
+    status = ProSelect( option, 1, 
+			NULL, NULL, NULL, NULL, p_selection, &amp;n_selected  );
+    TEST_CALL_REPORT( &quot;ProSelect()&quot;, &quot;ProUtilAniObjectSelect()&quot;, 
+<a name="anchor-171"></a>			status, status != PRO_TK_NO_ERROR );
+    if( (status != PRO_TK_NO_ERROR) || (n_selected != 1) )
+	return PRO_TK_USER_ABORT;
+
+    if( p_ani_object == NULL )
+<a name="anchor-172"></a>	p_ani_object = &amp;ani_object;
+
+    /* Use ProSelection data to init the animation object */
+    if( ProUtilAniObjectInstanceInit( p_selection, p_ani_object ) 
+							!= PRO_TK_NO_ERROR )
+<a name="anchor-173"></a>	return PRO_TK_USER_ABORT;
+
+    /* Try to find out the selected object among array of the 
+	animation objects */
+    return (ProError) ProUtilAniObjectFind( ani_obj_seq, *p_ani_object );
+<a name="anchor-174"></a>}
+
+
+
+/*---------------------------------------------------------------------*\
+<a name="anchor-175"></a>    Function:	ProUtilAniObjectFind()
+    Purpose:	Find specified animation object (AniObjectInstance) in 
+		the array.
+    Returns:	
+    Note:	Animation objects are compared using ProMdl data and 
+<a name="anchor-176"></a>		ProAsmcomppath data. Animation object handles (ProAnimObj)
+		are not used.
+\*---------------------------------------------------------------------*/
+int ProUtilAniObjectFind( 
+    ProArray array,	    /* (In) An array of the animation objects */
+<a name="anchor-177"></a>    AniObjectInstance ani_object )  /* (In)	The animation objects 
+						to looking for */
+{
+    ProError	    status;
+    int		    n_ani_objects = 0;	/* Variable to get the size of the 
+<a name="anchor-178"></a>					    array of the animation objects */
+    int		    i;
+
+
+    /* Get the current size of the array. */
+<a name="anchor-179"></a>    status = ProArraySizeGet( array, &amp;n_ani_objects );
+    TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProUtilAniObjectFind()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return PRO_TK_E_NOT_FOUND;
+<a name="anchor-180"></a>
+    /* Try to find out the name of the selected object among array of the
+	animation objects */
+    for( i=0; i&lt;n_ani_objects; i++ )
+	if( (ProUtilMdlEqual( ((AniObjectInstance*)array)[i].model, 
+<a name="anchor-181"></a>				ani_object.model ) == PRO_B_TRUE ) &amp;&amp;
+	    (ProUtilAsmcomppathEqual( ((AniObjectInstance*)array)[i].comp_path,
+				ani_object.comp_path ) == PRO_B_TRUE ) )
+	    return  i;
+
+<a name="anchor-182"></a>
+    /* The specified object is not found */
+    return PRO_TK_E_NOT_FOUND;
+}
+
+<a name="anchor-183"></a>
+
+/*---------------------------------------------------------------------*\
+    Function:	ProUtilAniObjectInstanceInit()
+    Purpose:	Initialize the AniObjectInstance structure using 
+<a name="anchor-184"></a>		ProSelection object.
+    Returns:	PRO_TK_NO_ERROR - success; PRO_TK_GENERAL_ERROR - error
+    Note:	
+\*---------------------------------------------------------------------*/
+ProError ProUtilAniObjectInstanceInit( 
+<a name="anchor-185"></a>    ProSelection** p_selection,	/* (In)	    The pointer to selected item */
+    AniObjectInstance* p_ani_object ) /* (Out)	Animation object to init */
+{
+    ProError	    status;
+
+<a name="anchor-186"></a>
+    /* Get a model from the selection */
+    if( ProUtilSelectedMdlGet( *p_selection, &amp;(p_ani_object->model) ) 
+							!= PRO_TK_NO_ERROR )
+	return PRO_TK_GENERAL_ERROR;	
+<a name="anchor-187"></a>
+    /* Get a component path of the model */
+    status = ProSelectionAsmcomppathGet( **p_selection, 
+					    &amp;(p_ani_object->comp_path) );
+    TEST_CALL_REPORT( &quot;ProSelectionAsmcomppathGet()&quot;, 
+<a name="anchor-188"></a>			&quot;ProUtilAniObjectInstanceInit()&quot;, 
+			status, status != PRO_TK_NO_ERROR );
+    if( status != PRO_TK_NO_ERROR )
+	return PRO_TK_GENERAL_ERROR;
+
+<a name="anchor-189"></a>
+    return PRO_TK_NO_ERROR;
+}
+
+
+<a name="anchor-190"></a>
+/*---------------------------------------------------------------------*\
+    Function:	ProUtilRotX()
+    Purpose:	Add x rotation values to the transformation matrix.
+    Returns:	None
+<a name="anchor-191"></a>    Note:	Only the rotation components of the matrix are modified.
+\*---------------------------------------------------------------------*/
+void ProUtilRotX( 
+    double angle,	/* (In)	    The rotation angle */
+    ProMatrix mx )	/* (Out)    The transformation matrix */
+<a name="anchor-192"></a>{
+    mx[0][0] = 1.0;
+    mx[0][1] = mx[0][2] = mx[1][0] = mx[2][0] = 0.0;
+    mx[1][1] = mx[2][2] = cos( angle * PI / 180.0);
+    mx[1][2] = sin( angle * PI / 180.0);
+<a name="anchor-193"></a>    mx[2][1] = - mx[1][2];
+}
+</pre>
+</body>
+</html>

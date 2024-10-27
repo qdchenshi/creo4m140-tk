@@ -1,0 +1,758 @@
+<html>
+<head>
+<title>UtilVisit.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProSurface.h>
+#include &lt;ProFeature.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProSelection.h>
+<a name="anchor-3"></a>#include &lt;ProSolid.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProEdge.h>
+#include &lt;ProAxis.h>
+#include &lt;ProCsys.h>
+<a name="anchor-4"></a>#include &lt;ProCurve.h>
+#include &lt;ProPoint.h>
+#include &lt;ProGeomitem.h>
+#include &lt;ProNcseq.h>
+#include &lt;UtilString.h>
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;UtilMath.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilVisit.h&quot;
+#include &quot;UtilCollect.h&quot;
+#include &quot;UtilTypes.h&quot;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-7"></a>Application data
+\*--------------------------------------------------------------------*/
+
+int multiCadCopy_count = 1;
+typedef struct 
+<a name="anchor-8"></a>{
+    ProAppData  app_data;       /* The caller's app_data */
+    ProFunction action;         /* The caller's action function */
+} AsmComp_data_t ;
+
+<a name="anchor-9"></a>/*--------------------------------------------------------------------*\
+    We need our own app_data to pass to ProUtilAsmCompVisit() which
+    contains both the app_data and the action function pointer input to
+    this function, plus our own context data so that OUR action function
+    has all it needs to call the user's action function.
+<a name="anchor-10"></a>\*--------------------------------------------------------------------*/
+
+typedef ProError (*ProTestAsmTravAction) (ProAsmcomppath*, ProAppData);
+
+typedef struct 
+<a name="anchor-11"></a>{
+    ProAppData     app_data;	/* The caller's app_data */
+    ProTestAsmTravAction    action;	/* The caller's action function */
+    ProAsmcomppath comp_path;	/* The current component path */
+} AsmTrav_data_t ;
+<a name="anchor-12"></a>
+/*====================================================================*\
+    FUNCTION :	ProUtilAsmcompVisit()
+    PURPOSE  :	Visit function for components of an assembly
+\*====================================================================*/
+<a name="anchor-13"></a>ProError ProUtilAsmcompVisit(
+    ProAssembly assembly,
+    ProFunction action,
+    ProAppData  app_data )
+{
+<a name="anchor-14"></a>    ProError status;
+
+/*--------------------------------------------------------------------*\
+    Visit all the features, using a filter to see only assembly components
+\*--------------------------------------------------------------------*/
+<a name="anchor-15"></a>    status = ProSolidFeatVisit(assembly, (ProFeatureVisitAction)action,
+		(ProFeatureFilterAction)ProUtilAsmcompFilterAction, app_data);
+    TEST_CALL_REPORT(&quot;ProSolidFeatVisit()&quot;, &quot;ProUtilAsmcompVisit()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+    
+<a name="anchor-16"></a>    return(status);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProUtilFeatvisVisit()
+<a name="anchor-17"></a>    PURPOSE  :	Visit function for visible features
+\*====================================================================*/
+ProError ProUtilFeatvisVisit(
+    ProSolid	solid,
+    ProFunction action,
+<a name="anchor-18"></a>    ProAppData  app_data )
+{
+    ProError status;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-19"></a>    Visit all the features, using a filter to see only assembly components
+\*--------------------------------------------------------------------*/
+    status = ProSolidFeatVisit(solid, (ProFeatureVisitAction)action,
+				(ProFeatureFilterAction)ProUtilFeatvisFilterAction, app_data);
+    TEST_CALL_REPORT(&quot;ProSolidFeatVisit()&quot;, &quot;ProUtilFeatvisVisit()&quot;,
+<a name="anchor-20"></a>                                status, status != PRO_TK_NO_ERROR);
+    
+    return(status);
+}
+
+<a name="anchor-21"></a>/*====================================================================*\
+    FUNCTION :	ProUtilGeomitemactiveVisit()
+    PURPOSE  :	Visit function for active geomitems
+\*====================================================================*/
+ProError ProUtilGeomitemactiveVisit( 
+<a name="anchor-22"></a>    ProFeature *p_feature,
+    ProType item_type,
+    ProFunction action,
+    ProAppData  app_data)
+{
+<a name="anchor-23"></a>    ProError status;
+
+/*--------------------------------------------------------------------*\
+    Visit all the features, using a filter to see only assembly components
+\*--------------------------------------------------------------------*/
+<a name="anchor-24"></a>    status = ProFeatureGeomitemVisit(p_feature, item_type,
+	    (ProGeomitemAction)action,
+	     (ProGeomitemFilter)ProUtilGeomitemactiveFilterAction, app_data);
+    TEST_CALL_REPORT(&quot;ProFeatureGeomitemVisit()&quot;, 
+	&quot;ProUtilGeomitemactiveVisit()&quot;,
+<a name="anchor-25"></a>        status, status != PRO_TK_NO_ERROR);
+   
+    return status; 
+}
+
+<a name="anchor-26"></a>
+/*====================================================================*\
+    FUNCTION :	ProUtilAsmTravAction()
+    PURPOSE  :	Action function to be called for features inside
+		ProUtilAsmTraverse() to recursively visit features which
+<a name="anchor-27"></a>		are assemblt components.
+\*====================================================================*/
+ProError ProUtilAsmTravAction(
+    ProFeature *component,
+    ProError instatus,
+<a name="anchor-28"></a>    ProAppData app_data )
+{
+    ProError status;
+    ProSolid model;
+    AsmTrav_data_t *asm_data = (AsmTrav_data_t*)app_data;
+<a name="anchor-29"></a>    ProMdlType model_type;
+
+/*--------------------------------------------------------------------*\
+    Increment the component path
+\*--------------------------------------------------------------------*/
+<a name="anchor-30"></a>    asm_data->comp_path.comp_id_table[asm_data->comp_path.table_num++] =
+		component->id;
+    asm_data->comp_path.comp_id_table[asm_data->comp_path.table_num] = -1;
+    
+/*--------------------------------------------------------------------*\
+<a name="anchor-31"></a>    Get the ProMdl for this assembly component
+\*--------------------------------------------------------------------*/
+    status = ProAsmcompMdlGet(component, (ProMdl *) &amp;model);
+    TEST_CALL_REPORT(&quot;ProAsmcompMdlGet()&quot;, &quot;ProUtilAsmTravAction()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-32"></a>
+/*--------------------------------------------------------------------*\
+    Call the action function for this component, with the user's app_data
+\*--------------------------------------------------------------------*/
+    status = (*asm_data->action)
+<a name="anchor-33"></a>        (&amp;asm_data->comp_path, asm_data->app_data);
+
+/*--------------------------------------------------------------------*\
+    If the model is an assembly, visit its components recursively
+\*--------------------------------------------------------------------*/
+<a name="anchor-34"></a>
+    ProMdlTypeGet(model, &amp;model_type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProUtilAsmTravAction()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-35"></a>    if(model_type == PRO_MDL_ASSEMBLY)
+	ProUtilAsmcompVisit((ProAssembly)model,
+			    (ProFunction)ProUtilAsmTravAction,app_data);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-36"></a>    Decrement the component path
+\*--------------------------------------------------------------------*/
+    asm_data->comp_path.comp_id_table[asm_data->comp_path.table_num--] = -1;
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-37"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProUtilAsmTraverse()
+    PURPOSE  :	Visit function for components of an assembly at ALL levels
+<a name="anchor-38"></a>\*====================================================================*/
+ProError ProUtilAsmTraverse(
+    ProAssembly assembly,
+    ProFunction action,
+    ProAppData app_data)
+<a name="anchor-39"></a>{
+    ProError status;
+    AsmTrav_data_t asm_data;
+    ProIdTable comp_id_table;
+
+<a name="anchor-40"></a>/*--------------------------------------------------------------------*\
+    Initialize our asm_data
+\*--------------------------------------------------------------------*/
+    asm_data.app_data = app_data;
+    asm_data.action = (ProTestAsmTravAction)action;
+<a name="anchor-41"></a>    comp_id_table[0] = -1;
+    status = ProAsmcomppathInit(assembly, comp_id_table, 0, 
+                    &amp;asm_data.comp_path);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathInit()&quot;, &quot;ProUtilAsmTraverse()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+<a name="anchor-42"></a>
+/*--------------------------------------------------------------------*\
+    Visit the components are this level
+\*--------------------------------------------------------------------*/
+    ProUtilAsmcompVisit(assembly, (ProFunction)ProUtilAsmTravAction,
+<a name="anchor-43"></a>						(ProAppData)&amp;asm_data);
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-44"></a>/*====================================================================*\
+    FUNCTION :  ProUtilAsmFeatsTraverse()
+    PURPOSE  :  Visit function for features of an assembly at *ALL* levels
+\*====================================================================*/
+ProError ProUtilAsmFeatsTraverse(
+<a name="anchor-45"></a>    ProAssembly assembly,
+    ProFunction action,
+    ProAppData app_data)
+{
+    ProError status;
+<a name="anchor-46"></a>    AsmTrav_data_t asm_data;
+    ProIdTable comp_id_table;
+ 
+/*--------------------------------------------------------------------*\
+    Initialize our asm_data
+<a name="anchor-47"></a>\*--------------------------------------------------------------------*/
+    asm_data.app_data = app_data;
+    asm_data.action = (ProTestAsmTravAction) action;
+    comp_id_table[0] = -1;
+    status = ProAsmcomppathInit(assembly, comp_id_table, 0,
+<a name="anchor-48"></a>                    &amp;asm_data.comp_path);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathInit()&quot;, &quot;ProUtilAsmTraverse()&quot;,
+                                status, status != PRO_TK_NO_ERROR);
+ 
+/*--------------------------------------------------------------------*\
+<a name="anchor-49"></a>    Visit the components are this level
+\*--------------------------------------------------------------------*/
+    ProUtilAsmcompVisit(assembly, (ProFunction) ProUtilAsmTravAction,
+                                                (ProAppData)&amp;asm_data);
+ 
+<a name="anchor-50"></a>    return(PRO_TK_NO_ERROR);
+}
+
+
+/*====================================================================*\
+<a name="anchor-51"></a>    FUNCTION :	ProUtilAsmcompFilterAction()
+    PURPOSE  :	A filter used by ProUtilAsmCompVisit() to visit
+		features which are assembly components
+\*====================================================================*/
+ProError ProUtilAsmcompFilterAction(
+<a name="anchor-52"></a>    ProFeature *feature,
+    ProAppData app_data)
+{
+    ProError status;
+    ProFeattype ftype;
+<a name="anchor-53"></a>
+/*--------------------------------------------------------------------*\
+    Get the feature type
+\*--------------------------------------------------------------------*/
+    status = ProFeatureTypeGet(feature, &amp;ftype);
+<a name="anchor-54"></a>
+/*--------------------------------------------------------------------*\
+    If the feature is an assembly component,
+	return NO ERROR,
+    else
+<a name="anchor-55"></a>	return CONTINUE
+\*--------------------------------------------------------------------*/
+    if(ftype == PRO_FEAT_COMPONENT)
+	return(PRO_TK_NO_ERROR);
+    return(PRO_TK_CONTINUE);
+<a name="anchor-56"></a>}
+
+/*=========================================================================*\
+    Function:	ProUtilFeatvisFilterAction()
+    Purpose:	Filter function for ProSolidFeatVisit, allow to visit only 
+<a name="anchor-57"></a>		visible features
+    Returns:	PRO_TK_NO_ERROR - feature visible
+		PRO_TK_CONTINUE - otherwise
+\*=========================================================================*/
+ProError ProUtilFeatvisFilterAction(
+<a name="anchor-58"></a>    ProFeature *p_feature,	/* In : the feature */
+    ProAppData app_data)	/* In : appdata (not used) */
+{
+    ProError status;
+    ProBoolean visible;
+<a name="anchor-59"></a>
+    status = ProFeatureVisibilityGet(p_feature, &amp;visible);
+    TEST_CALL_REPORT(&quot;ProFeatureVisibilityGet()&quot;, 
+				    &quot;ProUtilFeatvisFilterAction()&quot;, 
+				    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-60"></a>    if (status == PRO_TK_NO_ERROR)
+	status = (visible == PRO_B_TRUE ? PRO_TK_NO_ERROR : PRO_TK_CONTINUE);
+
+    return (status);
+}
+<a name="anchor-61"></a>
+
+/*=========================================================================*\
+    Function:	ProUtilByNameFilterAction()
+    Purpose:	Allow to visit only modelitem with a specified name
+<a name="anchor-62"></a>    Returns:	PRO_TK_NO_ERROR - success;
+		PRO_TK_CONTINUE - no valid modelitem found
+\*=========================================================================*/
+ProError ProUtilByNameFilterAction(
+    ProModelitem *p_modelitem,	    /* In : The modelitem */
+<a name="anchor-63"></a>    FindByName   *p_findbyname)	    /* In : The find structure */
+{
+    ProName  name;
+    ProError status;
+
+<a name="anchor-64"></a>    status = ProModelitemNameGet(p_modelitem, name);
+    TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, 
+				    &quot;ProUtilFindByNameFilterAction()&quot;, 
+	    status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+    if (status == PRO_TK_NO_ERROR) 
+<a name="anchor-65"></a>    {
+	if (ProUtilWstrCmp(p_findbyname->name, name)==0)
+	    status = PRO_TK_NO_ERROR;
+	else 
+	    status = PRO_TK_CONTINUE;
+<a name="anchor-66"></a>    }
+    else if (status == PRO_TK_E_NOT_FOUND)
+	status = PRO_TK_CONTINUE;
+
+    return (status);
+<a name="anchor-67"></a>}
+
+/*=========================================================================*\
+    Function:	ProUtilFeatvisByNameFilterAction()
+    Purpose:	Allow to visit only visible features with a specified name
+<a name="anchor-68"></a>    Returns:	PRO_TK_NO_ERROR - success;
+		PRO_TK_CONTINUE - no valid feature found found
+\*=========================================================================*/
+ProError ProUtilFeatvisByNameFilterAction(
+    ProFeature   *p_feature,	    /* In : The feature */
+<a name="anchor-69"></a>    FindByName   *p_findbyname)	    /* In : The find structure */
+{
+    ProError  status;
+
+    status = ProUtilFeatvisFilterAction(p_feature, NULL);
+<a name="anchor-70"></a>    if (status == PRO_TK_NO_ERROR)
+	status = ProUtilByNameFilterAction((ProModelitem*)p_feature, 
+	    p_findbyname);
+	
+    return (status);
+<a name="anchor-71"></a>}
+
+/*=========================================================================*\
+    Function:	ProUtilGeomitemactiveFilterAction()
+    Purpose:	Filter function for ProFeatureGeomitemVisit, allow to visit 
+<a name="anchor-72"></a>		only active geomitems
+    Returns:	PRO_TK_NO_ERROR - feature visible
+		PRO_TK_CONTINUE - otherwise
+\*=========================================================================*/
+ProError ProUtilGeomitemactiveFilterAction(
+<a name="anchor-73"></a>    ProGeomitem *p_geomitem,	/* In : the geomitem */
+    ProAppData app_data)	/* In : appdata (not used) */
+{
+    ProBoolean test;
+    ProError status;
+<a name="anchor-74"></a>
+    TEST_CALL_REPORT( &quot;ProGeomitemFilter&quot;, &quot;ProUtilGeomitemactiveFilterAction&quot;,
+	PRO_TK_NO_ERROR, 0 );
+    status = ProGeomitemIsInactive(p_geomitem, &amp;test);
+    TEST_CALL_REPORT(&quot;ProGeomitemIsInactive()&quot;, 
+<a name="anchor-75"></a>	&quot;ProUtilGeomitemactiveFilterAction()&quot;, 
+        status, status != PRO_TK_NO_ERROR);
+    return (test != PRO_B_TRUE ? PRO_TK_NO_ERROR : PRO_TK_CONTINUE);
+}
+
+<a name="anchor-76"></a>
+/*=========================================================================*\
+    Function:   ProUtilAxisByVectorFilterAction()
+    Purpose:    Allow to visit only axis which parallel (perpendicular)
+                to a vector
+<a name="anchor-77"></a>    Returns:    PRO_TK_NO_ERROR - success;
+                PRO_TK_CONTINUE - no valid axis found
+\*=========================================================================*/
+ProError ProUtilAxisByVectorFilterAction(
+    ProAxis axis,                               /* In : The Axis */
+<a name="anchor-78"></a>    CollectAxisByVector *p_find_by_vector)      /* In : find data */
+{
+    ProGeomitemdata  *p_gi_data;
+    Pro3dPnt         vec;
+    double           dot;
+<a name="anchor-79"></a>    ProError         status = PRO_TK_CONTINUE;
+
+
+    TEST_CALL_REPORT( &quot;ProAxisFilterAction&quot;, &quot;ProUtilAxisByVectorFilterAction&quot;,
+	PRO_TK_NO_ERROR, 0 );
+<a name="anchor-80"></a>
+    status = ProAxisDataGet(axis, &amp;p_gi_data);
+    TEST_CALL_REPORT(&quot;ProAxisDataGet()&quot;, &quot;ProUtilAxisByVectorFilterAction()&quot;,
+                                    status, status != PRO_TK_NO_ERROR);
+    ProUtilVectorDiff(p_gi_data->data.p_curve_data->line.end2,
+<a name="anchor-81"></a>                      p_gi_data->data.p_curve_data->line.end1, vec);
+    status = ProGeomitemdataFree(&amp;p_gi_data);
+    TEST_CALL_REPORT(&quot;ProGeomitemdataFree()&quot;,
+        &quot;ProUtilAxisByVectorFilterAction()&quot;, status, status != PRO_TK_NO_ERROR);
+    ProUtilVectorNormalize(vec, vec);
+<a name="anchor-82"></a>    dot = fabs(ProUtilVectorDot(vec, p_find_by_vector->vec));
+    if ((p_find_by_vector->option==USER_PARALLEL &amp;&amp; 1-dot&lt;EPSM6) ||
+         (p_find_by_vector->option==USER_PERPENDICULAR &amp;&amp; dot&lt;EPSM6))
+         status = PRO_TK_NO_ERROR;
+    else
+<a name="anchor-83"></a>         status = PRO_TK_CONTINUE;
+    return (status);
+}
+
+/*=========================================================================*\
+<a name="anchor-84"></a>    Function:	ProUtilCollectDtmCurveFeatFilter()
+    Purpose:	Allow to visit only dtm curve features
+    Returns:	PRO_TK_NO_ERROR - success;
+		PRO_TK_CONTINUE - no valid feature found found
+\*=========================================================================*/
+<a name="anchor-85"></a>ProError ProUtilCollectDtmCurveFeatFilter(
+    ProFeature   *p_feature,	    /* In : The feature */
+    ProAppData   app_data)	    /* In : The find structure */
+{
+    ProError  status;
+<a name="anchor-86"></a>    ProFeattype ftype;
+    
+    TEST_CALL_REPORT( &quot;ProFeatureFilterAction&quot;, 
+        &quot;ProUtilCollectDtmCurveFeatFilter&quot;,
+	PRO_TK_NO_ERROR, 0 );
+<a name="anchor-87"></a>
+    status = ProFeatureTypeGet(p_feature, &amp;ftype);
+    TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;, &quot;ProUtilCollectDtmCurveFeatFilter()&quot;,
+			    status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-88"></a>    return(ftype == PRO_FEAT_CURVE ? PRO_TK_NO_ERROR : PRO_TK_CONTINUE);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProUtilCollectDtmPointFeatFilter()
+<a name="anchor-89"></a>    PURPOSE  :	A filter used to visit only Datum Points features
+\*====================================================================*/
+ProError ProUtilCollectDtmPointFeatFilter(
+    ProFeature *feature,
+    ProAppData app_data)
+<a name="anchor-90"></a>{
+    ProError status;
+    ProFeattype ftype;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-91"></a>    Get the feature type
+\*--------------------------------------------------------------------*/
+    status = ProFeatureTypeGet(feature, &amp;ftype);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-92"></a>    If the feature is Datum Point,
+	return NO ERROR,
+    else
+	return CONTINUE
+\*--------------------------------------------------------------------*/
+<a name="anchor-93"></a>    if(ftype == PRO_FEAT_DATUM_POINT)
+	return(PRO_TK_NO_ERROR);
+    return(PRO_TK_CONTINUE);
+}
+
+<a name="anchor-94"></a>
+/*=========================================================================*\
+    Function:	ProUtilCollectDtmCurveFeatFilter()
+    Purpose:	Allow to visit only dtm curve features
+    Returns:	PRO_TK_NO_ERROR - success;
+<a name="anchor-95"></a>		PRO_TK_CONTINUE - no valid feature found found
+\*=========================================================================*/
+ProError ProUtilCollectNCSeqFeatFilter(
+    ProFeature   *p_feat,	    /* In : The feature */
+    ProAppData   tmp_p_nc_seq)	    /* In : The find structure */
+<a name="anchor-96"></a>{
+    ProError status;
+    ProBoolean is_nc_seq;
+    
+    TEST_CALL_REPORT( &quot;ProFeatureFilterAction&quot;, &quot;ProUtilCollectNCSeqFeatFilter&quot;,
+<a name="anchor-97"></a>	PRO_TK_NO_ERROR, 0 );
+
+    status = ProFeatureIsNcseq(p_feat, &amp;is_nc_seq);
+    TEST_CALL_REPORT(&quot;ProFeatureIsNcseq()&quot;,
+                        &quot;ProTestFeatFilterNcseq()&quot;, status,
+<a name="anchor-98"></a>                        (status != PRO_TK_NO_ERROR));
+
+    return (is_nc_seq == PRO_B_TRUE? PRO_TK_NO_ERROR : PRO_TK_CONTINUE);
+
+}
+<a name="anchor-99"></a>
+/*=========================================================================*\
+    Function:	ProUtilGeomitemByNameFilterAction()
+    Purpose:	Allow to visit only geomitem with a specified name
+    Returns:	PRO_TK_NO_ERROR - success;
+<a name="anchor-100"></a>		PRO_TK_CONTINUE - no valid modelitem found
+\*=========================================================================*/
+ProError ProUtilGeomitemByNameFilterAction(
+    ProAppData geomitem,	    /* In : The geomitem */
+    FindByName   *p_findbyname)	    /* In : The find structure */
+<a name="anchor-101"></a>{
+    ProName  name;
+    ProError status;
+    ProModelitem modelitem = p_findbyname->p_modelitem[0];
+
+<a name="anchor-102"></a>    switch (modelitem.type)
+    {
+	case PRO_CSYS:
+	    status = ProCsysToGeomitem((ProSolid)modelitem.owner, 
+		(ProCsys)geomitem, &amp;modelitem);
+<a name="anchor-103"></a>	    TEST_CALL_REPORT(&quot;ProCsysToGeomitem()&quot;, 
+		&quot;ProUtilGeomitemByNameFilterAction()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+	    break;
+	case PRO_AXIS:
+<a name="anchor-104"></a>	    status = ProAxisToGeomitem((ProSolid)modelitem.owner, 
+		(ProAxis)geomitem, &amp;modelitem);
+	    TEST_CALL_REPORT(&quot;ProAxisToGeomitem()&quot;, 
+		&quot;ProUtilGeomitemByNameFilterAction()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+<a name="anchor-105"></a>	    break;
+	case PRO_SURFACE:
+	    status = ProSurfaceToGeomitem((ProSolid)modelitem.owner, 
+		(ProSurface)geomitem, &amp;modelitem);
+	    TEST_CALL_REPORT(&quot;ProSurfaceToGeomitem()&quot;, 
+<a name="anchor-106"></a>		&quot;ProUtilGeomitemByNameFilterAction()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+	    break;
+	default:
+	    status = PRO_TK_GENERAL_ERROR;
+<a name="anchor-107"></a>    }
+    
+    if (status == PRO_TK_NO_ERROR)
+    {
+	status = ProModelitemNameGet(&amp;modelitem, name);
+<a name="anchor-108"></a>	TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, 
+		&quot;ProUtilGeomitemByNameFilterAction()&quot;, status,
+		status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+    }
+    if (status == PRO_TK_NO_ERROR) 
+<a name="anchor-109"></a>    {
+	if (ProUtilWstrCmp(p_findbyname->name, name)==0)
+	    status = PRO_TK_NO_ERROR;
+	else 
+	    status = PRO_TK_CONTINUE;
+<a name="anchor-110"></a>    }
+    else if (status == PRO_TK_E_NOT_FOUND)
+	status = PRO_TK_CONTINUE;
+
+    return (status);
+<a name="anchor-111"></a>}
+
+
+/*============================================================================*\
+    FUNCTION : ProUtilMultiCADFileInfoWrite	
+<a name="anchor-112"></a>    PURPOSE  : Writes model info in file
+\*============================================================================*/
+ProError ProUtilMultiCADFileInfoWrite(ProMdl model, FILE *MultiCADInfo_fp)
+{
+	ProError   status;
+<a name="anchor-113"></a> 	ProMdlType modelType;
+	char       c_buff[PRO_PATH_SIZE], mdl_cext[PRO_MDLEXTENSION_SIZE];
+	char       mdl_cname[PRO_PATH_SIZE];
+	ProMdlType mdl_type;
+	ProMdlName mdl_name, newName;
+<a name="anchor-114"></a>	ProMdl     newMdl;
+	ProPath    mdl_path;
+	ProMdlExtension mdl_ext;
+	ProMdlfileType  fileType;
+
+<a name="anchor-115"></a>
+
+	/* ProMdlDataGet() is deprecated in creo3, use following functions to get model info. */
+    /* Gets Multi-CAD file type */
+	status = ProMdlMdlnameGet(model, mdl_name);
+<a name="anchor-116"></a>	TEST_CALL_REPORT( &quot;ProMdlMdlnameGet()&quot;, &quot;ProUtilMultiCADFileInfoWrite()&quot;, 
+			status, status != PRO_TK_NO_ERROR);
+
+	ProWstringToString(mdl_cname, mdl_name);
+	ProTKFprintf (MultiCADInfo_fp,&quot;      ++ Model name: %s \n&quot;, mdl_cname);
+<a name="anchor-117"></a>
+    /* Gets creo file type */
+	status = ProMdlTypeGet(model,  &amp;mdl_type);
+	TEST_CALL_REPORT( &quot;ProMdlTypeGet()&quot;, &quot;ProUtilMultiCADFileInfoWrite()&quot;, 
+			status, status != PRO_TK_NO_ERROR);
+<a name="anchor-118"></a>
+	status = (ProError) ProUtilObjtypeStr((ProType)mdl_type, c_buff);
+	TEST_CALL_REPORT( &quot;ProUtilObjtypeStr()&quot;, &quot;ProUtilMultiCADFileInfoWrite()&quot;, 
+			status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-119"></a>	ProTKFprintf (MultiCADInfo_fp,&quot;      ++ Model Type: %s \n&quot;, c_buff);
+
+    /* Gets path of input model */
+	status = ProMdlDirectoryPathGet(model, mdl_path);
+	TEST_CALL_REPORT( &quot;ProMdlDirectoryPathGet()&quot;, &quot;ProUtilMultiCADFileInfoWrite()&quot;, 
+<a name="anchor-120"></a>			status, status != PRO_TK_NO_ERROR);
+	
+	ProWstringToString(c_buff, mdl_path);
+	ProTKFprintf (MultiCADInfo_fp,&quot;      ++ Model path: %s \n&quot;, c_buff);
+
+<a name="anchor-121"></a>	/* Gets Multi-CAD file extention */ 
+	status = ProMdlExtensionGet(model, mdl_ext);
+	TEST_CALL_REPORT( &quot;ProMdlExtensionGet()&quot;, &quot;ProUtilMultiCADFileInfoWrite()&quot;, 
+			status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-122"></a>	ProWstringToString(mdl_cext, mdl_ext);
+	ProTKFprintf (MultiCADInfo_fp,&quot;      ++ Model extention: %s \n&quot;, mdl_cext);
+
+    /* Gets Multi-CAD file type */
+	status = ProMdlFiletypeGet (model, (ProMdlfileType*) &amp;fileType);
+<a name="anchor-123"></a>	TEST_CALL_REPORT(&quot;ProMdlFiletypeGet()&quot;, &quot;ProUtilMultiCADFileInfoWrite()&quot;, 
+			status, status != PRO_TK_NO_ERROR);
+	
+	status = (ProError)ProUtilMdlfileTypeStr(fileType, c_buff);
+	TEST_CALL_REPORT( &quot;ProUtilMdlfileTypeStr()&quot;, &quot;ProUtilMultiCADFileInfoWrite()&quot;, 
+<a name="anchor-124"></a>			status, status != PRO_TK_NO_ERROR);
+
+	ProTKFprintf (MultiCADInfo_fp,&quot;      ++ Model File Type: %s \n&quot;, c_buff);
+
+	/* In Creo3 ProMdlnameCopy() is not different from ProMdlCopy() and    
+<a name="anchor-125"></a>	   is added to provide consistency in future releases when it will  
+	   be expanded to support MULTI-CAD assemblies. */
+    
+	ProTKSprintf (c_buff,&quot;new_name%d&quot;, multiCadCopy_count);
+	multiCadCopy_count++;
+<a name="anchor-126"></a>        
+	strcat(c_buff,mdl_cname);
+	ProStringToWstring (newName, c_buff);
+	status = ProMdlnameCopy(model, newName, &amp;newMdl);
+	TEST_CALL_REPORT( &quot;ProMdlnameCopy()&quot;, &quot;ProMultiCADFileInfo()&quot;, 
+<a name="anchor-127"></a>			status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_UNSUPPORTED);
+	if(status == PRO_TK_UNSUPPORTED)
+	{
+		ProTKFprintf (MultiCADInfo_fp,
+			     &quot;      ++ ProMdlnameCopy is not supported for this file \n&quot;);
+<a name="anchor-128"></a>	}
+	ProTKFprintf (MultiCADInfo_fp,&quot;\n&quot;);
+
+	return (PRO_TK_NO_ERROR);
+}
+<a name="anchor-129"></a>
+/*============================================================================*\
+    FUNCTION : ProUtilMultiCADFilterAction	
+    PURPOSE  : Filters PRO_FEAT_COMPONENT for ProSolidFeatVisit
+\*============================================================================*/
+<a name="anchor-130"></a>
+ProError ProUtilMultiCADFilterAction(ProFeature *feature, ProAppData info_file)
+{
+  ProError    status;
+  ProFeattype ftype;
+<a name="anchor-131"></a>
+  status = ProFeatureTypeGet(feature, &amp;ftype);
+  TEST_CALL_REPORT( &quot;ProFeatureTypeGet()&quot;, &quot;ProUtilMultiCADFilterAction()&quot;, 
+		status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-132"></a>  if(ftype == PRO_FEAT_COMPONENT)
+    return(PRO_TK_NO_ERROR);
+
+  return(PRO_TK_CONTINUE);
+}
+<a name="anchor-133"></a>
+/*============================================================================*\
+    FUNCTION : ProUtilMultiCADVisitAction	
+    PURPOSE  : Action function for ProSolidFeatVisit
+\*============================================================================*/
+<a name="anchor-134"></a>ProError ProUtilMultiCADVisitAction(ProFeature *feat, 
+									ProError visit_status, ProAppData appdata)
+{
+	ProError   status;
+ 	ProMdl     model;
+<a name="anchor-135"></a> 	ProMdlType mdl_type;
+	char       mdl_cname[PRO_MDLNAME_SIZE], c_buff[PRO_MDLNAME_SIZE];
+	
+	ProMdlfileType   comp_type;
+	ProFamilyMdlName comp_name;
+<a name="anchor-136"></a>	
+	FILE  *MultiCADInfo_fp = (FILE *) appdata;
+
+	if (visit_status == PRO_TK_NO_ERROR)
+	{
+<a name="anchor-137"></a>        /* Gets Multi-CAD components name and type */
+		status = ProAsmcompMdlMdlnameGet((ProAsmcomp *)feat, &amp;comp_type, comp_name);
+		TEST_CALL_REPORT ( &quot;ProAsmcompMdlMdlnameGet()&quot;, &quot;ProUtilMultiCADVisitAction()&quot;, 
+			                status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-138"></a>		ProWstringToString(mdl_cname, comp_name);
+		ProTKFprintf (MultiCADInfo_fp,&quot;    ++ Component name: %s \n&quot;, mdl_cname);
+
+		status = (ProError)ProUtilMdlfileTypeStr(comp_type, c_buff);
+		TEST_CALL_REPORT( &quot;ProUtilMdlfileTypeStr()&quot;, &quot;ProUtilMultiCADVisitAction()&quot;, 
+<a name="anchor-139"></a>					       status, status != PRO_TK_NO_ERROR);
+		ProTKFprintf (MultiCADInfo_fp,&quot;    ++ Component type: %s \n&quot;, c_buff);
+
+		status = ProAsmcompMdlGet((ProAsmcomp *)feat, (ProMdl *) &amp;model);
+		TEST_CALL_REPORT(&quot;ProAsmcompMdlGet&quot;, &quot;ProUtilMultiCADVisitAction()&quot;, status, 
+<a name="anchor-140"></a>			              status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+
+		if(status == PRO_TK_NO_ERROR)
+		{
+			status = ProUtilMultiCADFileInfoWrite(model, MultiCADInfo_fp);
+<a name="anchor-141"></a>            
+            /* Gets creo model type */
+			status = ProMdlTypeGet(model,  &amp;mdl_type);
+			TEST_CALL_REPORT( &quot;ProMdlTypeGet()&quot;, &quot;ProUtilMultiCADFileInfoWrite()&quot;, 
+							   status, status != PRO_TK_NO_ERROR);
+<a name="anchor-142"></a>
+			if(mdl_type == PRO_MDL_ASSEMBLY)
+			{
+                /* Visits sub assembly and components */
+				status = ProSolidFeatVisit ((ProSolid)model, 
+<a name="anchor-143"></a>					                        (ProFeatureVisitAction)ProUtilMultiCADVisitAction,
+					                        (ProFeatureFilterAction)ProUtilMultiCADFilterAction,
+                                             MultiCADInfo_fp);
+				TEST_CALL_REPORT(&quot;ProSolidFeatVisit_VisitFeatsOfTHA&quot;, 
+					             &quot;ProUtilMultiCADVisitAction()&quot;, status, 
+<a name="anchor-144"></a>								 status != PRO_TK_NO_ERROR );
+			}
+		}
+	}
+
+<a name="anchor-145"></a>	return (PRO_TK_NO_ERROR);
+}
+
+
+/*============================================================================*\
+<a name="anchor-146"></a>    FUNCTION : ProUtilMultiCADFileInfoWrite	
+    PURPOSE  : Writes model info in file
+\*============================================================================*/
+ProError ProUtilMultiCADFileInfo(ProMdl model, FILE *MultiCADInfo_fp)
+{
+<a name="anchor-147"></a>	ProError status;
+
+	status = ProUtilMultiCADFileInfoWrite(model, MultiCADInfo_fp);
+	TEST_CALL_REPORT( &quot;ProUtilMultiCADFileInfo()&quot;, &quot;ProMultiCADFileInfo()&quot;, 
+			status, status != PRO_TK_NO_ERROR);
+<a name="anchor-148"></a>
+	status = ProSolidFeatVisit ((ProSolid)model, (ProFeatureVisitAction)ProUtilMultiCADVisitAction, 
+							(ProFeatureFilterAction) ProUtilMultiCADFilterAction, MultiCADInfo_fp);
+	TEST_CALL_REPORT(&quot;ProSolidFeatVisit()&quot;, &quot;ProMultiCADFileInfo()&quot;, status, 
+						(status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND));
+<a name="anchor-149"></a>
+	return (PRO_TK_NO_ERROR);
+}
+
+
+</pre>
+</body>
+</html>

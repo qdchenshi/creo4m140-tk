@@ -1,0 +1,674 @@
+<html>
+<head>
+<title>TestUITable.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProMdl.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMessage.h>
+#include &lt;ProUI.h>
+#include &lt;ProUIDialog.h>
+<a name="anchor-3"></a>#include &lt;ProUIPushbutton.h>
+#include &lt;ProUITable.h>
+#include &lt;ProUIInputpanel.h>
+#include &lt;ProTKRunTime.h>
+#include &lt;ProWstring.h>
+<a name="anchor-4"></a>#include &lt;ProUtil.h>
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestMenu.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilFiles.h&quot;
+#include &quot;UtilString.h&quot;
+
+
+#define EX_DLG_NAME (char*)&quot;uitableexample&quot;
+<a name="anchor-7"></a>#define EX_DLG_RES_FILE (char*)&quot;uitableexample&quot;
+#define EX_DLG_TABLE (char*)&quot;Table2&quot;
+
+#define EX_DLG_ADD (char*)&quot;PushButton14&quot;
+#define EX_DLG_REMOVE (char*)&quot;PushButton15&quot;
+<a name="anchor-8"></a>#define EX_DLG_UP (char*)&quot;PushButton16&quot;
+#define EX_DLG_DOWN (char*)&quot;PushButton17&quot;
+#define EX_DLG_CLOSE (char*)&quot;PushButton18&quot;
+
+#define EX_DLG_IP (char*)&quot;InputPanel8&quot;
+<a name="anchor-9"></a>
+static int row_number;
+static char* ip_row;
+static char* ip_col;
+
+<a name="anchor-10"></a>/**********************************************************************\
+    Example which demonstrates UI Table usage. 
+    The user can add and remove rows and edit cells.
+\**********************************************************************/
+
+<a name="anchor-11"></a>
+/*====================================================================*\
+FUNCTION: ProTestUITableGetLastRow 
+PURPOSE:  Get the last row in the table
+\*====================================================================*/
+<a name="anchor-12"></a>ProError ProTestUITableGetLastRow(char *dialog, char *table, 
+                             char *last_row_name)
+{
+  ProError status;
+  int count;
+<a name="anchor-13"></a>  char **values;
+
+/*--------------------------------------------------------------------*\ 
+    Get all the rows in the table and the return the row with the 
+    greatest index.
+<a name="anchor-14"></a>\*--------------------------------------------------------------------*/
+  status = ProUITableRownamesGet(dialog, table, &amp;count, &amp;values);
+  TEST_CALL_REPORT(&quot;ProUITableRownamesGet()&quot;, 
+                   &quot;ProTestUITableGetLastRow()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+<a name="anchor-15"></a>                     
+  if((status != PRO_TK_NO_ERROR) || (count &lt; 1))
+  {
+    last_row_name = NULL;
+  }
+<a name="anchor-16"></a>  else
+  {
+    ProUtilstrcpy(last_row_name, values[count-1]);
+  }
+
+<a name="anchor-17"></a>  ProStringarrayFree(values, count);
+
+  return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-18"></a>/*====================================================================*\
+FUNCTION: ProTestUITableEditAddAction 
+PURPOSE:  Add a row to the table
+\*====================================================================*/
+void ProTestUITableEditAddAction(char *dialog, char *component, 
+<a name="anchor-19"></a>                            ProAppData data)
+{
+  ProError status;
+  char last_row_name[3] = {'\0','\0','\0'};
+  char *last_row_name_ptr = &amp;last_row_name[0];
+<a name="anchor-20"></a>  char new_row_name[3] = {'\0','\0','\0'};
+  char *new_row_name_ptr = &amp;new_row_name[0];
+  char str_row_data[32];
+  wchar_t row_data[32];
+  int col_number;
+<a name="anchor-21"></a>
+/*--------------------------------------------------------------------*\ 
+    Add a row after the last row 
+\*--------------------------------------------------------------------*/
+  ProTestUITableGetLastRow(EX_DLG_NAME, EX_DLG_TABLE, last_row_name_ptr);
+<a name="anchor-22"></a>
+  ProTKSprintf(new_row_name,&quot;%d&quot;,(row_number+1));
+  status = ProUITableRowsInsert(EX_DLG_NAME, EX_DLG_TABLE, 
+                                last_row_name_ptr, 1, &amp;new_row_name_ptr);
+  TEST_CALL_REPORT(&quot;ProUITableRowsInsert()&quot;, 
+<a name="anchor-23"></a>                   &quot;ProTestUITableEditAddAction()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+                   
+/*--------------------------------------------------------------------*\ 
+    Enter data in the row 
+<a name="anchor-24"></a>\*--------------------------------------------------------------------*/
+  if(status == PRO_TK_NO_ERROR)
+  { 
+    row_number++;
+  
+<a name="anchor-25"></a>    ProTKSprintf(str_row_data, &quot;R%d; C1&quot;, row_number);
+    ProStringToWstring(row_data, str_row_data);
+    ProUITableCellLabelSet(EX_DLG_NAME, EX_DLG_TABLE, new_row_name_ptr, 
+                           (char*)&quot;1&quot;, row_data);
+
+<a name="anchor-26"></a>    ProTKSprintf(str_row_data, &quot;R%d; C2&quot;, row_number);
+    ProStringToWstring(row_data, str_row_data);
+    ProUITableCellLabelSet(EX_DLG_NAME, EX_DLG_TABLE, new_row_name_ptr, 
+                           (char*)&quot;2&quot;, row_data);
+
+<a name="anchor-27"></a>    ProTKSprintf(str_row_data, &quot;R%d; C3&quot;, row_number);
+    ProStringToWstring(row_data, str_row_data);
+    ProUITableCellLabelSet(EX_DLG_NAME, EX_DLG_TABLE, new_row_name_ptr, 
+                           (char*)&quot;3&quot;, row_data);
+
+<a name="anchor-28"></a>    ProTKSprintf(str_row_data, &quot;R%d; C4&quot;, row_number);
+    ProStringToWstring(row_data, str_row_data);
+    ProUITableCellLabelSet(EX_DLG_NAME, EX_DLG_TABLE, new_row_name_ptr, 
+                           (char*)&quot;4&quot;, row_data);
+  }
+<a name="anchor-29"></a>
+}
+
+/*====================================================================*\
+FUNCTION: ProTestUITableEditRemoveAction 
+<a name="anchor-30"></a>PURPOSE:  Remove selected rows from the table
+\*====================================================================*/
+void ProTestUITableEditRemoveAction(char *dialog, char *component,
+                               ProAppData data)
+{
+<a name="anchor-31"></a>  ProError status;
+  int count, i, sel_row, index;
+  char **del_values;
+  char **values;
+
+<a name="anchor-32"></a>/*--------------------------------------------------------------------*\ 
+    Get all the selected rows 
+\*--------------------------------------------------------------------*/  
+  status = ProUITableSelectednamesGet(EX_DLG_NAME, EX_DLG_TABLE, &amp;count, 
+                                      &amp;del_values);
+<a name="anchor-33"></a>  TEST_CALL_REPORT(&quot;ProUITableSelectednamesGet()&quot;, 
+                   &quot;ProTestUITableEditRemoveAction()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+                   
+  if((status == PRO_TK_NO_ERROR) &amp;&amp; (count > 0))
+<a name="anchor-34"></a>  {
+/*--------------------------------------------------------------------*\ 
+    Get the row with the lowest index 
+\*--------------------------------------------------------------------*/ 
+    sel_row = -1;
+<a name="anchor-35"></a>    
+    for(i=0; i&lt;count; i=i+2)
+    {
+      status = ProUITableRowIndexGet(EX_DLG_NAME, EX_DLG_TABLE, 
+                                     del_values[i], &amp;index);
+<a name="anchor-36"></a>      TEST_CALL_REPORT(&quot;ProUITableRowIndexGet()&quot;, 
+                   &quot;ProTestUITableEditRemoveAction()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+                   
+      if((status == PRO_TK_NO_ERROR) &amp;&amp; 
+<a name="anchor-37"></a>         (sel_row == -1) || (sel_row > index))
+      {
+        sel_row = index;
+      }
+    }
+<a name="anchor-38"></a>
+/*--------------------------------------------------------------------*\ 
+    Delete the selected rows 
+\*--------------------------------------------------------------------*/ 
+    for(i=0; i&lt;count; i=i+2)
+<a name="anchor-39"></a>    {
+      status = ProUITableRowsDelete(EX_DLG_NAME, EX_DLG_TABLE, 1, 
+                                    &amp;(del_values[i]));
+      TEST_CALL_REPORT(&quot;ProUITableRowsDelete()&quot;, 
+                   &quot;ProTestUITableEditRemoveAction()&quot;,
+<a name="anchor-40"></a>                   status, status != PRO_TK_NO_ERROR);
+    }
+
+/*--------------------------------------------------------------------*\ 
+    Highlight the row with the lowest index 
+<a name="anchor-41"></a>\*--------------------------------------------------------------------*/ 
+    if(sel_row > -1)
+    {
+      status = ProUITableRownamesGet(EX_DLG_NAME, EX_DLG_TABLE, &amp;index, 
+                                     &amp;values);
+<a name="anchor-42"></a>      TEST_CALL_REPORT(&quot;ProUITableRownamesGet()&quot;, 
+                   &quot;ProTestUITableEditRemoveAction()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+      if((status == PRO_TK_NO_ERROR) &amp;&amp; (index > 0))
+      {
+<a name="anchor-43"></a>        if(sel_row >= index)
+        {
+          sel_row = index - 1;
+        }
+        status = ProUITableRowCellsSelect(EX_DLG_NAME, EX_DLG_TABLE, 1, 
+<a name="anchor-44"></a>                                          &amp;(values[sel_row]));
+        TEST_CALL_REPORT(&quot;ProUITableRowCellsSelect()&quot;, 
+                   &quot;ProTestUITableEditRemoveAction()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+      }
+<a name="anchor-45"></a>
+      ProStringarrayFree(values, index);
+    }
+  }
+
+<a name="anchor-46"></a>  ProStringarrayFree(del_values, count);
+}
+
+/*====================================================================*\
+FUNCTION: ProTestUITableEditSwapRows 
+<a name="anchor-47"></a>PURPOSE:  Swap the two rows given their index
+\*====================================================================*/
+ProError ProTestUITableEditSwapRows(int row1, int row2)
+{
+  ProError status;
+<a name="anchor-48"></a>  int col_count, row_count, i;
+  char **row_values;
+  char **col_values;
+  wchar_t *label_1, *label_2;
+
+<a name="anchor-49"></a>  if(row1 == row2)
+    return PRO_TK_BAD_INPUTS;
+
+/*--------------------------------------------------------------------*\ 
+    Get the rows in the table 
+<a name="anchor-50"></a>\*--------------------------------------------------------------------*/ 
+  status = ProUITableRownamesGet(EX_DLG_NAME, EX_DLG_TABLE, &amp;row_count, 
+                                 &amp;row_values);
+  TEST_CALL_REPORT(&quot;ProUITableRownamesGet()&quot;, 
+                   &quot;ProTestUITableEditSwapRows()&quot;,
+<a name="anchor-51"></a>                   status, status != PRO_TK_NO_ERROR);
+      
+  if((status == PRO_TK_NO_ERROR) &amp;&amp; (row_count > 1))
+  {
+    if((row1 >= 0) &amp;&amp; (row1 &lt; row_count) &amp;&amp;
+<a name="anchor-52"></a>       (row2 >= 0) &amp;&amp; (row2 &lt; row_count))
+    {
+  /*--------------------------------------------------------------------*\ 
+      Get the columns in the table 
+  \*--------------------------------------------------------------------*/ 
+<a name="anchor-53"></a>      status = ProUITableColumnnamesGet(EX_DLG_NAME, EX_DLG_TABLE,
+                                        &amp;col_count, &amp;col_values);
+      TEST_CALL_REPORT(&quot;ProUITableColumnnamesGet()&quot;, 
+                   &quot;ProTestUITableEditSwapRows()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+<a name="anchor-54"></a>      if((status == PRO_TK_NO_ERROR) &amp;&amp; (col_count > 0))
+      {
+  /*--------------------------------------------------------------------*\ 
+      Swap the cell values 
+  \*--------------------------------------------------------------------*/ 
+<a name="anchor-55"></a>        for(i=0; i&lt;col_count; i++)
+        {
+          ProUITableCellLabelGet(EX_DLG_NAME, EX_DLG_TABLE, 
+                                 row_values[row1], col_values[i], 
+                                 &amp;label_1);
+<a name="anchor-56"></a>
+          ProUITableCellLabelGet(EX_DLG_NAME, EX_DLG_TABLE, 
+                                 row_values[row2], col_values[i], 
+                                 &amp;label_2);
+
+<a name="anchor-57"></a>          ProUITableCellLabelSet(EX_DLG_NAME, EX_DLG_TABLE, 
+                                 row_values[row1], col_values[i], 
+                                 label_2);
+
+          ProUITableCellLabelSet(EX_DLG_NAME, EX_DLG_TABLE, 
+<a name="anchor-58"></a>                                 row_values[row2], col_values[i], 
+                                 label_1);
+        }     
+      }
+      ProStringarrayFree(col_values, col_count);
+<a name="anchor-59"></a>    }
+    else
+    {
+      status = PRO_TK_BAD_INPUTS;
+    }
+<a name="anchor-60"></a>  }
+  ProStringarrayFree(row_values, row_count);
+
+  return status;
+}
+<a name="anchor-61"></a>
+/*====================================================================*\
+FUNCTION: ProTestUITableEditMoveRows 
+PURPOSE:  Move selected row
+\*====================================================================*/
+<a name="anchor-62"></a>ProError ProTestUITableEditMoveRows(int direction)
+{
+  ProError status;
+  int count, i, sel_row, new_row, index;
+  char **values;
+<a name="anchor-63"></a>
+/*--------------------------------------------------------------------*\ 
+    Get all the selected rows 
+\*--------------------------------------------------------------------*/  
+  status = ProUITableSelectednamesGet(EX_DLG_NAME, EX_DLG_TABLE, &amp;count, 
+<a name="anchor-64"></a>                                      &amp;values);
+  TEST_CALL_REPORT(&quot;ProUITableSelectednamesGet()&quot;, 
+                   &quot;ProTestUITableEditMoveRows()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+  if((status == PRO_TK_NO_ERROR) &amp;&amp; (count > 0))
+<a name="anchor-65"></a>  {
+/*--------------------------------------------------------------------*\ 
+    Get the row with the lowest index 
+\*--------------------------------------------------------------------*/ 
+    sel_row = -1;
+<a name="anchor-66"></a>    
+    for(i=0; i&lt;count; i=i+2)
+    {
+      status = ProUITableRowIndexGet(EX_DLG_NAME, EX_DLG_TABLE, 
+                                     values[i], &amp;index);
+<a name="anchor-67"></a>      TEST_CALL_REPORT(&quot;ProUITableRowIndexGet()&quot;, 
+                   &quot;ProTestUITableEditMoveRows()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+
+      if((status == PRO_TK_NO_ERROR) &amp;&amp; 
+<a name="anchor-68"></a>         (sel_row == -1) || (sel_row > index))
+      {
+        sel_row = index;
+      }
+    }
+<a name="anchor-69"></a>
+/*--------------------------------------------------------------------*\ 
+    Swap the values of the selected row
+\*--------------------------------------------------------------------*/     
+    new_row = sel_row + direction;
+<a name="anchor-70"></a>    status = ProTestUITableEditSwapRows(new_row, sel_row);
+    
+    if(status == PRO_TK_NO_ERROR)
+    {
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-71"></a>    Deselect all the rows
+\*--------------------------------------------------------------------*/ 
+      for(i=0; i&lt;count; i=i+2)
+      {
+        status = ProUITableRowCellsDeselect(EX_DLG_NAME, EX_DLG_TABLE, 
+<a name="anchor-72"></a>                                            1, &amp;(values[i]));
+        TEST_CALL_REPORT(&quot;ProUITableRowCellsDeselect()&quot;, 
+                   &quot;ProTestUITableEditMoveRows()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+      }
+<a name="anchor-73"></a>
+      ProStringarrayFree(values, count);    
+/*--------------------------------------------------------------------*\ 
+    Highlight the new row 
+\*--------------------------------------------------------------------*/     
+<a name="anchor-74"></a>      status = ProUITableRownamesGet(EX_DLG_NAME, EX_DLG_TABLE, &amp;count, 
+                                     &amp;values);
+      TEST_CALL_REPORT(&quot;ProUITableRownamesGet()&quot;, 
+                   &quot;ProTestUITableEditMoveRows()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+<a name="anchor-75"></a>                   
+      if((status == PRO_TK_NO_ERROR) &amp;&amp; (count > 0))
+      {     
+        status = ProUITableRowCellsSelect(EX_DLG_NAME, EX_DLG_TABLE, 1, 
+                                          &amp;(values[new_row]));
+<a name="anchor-76"></a>        TEST_CALL_REPORT(&quot;ProUITableRowCellsSelect()&quot;, 
+                   &quot;ProTestUITableEditMoveRows()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+      }
+    }
+<a name="anchor-77"></a>  }
+  
+  ProStringarrayFree(values, count);
+  return (status);
+}
+<a name="anchor-78"></a>
+/*====================================================================*\
+FUNCTION: ProTestUITableEditUpAction 
+PURPOSE:  Move selected row up
+\*====================================================================*/
+<a name="anchor-79"></a>void ProTestUITableEditUpAction(char *dialog, char *component,
+                           ProAppData data)
+{
+  ProTestUITableEditMoveRows(-1);
+}
+<a name="anchor-80"></a>
+/*====================================================================*\
+FUNCTION: ProTestUITableEditDownAction 
+PURPOSE:  Move selected row down
+\*====================================================================*/
+<a name="anchor-81"></a>void ProTestUITableEditDownAction(char *dialog, char *component,
+                             ProAppData data)
+{
+  ProTestUITableEditMoveRows(1);
+}
+<a name="anchor-82"></a>
+/*====================================================================*\
+FUNCTION: ProTestUITableEditCloseAction 
+PURPOSE:  Close the dialog
+\*====================================================================*/
+<a name="anchor-83"></a>void ProTestUITableEditCloseAction(char *dialog, char *component, 
+                              ProAppData data)
+{
+  ProError status;
+
+<a name="anchor-84"></a>  status = ProUIDialogExit(dialog, PRO_TK_NO_ERROR);
+  TEST_CALL_REPORT(&quot;ProUIDialogExit()&quot;, 
+                   &quot;ProTestUITableEditCloseAction()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+}
+<a name="anchor-85"></a>
+
+/*====================================================================*\
+FUNCTION: ProTestUITableEditLoseIPfocus 
+PURPOSE:  Action function for input panel at table cell
+<a name="anchor-86"></a>\*====================================================================*/
+void ProTestUITableEditLoseIPfocus(char *dialog, char *component,
+                              ProAppData data)
+{
+  ProError status;
+<a name="anchor-87"></a>  wchar_t* label;
+  char input_panel[8];
+    
+  ProTKSprintf(input_panel, &quot;%s_%s&quot;, ip_row, ip_col);
+  
+<a name="anchor-88"></a>/*--------------------------------------------------------------------*\
+    Copy the input panel label to the cell
+\*--------------------------------------------------------------------*/
+  status = ProUIInputpanelValueGet(EX_DLG_NAME, input_panel, &amp;label);  
+  TEST_CALL_REPORT(&quot;ProUIInputpanelValueGet()&quot;, 
+<a name="anchor-89"></a>                   &quot;ProTestUITableEditLoseIPfocus()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+                   
+  if((status == PRO_TK_NO_ERROR) &amp;&amp; (label != NULL))
+  {
+<a name="anchor-90"></a>    status = ProUITableCellLabelSet(EX_DLG_NAME, EX_DLG_TABLE, ip_row, 
+                                    ip_col, label);
+    TEST_CALL_REPORT(&quot;ProUITableCellLabelSet()&quot;, 
+                   &quot;ProTestUITableEditLoseIPfocus()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+<a name="anchor-91"></a>
+  }
+
+/*--------------------------------------------------------------------*\
+    Delete the input panel label from the cell
+<a name="anchor-92"></a>\*--------------------------------------------------------------------*/  
+  status = ProUITableCellComponentDelete(EX_DLG_NAME, EX_DLG_TABLE, 
+                                         ip_row, ip_col);
+  TEST_CALL_REPORT(&quot;ProUITableCellComponentDelete()&quot;, 
+                   &quot;ProTestUITableEditLoseIPfocus()&quot;,
+<a name="anchor-93"></a>                   status, status != PRO_TK_NO_ERROR);
+
+  ProWstringFree(label);
+  ProStringFree(ip_row);
+  ProStringFree(ip_col);
+<a name="anchor-94"></a>}
+
+/*====================================================================*\
+FUNCTION: ProTestUITableEditActivateCell 
+PURPOSE:  Edit action when user selects a cell
+<a name="anchor-95"></a>\*====================================================================*/
+void ProTestUITableEditActivateCell(char *dialog, char *component, 
+                               ProAppData data)
+{
+  ProError status;
+<a name="anchor-96"></a>  int count, i, width;
+  char **values;
+  char *row;
+  wchar_t* label;
+  char input_panel[8];
+<a name="anchor-97"></a>
+/*--------------------------------------------------------------------*\ 
+    Get all the selected rows. If more thatn one row is selected, do 
+    nothing
+\*--------------------------------------------------------------------*/  
+<a name="anchor-98"></a>  status = ProUITableSelectednamesGet(EX_DLG_NAME, EX_DLG_TABLE, &amp;count, 
+                                      &amp;values);
+  TEST_CALL_REPORT(&quot;ProUITableSelectednamesGet()&quot;, 
+                   &quot;ProTestUITableEditActivateCell()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+<a name="anchor-99"></a>
+  if((status == PRO_TK_NO_ERROR) &amp;&amp; (count > 0))
+  {
+    row = values[0];
+    for(i=2; i&lt;count; i++)
+<a name="anchor-100"></a>    {
+      if(strcmp(row, values[i]) != 0)
+      {
+        ProStringarrayFree(values, count);
+        return;
+<a name="anchor-101"></a>      }
+    }
+  }
+  ProStringarrayFree(values, count);
+
+<a name="anchor-102"></a>/*--------------------------------------------------------------------*\ 
+    Get the focus cell
+\*--------------------------------------------------------------------*/   
+  status = ProUITableFocusCellGet(EX_DLG_NAME, EX_DLG_TABLE, 
+                                  &amp;ip_row, &amp;ip_col);
+<a name="anchor-103"></a>  TEST_CALL_REPORT(&quot;ProUITableFocusCellGet()&quot;, 
+                   &quot;ProTestUITableEditActivateCell()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+
+  if(status == PRO_TK_NO_ERROR)
+<a name="anchor-104"></a>  {
+    status = ProUITableCellLabelGet(EX_DLG_NAME, EX_DLG_TABLE, ip_row, 
+                                    ip_col, &amp;label);
+    TEST_CALL_REPORT(&quot;ProUITableCellLabelGet()&quot;, 
+                   &quot;ProTestUITableEditActivateCell()&quot;,
+<a name="anchor-105"></a>                   status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\ 
+    Create an input panel at the focus cell
+\*--------------------------------------------------------------------*/     
+<a name="anchor-106"></a>    ProTKSprintf(input_panel, &quot;%s_%s&quot;, ip_row, ip_col);
+
+    status = ProUITableCellComponentCopy(EX_DLG_NAME, EX_DLG_TABLE, 
+                                         ip_row, ip_col, EX_DLG_NAME, 
+                                         EX_DLG_IP, input_panel);
+<a name="anchor-107"></a>    TEST_CALL_REPORT(&quot;ProUITableCellComponentCopy()&quot;, 
+                   &quot;ProTestUITableEditActivateCell()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+                   
+    if(status == PRO_TK_NO_ERROR)
+<a name="anchor-108"></a>    {
+/*--------------------------------------------------------------------*\
+    Setup the properties of the input panel
+\*--------------------------------------------------------------------*/
+      ProUITableColumnWidthGet(EX_DLG_NAME, EX_DLG_TABLE, ip_col, 
+<a name="anchor-109"></a>                               &amp;width);
+
+      ProUIInputpanelColumnsSet(EX_DLG_NAME, input_panel, width);
+
+      ProUIInputpanelEnable(EX_DLG_NAME, input_panel);            
+<a name="anchor-110"></a>
+      ProUIInputpanelShow(EX_DLG_NAME, input_panel);
+
+      ProUIInputpanelValueSet(EX_DLG_NAME, input_panel, label);
+
+<a name="anchor-111"></a>      ProUIInputpanelFocusoutActionSet(EX_DLG_NAME, input_panel, 
+                                      (ProUIAction)ProTestUITableEditLoseIPfocus, 
+                                       NULL);
+      ProUIInputpanelActivateActionSet(EX_DLG_NAME, input_panel, 
+                                       (ProUIAction)ProTestUITableEditLoseIPfocus, 
+<a name="anchor-112"></a>                                       NULL);
+      ProUIDialogFocusSet(EX_DLG_NAME, input_panel);
+    }
+    else
+    {
+<a name="anchor-113"></a>      ProStringFree(ip_row);
+      ProStringFree(ip_col);
+    }
+    ProWstringFree(label);
+  }
+<a name="anchor-114"></a>}
+
+/*====================================================================*\
+FUNCTION: UserUITableEditExample 
+PURPOSE:  Example which demonstrates UI Table usage. 
+<a name="anchor-115"></a>          The user can add and remove rows and edit cells.
+\*====================================================================*/
+int ProTestUITableEditExample()
+{
+  ProError status;
+<a name="anchor-116"></a>
+/*--------------------------------------------------------------------*\ 
+    Load the dialog from the resource file 
+\*--------------------------------------------------------------------*/ 
+  status = ProUIDialogCreate(EX_DLG_NAME, EX_DLG_RES_FILE);  
+<a name="anchor-117"></a>  TEST_CALL_REPORT(&quot;ProUIDialogCreate()&quot;, &quot;ProTestUITableEditExample()&quot;,
+                    status, status != PRO_TK_NO_ERROR);  
+  if(status != PRO_TK_NO_ERROR)
+    return (status);
+
+<a name="anchor-118"></a>  row_number = 0;
+
+/*--------------------------------------------------------------------*\ 
+    Set action function for buttons 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-119"></a>  status = ProUIPushbuttonActivateActionSet(EX_DLG_NAME, EX_DLG_ADD, 
+                                         (ProUIAction)ProTestUITableEditAddAction, 
+                                         NULL);
+  TEST_CALL_REPORT(&quot;ProUIPushbuttonActivateActionSet()&quot;, 
+                   &quot;ProTestUITableEditExample()&quot;,
+<a name="anchor-120"></a>                   status, status != PRO_TK_NO_ERROR);  
+                    
+  status = ProUIPushbuttonActivateActionSet(EX_DLG_NAME, EX_DLG_REMOVE, 
+                                        (ProUIAction)ProTestUITableEditRemoveAction, 
+                                        NULL);
+<a name="anchor-121"></a>  TEST_CALL_REPORT(&quot;ProUIPushbuttonActivateActionSet()&quot;, 
+                   &quot;ProTestUITableEditExample()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+                   
+  status = ProUIPushbuttonActivateActionSet(EX_DLG_NAME, EX_DLG_UP, 
+<a name="anchor-122"></a>                                          (ProUIAction)ProTestUITableEditUpAction, 
+                                          NULL);
+  TEST_CALL_REPORT(&quot;ProUIPushbuttonActivateActionSet()&quot;, 
+                   &quot;ProTestUITableEditExample()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+<a name="anchor-123"></a>                   
+  status = ProUIPushbuttonActivateActionSet(EX_DLG_NAME, EX_DLG_DOWN, 
+                                        (ProUIAction)ProTestUITableEditDownAction, 
+                                        NULL);
+  TEST_CALL_REPORT(&quot;ProUIPushbuttonActivateActionSet()&quot;, 
+<a name="anchor-124"></a>                   &quot;ProTestUITableEditExample()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+                   
+  status = ProUIPushbuttonActivateActionSet(EX_DLG_NAME, EX_DLG_CLOSE, 
+                                       (ProUIAction)ProTestUITableEditCloseAction, 
+<a name="anchor-125"></a>                                       NULL);
+  TEST_CALL_REPORT(&quot;ProUIPushbuttonActivateActionSet()&quot;, 
+                   &quot;ProTestUITableEditExample()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+                   
+<a name="anchor-126"></a>  status = ProUIDialogCloseActionSet(EX_DLG_NAME, 
+                                       (ProUIAction)ProTestUITableEditCloseAction, 
+                                       NULL);
+  TEST_CALL_REPORT(&quot;ProUIDialogCloseActionSet()&quot;, 
+                   &quot;ProTestUITableEditExample()&quot;,
+<a name="anchor-127"></a>                   status, status != PRO_TK_NO_ERROR);
+                   
+/*--------------------------------------------------------------------*\ 
+    Set action function for editing cells 
+\*--------------------------------------------------------------------*/ 
+<a name="anchor-128"></a>  status = ProUITableSelectActionSet(EX_DLG_NAME, EX_DLG_TABLE, 
+                                     (ProUIAction)ProTestUITableEditActivateCell, NULL);
+  TEST_CALL_REPORT(&quot;ProUITableSelectActionSet()&quot;, 
+                   &quot;ProTestUITableEditExample()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+<a name="anchor-129"></a>                   
+/*--------------------------------------------------------------------*\ 
+    Display and activate the dialog 
+\*--------------------------------------------------------------------*/ 
+  status = ProUIDialogActivate(EX_DLG_NAME, NULL);
+<a name="anchor-130"></a>  TEST_CALL_REPORT(&quot;ProUIDialogActivate()&quot;, 
+                   &quot;ProTestUITableEditExample()&quot;,
+                   status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\ 
+<a name="anchor-131"></a>    Remove the dialog from memory 
+\*--------------------------------------------------------------------*/ 
+  status = ProUIDialogDestroy(EX_DLG_NAME);
+  TEST_CALL_REPORT(&quot;ProUIDialogDestroy()&quot;, 
+                   &quot;ProTestUITableEditExample()&quot;,
+<a name="anchor-132"></a>                   status, status != PRO_TK_NO_ERROR);
+
+  return(1);
+}
+
+<a name="anchor-133"></a>
+</pre>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<html>
+<head>
+<title>UgSolidOutlineComp.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#include &lt;ProToolkit.h>
+#include &lt;ProSelection.h>
+#include &lt;ProGeomitem.h>
+#include &lt;ProSolid.h>
+#include &lt;UtilMath.h>
+<a name="anchor-2"></a>
+#include &lt;TestError.h>
+
+/*============================================================================*\
+	Function: UserOutlineCompute()
+<a name="anchor-3"></a>	Purpose: Display extents of solid in space defined by CSYS
+\*============================================================================*/
+int UserOutlineCompute()
+{
+    int sel_count;
+<a name="anchor-4"></a>    ProError status;
+    ProFileName msgfile;
+    ProSelection *psels=NULL;
+    ProModelitem csys_feat;
+    ProGeomitemdata *geom_data=NULL;
+<a name="anchor-5"></a>    ProCsysdata *p_csys=NULL;
+    ProMdl solid;
+    Pro3dPnt outline[2];
+    ProMatrix transf, itranf;
+    ProSolidOutlExclTypes excludes[] = {PRO_OUTL_EXC_DATUM_PLANE, 
+<a name="anchor-6"></a>                                        PRO_OUTL_EXC_DATUM_POINT,
+                                        PRO_OUTL_EXC_DATUM_CSYS};
+
+/*----------------------------------------------------------------------------*\
+   Request Csys as reference point and orientation to report outline points
+<a name="anchor-7"></a>\*----------------------------------------------------------------------------*/
+
+    ProStringToWstring(msgfile,&quot;msg_ugsolid.txt&quot;);
+    status = ProMessageDisplay(msgfile,&quot;USER Select CSYS as reference point&quot;);
+    ERROR_CHECK(&quot;UserOutlineCompute&quot;,&quot;ProMessageDisplay&quot;,status);
+<a name="anchor-8"></a>    if((ProSelect(&quot;csys&quot;,1,NULL,NULL,NULL,NULL,&amp;psels, &amp;sel_count) != 
+       PRO_TK_NO_ERROR) || (sel_count &lt; 1))
+    {
+       status = ProMessageDisplay(msgfile,&quot;USER Invalid Selection!&quot;);
+       ERROR_CHECK(&quot;UserOutlineCompute&quot;,&quot;ProMessageDisplay(Invalid Selection)&quot;,status);
+<a name="anchor-9"></a>       return((int)PRO_TK_GENERAL_ERROR);
+    }
+
+/*----------------------------------------------------------------------------*\
+	Retrieve Csys Data 
+<a name="anchor-10"></a>\*----------------------------------------------------------------------------*/
+    status = ProSelectionModelitemGet(psels[0], &amp;csys_feat);
+    ERROR_CHECK(&quot;UserOutlineCompute&quot;,&quot;ProSelectionModelitemGet&quot;,status);
+    status = ProGeomitemdataGet(&amp;csys_feat,&amp;geom_data);
+    ERROR_CHECK(&quot;UserOutlineCompute&quot;,&quot;ProGeomitemdataGet&quot;,status);
+<a name="anchor-11"></a>    if(geom_data->obj_type != PRO_CSYS)
+    {
+       status = ProMessageDisplay(msgfile,
+                         &quot;USER Invalid Feature Selected as reference point&quot;);
+	ERROR_CHECK(&quot;UserOutlineCompute&quot;,&quot;ProMessageDisplay&quot;,status);
+<a name="anchor-12"></a>       return((int)PRO_TK_GENERAL_ERROR);
+    }
+
+    p_csys = geom_data->data.p_csys_data;
+    ProUtilVectorsToTransf(p_csys->x_vector, p_csys->y_vector, p_csys->z_vector,
+<a name="anchor-13"></a>                          p_csys->origin,transf);
+    ProUtilMatrixInvert(transf, itranf);
+    status = ProMdlCurrentGet(&amp;solid);
+    ERROR_CHECK(&quot;UserOutlineCompute&quot;,&quot;ProMdlCurrentGet&quot;,status);
+    status = ProSolidOutlineCompute(solid, transf, excludes, 3, outline);
+<a name="anchor-14"></a>    ERROR_CHECK(&quot;UserOutlineCompute&quot;,&quot;ProSolidOutlineCompute&quot;,status);
+    status = ProMessageDisplay(msgfile,&quot;USER Outline points: (%0f %1f %2f) (%3f %4f %5f)&quot;,
+                      &amp;outline[0][0],&amp;outline[0][1],&amp;outline[0][2],
+                      &amp;outline[1][0],&amp;outline[1][1],&amp;outline[1][2]);
+    ERROR_CHECK(&quot;UserOutlineCompute&quot;,&quot;ProMessageDisplay(Outline points)&quot;,status);
+<a name="anchor-15"></a>    return((int)status);
+}
+
+</pre>
+</body>
+</html>

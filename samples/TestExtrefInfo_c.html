@@ -1,0 +1,1252 @@
+<html>
+<head>
+<title>TestExtrefInfo.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProObjects.h>
+#include &lt;ProAssembly.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProElemId.h>
+#include &lt;ProElement.h>
+<a name="anchor-3"></a>#include &lt;ProExpldstate.h>
+#include &lt;ProFeatType.h>
+#include &lt;ProMdl.h>
+#include &lt;ProMessage.h>
+#include &lt;ProModelitem.h>
+<a name="anchor-4"></a>#include &lt;ProMenu.h>
+#include &lt;ProSelection.h>
+#include &lt;ProSolid.h>
+#include &lt;ProUtil.h>
+#include &lt;ProValue.h>
+<a name="anchor-5"></a>#include &lt;ProRefInfo.h>
+#include &lt;ProCopyGeom.h>
+
+#include &quot;TestError.h&quot;
+#include &lt;ProTKRunTime.h>
+<a name="anchor-6"></a>#include &lt;UtilMessage.h>
+
+/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+<a name="anchor-7"></a>#define UNUSED_MENU_INT 15000
+
+/*--------------------------------------------------------------------*\
+Application data types
+\*--------------------------------------------------------------------*/
+<a name="anchor-8"></a>
+
+typedef enum {
+    TEST_CHILDREN_GET = 0,
+    TEST_PARENTS_GET = 1
+<a name="anchor-9"></a>} TestRels;
+
+typedef enum {
+    TEST_FEATURE_SELECT = 0,
+    TEST_SOLID_SELECT = 1,
+<a name="anchor-10"></a>    TEST_SOLID_ALL_FEATS = 2,
+    TEST_ALL_SOLIDS = 3,
+    TEST_ALL_SOLIDS_ALL_FEATS = 4
+} ExtrefinfoActionType;
+
+<a name="anchor-11"></a>typedef struct {
+     ProExtRefType    type;
+     ExtrefinfoActionType action_type;
+     TestRels rels;
+     ProBoolean solid;   /* solid/feature */
+<a name="anchor-12"></a>     FILE * qcr_ref;
+} ExtrefinfoMenuState;
+
+
+typedef struct {
+<a name="anchor-13"></a>    char * buttun_name;
+    ProMenubuttonAction action;
+    ProAppData data;
+    int button_int;
+} TestMenubuttonStruct;
+<a name="anchor-14"></a>
+typedef struct {
+    char * menu_name;
+	/*
+    TestMenubuttonStruct *buttons;
+<a name="anchor-15"></a>	*/
+    ProMenubuttonAction exit_action;
+    ProAppData exit_data;
+    int exit_button_int;
+} TestMenuStruct;
+<a name="anchor-16"></a>
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+<a name="anchor-17"></a>
+
+ProError ProTestSolidInfoWrite ( FILE * qcr_ref,  ProSolid solid);
+int ProTestFileOpen (FILE ** qcr_ref);
+
+<a name="anchor-18"></a>/*====================================================================*\
+  Function : ProTestCopiedRefSolidStateGet()
+  Purpose  : 
+\*====================================================================*/
+ProError  ProTestCopiedRefSolidStateFilter(
+<a name="anchor-19"></a>    ProFeature * p_feat,
+    ProAppData app_data)
+{
+    ProError err = PRO_TK_NO_ERROR;
+    ProBoolean has_backup = PRO_B_TRUE;
+<a name="anchor-20"></a>    ProFeattype type;
+
+    err = ProFeatureTypeGet (p_feat, &amp;type);
+    TEST_CALL_REPORT (&quot;ProFeatureTypeGet()&quot;,
+	&quot;ProTestCopiedRefSolidStateFilter()&quot;, err ,
+<a name="anchor-21"></a>         err != PRO_TK_NO_ERROR);
+    if (type == PRO_FEAT_GEOM_COPY)
+    {
+	return PRO_TK_NO_ERROR;
+    }
+<a name="anchor-22"></a>    err = ProFeatureHasBackup (p_feat, &amp;has_backup );
+    TEST_CALL_REPORT (&quot;ProFeatureHasBackup()&quot;,
+	&quot;ProTestCopiedRefSolidStateFilter()&quot;, err ,
+         err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-23"></a>    if (err!=PRO_TK_NO_ERROR || has_backup == PRO_B_FALSE)
+	return PRO_TK_CONTINUE; /* skip */
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-24"></a>/*====================================================================*\
+  Function : ProTestCopiedRefSolidStateVisitAction()
+  Purpose  : 
+\*====================================================================*/
+ProError  ProTestCopiedRefSolidStateVisitAction(
+<a name="anchor-25"></a>    ProFeature * p_feat,
+    ProError status,
+    ProAppData app_data)
+{
+    ProError err = PRO_TK_NO_ERROR;
+<a name="anchor-26"></a>    FILE * qcr_ref = (FILE*) app_data;
+    ProCopiedRefStateDetails f_state;
+    ProSolid mdl;
+    ProCharLine str;
+    ProBoolean has_backup = PRO_B_TRUE;
+<a name="anchor-27"></a>    
+    if (status != (ProError)PRO_FEAT_ACTIVE)
+	return PRO_TK_NO_ERROR;
+
+    ProTKSprintf (str,
+<a name="anchor-28"></a>	&quot;New feature to get state \nid : %d type %d \n  owner : \n&quot;,
+	p_feat->id,p_feat->type );
+    ProTKFprintf (qcr_ref,&quot;%s&quot;, str);
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+
+<a name="anchor-29"></a>    err = ProModelitemMdlGet (p_feat, (ProMdl *) &amp;mdl);
+    TEST_CALL_REPORT (&quot;ProModelitemMdlGet()&quot;,
+	&quot;ProTestCopiedRefSolidStateVisitAction()&quot;, err ,
+         err != PRO_TK_NO_ERROR);
+
+<a name="anchor-30"></a>    err = ProTestSolidInfoWrite (qcr_ref, mdl);
+
+    err = ProFeatureCopiedRefStateDetailsGet ( p_feat, &amp; f_state);
+    TEST_CALL_REPORT (&quot;ProFeatureCopiedRefStateDetailsGet()&quot;,
+	&quot;ProTestCopiedRefSolidStateVisitAction()&quot;, err ,
+<a name="anchor-31"></a>         err != PRO_TK_NO_ERROR);
+
+    err = ProFeatureHasBackup (p_feat, &amp;has_backup );
+    TEST_CALL_REPORT (&quot;ProFeatureHasBackup()&quot;,
+	&quot;ProTestCopiedRefSolidStateVisitAction()&quot;, err ,
+<a name="anchor-32"></a>         err != PRO_TK_NO_ERROR);
+
+    ProTKSprintf (str,
+	&quot;The feature state : %d backup : %d \n &quot;,
+        f_state, has_backup );
+<a name="anchor-33"></a>    ProTKFprintf (qcr_ref,&quot;%s&quot;, str);
+    ProUtilMsgPrint( &quot;gen&quot;, &quot;TEST %0s&quot;, str);
+
+    return PRO_TK_NO_ERROR;
+}
+<a name="anchor-34"></a>
+    
+/*====================================================================*\
+  Function : ProTestCopiedRefSolidStateGet()
+  Purpose  : 
+<a name="anchor-35"></a>\*====================================================================*/
+ProError  ProTestCopiedRefSolidStateGet(
+    FILE * qcr_ref,
+    ProSolid solid)
+{
+<a name="anchor-36"></a>    ProError err = PRO_TK_NO_ERROR;
+
+    err = ProSolidFeatVisit ( solid,
+	(ProFeatureVisitAction) ProTestCopiedRefSolidStateVisitAction,
+	(ProFeatureFilterAction)ProTestCopiedRefSolidStateFilter,
+<a name="anchor-37"></a>	(ProAppData) qcr_ref);
+    TEST_CALL_REPORT (&quot;ProSolidFeatVisit()&quot;,
+	&quot;ProTestCopiedRefSolidStateGet()&quot;, err ,
+         err != PRO_TK_NO_ERROR);
+    return err;
+<a name="anchor-38"></a>}
+	
+/*====================================================================*\
+  Function : ProTestCopiedRefSolidSelectStateGet()
+  Purpose  : Menu callback
+<a name="anchor-39"></a>\*====================================================================*/
+int ProTestCopiedRefSolidSelectStateGet (ProAppData data, int dummy)
+{
+    ProError err;
+    int n_sel;
+<a name="anchor-40"></a>    ProSelection *sel_prt;
+    ProModelitem mdl;
+    ProSolid solid;
+    FILE * qcr_ref = *((FILE**) data);
+
+<a name="anchor-41"></a>    ProTestFileOpen (&amp;qcr_ref);
+    *((FILE**) data) = qcr_ref;
+    
+    err = ProSelect((char *)&quot;prt_or_asm&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel_prt, &amp;n_sel);
+    if (n_sel &lt; 1 || err  != PRO_TK_NO_ERROR)
+<a name="anchor-42"></a>	return 0;
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestCopiedRefSolidSelectStateGet()&quot;,
+	    err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_USER_ABORT &amp;&amp;
+	    err != PRO_TK_PICK_ABOVE);
+    err = ProSelectionModelitemGet (sel_prt[0], (ProModelitem*) &amp;mdl);
+<a name="anchor-43"></a>    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+	&quot;ProTestCopiedRefSolidSelectStateGet()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+	
+    err = ProModelitemMdlGet ( &amp;mdl, (ProMdl*) &amp;solid);
+<a name="anchor-44"></a>    TEST_CALL_REPORT(&quot;ProModelitemMdlGet()&quot;,
+	&quot;ProTestCopiedRefSolidSelectStateGet()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+
+    err = ProTestCopiedRefSolidStateGet (qcr_ref, solid );
+<a name="anchor-45"></a>
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-46"></a>  Function : ProTestCopiedRefSolidAllGet()
+  Purpose  : Menu buttun callback
+\*====================================================================*/
+int  ProTestCopiedRefSolidAllGet (ProAppData data, int dummy)
+{
+<a name="anchor-47"></a>   ProError err;
+   ProMdl *session_mdls;
+   FILE * qcr_ref = *((FILE**) data);
+   int arr_size = 0, i;
+
+<a name="anchor-48"></a>   ProTestFileOpen (&amp;qcr_ref);
+   *((FILE**) data) = qcr_ref;
+
+   err = ProSessionMdlList (PRO_MDL_PART, &amp; session_mdls, &amp;arr_size);
+   TEST_CALL_REPORT(&quot;ProSessionMdlList()&quot;, &quot;ProTestCopiedRefSolidAllGet()&quot;,
+<a name="anchor-49"></a>				  err, err != PRO_TK_NO_ERROR);
+
+   for (i = 0; i&lt;arr_size; i++)
+    {
+	 err = ProTestCopiedRefSolidStateGet (qcr_ref, (ProSolid)session_mdls[i] );
+<a name="anchor-50"></a>	
+    }
+    err = ProArrayFree ((ProArray*)&amp; session_mdls);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestCopiedRefSolidAllGet()&quot;,
+				  err, err != PRO_TK_NO_ERROR);
+<a name="anchor-51"></a>    
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-52"></a>FUNCTION : ProTestSelectionDepndFilter
+PURPOSE  : 
+\*====================================================================*/
+ProError ProTestSelectionDepndFilter(
+    ProSelection selection,
+<a name="anchor-53"></a>    Pro3dPnt point,
+    ProMatrix transform,
+    char * option,
+    int level,
+    ProAppData app_data)
+<a name="anchor-54"></a>{
+    ProFeature feat;
+   
+    ProError err = PRO_TK_NO_ERROR;
+    ProBoolean has_backup = PRO_B_TRUE;
+<a name="anchor-55"></a>    ProFeattype type;
+
+    err = ProSelectionModelitemGet ( selection, &amp;feat);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+			         &quot;ProTestSelectionDepndFilter()&quot;,
+<a name="anchor-56"></a>		     err, err != PRO_TK_NO_ERROR );
+
+    err = ProFeatureTypeGet (&amp;feat, &amp;type);
+    TEST_CALL_REPORT (&quot;ProFeatureTypeGet()&quot;,
+	&quot;ProTestSelectionDepndFilter()&quot;, err ,
+<a name="anchor-57"></a>         err != PRO_TK_NO_ERROR);
+    if (type == PRO_FEAT_GEOM_COPY)
+    {
+
+	return PRO_TK_NO_ERROR; /* accept */
+<a name="anchor-58"></a>    }
+
+    err = ProFeatureHasBackup (&amp;feat, &amp;has_backup );
+    TEST_CALL_REPORT (&quot;ProFeatureHasBackup()&quot;,
+	&quot;ProTestSelectionDepndFilter()&quot;, err ,
+<a name="anchor-59"></a>         err != PRO_TK_NO_ERROR);
+	
+    if (err!=PRO_TK_NO_ERROR || has_backup == PRO_B_FALSE)
+	return PRO_TK_CONTINUE; /* skip */
+    return PRO_TK_NO_ERROR; /* accept */
+<a name="anchor-60"></a>   
+
+}
+
+
+<a name="anchor-61"></a>/*====================================================================*\
+  Function : ProTestCopiedRefDependSet()
+  Purpose  : Menu callback
+\*====================================================================*/
+int ProTestCopiedRefDependSet (ProAppData data, int dummy)
+<a name="anchor-62"></a>{
+    ProError err;
+    int n_sel;
+    ProSelection *sel_feat;
+    ProFeature feat;
+<a name="anchor-63"></a>    ProSelFunctions sel_funcs;
+
+    sel_funcs.pre_filter = (ProSelectionPreFilter)ProTestSelectionDepndFilter;
+
+    sel_funcs.post_filter =  NULL;
+<a name="anchor-64"></a>    sel_funcs.post_selact = NULL;
+    sel_funcs.app_data = NULL;
+    
+    err = ProSelect((char *)&quot;feature&quot;, 1, NULL,&amp;sel_funcs , NULL, NULL, &amp;sel_feat, &amp;n_sel);
+    if (n_sel &lt; 1 || err  != PRO_TK_NO_ERROR)
+<a name="anchor-65"></a>	return 0;
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestCopiedRefDependSet()&quot;,
+	    err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_USER_ABORT &amp;&amp;
+	    err != PRO_TK_PICK_ABOVE);
+    err = ProSelectionModelitemGet (sel_feat[0], (ProModelitem*) &amp;feat);
+<a name="anchor-66"></a>    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+	&quot;ProTestCopiedRefDependSet()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+	
+    err = ProFeatureDSFDependencystateSet (&amp;feat, PRO_DSF_UPDATE_AUTOMATICALLY);
+<a name="anchor-67"></a>    TEST_CALL_REPORT(&quot;ProFeatureDSFDependencystateSet()&quot;,
+	&quot;ProTestCopiedRefDependSet()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+	
+    return (0);
+<a name="anchor-68"></a>}
+
+
+/*====================================================================*\
+  Function : ProTestCopiedRefInDependSet()
+<a name="anchor-69"></a>  Purpose  : Menu callback
+\*====================================================================*/
+int ProTestCopiedRefInDependSet (ProAppData data, int dummy)
+{
+    ProError err;
+<a name="anchor-70"></a>    int n_sel;
+    ProSelection *sel_feat;
+    ProFeature feat;
+    ProSelFunctions sel_funcs;
+
+<a name="anchor-71"></a>    sel_funcs.pre_filter = (ProSelectionPreFilter)ProTestSelectionDepndFilter;
+
+    sel_funcs.post_filter =  NULL;
+    sel_funcs.post_selact = NULL;
+    sel_funcs.app_data = NULL;
+<a name="anchor-72"></a>    
+    err = ProSelect((char *)&quot;feature&quot;, 1, NULL,&amp;sel_funcs , NULL, NULL, &amp;sel_feat, &amp;n_sel);
+    if (n_sel &lt; 1 || err  != PRO_TK_NO_ERROR)
+	return 0;
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestCopiedRefInDependSet()&quot;,
+<a name="anchor-73"></a>	    err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_USER_ABORT &amp;&amp;
+	    err != PRO_TK_PICK_ABOVE);
+    err = ProSelectionModelitemGet (sel_feat[0], (ProModelitem*) &amp;feat);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+	&quot;ProTestCopiedRefInDependSet()&quot;,
+<a name="anchor-74"></a>	    err, err != PRO_TK_NO_ERROR);
+	
+    err = ProFeatureDSFDependencystateSet (&amp;feat, PRO_DSF_UPDATE_MANUALLY);
+    TEST_CALL_REPORT(&quot;ProFeatureDSFDependencystateSet()&quot;,
+	&quot;ProTestCopiedRefInDependSet()&quot;,
+<a name="anchor-75"></a>	    err, err != PRO_TK_NO_ERROR);
+	
+    return (0);
+}
+
+<a name="anchor-76"></a>/*--------------------------------------------------------------------*/
+
+/*====================================================================*\
+  Function : ProTestExtFeatRefProcess()
+  Purpose  : 
+<a name="anchor-77"></a>\*====================================================================*/
+ProError  ProTestExtFeatRefProcess(
+    FILE * qcr_ref,
+    ProExtFeatRef ref)
+{
+<a name="anchor-78"></a>    ProError err = PRO_TK_NO_ERROR;
+    ProRefState state = PRO_REF_ACTIVE;
+    ProType type;
+    ProAsmcomppath own_comp, ref_comp;
+    ProSolid solid;
+<a name="anchor-79"></a>    ProFeature feature;
+    ProModelitem modelitem;
+    int i;
+
+    own_comp.table_num = ref_comp.table_num = 0;
+<a name="anchor-80"></a>    feature.type = PRO_TYPE_UNUSED;
+    modelitem.type = PRO_TYPE_UNUSED;
+
+    err = ProExtRefStateGet ( ref, &amp;state);
+    TEST_CALL_REPORT (&quot;ProExtRefStateGet()&quot;,
+<a name="anchor-81"></a>	&quot;ProTestExtFeatRefProcess()&quot;, err ,
+         err != PRO_TK_NO_ERROR);
+
+    ProTKFprintf (qcr_ref, &quot;Reference state : %d\n&quot;, state);
+
+<a name="anchor-82"></a>    err = ProExtRefTypeGet ( ref, &amp;type);
+    TEST_CALL_REPORT (&quot;ProExtRefTypeGet()&quot;,
+	&quot;ProTestExtFeatRefProcess()&quot;, err ,
+         err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-83"></a>    ProTKFprintf (qcr_ref, &quot;Reference type : %d\n&quot;, type);
+
+    err = ProExtRefAsmcompsGet (ref, &amp;own_comp, &amp;ref_comp);
+    TEST_CALL_REPORT (&quot;ProExtRefAsmcompsGet()&quot;,
+	&quot;ProTestExtFeatRefProcess()&quot;, err ,
+<a name="anchor-84"></a>         err != PRO_TK_NO_ERROR);
+
+    if (ref_comp.table_num != 0)
+    {
+	ProTKFprintf (qcr_ref, &quot;owner's asmcomppath model:\n&quot;);
+<a name="anchor-85"></a>	err = ProTestSolidInfoWrite (qcr_ref, own_comp.owner);
+	ProTKFprintf (qcr_ref, &quot;Reference's asmcomppath model:\n&quot;);
+        err = ProTestSolidInfoWrite (qcr_ref, ref_comp.owner);
+    }
+
+<a name="anchor-86"></a>    ProTKFprintf (qcr_ref, &quot;Owner's asmcomppath:\n&quot;);
+    for (i=0; i&lt;own_comp.table_num; i++)
+	ProTKFprintf (qcr_ref, &quot;%d &quot;, own_comp.comp_id_table[i]);
+    
+    ProTKFprintf (qcr_ref, &quot;\nReference's asmcomppath:\n&quot;);
+<a name="anchor-87"></a>    for (i=0; i&lt;ref_comp.table_num; i++)
+	ProTKFprintf (qcr_ref, &quot;%d &quot;, ref_comp.comp_id_table[i]);
+
+    err = ProExtRefOwnMdlGet (ref, &amp;solid);
+    TEST_CALL_REPORT (&quot;ProExtRefOwnMdlGet()&quot;,
+<a name="anchor-88"></a>	&quot;ProTestExtFeatRefProcess()&quot;, err ,
+         err != PRO_TK_NO_ERROR);
+    ProTKFprintf (qcr_ref, &quot;\nOwner model:\n&quot;);
+    err = ProTestSolidInfoWrite (qcr_ref, solid);
+
+<a name="anchor-89"></a>     err = ProExtRefMdlGet (ref, &amp;solid);
+    TEST_CALL_REPORT (&quot;ProExtRefMdlGet()&quot;,
+	&quot;ProTestExtFeatRefProcess()&quot;, err ,
+         err != PRO_TK_NO_ERROR);
+   	ProTKFprintf (qcr_ref, &quot;Reference model:\n&quot;);
+<a name="anchor-90"></a>	err = ProTestSolidInfoWrite (qcr_ref, solid); 
+	
+    err = ProExtRefOwnFeatGet (ref, &amp;feature);
+    TEST_CALL_REPORT (&quot;ProExtRefOwnFeatGet()&quot;,
+	&quot;ProTestExtFeatRefProcess()&quot;, err ,
+<a name="anchor-91"></a>         err != PRO_TK_NO_ERROR);
+    if (feature.type != PRO_TYPE_UNUSED)
+    {
+	ProTKFprintf (qcr_ref, &quot;Owner feature ID: %d\n&quot;, feature.id);
+	ProTKFprintf (qcr_ref, &quot;Owner feature type: %d\n&quot;, feature.type);
+<a name="anchor-92"></a>        err = ProTestSolidInfoWrite (qcr_ref, (ProSolid)feature.owner);
+    }
+
+    err = ProExtRefFeatGet (ref, &amp;feature);
+    TEST_CALL_REPORT (&quot;ProExtRefFeatGet()&quot;,
+<a name="anchor-93"></a>	&quot;ProTestExtFeatRefProcess()&quot;, err ,
+         err != PRO_TK_NO_ERROR);
+    if (feature.type != PRO_TYPE_UNUSED)
+    {
+	ProTKFprintf (qcr_ref, &quot;Reference feature ID: %d\n&quot;, feature.id);
+<a name="anchor-94"></a>	ProTKFprintf (qcr_ref, &quot;Reference feature type: %d\n&quot;, feature.type);
+        err = ProTestSolidInfoWrite (qcr_ref, (ProSolid)feature.owner);
+    }
+
+    err = ProExtRefModelitemGet (ref, &amp;modelitem);
+<a name="anchor-95"></a>    TEST_CALL_REPORT (&quot;ProExtRefModelitemGet()&quot;,
+	&quot;ProTestExtFeatRefProcess()&quot;, err ,
+         err != PRO_TK_NO_ERROR);
+    if (modelitem.type != PRO_TYPE_UNUSED)
+    {
+<a name="anchor-96"></a>	ProTKFprintf (qcr_ref, &quot;Reference modelitem ID: %d\n&quot;, modelitem.id);
+	ProTKFprintf (qcr_ref, &quot;Reference modelitem type: %d\n&quot;, modelitem.type);
+        err = ProTestSolidInfoWrite (qcr_ref, (ProSolid)modelitem.owner);
+    }
+
+<a name="anchor-97"></a>    return (err);
+}
+
+
+/*====================================================================*\
+<a name="anchor-98"></a>  Function : ProTestRefExtInfoProcess()
+  Purpose  : 
+\*====================================================================*/
+ProError ProTestRefExtInfoProcess (
+    FILE * qcr_ref,
+<a name="anchor-99"></a>    ProExtRefInfo * info)
+{
+    ProError err = PRO_TK_NO_ERROR;
+    int i;
+
+<a name="anchor-100"></a>    ProTKFprintf (qcr_ref,&quot;Ext. ref. info : type %d n_refs : %d\n&quot;,
+	info->type, info->n_refs);
+
+    for (i = 0; i&lt; info->n_refs; i++)
+    {
+<a name="anchor-101"></a>	ProTKFprintf (qcr_ref,&quot;the number of ProExtFeatRef item : %d \n&quot;, i);
+	err = ProTestExtFeatRefProcess (qcr_ref, info->ext_refs[i]);
+    }
+
+    ProTKFprintf (qcr_ref,&quot;End of ext. ref. info\n&quot;);
+<a name="anchor-102"></a>    return (err);
+}
+
+/*====================================================================*\
+  Function : ProTestRefExtIfoArrProcess()
+<a name="anchor-103"></a>  Purpose  : 
+\*====================================================================*/
+ProError ProTestRefExtIfoArrProcess (
+    FILE * qcr_ref,
+    ProExtRefInfo * infos,
+<a name="anchor-104"></a>    int n_infos)
+{
+    ProError err = PRO_TK_NO_ERROR;
+    int i;
+
+<a name="anchor-105"></a>    for (i = 0; i&lt; n_infos; i++)
+	err = ProTestRefExtInfoProcess (qcr_ref, &amp;(infos[i]));
+	
+    return (err);
+}
+<a name="anchor-106"></a>
+
+/*====================================================================*\
+  Function : ProTestFeatureExternGet()
+  Purpose  : 
+<a name="anchor-107"></a>\*====================================================================*/
+ProError ProTestFeatureExternGet (
+    ProFeature * feature,
+    ProExtRefType type,
+    ProExtRefInfo ** infos,
+<a name="anchor-108"></a>    int * n_infos,
+    TestRels rel)
+{
+    ProError err = PRO_TK_NO_ERROR;
+
+<a name="anchor-109"></a>    
+    if (rel == TEST_CHILDREN_GET)
+    {
+	  
+	err = ProFeatureExternChildrenGet (feature, type, infos, n_infos);
+<a name="anchor-110"></a>	TEST_CALL_REPORT(&quot;ProFeatureExternChildrenGet()&quot;,
+	&quot;ProTestFeatureExternGet()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+	   
+    }
+<a name="anchor-111"></a>    else
+    {
+	   
+	err = ProFeatureExternParentsGet (feature, type, infos, n_infos);
+	TEST_CALL_REPORT(&quot;ProFeatureExternParentsGet()&quot;,
+<a name="anchor-112"></a>	&quot;ProTestFeatureExternGet()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+	   
+    }
+	
+<a name="anchor-113"></a>
+
+    return (err);
+}
+
+<a name="anchor-114"></a>/*====================================================================*\
+  Function : ProTestSolidExternGet()
+  Purpose  : 
+\*====================================================================*/
+ProError ProTestSolidExternGet (
+<a name="anchor-115"></a>    ProSolid solid,
+    ProExtRefType type,
+    ProExtRefInfo ** infos,
+    int * n_infos,
+    TestRels rel)
+<a name="anchor-116"></a>{
+    ProError err = PRO_TK_NO_ERROR;
+     
+    if (rel == TEST_CHILDREN_GET)
+    {
+<a name="anchor-117"></a>	    
+	err = ProSolidExternChildrenGet (solid, type, infos, n_infos);
+	TEST_CALL_REPORT(&quot;ProSolidExternChildrenGet()&quot;,
+	&quot;ProTestFeatureExternGet()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+<a name="anchor-118"></a>	   
+    }
+    else
+    {
+	   
+<a name="anchor-119"></a>	err = ProSolidExternParentsGet (solid, type, infos, n_infos);
+	TEST_CALL_REPORT(&quot;ProSolidExternParentsGet()&quot;,
+	&quot;ProTestFeatureExternGet()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+	    
+<a name="anchor-120"></a>    }
+	
+
+
+    return (err);
+<a name="anchor-121"></a>}
+
+/*====================================================================*\
+  Function : ProTestFeatuteExtrefinfo()
+  Purpose  : 
+<a name="anchor-122"></a>\*====================================================================*/
+ProError ProTestFeatuteExtrefinfo (
+    FILE * qcr_ref,
+    ProExtRefType type,
+    ProFeature * feature,
+<a name="anchor-123"></a>    TestRels rel)
+{
+    ProError err = PRO_TK_NO_ERROR;
+    ProExtRefInfo * infos = NULL;
+    int n_infos;
+<a name="anchor-124"></a>
+    ProTKFprintf (qcr_ref, &quot;Proccess a new feature. ID is : %d, Type is %d\n&quot;,
+	feature->type, feature->id);
+
+    err = ProTestFeatureExternGet (feature, type, &amp;infos, &amp;n_infos, rel);
+<a name="anchor-125"></a>    if (err != PRO_TK_NO_ERROR)
+	return err;
+    
+    err = ProTestRefExtIfoArrProcess (qcr_ref, infos, n_infos );
+       
+<a name="anchor-126"></a>    err = ProExtRefInfoFree ( &amp;infos);
+    TEST_CALL_REPORT(&quot;ProExtRefInfoFree()&quot;,
+	&quot;ProTestFeatuteExtrefinfo()&quot;,
+	    err, err != PRO_TK_NO_ERROR); 
+       
+<a name="anchor-127"></a>    return (err);
+}
+
+/*====================================================================*\
+  Function : ProTestSolidExtrefinfo()
+<a name="anchor-128"></a>  Purpose  : 
+\*====================================================================*/
+ProError ProTestSolidExtrefinfo (
+    FILE * qcr_ref,
+    ProExtRefType type,
+<a name="anchor-129"></a>    ProSolid solid,
+    TestRels rel)
+{
+    ProError err = PRO_TK_NO_ERROR;
+    ProExtRefInfo * infos=NULL;
+<a name="anchor-130"></a>    int n_infos;
+
+    ProTKFprintf (qcr_ref, &quot;Proccess a new solid. Ref. type : %d&quot;, type);
+    if (rel ==TEST_CHILDREN_GET)
+	ProTKFprintf (qcr_ref,&quot; Getting children... \n\n&quot;);
+<a name="anchor-131"></a>    else
+	ProTKFprintf (qcr_ref,&quot; Getting parents... \n\n&quot;);
+    err = ProTestSolidInfoWrite (qcr_ref, solid);
+
+    err = ProTestSolidExternGet (solid, type, &amp;infos, &amp;n_infos, rel);
+<a name="anchor-132"></a>    if (err != PRO_TK_NO_ERROR)
+	return err;
+    
+    err = ProTestRefExtIfoArrProcess (qcr_ref, infos, n_infos );
+	
+<a name="anchor-133"></a>    err = ProExtRefInfoFree ( &amp;infos);
+    TEST_CALL_REPORT(&quot;ProExtRefInfoFree()&quot;,
+	&quot;ProTestSolidExtrefinfo()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+    ProTKFprintf (qcr_ref, &quot;\nEnd\n\n&quot;);
+<a name="anchor-134"></a>    
+    return (err);
+}
+
+/*====================================================================*\
+<a name="anchor-135"></a>  Function : ProTestFeatuteSelectExtrefinfo()
+  Purpose  : 
+\*====================================================================*/
+ProError ProTestFeatuteSelectExtrefinfo (
+    FILE * qcr_ref,
+<a name="anchor-136"></a>    ProExtRefType type,
+    TestRels rel)
+{
+    ProError err = PRO_TK_NO_ERROR;
+    int n_sel;
+<a name="anchor-137"></a>    ProSelection *sel_feat;
+    ProFeature feat; 
+
+err = ProSelect((char *)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel_feat, &amp;n_sel);
+    if (n_sel &lt; 1 || err  != PRO_TK_NO_ERROR)
+<a name="anchor-138"></a>	return PRO_TK_NO_ERROR;
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestFeatuteSelectExtrefinfo()&quot;,
+	    err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_USER_ABORT &amp;&amp;
+	    err != PRO_TK_PICK_ABOVE);
+    
+<a name="anchor-139"></a>    err = ProSelectionModelitemGet ( sel_feat[0], &amp;feat);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+			         &quot;ProTestFeatuteSelectExtrefinfo()&quot;,
+		     err, err != PRO_TK_NO_ERROR );    
+    
+<a name="anchor-140"></a>    err = ProTestFeatuteExtrefinfo (qcr_ref, type,  &amp;feat, rel);
+    return err;
+}
+
+
+<a name="anchor-141"></a>
+
+
+/*====================================================================*\
+  Function : ProTestSolidSelectExtrefinfo()
+<a name="anchor-142"></a>  Purpose  : 
+\*====================================================================*/
+ProError ProTestSolidSelectExtrefinfo (
+    FILE * qcr_ref,
+    ProExtRefType type,
+<a name="anchor-143"></a>    TestRels rel)
+{
+    ProError err = PRO_TK_NO_ERROR;
+    int n_sel;
+    ProSelection *sel_feat;
+<a name="anchor-144"></a>    ProModelitem modelitem;
+    ProSolid solid;
+
+    err = ProSelect((char *)&quot;prt_or_asm&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel_feat, &amp;n_sel);
+    if (n_sel &lt; 1 || err  != PRO_TK_NO_ERROR)
+<a name="anchor-145"></a>	return PRO_TK_NO_ERROR;
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestSolidSelectExtrefinfo()&quot;,
+	    err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_USER_ABORT &amp;&amp;
+	    err != PRO_TK_PICK_ABOVE);
+    
+<a name="anchor-146"></a>    err = ProSelectionModelitemGet ( sel_feat[0], &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+			         &quot;ProTestSolidSelectExtrefinfo()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+    
+<a name="anchor-147"></a>    err = ProModelitemMdlGet ( &amp;modelitem, (ProMdl*) &amp;solid);
+    TEST_CALL_REPORT(&quot;ProModelitemMdlGet()&quot;,
+	&quot;ProTestSolidSelectExtrefinfo()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+    
+<a name="anchor-148"></a>    err = ProTestSolidExtrefinfo (qcr_ref, type,  solid, rel);
+    return err;
+}
+
+/*====================================================================*\
+<a name="anchor-149"></a>  Function : ProTestSolidExtrefinfoVisitAction()
+  Purpose  : 
+\*====================================================================*/
+ProError  ProTestSolidExtrefinfoVisitAction(
+    ProFeature * p_feat,
+<a name="anchor-150"></a>    ProError status,
+    ProAppData app_data)
+{
+    ExtrefinfoMenuState *st = (ExtrefinfoMenuState*) app_data;
+    
+<a name="anchor-151"></a>    ProTestFeatuteExtrefinfo (st->qcr_ref, st->type,  p_feat, st->rels);
+
+    return PRO_TK_NO_ERROR;
+}
+
+<a name="anchor-152"></a>/*====================================================================*\
+  Function : ProTestSolidAllfeatExtrefinfo()
+  Purpose  : 
+\*====================================================================*/
+ProError  ProTestSolidAllfeatExtrefinfo(
+<a name="anchor-153"></a>    FILE * qcr_ref,
+    ProExtRefType type,
+    TestRels rel)
+
+{
+<a name="anchor-154"></a>    ProError err = PRO_TK_NO_ERROR;
+    int n_sel;
+    ProSelection *sel_feat;
+    ProModelitem modelitem;
+    ProSolid solid;
+<a name="anchor-155"></a>    ExtrefinfoMenuState st;
+    
+    st.type = type;
+    st.rels = rel;
+    st.qcr_ref = qcr_ref;
+<a name="anchor-156"></a>    
+
+    err = ProSelect((char *)&quot;prt_or_asm&quot;, 1, NULL, NULL, NULL, NULL, &amp;sel_feat, &amp;n_sel);
+    if (n_sel &lt; 1 || err  != PRO_TK_NO_ERROR)
+	return PRO_TK_NO_ERROR;
+<a name="anchor-157"></a>    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestSolidAllfeatExtrefinfo()&quot;,
+	    err, err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_USER_ABORT &amp;&amp;
+	    err != PRO_TK_PICK_ABOVE);
+    
+    err = ProSelectionModelitemGet ( sel_feat[0], &amp;modelitem);
+<a name="anchor-158"></a>    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;,
+			         &quot;ProTestSolidAllfeatExtrefinfo()&quot;,
+		     err, err != PRO_TK_NO_ERROR );
+    
+    err = ProModelitemMdlGet ( &amp;modelitem, (ProMdl*) &amp;solid);
+<a name="anchor-159"></a>    TEST_CALL_REPORT(&quot;ProModelitemMdlGet()&quot;,
+	&quot;ProTestSolidAllfeatExtrefinfo()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+
+    err = ProSolidFeatVisit ( solid,
+<a name="anchor-160"></a>	(ProFeatureVisitAction) ProTestSolidExtrefinfoVisitAction,
+	NULL,
+	(ProAppData) &amp;st);
+    TEST_CALL_REPORT (&quot;ProSolidFeatVisit()&quot;,
+	&quot;ProTestSolidAllfeatExtrefinfo()&quot;, err ,
+<a name="anchor-161"></a>         err != PRO_TK_NO_ERROR);
+    return err;
+}
+
+/*====================================================================*\
+<a name="anchor-162"></a>  Function : ProTestAllSolidExtrefinfo()
+  Purpose  : 
+\*====================================================================*/
+ProError  ProTestAllSolidExtrefinfo(
+    FILE * qcr_ref,
+<a name="anchor-163"></a>    ProExtRefType type,
+    TestRels rel)
+
+{
+    ProError err = PRO_TK_NO_ERROR;
+<a name="anchor-164"></a>    ProMdl *session_mdls;
+   int arr_size = 0, i;
+
+   err = ProSessionMdlList (PRO_MDL_PART, &amp; session_mdls, &amp;arr_size);
+   TEST_CALL_REPORT(&quot;ProSessionMdlList()&quot;, &quot;ProTestAllSolidExtrefinfo()&quot;,
+<a name="anchor-165"></a>				  err, err != PRO_TK_NO_ERROR);
+
+   for (i = 0; i&lt;arr_size; i++)
+    {
+	err = ProTestSolidExtrefinfo (qcr_ref, type,
+<a name="anchor-166"></a>	    (ProSolid) session_mdls[i], rel);
+	
+    }
+    err = ProArrayFree ((ProArray*)&amp; session_mdls);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestAllSolidExtrefinfo()&quot;,
+<a name="anchor-167"></a>				  err, err != PRO_TK_NO_ERROR);
+    
+    return (err);
+}
+
+<a name="anchor-168"></a>/*====================================================================*\
+  Function : ProTestAllSolidAllfeatExtrefinfo()
+  Purpose  : 
+\*====================================================================*/
+ProError  ProTestAllSolidAllfeatExtrefinfo(
+<a name="anchor-169"></a>    FILE * qcr_ref,
+    ProExtRefType type,
+    TestRels rel)
+
+{
+<a name="anchor-170"></a>    ProError err = PRO_TK_NO_ERROR;
+    ProMdl *session_mdls;
+   int arr_size = 0, i;
+   ExtrefinfoMenuState st;
+    
+<a name="anchor-171"></a>    st.type = type;
+    st.rels = rel;
+    st.qcr_ref = qcr_ref;
+
+   err = ProSessionMdlList (PRO_MDL_PART, &amp; session_mdls, &amp;arr_size);
+<a name="anchor-172"></a>   TEST_CALL_REPORT(&quot;ProSessionMdlList()&quot;,&quot;ProTestAllSolidAllfeatExtrefinfo()&quot;,
+				  err, err != PRO_TK_NO_ERROR);
+
+   for (i = 0; i&lt;arr_size; i++)
+    {
+<a name="anchor-173"></a>	
+	err = ProSolidFeatVisit ( (ProSolid) session_mdls[i],
+	(ProFeatureVisitAction) ProTestSolidExtrefinfoVisitAction,
+	NULL,
+	(ProAppData) &amp;st);
+<a name="anchor-174"></a>         TEST_CALL_REPORT (&quot;ProSolidFeatVisit()&quot;,
+	&quot;ProTestAllSolidAllfeatExtrefinfo()&quot;, err ,
+         err != PRO_TK_NO_ERROR);
+	
+    }
+<a name="anchor-175"></a>    err = ProArrayFree ((ProArray*)&amp; session_mdls);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestAllSolidAllfeatExtrefinfo()&quot;,
+				  err, err != PRO_TK_NO_ERROR);
+    
+    return (err);
+<a name="anchor-176"></a>}
+
+
+/*====================================================================*\
+  Function : ProTestExtrefinfoActionProccess()
+<a name="anchor-177"></a>  Purpose  : Menu callback
+\*====================================================================*/
+int ProTestExtrefinfoActionProccess (ProAppData data, int dummy)
+{
+    ExtrefinfoMenuState *st = (ExtrefinfoMenuState*) data;
+<a name="anchor-178"></a>
+    switch (st->action_type)
+    {
+	case TEST_FEATURE_SELECT:
+	    ProTestFeatuteSelectExtrefinfo (st->qcr_ref,
+<a name="anchor-179"></a>		st->type, st->rels);
+	    break;
+	case TEST_SOLID_SELECT:
+	    ProTestSolidSelectExtrefinfo (st->qcr_ref,
+		st->type, st->rels);
+<a name="anchor-180"></a>	    break;
+	case TEST_SOLID_ALL_FEATS:
+	    ProTestSolidAllfeatExtrefinfo(st->qcr_ref,
+		st->type, st->rels);
+	    break;
+<a name="anchor-181"></a>	case TEST_ALL_SOLIDS:
+	    ProTestAllSolidExtrefinfo (st->qcr_ref,
+		st->type, st->rels);
+	    break;
+	case TEST_ALL_SOLIDS_ALL_FEATS:
+<a name="anchor-182"></a>	    ProTestAllSolidAllfeatExtrefinfo (st->qcr_ref,
+		st->type, st->rels);
+	    break;
+    }
+
+<a name="anchor-183"></a>    
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-184"></a>  Function : ProTestMenuSetup()
+  Purpose  : 
+\*====================================================================*/
+ProError  ProTestMenuSetup (
+    TestMenuStruct * menu,
+<a name="anchor-185"></a>    ProMenubuttonAction action,
+    ProAppData data,
+    int button_int,
+    TestMenubuttonStruct *buttons,
+    char * menu_name)
+<a name="anchor-186"></a>{
+    ProError err;
+    int i, size, id;
+    wchar_t ** names;
+
+<a name="anchor-187"></a>    for (i=0;;i++)
+	if(strcmp (buttons[i].buttun_name, &quot;&quot;) == 0)
+	    break;
+
+    
+<a name="anchor-188"></a>    size = i;
+    names = (wchar_t**)calloc(size+1, sizeof(wchar_t*));
+    
+    for (i=0; i&lt;=size; i++)
+    {
+<a name="anchor-189"></a>	names[i] = (wchar_t*)calloc(PRO_NAME_SIZE, sizeof(wchar_t));
+	ProStringToWstring(names[i], buttons[i].buttun_name );
+    }
+
+    err = ProMenuFromStringsRegister(menu_name, NULL, names, NULL, 
+<a name="anchor-190"></a>	    NULL, &amp;id);
+
+    TEST_CALL_REPORT(&quot;ProMenuFromStringsRegister()&quot;, &quot;ProTestMenuSetup()&quot;,
+	    err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-191"></a>    for (i=0; i&lt;size+1; i++)
+	free(names[i]);
+    
+    free(names);
+
+<a name="anchor-192"></a>    for (i=0; i&lt;=size; i++)
+    {
+    	ProMenubuttonActionSet(menu_name, buttons[i].buttun_name,
+	  ((buttons[i].action == NULL)? action : buttons[i].action),
+	    ((buttons[i].data == NULL)? data : buttons[i].data),
+<a name="anchor-193"></a>	    ((buttons[i].button_int == UNUSED_MENU_INT ) ?button_int :
+	           buttons[i].button_int));
+    }
+
+
+<a name="anchor-194"></a>    ProMenubuttonActionSet(menu_name ,menu_name,
+	 menu->exit_action, menu->exit_data, menu->exit_button_int);
+    return err;
+}
+
+<a name="anchor-195"></a>/*====================================================================*\
+  Function : ()
+  Purpose  : 
+\*====================================================================*/
+int ProTestCompmenuQuit(ProAppData p_member, int option)
+<a name="anchor-196"></a>{
+    ProError status;
+
+    status = ProMenuDelete();
+    status = ProMenuDelete();
+<a name="anchor-197"></a>    status = ProMenuDelete();
+    status = ProMenuDelete();
+
+    TEST_CALL_REPORT(&quot;ProMenuDelete()&quot;,&quot;ProTestDoneCancelAssign()&quot;, status,
+    				status != PRO_TK_NO_ERROR);
+<a name="anchor-198"></a>    
+    return (0);
+}
+
+int ProTestScopeAssign(ProAppData p_member, int option);
+<a name="anchor-199"></a>
+/*====================================================================*\
+  Function : ProTestExtrefinfoMenuAction()
+  Purpose  : Menu callback
+\*====================================================================*/
+<a name="anchor-200"></a>int  ProTestExtrefinfoMenuAction (ProAppData data, int dummy)
+{
+    ProError err;
+    ExtrefinfoMenuState st;
+    int dummyx;
+<a name="anchor-201"></a>    static char * menus[] = {&quot;Relation&quot;, &quot;Act. Type&quot;, &quot;Ref. Type&quot;,
+			     &quot;ProcExit&quot;, &quot;&quot;};
+    TestMenubuttonStruct ch_par_buttons [] =
+    {
+	{
+<a name="anchor-202"></a>	    (char *)&quot;Get Children&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	      NULL,
+	     (int)TEST_CHILDREN_GET
+	},
+<a name="anchor-203"></a>	{
+	    (char *)&quot;Get Parents&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)TEST_PARENTS_GET
+<a name="anchor-204"></a>	},
+	{
+	    (char *)&quot;&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+<a name="anchor-205"></a>	     (int)TEST_PARENTS_GET
+	}
+    };
+    
+    TestMenuStruct RelMenu = {
+<a name="anchor-206"></a>	NULL,
+        (ProMenubuttonAction)ProMenuDelete,
+        NULL,
+        0
+    };
+<a name="anchor-207"></a>
+    TestMenubuttonStruct action_type_buttons [] =
+    {
+	{
+	    (char *)&quot;Feat Select&quot;,
+<a name="anchor-208"></a>	     (ProMenubuttonAction)ProTestScopeAssign,
+	      NULL,
+	     (int)TEST_FEATURE_SELECT
+	},
+	{
+<a name="anchor-209"></a>	    (char *)&quot;Solid Select&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)TEST_SOLID_SELECT
+	},
+<a name="anchor-210"></a>	{
+	    (char *)&quot;All Feat in Solid&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)TEST_SOLID_ALL_FEATS
+<a name="anchor-211"></a>	},
+	{
+	    (char *)&quot;All Solids&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+<a name="anchor-212"></a>	     (int)TEST_ALL_SOLIDS
+	},
+	{
+	    (char *)&quot;All Feats in All Solids&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+<a name="anchor-213"></a>	     NULL,
+	     (int)TEST_ALL_SOLIDS_ALL_FEATS
+	},
+	{
+	    (char *)&quot;&quot;,
+<a name="anchor-214"></a>	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)TEST_ALL_SOLIDS_ALL_FEATS
+	}
+    };
+<a name="anchor-215"></a>     TestMenuStruct ActTypeMenu = {
+	NULL,
+        (ProMenubuttonAction)ProMenuDelete,
+        NULL,
+        0
+<a name="anchor-216"></a>    };
+
+    TestMenubuttonStruct ext_ref_type_buttons [] =
+    {
+	{
+<a name="anchor-217"></a>	    (char *)&quot;PRO_EXT_GEOM_REF&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)PRO_EXT_GEOM_REF
+	},
+<a name="anchor-218"></a>	{
+	    (char *)&quot;PRO_LOC_GEOM_REF&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)PRO_LOC_GEOM_REF
+<a name="anchor-219"></a>	},
+	{
+	    (char *)&quot;PRO_MERGE_REF&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+<a name="anchor-220"></a>	     (int)PRO_MERGE_REF
+	},
+	{
+	    (char *)&quot;PRO_EXT_REL_REF&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+<a name="anchor-221"></a>	     NULL,
+	     (int)PRO_EXT_REL_REF
+	},
+	{
+	    (char *)&quot;PRO_LOC_REL_REF&quot;,
+<a name="anchor-222"></a>	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)PRO_LOC_REL_REF
+	},
+	{
+<a name="anchor-223"></a>	    (char *)&quot;PRO_PRGM_REF&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)PRO_PRGM_REF
+	},
+<a name="anchor-224"></a>	{
+	    (char *)&quot;PRO_MOVE_COMP_REF&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)PRO_MOVE_COMP_REF
+<a name="anchor-225"></a>	},
+	{
+	    (char *)&quot;PRO_SUBS_REF&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+<a name="anchor-226"></a>	     (int)PRO_SUBS_REF
+	},
+	{
+	    (char *)&quot;PRO_MFG_INFO_REF&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+<a name="anchor-227"></a>	     NULL,
+	     (int)PRO_MFG_INFO_REF
+	},
+	{
+	    (char *)&quot;PRO_INTRCH_REF&quot;,
+<a name="anchor-228"></a>	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)PRO_INTRCH_REF
+	},
+	{
+<a name="anchor-229"></a>	    (char *)&quot;PRO_HARN_REF&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)PRO_HARN_REF
+	},
+<a name="anchor-230"></a>	{
+	    (char *)&quot;PRO_FEAT_PAT_REF&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)PRO_FEAT_PAT_REF
+<a name="anchor-231"></a>	},
+	{
+	    (char *)&quot;PRO_ALL_EXT_REF_TYPES&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+<a name="anchor-232"></a>	     (int)PRO_ALL_EXT_REF_TYPES
+	},
+	{
+	    (char *)&quot;PRO_ALL_REF_TYPES&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+<a name="anchor-233"></a>	     NULL,
+	     (int)PRO_ALL_REF_TYPES
+	},
+	{
+	    (char *)&quot;&quot;,
+<a name="anchor-234"></a>	     (ProMenubuttonAction)ProTestScopeAssign,
+	     NULL,
+	     (int)PRO_ALL_REF_TYPES
+	}
+    };
+<a name="anchor-235"></a>
+    TestMenuStruct RefTypeMenu = {
+	NULL,
+        (ProMenubuttonAction)ProMenuDelete,
+        NULL,
+<a name="anchor-236"></a>        0
+    };
+
+    TestMenubuttonStruct exit_proc_buttons [] =
+    {
+<a name="anchor-237"></a>	{
+	    (char *)&quot;Proccess&quot;,
+	     (ProMenubuttonAction)ProTestExtrefinfoActionProccess,
+	     NULL,
+	     0
+<a name="anchor-238"></a>	},
+	{
+	    (char *)&quot;Quit&quot;,
+	     (ProMenubuttonAction)ProTestCompmenuQuit,
+	     NULL,
+<a name="anchor-239"></a>	     0
+	},
+	{
+	    (char *)&quot;&quot;,
+	     (ProMenubuttonAction)ProTestScopeAssign,
+<a name="anchor-240"></a>	     NULL,
+	     0
+	}
+    };
+
+<a name="anchor-241"></a>     TestMenuStruct ExitProcMenu = {
+	NULL,
+        (ProMenubuttonAction)ProMenuDelete,
+        NULL,
+        0
+<a name="anchor-242"></a>    };
+
+    st.qcr_ref = *((FILE**) data);
+    ProTestFileOpen (&amp;(st.qcr_ref));
+    *((FILE**) data) = st.qcr_ref;
+<a name="anchor-243"></a>
+
+    ProTestMenuSetup (&amp;RelMenu, (ProMenubuttonAction) NULL,
+	(ProAppData)&amp;(st.rels), 0, ch_par_buttons, menus[0]);
+    
+<a name="anchor-244"></a>    ProTestMenuSetup (&amp;ActTypeMenu, (ProMenubuttonAction) NULL,
+	(ProAppData)&amp;(st.action_type), 0, action_type_buttons, menus[1]);
+    
+    ProTestMenuSetup (&amp;RefTypeMenu, (ProMenubuttonAction) NULL,
+	(ProAppData)&amp;(st.type), 0, ext_ref_type_buttons, menus[2]);
+<a name="anchor-245"></a>    
+    ProTestMenuSetup (&amp;ExitProcMenu, (ProMenubuttonAction) NULL,
+	(ProAppData) &amp;st, 0, exit_proc_buttons, menus[3]);
+
+
+<a name="anchor-246"></a>
+    err = ProCompoundmenuCreate(menus, &amp;dummyx);
+    TEST_CALL_REPORT (&quot;ProCompoundmenuCreate()&quot;,&quot;ProTestExtrefinfoMenuAction()&quot;,
+	 err ,
+         err != PRO_TK_NO_ERROR);
+<a name="anchor-247"></a>
+     err = ProMenuProcess(menus[0], &amp;dummyx);
+     TEST_CALL_REPORT (&quot;ProMenuProcess()&quot;, 
+                   &quot;ProTestExtrefinfoMenuAction()&quot;,
+	           err, err != PRO_TK_NO_ERROR);
+<a name="anchor-248"></a>     return (PRO_TK_NO_ERROR);
+}
+
+
+</pre>
+</body>
+</html>

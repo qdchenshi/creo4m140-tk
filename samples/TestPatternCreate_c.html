@@ -1,0 +1,1114 @@
+<html>
+<head>
+<title>TestPatternCreate.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*-------------------------- Pro/Toolkit includes ---------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProUtil.h>
+<a name="anchor-2"></a>#include &lt;ProMessage.h>
+#include &lt;ProSolid.h>
+#include &lt;ProPattern.h>
+#include &lt;ProFeature.h>
+#include &lt;ProArray.h>
+<a name="anchor-3"></a>#include &lt;ProDtlitem.h>
+#include &lt;ProDtlentity.h>
+
+/*-------------------------- Application includes ---------------------------*/
+#include &lt;TestError.h>
+<a name="anchor-4"></a>#include &lt;TestFeat.h>
+#include &lt;UtilFiles.h>
+#include &lt;UtilString.h>
+#include &lt;PTApplsUnicodeUtils.h>
+
+<a name="anchor-5"></a>
+static wchar_t PT_MSGFIL[] =
+{'f','e','a','t','_','m','s','g','.','t','x','t','\0'};
+
+
+<a name="anchor-6"></a>static ProError status = PRO_TK_NO_ERROR;
+static ProError visit_GeomFeat(ProGeomitem *item, ProError stat, ProAppData app_data);
+
+/*================================================================*\
+FUNCTION  : ProTestAxisPattern()
+<a name="anchor-7"></a>PURPOSE   : Creates Axis pattern
+\*================================================================*/
+      
+  
+ProError ProTestAxisPattern()
+<a name="anchor-8"></a>{
+	int n_sels, numof_elems;
+    ProSelection* sels = NULL;
+    ProFeature feature;
+    ProElement elem_axis,elem_ref,elem_flip;
+<a name="anchor-9"></a>	ProElement elem_inc;
+    ProElement elem_fdir,elem_inst;
+    ProModelitem mdl_item;
+	ProElement elem_tree,elem_type,elem_rgn;
+	ProGroupStatus grp;
+<a name="anchor-10"></a>    ProSelection selections;   
+    ProReference ref;
+    double at_space, space_range[2];
+    int num_range[2];
+
+<a name="anchor-11"></a>    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select feature for pattern creation&quot;);
+    status = ProSelect ((char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProSelect&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;
+<a name="anchor-12"></a>      
+    status = ProSelectionModelitemGet (sels[0], &amp;feature);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);         
+    if ((status != PRO_TK_NO_ERROR) || (feature.type != PRO_FEATURE))
+      return PRO_TK_BAD_INPUTS;
+<a name="anchor-13"></a>            	
+	status  = ProFeatureGroupStatusGet(&amp;feature,&amp;grp);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProSelect&quot;, status);
+   /*====================================================================*\
+      Pattern Root
+<a name="anchor-14"></a>   \*====================================================================*/  
+	status = ProElementAlloc(PRO_E_PATTERN_ROOT,&amp;elem_tree);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_TYPE,&amp;elem_type);
+<a name="anchor-15"></a>    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProSelect&quot;, status);
+	status = ProElementIntegerSet(elem_type,PRO_GENPAT_AXIS_DRIVEN);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProSelect&quot;, status);
+	status = ProElemtreeElementAdd(elem_tree,NULL,elem_type);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProSelect&quot;, status);
+<a name="anchor-16"></a>
+    /*====================================================================*\
+       AXIS PATTERN
+    \*====================================================================*/
+
+<a name="anchor-17"></a>	status = ProElementAlloc(PRO_E_GENPAT_AXIS,&amp;elem_axis);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    status = ProElemtreeElementAdd(elem_tree,NULL,elem_axis);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+    
+<a name="anchor-18"></a>	status = ProElementAlloc(PRO_E_GENPAT_AXIS_REF,&amp;elem_ref);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select axis&quot;);  
+    status = ProSelect ((char*)&quot;axis&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+<a name="anchor-19"></a>    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProSelect&quot;, status); 
+
+    status = ProSelectionModelitemGet (sels[0], &amp;mdl_item);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);   
+    if ((status != PRO_TK_NO_ERROR) &amp;&amp; (mdl_item.type == PRO_AXIS))
+<a name="anchor-20"></a>      return status;
+	
+    status = ProSelectionAlloc(NULL,&amp;mdl_item,&amp;selections);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProSelectionAlloc&quot;, status);
+	status = ProSelectionToReference(selections,&amp;ref);
+<a name="anchor-21"></a>    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProSelectionToReference&quot;, status);
+	status = ProElementReferenceSet(elem_ref,ref);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementReferenceSet&quot;, status);
+    status = ProElemtreeElementAdd(elem_axis,NULL,elem_ref);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+<a name="anchor-22"></a>
+    status = ProElementAlloc(PRO_E_GENPAT_AXIS1_INC,&amp;elem_inc);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+  
+    space_range[0] = 0;
+<a name="anchor-23"></a>    space_range[1] = 360;
+
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Enter the distance between pattern elements&quot;);
+    ProMessageDoubleRead(space_range, &amp;at_space);
+      
+<a name="anchor-24"></a>    status = ProElementDoubleSet(elem_inc, at_space);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+    status = ProElemtreeElementAdd(elem_axis,NULL,elem_inc);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+<a name="anchor-25"></a>    status = ProElementAlloc(PRO_E_AXIS_PAT_DIR1_FLIP,&amp;elem_flip);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    status = ProElementIntegerSet(elem_flip,1);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+    status = ProElemtreeElementAdd(elem_axis,NULL,elem_flip);
+<a name="anchor-26"></a>    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+    status = ProElementAlloc(PRO_E_GENPAT_DIM_FIRST_DIR,&amp;elem_fdir);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    status = ProElemtreeElementAdd(elem_axis,NULL,elem_fdir);
+<a name="anchor-27"></a>    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+    status = ProElementAlloc(PRO_E_GENPAT_DIM_FIRST_DIR_NUM_INST,&amp;elem_inst);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+
+<a name="anchor-28"></a>    num_range[0] = 2;
+    num_range[1] = 100;
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Enter number of elements in pattern&quot;);
+    ProMessageIntegerRead(num_range, &amp;numof_elems);
+        
+<a name="anchor-29"></a>    status = ProElementIntegerSet(elem_inst,numof_elems);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;   
+      
+<a name="anchor-30"></a>    status = ProElemtreeElementAdd(elem_axis,NULL,elem_inst);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;   
+      
+<a name="anchor-31"></a>    status = ProElementAlloc(PRO_E_GENPAT_REGEN_METHOD,&amp;elem_rgn);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status; 
+      
+<a name="anchor-32"></a>    status = ProElementIntegerSet(elem_rgn,PRO_PAT_GENERAL);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;   
+      
+<a name="anchor-33"></a>    status = ProElemtreeElementAdd(elem_tree,NULL,elem_rgn);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;   
+      	
+<a name="anchor-34"></a>    status = ProPatternCreate(&amp;feature,PRO_FEAT_PATTERN,elem_tree);
+    ERROR_CHECK (&quot;ProTestAxisPattern()&quot;, &quot;ProPatternCreate&quot;, status);
+
+    if ((status != PRO_TK_NO_ERROR))
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation failed&quot;);
+<a name="anchor-35"></a>    
+    else
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation successful&quot;);
+       
+  return (status);
+<a name="anchor-36"></a>}
+
+
+/*================================================================*\
+FUNCTION  : ProTestCurvePattern()
+<a name="anchor-37"></a>PURPOSE   : Creates curve pattern
+\*================================================================*/
+
+ProError ProTestCurvePattern()
+{
+<a name="anchor-38"></a>	ProElement elem_curve;
+	ProElement elem_space;
+	ProElement elem_sketch,elem_std,elem_method;
+    ProFeature feature;
+    ProModelitem mdl_item;
+<a name="anchor-39"></a>	ProElement elem_tree,elem_type;
+	ProGroupStatus grp;
+    ProSelection selections;   
+    ProReference ref;
+    double at_space, space_range[2];
+<a name="anchor-40"></a>    int n_sels;
+    ProSelection* sels = NULL;
+    
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select feature for pattern creation&quot;);
+    status = ProSelect ((char*)&quot;membfeat&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+<a name="anchor-41"></a>    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProSelect&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;
+
+    status = ProSelectionModelitemGet (sels[0], &amp;feature);
+<a name="anchor-42"></a>    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);         
+    if ((status != PRO_TK_NO_ERROR) || (feature.type != PRO_FEATURE))
+      return PRO_TK_BAD_INPUTS;
+
+	status  = ProFeatureGroupStatusGet(&amp;feature,&amp;grp);
+<a name="anchor-43"></a>    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProFeatureGroupStatusGet&quot;, status);
+
+
+   /*====================================================================*\
+      Pattern Root
+<a name="anchor-44"></a>   \*====================================================================*/  
+	status = ProElementAlloc(PRO_E_PATTERN_ROOT,&amp;elem_tree);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_TYPE,&amp;elem_type);
+<a name="anchor-45"></a>    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_type,PRO_GENPAT_CRV_DRIVEN);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_tree,NULL,elem_type);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+<a name="anchor-46"></a>
+     /*====================================================================*\
+        CURVE PATTERN
+    \*====================================================================*/
+	status = ProElementAlloc(PRO_E_GENPAT_CURVE,&amp;elem_curve);
+<a name="anchor-47"></a>    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    status = ProElemtreeElementAdd(elem_tree,NULL,elem_curve);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_CRV_SPACING,&amp;elem_space);
+<a name="anchor-48"></a>    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+
+    space_range[0] = 0;
+    space_range[1] = 360;
+
+<a name="anchor-49"></a>    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Enter the distance between pattern elements&quot;);
+    ProMessageDoubleRead(space_range, &amp;at_space);
+      
+    status = ProElementDoubleSet(elem_space, at_space);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+<a name="anchor-50"></a>	status = ProElemtreeElementAdd(elem_curve,NULL,elem_space);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+    status = ProElementAlloc(PRO_E_STD_SECTION,&amp;elem_std);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-51"></a>	status = ProElemtreeElementAdd(elem_tree,NULL,elem_std);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_STD_SEC_METHOD,&amp;elem_method);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-52"></a>	status = ProElementIntegerSet(elem_method,0);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_std,NULL,elem_method);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+<a name="anchor-53"></a>	status = ProElementAlloc(PRO_E_SEC_USE_SKETCH,&amp;elem_sketch);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select curve&quot;);
+    status = ProSelect ((char*)&quot;curve&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+<a name="anchor-54"></a>    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProSelect&quot;, status); 
+    if ((status != PRO_TK_NO_ERROR))
+      return status;
+      
+    status = ProSelectionModelitemGet (sels[0], &amp;mdl_item);
+<a name="anchor-55"></a>    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);   
+    if ((status != PRO_TK_NO_ERROR) &amp;&amp;(mdl_item.type != PRO_CURVE))
+      return status;
+	
+    status = ProSelectionAlloc(NULL,(ProModelitem*)&amp;mdl_item,&amp;selections);
+<a name="anchor-56"></a>    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProSelectionAlloc&quot;, status);
+    status = ProSelectionToReference(selections,&amp;ref);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProSelectionToReference&quot;, status);
+	status = ProElementReferenceSet(elem_sketch,ref);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElementReferenceSet&quot;, status);
+<a name="anchor-57"></a>	status = ProElemtreeElementAdd(elem_std,NULL,elem_sketch);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+    status = ProPatternCreate(&amp;feature,PRO_FEAT_PATTERN,elem_tree);
+    ERROR_CHECK (&quot;ProTestCurvePattern()&quot;, &quot;ProPatternCreate&quot;, status);
+<a name="anchor-58"></a>
+    if ((status != PRO_TK_NO_ERROR))
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation failed&quot;);
+    
+    else
+<a name="anchor-59"></a>      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation successful&quot;);
+
+  return (status); 
+} 
+
+<a name="anchor-60"></a>
+/*================================================================*\
+FUNCTION  : ProTestGeneralPattern()
+PURPOSE   : Creates general pattern
+\*================================================================*/
+<a name="anchor-61"></a>
+ProError ProTestGeneralPattern()
+{
+    ProElement elem_dir,elem_cmpd;
+    ProElement elem_dim,elem_var,elem_value,elem_dim1;
+<a name="anchor-62"></a>    ProElement elem_inst;
+    ProFeature feature;
+    ProModelitem mdl_item;
+	ProElement elem_tree,elem_type,elem_rgn;
+    ProSelection selections;   
+<a name="anchor-63"></a>    ProReference ref;
+    double at_space, space_range[2];
+    int num_range[2];
+    int n_sels, numof_elems;
+    ProSelection* sels = NULL;	
+<a name="anchor-64"></a>	
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select feature for pattern creation&quot;);
+    status = ProSelect ((char*)&quot;membfeat&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProSelect&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+<a name="anchor-65"></a>      return status;
+
+    status = ProSelectionModelitemGet (sels[0], &amp;feature);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);         
+    if ((status != PRO_TK_NO_ERROR) || (feature.type != PRO_FEATURE))
+<a name="anchor-66"></a>      return PRO_TK_BAD_INPUTS;
+
+    status = ProElementAlloc(PRO_E_PATTERN_ROOT,&amp;elem_tree);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+
+<a name="anchor-67"></a>	status = ProElementAlloc(PRO_E_GENPAT_TYPE,&amp;elem_type);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_type,PRO_GENPAT_DIM_DRIVEN);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_tree,NULL,elem_type);
+<a name="anchor-68"></a>
+    status = ProElementAlloc(PRO_E_GENPAT_REGEN_METHOD,&amp;elem_rgn);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_rgn,PRO_PAT_GENERAL);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+<a name="anchor-69"></a>	status = ProElemtreeElementAdd(elem_tree,NULL,elem_rgn);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_DIM,&amp;elem_dim);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-70"></a>	status = ProElemtreeElementAdd(elem_tree,NULL,elem_dim);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+    status = ProElementAlloc(PRO_E_GENPAT_DIM_FIRST_DIR,&amp;elem_dir);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-71"></a>	status = ProElemtreeElementAdd(elem_dim,NULL,elem_dir);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+    status = ProElementAlloc(PRO_E_GENPAT_DIM_DIR_COMPOUND,&amp;elem_cmpd);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-72"></a>	status = ProElemtreeElementAdd(elem_dir,NULL,elem_cmpd);
+
+	status = ProElementAlloc(PRO_E_GENPAT_DIR_DIMENSION,&amp;elem_dim1);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    
+<a name="anchor-73"></a>    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select dimension&quot;);    
+    status = ProSelect ((char*)&quot;dimension&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProSelect&quot;, status); 
+    if ((status != PRO_TK_NO_ERROR))
+      return status;
+<a name="anchor-74"></a>      
+    status = ProSelectionModelitemGet (sels[0], &amp;mdl_item);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);   
+    if ((status != PRO_TK_NO_ERROR) &amp;&amp;(mdl_item.type != PRO_DIMENSION))
+      return status;
+<a name="anchor-75"></a>
+	status = ProSelectionAlloc(NULL,&amp;mdl_item,&amp;selections);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProSelectionAlloc&quot;, status);
+	status = ProSelectionToReference(selections,&amp;ref);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProSelectionToReference&quot;, status);
+<a name="anchor-76"></a>	status = ProElementReferenceSet(elem_dim1,ref);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementReferenceSet&quot;, status);
+    status = ProElemtreeElementAdd(elem_cmpd,NULL,elem_dim1);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+<a name="anchor-77"></a>	status = ProElementAlloc(PRO_E_GENPAT_DIR_VAR_TYPE,&amp;elem_var);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_var,PRO_PAT_VALUE_DRIVEN);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_cmpd,NULL,elem_var);
+<a name="anchor-78"></a>    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_DIR_VAR_VALUE,&amp;elem_value);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    
+<a name="anchor-79"></a>    space_range[0] = 0;
+    space_range[1] = 360;
+
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Enter the distance between pattern elements&quot;);
+    ProMessageDoubleRead(space_range, &amp;at_space);
+<a name="anchor-80"></a>        
+	status = ProElementDoubleSet(elem_value,at_space);
+	ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+            
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+<a name="anchor-81"></a>	status = ProElemtreeElementAdd(elem_cmpd,NULL,elem_value);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_DIM_FIRST_DIR_NUM_INST,&amp;elem_inst);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-82"></a>    
+    num_range[0] = 2;
+    num_range[1] = 100;
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Enter number of elements in pattern&quot;);
+    ProMessageIntegerRead(num_range, &amp;numof_elems);
+<a name="anchor-83"></a>        
+	status = ProElementIntegerSet(elem_inst,numof_elems);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+    {
+<a name="anchor-84"></a>      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation failed&quot;);
+      return status;
+    }
+    
+	status = ProElemtreeElementAdd(elem_dim,NULL,elem_inst);
+<a name="anchor-85"></a>    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+    {
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation failed&quot;);
+      return status;
+<a name="anchor-86"></a>    } 
+    
+	status = ProPatternCreate(&amp;feature, PRO_FEAT_PATTERN,elem_tree);
+    ERROR_CHECK (&quot;ProTestGeneralPattern()&quot;, &quot;ProPatternCreate&quot;, status);
+
+<a name="anchor-87"></a>    if ((status != PRO_TK_NO_ERROR))
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation failed&quot;);
+    
+    else
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation successful&quot;);
+<a name="anchor-88"></a>
+  return (status); 
+}
+
+
+<a name="anchor-89"></a>/*================================================================*\
+FUNCTION  : ProTestDirectionPattern()
+PURPOSE   : Creates direction pattern
+\*================================================================*/
+
+<a name="anchor-90"></a>ProError ProTestDirectionPattern()  
+{
+
+	ProElement elem_dir,elem_opt,elem_dir1,elem_cmpd,elem_ref,elem_flip;
+	ProElement elem_dir1_flip,elem_inc;
+<a name="anchor-91"></a>    ProElement elem_fdir,elem_inst;
+    ProFeature feature;
+    ProModelitem mdl_item;
+	ProElement elem_tree,elem_type,elem_rgn;
+	ProGroupStatus grp;
+<a name="anchor-92"></a>    ProSelection selections;   
+    ProReference ref;
+    double at_space, space_range[2];
+    int num_range[2];
+    int n_sels, numof_elems;
+<a name="anchor-93"></a>    ProSelection* sels = NULL;	
+	
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select feature for pattern creation&quot;);
+    status = ProSelect ((char*)&quot;membfeat&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProSelect&quot;, status);
+<a name="anchor-94"></a>    if ((status != PRO_TK_NO_ERROR))
+      return status;
+
+    status = ProSelectionModelitemGet (sels[0], &amp;feature);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);         
+<a name="anchor-95"></a>    if ((status != PRO_TK_NO_ERROR) || (feature.type != PRO_FEATURE))
+      return PRO_TK_BAD_INPUTS;
+
+	status  = ProFeatureGroupStatusGet(&amp;feature,&amp;grp);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProFeatureGroupStatusGet&quot;, status);
+<a name="anchor-96"></a>   /*====================================================================*\
+      Pattern Root
+   \*====================================================================*/  
+	status = ProElementAlloc(PRO_E_PATTERN_ROOT,&amp;elem_tree);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-97"></a>
+	status = ProElementAlloc(PRO_E_GENPAT_TYPE,&amp;elem_type);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_type,PRO_GENPAT_DIR_DRIVEN);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+<a name="anchor-98"></a>	status = ProElemtreeElementAdd(elem_tree,NULL,elem_type);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_REGEN_METHOD,&amp;elem_rgn);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-99"></a>	status = ProElementIntegerSet(elem_rgn,PRO_PAT_GENERAL);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_tree,NULL,elem_rgn);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+<a name="anchor-100"></a>    /*====================================================================*\
+       Direction Pattern
+    \*====================================================================*/
+
+	status = ProElementAlloc(PRO_E_GENPAT_DIR,&amp;elem_dir);
+<a name="anchor-101"></a>    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+        status = ProElemtreeElementAdd(elem_tree,NULL,elem_dir);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+    
+	status = ProElementAlloc(PRO_E_GENPAT_DIR1,&amp;elem_dir1);
+<a name="anchor-102"></a>    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_dir,NULL,elem_dir1);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_DIRECTION_COMPOUND,&amp;elem_cmpd);
+<a name="anchor-103"></a>    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_dir1,NULL,elem_cmpd);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_DIRECTION_REFERENCE,&amp;elem_ref);
+<a name="anchor-104"></a>    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select surface&quot;);
+    status = ProSelect ((char*)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProSelect&quot;, status);
+<a name="anchor-105"></a>    if ((status != PRO_TK_NO_ERROR))
+      return status;
+      
+    status = ProSelectionModelitemGet (sels[0], &amp;mdl_item);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);   
+<a name="anchor-106"></a>    if ((status != PRO_TK_NO_ERROR) &amp;&amp;(mdl_item.type != PRO_SURFACE))
+      return status;
+    
+	status = ProSelectionAlloc(NULL,&amp;mdl_item,&amp;selections);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProSelectionAlloc&quot;, status);
+<a name="anchor-107"></a>        status = ProSelectionToReference(selections,&amp;ref);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProSelectionToReference&quot;, status);
+	status = ProElementReferenceSet(elem_ref,ref);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementReferenceSet&quot;, status);
+        status = ProElemtreeElementAdd(elem_cmpd,NULL,elem_ref);
+<a name="anchor-108"></a>    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+        status = ProElementAlloc(PRO_E_DIRECTION_FLIP,&amp;elem_flip);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_flip,1);
+<a name="anchor-109"></a>    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_cmpd,NULL,elem_flip);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+        status = ProElementAlloc(PRO_E_GENPAT_DIR1_INC,&amp;elem_inc);
+<a name="anchor-110"></a>    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+        
+    space_range[0] = 0;
+    space_range[1] = 360;
+
+<a name="anchor-111"></a>    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Enter the distance between pattern elements&quot;);
+    ProMessageDoubleRead(space_range, &amp;at_space);
+            
+        status = ProElementDoubleSet(elem_inc, at_space);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+<a name="anchor-112"></a>	status = ProElemtreeElementAdd(elem_dir,NULL,elem_inc);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+    
+	status = ProElementAlloc(PRO_E_DIR_PAT_DIR1_FLIP,&amp;elem_dir1_flip);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-113"></a>	status = ProElementIntegerSet(elem_dir1_flip,0);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_dir,NULL,elem_dir1_flip);
+
+	status = ProElementAlloc(PRO_E_DIR_PAT_DIR1_OPT,&amp;elem_opt);
+<a name="anchor-114"></a>    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_opt,-1);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_dir,NULL,elem_opt);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+<a name="anchor-115"></a>
+	status = ProElementAlloc(PRO_E_GENPAT_DIM_FIRST_DIR,&amp;elem_fdir);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_dir,NULL,elem_fdir);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+<a name="anchor-116"></a>
+	status = ProElementAlloc(PRO_E_GENPAT_DIM_FIRST_DIR_NUM_INST,&amp;elem_inst);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    
+    num_range[0] = 2;
+<a name="anchor-117"></a>    num_range[1] = 100;
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Enter number of elements in pattern&quot;);
+    ProMessageIntegerRead(num_range, &amp;numof_elems);
+        
+        status = ProElementIntegerSet(elem_inst,numof_elems);
+<a name="anchor-118"></a>    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_dir,NULL,elem_inst);
+    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProPatternCreate(&amp;feature,PRO_FEAT_PATTERN,elem_tree);
+<a name="anchor-119"></a>    ERROR_CHECK (&quot;ProTestDirectionPattern()&quot;, &quot;ProPatternCreate&quot;, status);
+
+    if ((status != PRO_TK_NO_ERROR))
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation failed&quot;);
+    
+<a name="anchor-120"></a>    else
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation successful&quot;);
+
+  return (status); 
+}
+<a name="anchor-121"></a>
+
+/*================================================================*\
+FUNCTION  : ProTestFillPattern()
+PURPOSE   : Creates Fill pattern 
+<a name="anchor-122"></a>\*================================================================*/
+
+ProError ProTestFillPattern()
+{
+
+<a name="anchor-123"></a>	ProElement elem_fill,elem_temp,elem_bord,elem_ang;
+	ProElement elem_space,elem_inc2;
+	ProElement elem_sketch,elem_std,elem_method;
+    ProFeature feature;
+    ProModelitem mdl_item;
+<a name="anchor-124"></a>	ProElement elem_tree,elem_type;
+	ProGroupStatus grp;
+    ProSelection selections;   
+    ProReference ref;
+    double at_space, space_range[2];
+<a name="anchor-125"></a>    int n_sels, sel_type;
+    ProSelection* sels = NULL;	
+	
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select feature for pattern creation&quot;);
+    status = ProSelect ((char*)&quot;membfeat&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+<a name="anchor-126"></a>    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProSelect&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;
+
+    status = ProSelectionModelitemGet (sels[0], &amp;feature);
+<a name="anchor-127"></a>    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);         
+    if ((status != PRO_TK_NO_ERROR) || (feature.type != PRO_FEATURE))
+      return PRO_TK_BAD_INPUTS;
+
+	status  = ProFeatureGroupStatusGet(&amp;feature,&amp;grp);
+<a name="anchor-128"></a>    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProFeatureGroupStatusGet&quot;, status);
+
+     /*====================================================================*\
+       Pattern Root
+     \*====================================================================*/  
+<a name="anchor-129"></a>	status = ProElementAlloc(PRO_E_PATTERN_ROOT,&amp;elem_tree);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementAlloc(PRO_E_GENPAT_TYPE,&amp;elem_type);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_type,PRO_GENPAT_FILL_DRIVEN);
+<a name="anchor-130"></a>    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_tree,NULL,elem_type);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+     /*====================================================================*\
+<a name="anchor-131"></a>       FILL PATTERN
+    \*====================================================================*/
+	status = ProElementAlloc(PRO_E_GENPAT_FILL,&amp;elem_fill);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+        status = ProElemtreeElementAdd(elem_tree,NULL,elem_fill);
+<a name="anchor-132"></a>    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_FILL_TEMPLATE_TYPE,&amp;elem_temp);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_temp,13);
+<a name="anchor-133"></a>    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_fill,NULL,elem_temp);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_FILL_SPACING,&amp;elem_space);
+<a name="anchor-134"></a>    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    space_range[0] = 0;
+    space_range[1] = 100;
+
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Enter the distance between pattern elements&quot;);
+<a name="anchor-135"></a>    ProMessageDoubleRead(space_range, &amp;at_space);
+        
+        status = ProElementDoubleSet(elem_space,at_space);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_fill,NULL,elem_space);
+<a name="anchor-136"></a>    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_FILL_BORDERING,&amp;elem_bord);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementDoubleSet(elem_bord,-10.000);
+<a name="anchor-137"></a>    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_fill,NULL,elem_bord);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_FILL_ROT_ANG,&amp;elem_ang);
+<a name="anchor-138"></a>    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    
+    space_range[0] = 0;
+    space_range[1] = 360;
+
+<a name="anchor-139"></a>    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Enter the element angle&quot;);
+    ProMessageDoubleRead(space_range, &amp;at_space);
+        
+        status = ProElementDoubleSet(elem_ang,at_space);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+<a name="anchor-140"></a>	status = ProElemtreeElementAdd(elem_fill,NULL,elem_ang);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+        status = ProElementAlloc(PRO_E_GENPAT_FILL_RADIUS_INC,&amp;elem_inc2);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-141"></a>	status = ProElementDoubleSet(elem_inc2,25.000);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_fill,NULL,elem_inc2);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+<a name="anchor-142"></a>        status = ProElementAlloc(PRO_E_STD_SECTION,&amp;elem_std);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_tree,NULL,elem_std);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+<a name="anchor-143"></a>	status = ProElementAlloc(PRO_E_STD_SEC_METHOD,&amp;elem_method);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_method,0);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_std,NULL,elem_method);
+<a name="anchor-144"></a>    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+
+	status = ProElementAlloc(PRO_E_SEC_USE_SKETCH,&amp;elem_sketch);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-145"></a> 
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select sketch&quot;);
+    status = ProSelect ((char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProSelect&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+<a name="anchor-146"></a>      return status;
+      
+    status = ProSelectionModelitemGet (sels[0], &amp;mdl_item);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);   
+    
+<a name="anchor-147"></a>    if ((status != PRO_TK_NO_ERROR) || (mdl_item.type != PRO_FEATURE))
+      return status;
+
+    sel_type = PRO_CURVE;
+    status = ProFeatureGeomitemVisit(&amp;mdl_item, PRO_CURVE, (ProGeomitemAction)visit_GeomFeat, NULL, (ProAppData)&amp;sel_type);
+<a name="anchor-148"></a>    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProFeatureGeomitemVisit&quot;, status); 
+    if ((status != PRO_TK_NO_ERROR))
+    {
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation failed&quot;);
+      return status;
+<a name="anchor-149"></a>    }
+
+    status = ProSelectionAlloc(NULL,(ProModelitem*)&amp;mdl_item,&amp;selections);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProSelectionAlloc&quot;, status);
+    
+<a name="anchor-150"></a>    status = ProSelectionToReference(selections,&amp;ref);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProSelectionToReference&quot;, status);
+	status = ProElementReferenceSet(elem_sketch,ref);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElementReferenceSet&quot;, status);
+    
+<a name="anchor-151"></a>	status = ProElemtreeElementAdd(elem_std,NULL,elem_sketch);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+    status = ProPatternCreate(&amp;feature,PRO_FEAT_PATTERN,elem_tree);
+    ERROR_CHECK (&quot;ProTestFillPattern()&quot;, &quot;ProPatternCreate&quot;, status);
+<a name="anchor-152"></a>
+    if ((status != PRO_TK_NO_ERROR))
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation failed&quot;);
+    
+    else
+<a name="anchor-153"></a>      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation successful&quot;);
+
+
+  return (status); 
+}
+<a name="anchor-154"></a>
+
+/*================================================================*\
+FUNCTION  : ProTestPointPattern()
+PURPOSE   : Creates point pattern
+<a name="anchor-155"></a>\*================================================================*/
+
+ProError ProTestPointPattern()
+{
+
+<a name="anchor-156"></a>	ProElement elem_point,elem_temp;
+	ProElement elem_point_ref;
+    ProFeature feature;
+    ProFeature mdl_item;
+	ProElement elem_tree,elem_type;
+<a name="anchor-157"></a>	ProGroupStatus grp;
+    ProSelection selections;   
+    ProReference ref;
+    int n_sels, sel_type;
+    ProSelection* sels = NULL;	
+<a name="anchor-158"></a>    
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select feature for pattern creation&quot;);
+    status = ProSelect ((char*)&quot;membfeat&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProSelect&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+<a name="anchor-159"></a>      return status;
+
+    status = ProSelectionModelitemGet (sels[0], &amp;feature);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);         
+    if ((status != PRO_TK_NO_ERROR) || (feature.type != PRO_FEATURE))
+<a name="anchor-160"></a>      return PRO_TK_BAD_INPUTS;
+
+	status  = ProFeatureGroupStatusGet(&amp;feature,&amp;grp);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProFeatureGroupStatusGet&quot;, status);
+   /*====================================================================*\
+<a name="anchor-161"></a>      Pattern Root
+   \*====================================================================*/  
+	status = ProElementAlloc(PRO_E_PATTERN_ROOT,&amp;elem_tree);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+
+<a name="anchor-162"></a>	status = ProElementAlloc(PRO_E_GENPAT_TYPE,&amp;elem_type);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_type,PRO_GENPAT_POINT_DRIVEN);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_tree,NULL,elem_type);
+<a name="anchor-163"></a>    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+    /*====================================================================*\
+       POINT PATTERN
+    \*====================================================================*/
+<a name="anchor-164"></a>	status = ProElementAlloc(PRO_E_GENPAT_POINT,&amp;elem_point);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    status = ProElemtreeElementAdd(elem_tree,NULL,elem_point);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+<a name="anchor-165"></a>	status = ProElementAlloc(PRO_E_GENPAT_POINT_REF_TYPE,&amp;elem_temp);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_temp,56);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_point,NULL,elem_temp);
+<a name="anchor-166"></a>    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_POINT_REF,&amp;elem_point_ref);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElementAlloc&quot;, status);
+
+<a name="anchor-167"></a>    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select Point&quot;);
+    status = ProSelect ((char*)&quot;feature&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProSelect&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;
+<a name="anchor-168"></a>      
+    status = ProSelectionModelitemGet (sels[0], &amp;mdl_item);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);   
+    if ((status != PRO_TK_NO_ERROR) || (mdl_item.type != PRO_FEATURE))
+      return PRO_TK_BAD_INPUTS;
+<a name="anchor-169"></a>    
+    sel_type = PRO_POINT;
+    status = ProFeatureGeomitemVisit(&amp;mdl_item, PRO_POINT, (ProGeomitemAction)visit_GeomFeat, NULL, (ProAppData) &amp;sel_type);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProFeatureGeomitemVisit&quot;, status); 
+    if ((status != PRO_TK_NO_ERROR))
+<a name="anchor-170"></a>    {
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation failed&quot;);
+      return status;
+    }
+      
+<a name="anchor-171"></a>    status = ProSelectionAlloc(NULL,(ProModelitem*)&amp;mdl_item,&amp;selections);
+	ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProSelectionAlloc&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;  
+  
+<a name="anchor-172"></a>	status = ProSelectionToReference(selections,&amp;ref);
+	ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProSelectionToReference&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;
+      	
+<a name="anchor-173"></a>    status = ProElementReferenceSet(elem_point_ref,ref);
+	ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElementReferenceSet&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;
+        
+<a name="anchor-174"></a>    status = ProElemtreeElementAdd(elem_point,NULL,elem_point_ref);
+	ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;
+          
+<a name="anchor-175"></a>    status = ProPatternCreate(&amp;feature,PRO_FEAT_PATTERN,elem_tree);
+    ERROR_CHECK (&quot;ProTestPointPattern()&quot;, &quot;ProPatternCreate&quot;, status);
+
+    if ((status != PRO_TK_NO_ERROR))
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation failed&quot;);
+<a name="anchor-176"></a>    
+    else
+      ProMessageDisplay (PT_MSGFIL, (char*)&quot;Pattern creation successful&quot;);
+
+  return (status); 
+<a name="anchor-177"></a>}
+
+
+/*================================================================*\
+FUNCTION  : ProTestTablePattern()
+<a name="anchor-178"></a>PURPOSE   : Creates table pattern
+\*================================================================*/
+
+ProError ProTestTablePattern()
+{
+<a name="anchor-179"></a>	ProElement elem_table,elem_table_dims,elem_table_entry;
+	ProElement elem_table_dim1,elem_table_dim2;
+	ProElement elem_table_list,elem_table_entry1,elem_table_instance1,elem_table_instances,elem_table_instance2;
+	ProElement elem_table_instance_ind,elem_table_instance_dim1,elem_table_instance_dim2,elem_table_instance_dim_val1,elem_table_instance_dim_val2;
+	ProElement pattern_table_set_active;
+<a name="anchor-180"></a>    ProFeature feature;
+    ProModelitem mdl_item;
+	ProElement elem_tree,elem_type;
+	ProGroupStatus grp;
+    ProSelection selections;   
+<a name="anchor-181"></a>    ProReference ref;
+    int n_sels;
+    ProSelection* sels = NULL;	
+	
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select feature for pattern creation&quot;);
+<a name="anchor-182"></a>    status = ProSelect ((char*)&quot;membfeat&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProSelect&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;
+
+<a name="anchor-183"></a>    status = ProSelectionModelitemGet (sels[0], &amp;feature);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);         
+    if ((status != PRO_TK_NO_ERROR) || (feature.type != PRO_FEATURE))
+      return PRO_TK_BAD_INPUTS;
+
+<a name="anchor-184"></a>	status  = ProFeatureGroupStatusGet(&amp;feature,&amp;grp);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProFeatureGroupStatusGet&quot;, status);
+
+   /*====================================================================*\
+      Pattern Root
+<a name="anchor-185"></a>   \*====================================================================*/  
+	status = ProElementAlloc(PRO_E_PATTERN_ROOT,&amp;elem_tree);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_TYPE,&amp;elem_type);
+<a name="anchor-186"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_type,PRO_GENPAT_TABLE_DRIVEN);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_tree,NULL,elem_type);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+<a name="anchor-187"></a>
+    /*====================================================================*\
+       TABLE PATTERN
+    \*====================================================================*/
+	status = ProElementAlloc(PRO_E_GENPAT_TABLE,&amp;elem_table);
+<a name="anchor-188"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    status = ProElemtreeElementAdd(elem_tree,NULL,elem_table);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status = ProElementAlloc(PRO_E_GENPAT_TABLE_DIMS,&amp;elem_table_dims);
+<a name="anchor-189"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_table,NULL,elem_table_dims);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+	status =ProElementAlloc(PRO_E_GENPAT_TABLE_DIM_ENTRY,&amp;elem_table_entry);
+<a name="anchor-190"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_table_dims,NULL,elem_table_entry);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+
+    status = ProElementAlloc(PRO_E_GENPAT_TABLE_DIM,&amp;elem_table_dim1);
+<a name="anchor-191"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    
+    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select dimension&quot;);
+    status = ProSelect ((char*)&quot;dimension&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProSelect&quot;, status);
+<a name="anchor-192"></a>    if ((status != PRO_TK_NO_ERROR))
+      return status;
+      
+    status = ProSelectionModelitemGet (sels[0], &amp;mdl_item);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);   
+<a name="anchor-193"></a>    if ((status != PRO_TK_NO_ERROR) || (mdl_item.type != PRO_DIMENSION))
+      return PRO_TK_BAD_INPUTS;
+
+	status = ProSelectionAlloc(NULL,&amp;mdl_item,&amp;selections);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProSelectionAlloc&quot;, status);
+<a name="anchor-194"></a>	status = ProSelectionToReference(selections,&amp;ref);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProSelectionToReference&quot;, status);
+	status = ProElementReferenceSet(elem_table_dim1,ref);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementReferenceSet&quot;, status);
+    status = ProElemtreeElementAdd(elem_table_entry,NULL,elem_table_dim1);
+<a name="anchor-195"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+	status = ProElementAlloc(PRO_E_GENPAT_TABLE_DIM,&amp;elem_table_dim2);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+
+<a name="anchor-196"></a>    ProMessageDisplay (PT_MSGFIL, (char*)&quot;Select dimension&quot;);
+    status = ProSelect ((char*)&quot;dimension&quot;, 1, NULL, NULL, NULL, NULL, &amp;sels, &amp;n_sels);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProSelect&quot;, status);
+    if ((status != PRO_TK_NO_ERROR))
+      return status;
+<a name="anchor-197"></a>      
+    status = ProSelectionModelitemGet (sels[0], &amp;mdl_item);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProSelectionModelitemGet&quot;, status);   
+    if ((status != PRO_TK_NO_ERROR) || (mdl_item.type != PRO_DIMENSION))
+      return PRO_TK_BAD_INPUTS;
+<a name="anchor-198"></a>
+    status = ProSelectionAlloc(NULL,&amp;mdl_item,&amp;selections);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProSelectionAlloc&quot;, status);
+	status = ProSelectionToReference(selections,&amp;ref);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProSelectionToReference&quot;, status);
+<a name="anchor-199"></a>	status = ProElementReferenceSet(elem_table_dim2,ref);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementReferenceSet&quot;, status);
+    status = ProElemtreeElementAdd(elem_table_entry,NULL,elem_table_dim2);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+<a name="anchor-200"></a>	status = ProElementAlloc(PRO_E_GENPAT_TABLE_LIST,&amp;elem_table_list);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_table,NULL,elem_table_list);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+<a name="anchor-201"></a>	status = ProElementAlloc(PRO_E_GENPAT_TABLE_ENTRY,&amp;elem_table_entry1);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_table_list,NULL,elem_table_entry1);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+<a name="anchor-202"></a>	status = ProElementAlloc(PRO_E_GENPAT_TABLE_INSTANCES,&amp;elem_table_instances);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_table_entry1,NULL,elem_table_instances);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+<a name="anchor-203"></a>	status = ProElementAlloc(PRO_E_GENPAT_TABLE_INSTANCE,&amp;elem_table_instance1);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_table_instances,NULL,elem_table_instance1);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+<a name="anchor-204"></a>	status = ProElementAlloc(PRO_E_GENPAT_TABLE_INSTANCE_INDEX,&amp;elem_table_instance_ind);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_table_instance_ind,1);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_table_instance1,NULL,elem_table_instance_ind);
+<a name="anchor-205"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+	status = ProElementAlloc(PRO_E_GENPAT_TABLE_INSTANCE_DIMS,&amp;elem_table_instance_dim1);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_table_instance1,NULL,elem_table_instance_dim1);
+<a name="anchor-206"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+	status = ProElementAlloc(PRO_E_GENPAT_TABLE_INSTANCE_DIM_VALUE,&amp;elem_table_instance_dim_val1);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementDoubleSet(elem_table_instance_dim_val1,20);
+<a name="anchor-207"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_table_instance_dim1,NULL,elem_table_instance_dim_val1);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+        
+	status = ProElementAlloc(PRO_E_GENPAT_TABLE_INSTANCE_DIM_VALUE,&amp;elem_table_instance_dim_val2);
+<a name="anchor-208"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementDoubleSet(elem_table_instance_dim_val2,20);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_table_instance_dim1,NULL,elem_table_instance_dim_val2);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+<a name="anchor-209"></a>	
+	status = ProElementAlloc(PRO_E_GENPAT_TABLE_INSTANCE,&amp;elem_table_instance2);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElemtreeElementAdd(elem_table_instances,NULL,elem_table_instance2);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+<a name="anchor-210"></a>	
+	status = ProElementAlloc(PRO_E_GENPAT_TABLE_INSTANCE_INDEX,&amp;elem_table_instance_ind);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementIntegerSet(elem_table_instance_ind,2);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+<a name="anchor-211"></a>	status = ProElemtreeElementAdd(elem_table_instance2,NULL,elem_table_instance_ind);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+	status = ProElementAlloc(PRO_E_GENPAT_TABLE_INSTANCE_DIMS,&amp;elem_table_instance_dim2);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-212"></a>	status = ProElemtreeElementAdd(elem_table_instance2,NULL,elem_table_instance_dim2);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+	status =ProElementAlloc(PRO_E_GENPAT_TABLE_INSTANCE_DIM_VALUE,&amp;elem_table_instance_dim_val1);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+<a name="anchor-213"></a>	status = ProElementDoubleSet(elem_table_instance_dim_val1,40);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_table_instance_dim2,NULL,elem_table_instance_dim_val1);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+<a name="anchor-214"></a>	status = ProElementAlloc(PRO_E_GENPAT_TABLE_INSTANCE_DIM_VALUE,&amp;elem_table_instance_dim_val2);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+	status = ProElementDoubleSet(elem_table_instance_dim_val2,40);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementDoubleSet&quot;, status);
+	status = ProElemtreeElementAdd(elem_table_instance_dim2,NULL,elem_table_instance_dim_val2);
+<a name="anchor-215"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+	status = ProElementAlloc (PRO_E_GENPAT_TABLE_SET_ACTIVE,&amp;pattern_table_set_active);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementAlloc&quot;, status);
+    status = ProElementIntegerSet ( pattern_table_set_active, 0); 
+<a name="anchor-216"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElementIntegerSet&quot;, status);
+    status = ProElemtreeElementAdd (elem_table, NULL, pattern_table_set_active);
+    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProElemtreeElementAdd&quot;, status);
+	
+	status = ProPatternCreate(&amp;feature,PRO_FEAT_PATTERN,elem_tree);
+<a name="anchor-217"></a>    ERROR_CHECK (&quot;ProTestTablePattern()&quot;, &quot;ProPatternCreate&quot;, status);
+
+    if ((status != PRO_TK_NO_ERROR))
+      ProMessageDisplay (PT_MSGFIL, (char* )&quot;Pattern creation failed&quot;);
+    
+<a name="anchor-218"></a>    else
+      ProMessageDisplay (PT_MSGFIL, (char* )&quot;Pattern creation successful&quot;);
+
+  return (status); 
+}
+<a name="anchor-219"></a>
+ProError visit_GeomFeat(ProGeomitem *item, ProError stat, ProAppData app_data)
+{
+  ProType *sel_type = (ProType *) app_data;
+  
+<a name="anchor-220"></a>  if(item->type == *sel_type)
+    return PRO_TK_NO_ERROR;
+  else
+    return PRO_TK_BAD_INPUTS; 
+
+<a name="anchor-221"></a>}
+</pre>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<html>
+<head>
+<title>UgFileEdit.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*-------------------------------------------------------------------------*\
+			  Pro/TOOLKIT Include Files
+\*-------------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+<a name="anchor-2"></a>#include &quot;ProUtil.h&quot;
+#include &quot;ProWstring.h&quot;
+#include &quot;ProArray.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;TestError.h&quot;
+<a name="anchor-3"></a>#include &quot;ProMenuBar.h&quot;
+#include &lt;PTApplsUnicodeUtils.h>
+/*-------------------------------------------------------------------------*\
+			 Global and static variables
+\*-------------------------------------------------------------------------*/
+<a name="anchor-4"></a>static ProName MSGFILE = {'m', 's', 'g', '.', 't', 'x', 't', 0};
+
+/*=========================================================================*\
+FUNCTION    : 	UserEditFile()			
+\*=========================================================================*/
+<a name="anchor-5"></a>int UserEditFile( void * arg1,  int arg2)
+{
+    int status;
+
+    /* Variables used to setup file selection */
+<a name="anchor-6"></a>    ProName		wlabel; 
+    ProLine		wfilter;
+    ProPath	*	p_short_path;
+    ProName 	*	p_short_label;
+    ProPath		tmppath1, tmppath2;
+<a name="anchor-7"></a>    ProName		tmplabel;
+
+    /* The selected file */ 
+    ProPath		w_file_sel;
+
+<a name="anchor-8"></a>    /* Variables representing the selected file after parsing */
+    ProPath		file_path;
+    ProMdlName	file_name;
+    ProMdlExtension	file_ext;
+    int			file_ver;
+<a name="anchor-9"></a>
+    /* New File after release update */
+    ProPath		w_file_new;
+    ProCharLine		file_sel, file_new;
+
+<a name="anchor-10"></a>    /* CharLine representing the command passed to the OS */
+    ProCharLine		sys_cmd;
+
+
+    /*-----------------------------------------------------------------------*\
+<a name="anchor-11"></a>      Prepare the file selection 
+    \*-----------------------------------------------------------------------*/ 
+    ProStringToWstring(wlabel, &quot;Open Text File&quot;);
+    ProStringToWstring(wfilter , &quot;*txt*&quot;); 
+
+<a name="anchor-12"></a>    status = ProArrayAlloc(0, sizeof(ProPath), 1, (ProArray*) &amp;p_short_path);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProArrayAlloc&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+
+    status = ProArrayAlloc(0, sizeof(ProName), 1, (ProArray*) &amp;p_short_label);
+<a name="anchor-13"></a>    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProArrayAlloc&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+
+    /*-----------------------------------------------------------------------*\
+      First Shortcut path points to directory containing appl executable
+<a name="anchor-14"></a>    \*-----------------------------------------------------------------------*/ 
+    status = ProToolkitApplExecPathGet(tmppath1);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProToolkitApplTextPathGet&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-15"></a>    status = ProFileMdlnameParse(tmppath1, tmppath2, NULL,NULL,NULL);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProFileMdlnameParse&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+
+    status = ProArrayObjectAdd((ProArray*) &amp;p_short_path, PRO_VALUE_UNUSED,
+<a name="anchor-16"></a>				1, &amp;tmppath2);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProWstringArrayObjectAdd&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+
+    ProStringToWstring(tmplabel, &quot;App Exec Path&quot;);
+<a name="anchor-17"></a>    status = ProArrayObjectAdd((ProArray*) &amp;p_short_label ,PRO_VALUE_UNUSED, 
+				1, &amp;tmplabel);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProWstringArrayObjectAdd&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-18"></a>    /*-----------------------------------------------------------------------*\
+      Second Shortcut path points to application text directory
+    \*-----------------------------------------------------------------------*/ 
+    status = ProToolkitApplTextPathGet(tmppath1);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProToolkitApplTextPathGet&quot;,status);
+<a name="anchor-19"></a>    if (status != PRO_TK_NO_ERROR) return status;
+
+    status = ProArrayObjectAdd((ProArray*) &amp;p_short_path, PRO_VALUE_UNUSED,
+				1, &amp;tmppath1);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProWstringArrayObjectAdd&quot;,status);
+<a name="anchor-20"></a>    if (status != PRO_TK_NO_ERROR) return status;
+
+    ProStringToWstring(tmplabel, &quot;App Text Path&quot;);
+    status = ProArrayObjectAdd((ProArray*) &amp;p_short_label ,PRO_VALUE_UNUSED, 
+				1, &amp;tmplabel);
+<a name="anchor-21"></a>    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProWstringArrayObjectAdd&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+
+    /*-----------------------------------------------------------------------*\
+      Select a file 
+<a name="anchor-22"></a>    \*-----------------------------------------------------------------------*/ 
+    status = ProFileMdlnameOpen(wlabel, wfilter, p_short_path, p_short_label, 
+			NULL, NULL, w_file_sel);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProFileMdlnameOpen&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+<a name="anchor-23"></a>    
+    /*-----------------------------------------------------------------------*\
+    Free Memory  that is not necessary any longer
+    \*-----------------------------------------------------------------------*/ 
+    status = ProArrayFree((ProArray*)&amp;p_short_path);
+<a name="anchor-24"></a>    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProArrayFree&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+
+    status = ProArrayFree((ProArray*)&amp;p_short_label);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProArrayFree&quot;,status);
+<a name="anchor-25"></a>    if (status != PRO_TK_NO_ERROR) return status;
+    
+    /*-----------------------------------------------------------------------*\
+    Create the new file name, with incremented release number 
+    \*-----------------------------------------------------------------------*/ 
+<a name="anchor-26"></a>    status = ProFileMdlnameParse(w_file_sel, 
+			file_path, file_name, file_ext, &amp;file_ver);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProFileMdlnameParse&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+
+<a name="anchor-27"></a>    if (file_ver &lt; 0) 
+	file_ver = 1;
+    else ++file_ver;
+
+    status = ProPathMdlnameCreate (file_path, 
+<a name="anchor-28"></a>		file_name, file_ext, file_ver, w_file_new);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProPathMdlnameCreate&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+
+    /*-----------------------------------------------------------------------*\
+<a name="anchor-29"></a>    Make a system copy of the file to edit
+    \*-----------------------------------------------------------------------*/ 
+    ProWstringToString (file_sel, w_file_sel);
+    ProWstringToString (file_new, w_file_new);
+    ProTKSprintf(sys_cmd, &quot;cp %s %s&quot;, file_sel, file_new); 
+<a name="anchor-30"></a>    system(sys_cmd);
+
+    /*-----------------------------------------------------------------------*\
+    Edit the new file 
+    \*-----------------------------------------------------------------------*/ 
+<a name="anchor-31"></a>    status = ProFileEdit(w_file_new);
+    ERROR_CHECK(&quot;UserEditFile&quot;,&quot;ProFileEdit&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return status;
+
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-32"></a>}
+</pre>
+</body>
+</html>

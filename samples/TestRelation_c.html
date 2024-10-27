@@ -1,0 +1,712 @@
+<html>
+<head>
+<title>TestRelation.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/Toolkit includes -- include this first
+\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+<a name="anchor-2"></a>#include &quot;ProMdl.h&quot;
+#include &quot;ProMenu.h&quot;
+#include &quot;ProMessage.h&quot;
+#include &quot;ProRelSet.h&quot;
+#include &quot;ProModelitem.h&quot;
+<a name="anchor-3"></a>#include &quot;ProSelection.h&quot;
+#include &lt;ProTKRunTime.h>
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProUtil.h>
+#include &lt;UtilFiles.h>
+<a name="anchor-4"></a>
+/*--------------------------------------------------------------------*\
+Pro/Develop includes
+\*--------------------------------------------------------------------*/
+
+<a name="anchor-5"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;TestError.h&quot;
+#include &quot;TestSetup.h&quot;
+<a name="anchor-6"></a>#include &quot;UtilMessage.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;TestFiletypes.h&quot;
+#include &quot;UtilTypes.h&quot;
+#include &quot;UtilCollect.h&quot;
+<a name="anchor-7"></a>/*--------------------------------------------------------------------*\
+Application macros
+\*--------------------------------------------------------------------*/
+
+#define USER_RL_EDIT  0 
+<a name="anchor-8"></a>#define USER_RL_DELETE 1
+
+/*====================================================================*\
+FUNCTION : ProTestRelationsMenu
+PURPOSE  : Top level menu for the Relations Menu testing.
+<a name="anchor-9"></a>\*====================================================================*/
+int ProTestRelationsMenu(ProMdl *model)
+{
+  ProMdlType   model_type;
+  int          action;
+<a name="anchor-10"></a>  ProError     status;
+
+    int ProTestModelRelsMenu();
+    int ProTestModelRelsetInfo();
+
+<a name="anchor-11"></a>    status = ProMdlTypeGet(*model, &amp;model_type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestRelationsMnu()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+    ProMenuPush();
+    ProMenuFileRegister((char*)&quot;TkModelRel&quot;,(char*)&quot;tkmodelrel.mnu&quot;, NULL);
+<a name="anchor-12"></a>    ProMenubuttonActionSet((char*)&quot;TkModelRel&quot;,(char*)&quot;TkModelRel&quot;,
+                           (ProMenubuttonAction)ProMenuDelete, NULL,  0);
+    ProMenubuttonActionSet((char*)&quot;TkModelRel&quot;,(char*)&quot;-Done&quot;,
+                           (ProMenubuttonAction)ProMenuDelete, NULL,  0);
+    ProMenubuttonActionSet((char*)&quot;TkModelRel&quot;,(char*)&quot;-Assem Rel&quot;,
+<a name="anchor-13"></a>                           (ProMenubuttonAction)ProTestModelRelsMenu,
+                                               model, PRO_RELOBJ_ASSEMBLY);
+    ProMenubuttonActionSet((char*)&quot;TkModelRel&quot;,(char*)&quot;-Part Rel&quot;,
+                           (ProMenubuttonAction)ProTestModelRelsMenu,
+                                               model, PRO_RELOBJ_PART);
+<a name="anchor-14"></a>    ProMenubuttonActionSet((char*)&quot;TkModelRel&quot;,(char*)&quot;-Feat Rel&quot;,
+                           (ProMenubuttonAction)ProTestModelRelsMenu,
+                                               model, PRO_RELOBJ_FEATURE);
+    ProMenubuttonActionSet((char*)&quot;TkModelRel&quot;,(char*)&quot;-Surface Rel&quot;,
+                           (ProMenubuttonAction)ProTestModelRelsMenu,
+<a name="anchor-15"></a>                                               model, PRO_RELOBJ_SURFACE);
+    ProMenubuttonActionSet((char*)&quot;TkModelRel&quot;,(char*)&quot;-Edge Rel&quot;,
+                           (ProMenubuttonAction)ProTestModelRelsMenu,
+                                               model, PRO_RELOBJ_EDGE);
+    ProMenubuttonActionSet((char*)&quot;TkModelRel&quot;,(char*)&quot;-Info&quot;,
+<a name="anchor-16"></a>        (ProMenubuttonAction)ProTestModelRelsetInfo, model, 0);
+    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkModelRel&quot;, NULL);
+    if ( model_type == PRO_MDL_ASSEMBLY)
+        ProMenubuttonActivate((char*)&quot;TkModelRel&quot;,(char*)&quot;-Assem Rel&quot;);
+    else
+<a name="anchor-17"></a>        ProMenubuttonDeactivate((char*)&quot;TkModelRel&quot;,(char*)&quot;-Assem Rel&quot;);
+
+    ProMenuProcess((char*)&quot;&quot;, &amp;action);
+    ProMenuPop();
+
+<a name="anchor-18"></a>  return(0);
+}
+
+
+/*====================================================================*\
+<a name="anchor-19"></a>    FUNCTION :	ProTestModelRelsMenu()
+    PURPOSE  :  General action function for the Note testing.
+\*====================================================================*/
+int ProTestModelRelsMenu(
+    ProMdl *model,
+<a name="anchor-20"></a>    int action)
+{
+  ProError status;
+  ProMdlType   model_type;
+  ProModelitem modelitem;
+<a name="anchor-21"></a>  int select = 0, n_sel;
+  char *opt = NULL;
+  ProSelection *p_sel;
+  ProCharLine str;
+  ProName w_name;
+<a name="anchor-22"></a>
+  int ProTestAddModelitemRel();
+  int ProTestEditModelitemRel();
+  int ProTestRegenerateModelitemRel();
+
+<a name="anchor-23"></a>    status = ProMdlTypeGet(*model, &amp;model_type);
+    TEST_CALL_REPORT(&quot;ProMdlTypeGet()&quot;, &quot;ProTestModelRelsMenu()&quot;, status,
+						status != PRO_TK_NO_ERROR);
+
+    if (((action == PRO_RELOBJ_PART) &amp;&amp; ( model_type == PRO_MDL_PART)) ||
+<a name="anchor-24"></a>	(action == PRO_RELOBJ_ASSEMBLY))
+    {
+	status = ProMdlToModelitem(*model, &amp;modelitem);
+	TEST_CALL_REPORT(&quot;ProMdlToModelitem()&quot;, &quot;ProTestModelRelsMenu()&quot;, 
+	    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-25"></a>	select = 1;
+    }
+    else
+    {
+    	switch(action)
+<a name="anchor-26"></a>    	{
+	case PRO_RELOBJ_PART :
+	    opt = (char*)&quot;part&quot;;
+            break;
+    	case PRO_RELOBJ_FEATURE :
+<a name="anchor-27"></a>	    opt = (char*)&quot;feature&quot;;
+       	    break;
+        case PRO_RELOBJ_SURFACE :
+	    opt = (char*)&quot;surface&quot;;
+            break;
+<a name="anchor-28"></a>        case PRO_RELOBJ_EDGE :
+	    opt = (char*)&quot;edge&quot;;
+            break;
+        case PRO_RELOBJ_PAT_DIR1 :
+            break;
+<a name="anchor-29"></a>	}
+
+	if (opt != NULL)
+	{
+	    ProTKSprintf(str, (char*)&quot;Select %s&quot;, opt);
+<a name="anchor-30"></a>    	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+
+	    status = ProSelect(opt, 1, NULL, NULL, NULL, NULL, &amp;p_sel, &amp;n_sel);
+	    if (status == PRO_TK_NO_ERROR &amp;&amp; n_sel == 1)
+	    {
+<a name="anchor-31"></a>		status = ProSelectionModelitemGet(p_sel[0], &amp;modelitem);
+	        TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, 
+		    &quot;ProTestModelRelsMenu()&quot;, status, 
+		    status != PRO_TK_NO_ERROR);
+		
+<a name="anchor-32"></a>		if (modelitem.type==PRO_EDGE || modelitem.type==PRO_SURFACE)
+		{
+/*--------------------------------------------------------------------------*\
+   Only named edges and surfaces can have relations 
+\*--------------------------------------------------------------------------*/
+<a name="anchor-33"></a>		    status = ProModelitemNameGet(&amp;modelitem, w_name);
+	            TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, 
+		    	&quot;ProTestModelRelsMenu()&quot;, status, 
+			status != PRO_TK_NO_ERROR);
+
+<a name="anchor-34"></a>		    if (status != PRO_TK_NO_ERROR)
+		    {
+			ProTKSprintf(str, (char*)&quot;Please name selected %s first [-QUIT-]:&quot;,
+			    opt);
+    	    		ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+<a name="anchor-35"></a>
+			status = ProMessageStringRead(PRO_NAME_SIZE, w_name);
+	            	TEST_CALL_REPORT(&quot;ProMessageStringRead()&quot;, 
+		    	    &quot;ProTestModelRelsMenu()&quot;, status, 
+			     status != PRO_TK_NO_ERROR);
+<a name="anchor-36"></a>			
+			if (status == PRO_TK_NO_ERROR)
+			{
+			    status = ProModelitemNameSet(&amp;modelitem, w_name);
+	            	    TEST_CALL_REPORT(&quot;ProModelitemNameSet()&quot;, 
+<a name="anchor-37"></a>		    	    	&quot;ProTestModelRelsMenu()&quot;, status, 
+			     	status != PRO_TK_NO_ERROR);
+
+			    if (status == PRO_TK_NO_ERROR)
+				select = 1;				
+<a name="anchor-38"></a>			}
+		    }
+		}
+		else
+		    select = 1;
+<a name="anchor-39"></a>	    }
+        }
+    }
+
+    ProMenuFileRegister((char*)&quot;TkRelations&quot;,(char*)&quot;tkrelations.mnu&quot;, NULL);
+<a name="anchor-40"></a>    ProMenubuttonActionSet((char*)&quot;TkRelations&quot;,(char*)&quot;TkRelations&quot;,
+                           (ProMenubuttonAction)ProMenuDelete, NULL,  0);
+    ProMenubuttonActionSet((char*)&quot;TkRelations&quot;,(char*)&quot;-Add Rel&quot;,
+        (ProMenubuttonAction)ProTestAddModelitemRel, &amp;modelitem, 0);
+    ProMenubuttonActionSet((char*)&quot;TkRelations&quot;,(char*)&quot;-Edit Rel&quot;,
+<a name="anchor-41"></a>        (ProMenubuttonAction)ProTestEditModelitemRel, &amp;modelitem, USER_RL_EDIT);
+    ProMenubuttonActionSet((char*)&quot;TkRelations&quot;,(char*)&quot;-Delete Rel&quot;,
+        (ProMenubuttonAction)ProTestEditModelitemRel, &amp;modelitem, 
+	USER_RL_DELETE);
+    ProMenubuttonActionSet((char*)&quot;TkRelations&quot;,(char*)&quot;-Regenerate&quot;,
+<a name="anchor-42"></a>        (ProMenubuttonAction)ProTestRegenerateModelitemRel, &amp;modelitem, 0);
+    ProMenubuttonActionSet((char*)&quot;TkRelations&quot;,(char*)&quot;-Done/Return&quot;,
+        (ProMenubuttonAction)ProMenuDelete, NULL, 0);
+
+    ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkRelations&quot;, NULL);
+<a name="anchor-43"></a>    ProMenuProcess((char*)&quot;&quot;, &amp;action);
+
+  return(0);
+}
+
+<a name="anchor-44"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestAddModelitemRel()
+    PURPOSE  :  Add new relation to the modelitem
+\*====================================================================*/
+<a name="anchor-45"></a>int ProTestAddModelitemRel(
+    ProModelitem *modelitem)
+{
+  ProError status;
+  ProLine w_line;
+<a name="anchor-46"></a>  ProWstring *w_array;
+  int n_lines, cont=1;
+  ProRelset relset;
+  wchar_t *w_ptr;
+
+<a name="anchor-47"></a>    while (cont)
+    {
+    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Enter Relation [QUIT]:&quot;);
+
+    status = ProMessageStringRead(PRO_LINE_SIZE, w_line);
+<a name="anchor-48"></a>    if (status == PRO_TK_NO_ERROR)
+    {   
+	status = ProArrayAlloc(0, sizeof(ProWstring), 1, (ProArray*)&amp;w_array);
+	TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProTestAddModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-49"></a>                                        
+	status = ProModelitemToRelset(modelitem, &amp;relset);
+	TEST_CALL_REPORT(&quot;ProModelitemToRelset()&quot;, &quot;ProTestAddModelitemRel()&quot;, 
+	    status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+	
+<a name="anchor-50"></a>	if (status == PRO_TK_NO_ERROR)
+	{
+	    status = ProRelsetRelationsGet(&amp;relset, &amp;w_array);
+	    TEST_CALL_REPORT(&quot;ProRelsetRelationsGet()&quot;, 
+		&quot;ProTestAddModelitemRel()&quot;, status, (status != PRO_TK_NO_ERROR)&amp;&amp;
+<a name="anchor-51"></a>                        (status!=PRO_TK_BAD_INPUTS));
+	}
+	else
+	{
+	    status = ProRelsetCreate(modelitem, &amp;relset);
+<a name="anchor-52"></a>	    TEST_CALL_REPORT(&quot;ProRelsetCreate()&quot;, 
+		&quot;ProTestAddModelitemRel()&quot;, status, status != PRO_TK_NO_ERROR);
+	}
+	w_ptr = w_line;
+	status = ProArrayObjectAdd((ProArray*)&amp;w_array, PRO_VALUE_UNUSED, 1,
+<a name="anchor-53"></a>	    &amp;w_ptr);
+	TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestAddModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+	status = ProArraySizeGet((ProArray)w_array, &amp;n_lines);
+	TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestAddModelitemRel()&quot;, 
+<a name="anchor-54"></a>					status, status != PRO_TK_NO_ERROR);
+	status = ProRelsetRelationsSet(&amp;relset, w_array, n_lines);
+	TEST_CALL_REPORT(&quot;ProRelsetRelationsSet()&quot;, 
+	    &quot;ProTestAddModelitemRel()&quot;, status, status != PRO_TK_NO_ERROR);
+	if (status == PRO_TK_NO_ERROR)
+<a name="anchor-55"></a>	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Relation added successfully&quot;);
+	
+	status = ProArrayFree((ProArray*)&amp;w_array);
+	TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestAddModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-56"></a>    }
+    else
+	cont = 0;
+    }
+    return (0);
+<a name="anchor-57"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestEditModelitemRel()
+    PURPOSE  :  Edit/Delete existing relations for the modelitem
+<a name="anchor-58"></a>\*====================================================================*/
+int ProTestEditModelitemRel(
+    ProModelitem *modelitem,
+    int action)
+{
+<a name="anchor-59"></a>  ProError status;
+  ProLine w_line;
+  ProCharLine str, line;
+  ProWstring *w_array;
+  int i, n_lines, sel_index;
+<a name="anchor-60"></a>  wchar_t w_empty = 0, **w_select, *w_ptr;
+  ProRelset relset;
+  ProName w_name;
+
+  ProWstring *mod_w_array;
+<a name="anchor-61"></a>  char  m_name[PRO_VALUE_SIZE], *mod_name; 
+  char cntr_line[PRO_NAME_SIZE], mod_w_array_str[PRO_NAME_SIZE];
+  int *repeat_cntr, j, num_lines;
+
+
+<a name="anchor-62"></a>    status = ProModelitemToRelset(modelitem, &amp;relset);
+    TEST_CALL_REPORT(&quot;ProModelitemToRelset()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+	    status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+	
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-63"></a>    {
+    	ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;No relations found&quot;);
+	return (0);
+    }
+
+<a name="anchor-64"></a>    status = ProArrayAlloc(0, sizeof(ProWstring), 1, (ProArray*)&amp;w_array);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+
+    status = ProRelsetRelationsGet(&amp;relset, &amp;w_array);
+<a name="anchor-65"></a>    TEST_CALL_REPORT(&quot;ProRelsetRelationGet()&quot;, 
+	&quot;ProTestEditModelitemRel()&quot;, status, status != PRO_TK_NO_ERROR);
+
+
+    status = ProArraySizeGet((ProArray)w_array, &amp;n_lines);
+<a name="anchor-66"></a>    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+
+/*----------------------------------------------------------------*\
+   As any individual string in wchar_t** array of strings that is passed 
+<a name="anchor-67"></a>   to the function ProMenuStringsSelect is restricted to PRO_NAME_SIZE-1, 
+   we check if the relation strings (w_array) that is passed to this function 
+   is limited to this size. So the relation strings form w_array are copied 
+   to a new array called mod_w_array after each string is truncated and  
+   modified to avoid duplication. 
+<a name="anchor-68"></a>\*-----------------------------------------------------------------*/
+
+
+/*----------------------------------------------------------------*\
+ Creating new Array mod_w_array of same size as w_array plus one extra
+<a name="anchor-69"></a> element for the required empty string terminator. 
+\*-----------------------------------------------------------------*/
+
+    status = ProArrayAlloc ((n_lines+1) , sizeof(ProWstring), 1, (ProArray*)&amp;mod_w_array);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+<a name="anchor-70"></a>					status, status != PRO_TK_NO_ERROR);
+
+
+/*----------------------------------------------------------------*\
+    repeat_cntr is created to count the num of times the truncated string in 
+<a name="anchor-71"></a>    mod_w_array is repeated. 
+\*-----------------------------------------------------------------*/
+
+    repeat_cntr = (int *) malloc ( sizeof (int) * n_lines); 
+
+<a name="anchor-72"></a>    for (i=0; i&lt;n_lines; i++)
+    {
+	int is_same = -1; 
+	repeat_cntr[i] = 0;
+	ProWstringToString (m_name, w_array[i]);
+<a name="anchor-73"></a>
+	if (strlen (m_name) > (PRO_NAME_SIZE - 3))
+	{
+	    mod_name = (char *) malloc ( sizeof (char) * PRO_NAME_SIZE);
+	    ProUtilstrncpy (mod_name, (const char*)m_name, PRO_NAME_SIZE-4);
+<a name="anchor-74"></a>	    mod_name[PRO_NAME_SIZE-4] = '\0';
+	}
+	else
+	{
+	    mod_name = (char *) malloc ( sizeof (char) * (strlen (m_name)+1));
+<a name="anchor-75"></a>	    ProUtilstrcpy (mod_name, (const char*)m_name);
+	}
+
+/*----------------------------------------------------------------*\
+   This loop is used to find out if the truncated element to be added 
+<a name="anchor-76"></a>matches with the existing element in the mod_w_array. If it matches then 
+the existing element repeat_cntr will be incremented and that element 
+position is assigned to is_same.
+\*-----------------------------------------------------------------*/
+
+<a name="anchor-77"></a>	for (j=0; j&lt;i ; j++)
+	{
+	    ProWstringToString ( mod_w_array_str, mod_w_array[j]);
+
+	    if ( ProUtilStrcmp ( mod_w_array_str, mod_name) == 0)
+<a name="anchor-78"></a>	    {
+		is_same = j;
+		repeat_cntr[j]++; 
+	    }
+	}
+<a name="anchor-79"></a>
+/*----------------------------------------------------------------*\
+   If the element to be added is repeated, then the matched existing 
+element repeat_cntr will be appended to the element.
+\*-----------------------------------------------------------------*/
+<a name="anchor-80"></a>
+	if (is_same > -1)
+	{
+	    ProTKSprintf (cntr_line, (char*)&quot;%s(%d)&quot;, mod_name, repeat_cntr[is_same]);
+	    mod_w_array[i] = ( ProWstring ) malloc ( sizeof (wchar_t) * (strlen (cntr_line)+1));
+<a name="anchor-81"></a>	    ProStringToWstring ( mod_w_array[i], cntr_line);
+	}
+	else
+	{
+	    mod_w_array[i] = (ProWstring ) malloc ( sizeof (wchar_t) * (strlen (mod_name)+1));
+<a name="anchor-82"></a>	    ProStringToWstring ( mod_w_array[i], mod_name);
+	}
+        free (mod_name);
+    }
+
+<a name="anchor-83"></a>    w_ptr = &amp;w_empty;
+
+/*----------------------------------------------------------------*\
+ empty wchar_t added as last element to mod_w_array 
+\*-----------------------------------------------------------------*/
+<a name="anchor-84"></a>
+    mod_w_array[i] = w_ptr;
+
+/*----------------------------------------------------------------*\
+   empty wchar_t added as last element to w_array to maintain the size 
+<a name="anchor-85"></a>equivalent to mod_w_array. Size of w_array (help msgs) and mod_w_array 
+(menus ) should be same for the fn ProMenuStringSelect to work properly.
+\*-----------------------------------------------------------------*/
+
+
+<a name="anchor-86"></a>    status = ProArrayObjectAdd((ProArray*)&amp;w_array, PRO_VALUE_UNUSED, 1,
+            &amp;w_ptr);
+    TEST_CALL_REPORT(&quot;ProArrayObjectAdd()&quot;, &quot;ProTestEditModelitemRel()&quot;,
+                                        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-87"></a>    status = ProArraySizeGet (mod_w_array, &amp;num_lines);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet ()&quot;, &quot;ProTestEditModelitemRel()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+    ProStringToWstring(w_name, (char*)&quot;Item Rels&quot;);
+<a name="anchor-88"></a>
+/*----------------------------------------------------------------*\
+   Note: Only for the sub menu strings mod_w_array is passed. For the 
+help message w_array is passed. This is to facilitate the user to know 
+the original value of truncated string.
+<a name="anchor-89"></a>\*-----------------------------------------------------------------*/
+
+    status = ProMenuStringsSelect(w_name, (wchar_t **) mod_w_array, 1, (wchar_t **) w_array, &amp;w_select, &amp;num_lines);
+    TEST_CALL_REPORT(&quot;ProMenuStringsSelect()&quot;, &quot;ProTestEditModelitemRel()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-90"></a>
+    if ((status != PRO_TK_NO_ERROR) || (num_lines&lt;1))
+	return (0); 
+
+    status = ProArraySizeGet((ProArray)w_array, &amp;n_lines);
+<a name="anchor-91"></a>    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+    for (i=0; i&lt;n_lines-1; i++)
+    {
+       sel_index = i;
+<a name="anchor-92"></a>       if (ProUtilWstrCmp(w_select[0], mod_w_array[i])==0)
+	   break;
+       else
+	 sel_index = -1;
+    }
+<a name="anchor-93"></a>
+    status = ProArrayObjectRemove((ProArray*)&amp;w_array, n_lines-1, 1);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-94"></a>    status = ProArrayObjectRemove((ProArray*)&amp;mod_w_array, n_lines-1, 1);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+
+    if (action == USER_RL_EDIT)
+<a name="anchor-95"></a>    {
+/*----------------------------------------------------------------*\
+ Since w_select[0] is truncated, w_array[i] is used to show the exact 
+ string for modification 
+\*-----------------------------------------------------------------*/
+<a name="anchor-96"></a>
+        if (sel_index > -1)
+	{
+	    ProWstringToString(line, w_array[sel_index]);
+	    ProTKSprintf(str, (char*)&quot;Enter Relation [%s]:&quot;, line);
+<a name="anchor-97"></a>    	    ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, str);
+
+    	    status = ProMessageStringRead(PRO_LINE_SIZE, w_line);
+	    TEST_CALL_REPORT(&quot;ProMessageStringRead&quot;, &quot;ProTestEditModelitemRel()&quot;,
+			status, status != PRO_TK_NO_ERROR);
+<a name="anchor-98"></a>	    if (status == PRO_TK_NO_ERROR)
+	    {
+	        w_array[sel_index] = w_line;
+	    }
+	}
+<a name="anchor-99"></a>    }
+    else
+    {
+	if (sel_index > -1)
+	{
+<a name="anchor-100"></a>	    status = ProArrayObjectRemove((ProArray*)&amp;w_array, sel_index, 1);
+	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+	    n_lines--;
+	}
+<a name="anchor-101"></a>    }
+	
+    status = ProArraySizeGet((ProArray)w_array, &amp;n_lines);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-102"></a>
+    if (n_lines&lt;1)
+    {
+	status =  ProRelsetDelete(&amp;relset);
+	TEST_CALL_REPORT(&quot;ProRelsetDelete()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+<a name="anchor-103"></a>					status, status != PRO_TK_NO_ERROR);
+    }
+    else
+    {
+    	status = ProRelsetRelationsSet(&amp;relset, w_array, n_lines);
+<a name="anchor-104"></a>    	TEST_CALL_REPORT(&quot;ProRelsetRelationsSet()&quot;, 
+	    &quot;ProTestEditModelitemRel()&quot;, status, status != PRO_TK_NO_ERROR);
+    }
+    free (repeat_cntr);
+
+<a name="anchor-105"></a>    status = ProArraySizeGet((ProArray)mod_w_array, &amp;n_lines);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------*\
+<a name="anchor-106"></a>Since malloc is used only for n_lines-1 element in mod_w_array,
+free method is called only to those elements.
+\*--------------------------------------------------------------*/
+
+
+<a name="anchor-107"></a>    for (i=0; i&lt;n_lines; i++)
+    {
+	free (mod_w_array[i]);
+    }
+
+<a name="anchor-108"></a>	
+    status = ProArrayFree((ProArray*) &amp;mod_w_array);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-109"></a>    status = ProArrayFree((ProArray*) &amp;w_array);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestEditModelitemRel()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+
+    return (0);
+<a name="anchor-110"></a>}
+
+
+/*====================================================================*\
+    FUNCTION :	ProTestRegenerateModelitemRel()
+<a name="anchor-111"></a>    PURPOSE  :  Regenerate relset 
+\*====================================================================*/
+int ProTestRegenerateModelitemRel(
+    ProModelitem *modelitem,
+    int action)
+<a name="anchor-112"></a>{
+  ProError status;
+  wchar_t w_empty = 0;
+  ProRelset relset;
+
+<a name="anchor-113"></a>    status = ProModelitemToRelset(modelitem, &amp;relset);
+    TEST_CALL_REPORT(&quot;ProModelitemToRelset()&quot;, 
+	&quot;ProTestRegeneratModelitemRel()&quot;, 
+	    status, status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_E_NOT_FOUND);
+	
+<a name="anchor-114"></a>    if (status != PRO_TK_NO_ERROR)
+    {
+    	ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;No relations found&quot;);
+	return (0);
+    }
+<a name="anchor-115"></a>
+    status = ProRelsetRegenerate(&amp;relset);
+    TEST_CALL_REPORT(&quot;ProRelsetRegenerate()&quot;, 
+	&quot;ProTestRegeneratModelitemRel()&quot;, status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-116"></a>    if (status == PRO_TK_NO_ERROR)
+	ProUtilMsgPrint((char*)&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, (char*)&quot;Relset regenerated successfully&quot;);
+
+    return (0);
+}
+<a name="anchor-117"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestRelsetVisitAction()
+    PURPOSE  :  Write info about one relset to the file
+\*====================================================================*/
+<a name="anchor-118"></a>int ProTestRelsetVisitAction(
+    ProRelset *p_relset,
+    FILE *fp)
+{
+  ProError status;
+<a name="anchor-119"></a>  ProLine w_line;
+  ProModelitem modelitem;
+  ProCharLine str_v, line;
+  ProParamvalue value;
+  int i, n_lines;
+<a name="anchor-120"></a>  ProWstring *w_array;
+
+    status = ProRelsetToModelitem(p_relset, &amp;modelitem);
+    TEST_CALL_REPORT(&quot;ProRelsetToModelitem()&quot;, &quot;ProTestrelsetVisitAction()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-121"></a>    ProTKFprintf(fp, (char*)&quot;Id %4d  Type %4d\n&quot;, modelitem.id, modelitem.type);
+
+    status = ProArrayAlloc(0, sizeof(ProWstring), 1, (ProArray*)&amp;w_array);
+    TEST_CALL_REPORT(&quot;ProArrayAlloc()&quot;, &quot;ProTestRelsetVisitAction()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-122"></a>    
+    status = ProRelsetRelationsGet(p_relset, &amp;w_array);
+    TEST_CALL_REPORT(&quot;ProRelsetRelationsGet()&quot;, &quot;ProTestRelsetVisitAction()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+    
+<a name="anchor-123"></a>    status = ProArraySizeGet((ProArray)w_array, &amp;n_lines);
+    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestRelsetVisitAction()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+    for (i=0; i&lt;n_lines; i++)
+    {
+<a name="anchor-124"></a>	ProWstringToString(line, w_array[i]);
+	ProStringToWstring(w_line, line);
+
+	if (strchr(line, '=')!=NULL)
+	{
+<a name="anchor-125"></a>	    w_line[strchr(line, '=') - line] = 0; 
+
+    	    status = ProRelationEval(p_relset, w_line, &amp;value);
+    	    TEST_CALL_REPORT(&quot;ProRelationEval()&quot;, &quot;ProTestRelsetVisitAction()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-126"></a>	    if (status != PRO_TK_NO_ERROR)
+	    	value.type = PRO_PARAM_VOID;
+            switch (value.type)
+	    {
+	    case PRO_PARAM_DOUBLE:
+<a name="anchor-127"></a>	    	ProTKSprintf(str_v, (char*)&quot;%8.2f&quot;, value.value.d_val);
+	    	break;
+	    case PRO_PARAM_INTEGER:
+	    case PRO_PARAM_NOTE_ID:
+	    	ProTKSprintf(str_v, (char*)&quot;%d&quot;, value.value.i_val);
+<a name="anchor-128"></a>	        break;
+	    case PRO_PARAM_STRING:
+	    	ProWstringToString(str_v, value.value.s_val);
+	    	break;
+	    case PRO_PARAM_BOOLEAN:
+<a name="anchor-129"></a>	    	ProUtilstrcpy(str_v, value.value.l_val ? &quot;TRUE&quot; : &quot;FALSE&quot;);
+	    	break;
+   	    default:
+	    	ProUtilstrcpy(str_v, &quot;ERROR&quot;);
+	    	break;
+<a name="anchor-130"></a>	    }
+	}
+	else
+	   str_v[0]='\0'; 
+	ProTKFprintf(fp, (char*)&quot;%10s%25s  %10s\n&quot;, (char*)&quot; &quot;, line, str_v);
+<a name="anchor-131"></a>    }
+
+    status = ProArrayFree((ProArray*)&amp;w_array);
+    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestRelsetVisitAction()&quot;, 
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-132"></a>    return (0);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestModelRelsetInfo()
+<a name="anchor-133"></a>    PURPOSE  :  Collect info information for all rels in the model
+\*====================================================================*/
+int ProTestModelRelsetInfo(
+    ProMdl *model)
+{
+<a name="anchor-134"></a>  ProError status;
+  char fname[PRO_FILE_NAME_SIZE];
+  FILE *fp;
+  ProPath w_path;
+  ProRelset	    *relset;
+<a name="anchor-135"></a>  int relset_num, i;
+
+    ProTestQcrName(model, (char*)&quot;.rls&quot;, fname);
+    fp = PTApplsUnicodeFopen(fname, &quot;w&quot;);
+
+<a name="anchor-136"></a>    ProTKFprintf(fp, (char*)&quot;Owner                      Relation           Value\n&quot;);           
+
+    status = ProUtilCollectRelset (*model, &amp;relset);
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-137"></a>        status = ProArraySizeGet ((ProArray)relset, &amp;relset_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestModelRelsetInfo()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; relset_num; i++)
+        {
+<a name="anchor-138"></a>            status = (ProError)ProTestRelsetVisitAction (relset+i, fp);
+        }
+        status = ProArrayFree ((ProArray*)&amp;relset);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestModelRelsetInfo()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-139"></a>    }
+    
+    fclose(fp);
+    ProStringToWstring(w_path, fname);
+
+<a name="anchor-140"></a>    ProInfoWindowDisplay(w_path, NULL, NULL);
+    return (0);
+}
+
+</pre>
+</body>
+</html>

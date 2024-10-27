@@ -1,0 +1,2602 @@
+<html>
+<head>
+<title>TestGeom.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/TOOLKIT includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProSolid.h>
+#include &lt;ProModelitem.h>
+#include &lt;ProObjects.h>
+#include &lt;ProMdl.h>
+#include &lt;ProAxis.h>
+<a name="anchor-3"></a>#include &lt;ProGeomitem.h>
+#include &lt;ProSurface.h>
+#include &lt;ProQuilt.h>
+#include &lt;ProEdge.h>
+#include &lt;ProFeature.h>
+<a name="anchor-4"></a>#include &lt;ProFeatType.h>
+#include &lt;ProCurve.h>
+#include &lt;ProSelection.h>
+#include &lt;ProPoint.h>
+#include &lt;ProCsys.h>
+<a name="anchor-5"></a>#include &lt;ProContour.h>
+#include &lt;ProAsmcomp.h>
+#include &lt;ProMenu.h>
+#include &lt;ProMessage.h>
+#include &lt;ProUtil.h>
+<a name="anchor-6"></a>
+
+/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-7"></a>
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &lt;TestError.h>
+<a name="anchor-8"></a>#include &lt;TestFiletypes.h>
+#include &lt;UtilFiles.h>
+#include &lt;UtilColor.h>
+#include &lt;UtilGeom.h>
+#include &lt;UtilMath.h>
+<a name="anchor-9"></a>#include &lt;UtilMatrix.h>
+#include &lt;UtilMessage.h>
+#include &lt;UtilNames.h>
+#include &lt;UtilString.h>
+#include &lt;UtilTypes.h>
+<a name="anchor-10"></a>#include &lt;UtilVisit.h>
+#include &lt;UtilCollect.h>
+
+#include &quot;TestError.h&quot;
+#include &quot;TestGeom.h&quot;
+<a name="anchor-11"></a>
+#include &lt;PTApplsUnicodeUtils.h>
+#include &lt;ProTKRunTime.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-12"></a>Application macros
+\*--------------------------------------------------------------------*/
+#define TRAVERSE	1
+#define TEST_MESH	2
+#define TESSELLATE	3
+<a name="anchor-13"></a>
+#define SURFAREA_TXT    &quot;gen_msg.txt&quot;
+#define QCR_NAME        &quot;sce_geom.inf&quot;
+
+#define TEST_CONT_AREA  1
+<a name="anchor-14"></a>#define TEST_CONT_BOX   2
+#define TEST_CONT_PNT   3
+#define TEST_CONT_CURV  4
+#define TEST_CURV_LEN   5
+#define TEST_CURV_PAR   6
+<a name="anchor-15"></a>#define TEST_PNT_ONSURF 7
+#define TEST_SURF_SAME  8
+
+/*--------------------------------------------------------------------*\
+Application prototypes
+<a name="anchor-16"></a>\*--------------------------------------------------------------------*/
+ProError ProTestCurveAct( ProModelitem* , ProError, ProAppData);
+int ProTestGeomTraverse(ProMdl *, int);
+
+ProError ProUtilContourSelect (
+<a name="anchor-17"></a>    ProSurface surface,
+    ProContour *p_contour);
+
+ProError ProTestContourHighlight (
+    ProMdl model,
+<a name="anchor-18"></a>    ProAsmcomppath *p_asmcomp_path,
+    ProSurface surface,
+    ProContour contour,
+    ProBoolean flag);
+
+<a name="anchor-19"></a>/*====================================================================*\
+    FUNCTION :	ProTestGeometry()
+    PURPOSE  :	Commands for testing geometry in Pro/TOOLKIT
+\*====================================================================*/
+int ProTestGeometry(
+<a name="anchor-20"></a>    ProMdl *model)
+{
+    int ProTestGeomShape();
+    int ProTestGeomMindist();
+    int ProTestGeometryAtPoint();
+<a name="anchor-21"></a>    int ProTestMeasureMenu();
+    int ProTestSheetmetalSurfs();
+    int ProTestSurfaceGeom ();
+    int ProTestEdgeCurveGeom ();
+    int ProTestPointGeom ();
+<a name="anchor-22"></a>    int ProTestSldVolumes ();
+    int ProTestTesselCurve();
+    ProError ProTestExportMainMenu(ProMdl mdl);
+    
+    ProError err;
+<a name="anchor-23"></a>    int id;
+
+    err = ProMenuFileRegister((char*)&quot;TkGeom&quot;,(char*)&quot;tkgeom.mnu&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuFileRegister&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+<a name="anchor-24"></a>    err = ProMenubuttonActionSet((char*)&quot;TkGeom&quot;,(char*)&quot;Traverse&quot;,  
+        (ProMenubuttonAction)ProTestGeomTraverse, model, TRAVERSE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+
+<a name="anchor-25"></a>    err = ProMenubuttonActionSet((char*)&quot;TkGeom&quot;,(char*)&quot;Mesh&quot;, 
+        (ProMenubuttonAction)ProTestGeomTraverse, model, TEST_MESH);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+
+<a name="anchor-26"></a>    err = ProMenubuttonActionSet((char*)&quot;TkGeom&quot;,(char*)&quot;Tessellate&quot;, 
+        (ProMenubuttonAction)ProTestGeomTraverse, model, TESSELLATE);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+
+<a name="anchor-27"></a>    err = ProMenubuttonActionSet((char*)&quot;TkGeom&quot;,(char*)&quot;TessExport&quot;, 
+        (ProMenubuttonAction)ProTestExportMainMenu, NULL, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+
+<a name="anchor-28"></a>    err = ProMenubuttonActionSet((char*)&quot;TkGeom&quot;,(char*)&quot;Shape&quot;, 
+        (ProMenubuttonAction)ProTestGeomShape,    model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+
+<a name="anchor-29"></a>    err = ProMenubuttonActionSet((char*)&quot;TkGeom&quot;,(char*)&quot;Min Dist&quot;, 
+        (ProMenubuttonAction)ProTestGeomMindist,  model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+
+<a name="anchor-30"></a>    err = ProMenubuttonActionSet((char*)&quot;TkGeom&quot;,(char*)&quot;Pnt On Geom&quot;, 
+        (ProMenubuttonAction)  ProTestGeometryAtPoint,  model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+
+<a name="anchor-31"></a>    err = ProMenubuttonActionSet((char*)&quot;TkGeom&quot;,(char*)&quot;Measure&quot;, 
+        (ProMenubuttonAction)ProTestMeasureMenu,  model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+
+<a name="anchor-32"></a>    err = ProMenubuttonActionSet((char*)&quot;TkGeom&quot;,(char*)&quot;Shtmetl Surfs&quot;,  
+        (ProMenubuttonAction)ProTestSheetmetalSurfs,  model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+
+<a name="anchor-33"></a>    err = ProMenubuttonActionSet ((char*)&quot;TkGeom&quot;, (char*)&quot;Surface Area&quot;,
+        (ProMenubuttonAction)ProTestSurfaceGeom, model, TEST_CONT_AREA);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeometry()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-34"></a>    err = ProMenubuttonActionSet ((char*)&quot;TkGeom&quot;, (char*)&quot;Bound box&quot;,
+        (ProMenubuttonAction)ProTestSurfaceGeom, model, TEST_CONT_BOX);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeometry()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+ 
+<a name="anchor-35"></a>    err = ProMenubuttonActionSet ((char*)&quot;TkGeom&quot;, (char*)&quot;Point verify&quot;,
+        (ProMenubuttonAction)ProTestSurfaceGeom, model, TEST_CONT_PNT);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeometry()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-36"></a>    err = ProMenubuttonActionSet ((char*)&quot;TkGeom&quot;, (char*)&quot;Surf curvature&quot;,
+        (ProMenubuttonAction)ProTestSurfaceGeom, model, TEST_CONT_CURV);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeometry()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-37"></a>    err = ProMenubuttonActionSet ((char*)&quot;TkGeom&quot;, (char*)&quot;Edge/Curve Length&quot;,
+        (ProMenubuttonAction)ProTestEdgeCurveGeom, model, TEST_CURV_LEN);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeometry()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-38"></a>    err = ProMenubuttonActionSet ((char*)&quot;TkGeom&quot;, (char*)&quot;Edge/Curve Parameter&quot;,
+        (ProMenubuttonAction)ProTestEdgeCurveGeom, model, TEST_CURV_PAR);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeometry()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-39"></a>    err = ProMenubuttonActionSet ((char*)&quot;TkGeom&quot;, (char*)&quot;Point On Surface&quot;,
+        (ProMenubuttonAction)ProTestPointGeom, model, TEST_PNT_ONSURF);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeometry()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-40"></a>    err = ProMenubuttonActionSet ((char*)&quot;TkGeom&quot;, (char*)&quot;Sld Volumes&quot;,
+        (ProMenubuttonAction)ProTestSldVolumes, model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeometry()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-41"></a>    err = ProMenubuttonActionSet ((char*)&quot;TkGeom&quot;, (char*)&quot;Same Surfaces&quot;,
+        (ProMenubuttonAction)ProTestSurfaceGeom, model, TEST_SURF_SAME);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeometry()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+
+<a name="anchor-42"></a>    err = ProMenubuttonActionSet ((char*)&quot;TkGeom&quot;, (char*)&quot;Curve Tessel&quot;,
+        (ProMenubuttonAction)ProTestTesselCurve, model, 0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet()&quot;, &quot;ProTestGeometry()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+        
+<a name="anchor-43"></a>    err = ProMenubuttonActionSet((char*)&quot;TkGeom&quot;,(char*)&quot;TkGeom&quot;, 
+        (ProMenubuttonAction)ProMenuDelete,NULL,  0);
+    TEST_CALL_REPORT (&quot;ProMenubuttonActionSet&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+
+<a name="anchor-44"></a>
+    err = ProMenuCreate(PROMENUTYPE_MAIN, (char*)&quot;TkGeom&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuCreate&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR);
+
+<a name="anchor-45"></a>    err = ProMenuProcess((char*)&quot;TkGeom&quot;, &amp;id);
+    TEST_CALL_REPORT (&quot;ProMenuProcess&quot;, &quot;ProTestGeometry&quot;, err,
+        err != PRO_TK_NO_ERROR &amp;&amp; err != PRO_TK_E_FOUND);
+
+    return(0);
+<a name="anchor-46"></a>}
+
+/*====================================================================*\
+    FUNCTION :  ProUtilPartSelect
+    PURPOSE  :  Prompts to select a part (if asm mode) and return part handle
+<a name="anchor-47"></a>                and asm comp path
+\*====================================================================*/
+ProError ProUtilPartSelect (
+    ProMdl model,
+    ProPart *p_part,
+<a name="anchor-48"></a>    ProAsmcomppath **p_asm_comp_path)  /* Out: asm comp path
+                                          function allocate memory for struct
+                                          user must free it by free() */
+{
+    ProError status;
+<a name="anchor-49"></a>    ProMdlType type;
+    ProSelection *p_sel;
+    int num;
+    ProModelitem part_item;
+
+<a name="anchor-50"></a>    if (model == NULL || p_part == NULL || p_asm_comp_path == NULL)
+        return (PRO_TK_BAD_INPUTS);
+
+    status = ProMdlTypeGet (model, &amp;type);
+
+<a name="anchor-51"></a>    if (type != PRO_MDL_PART)
+    {
+        ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select part&quot;);
+        status = ProSelect ((char*)&quot;part&quot;, 1, NULL, NULL, NULL, NULL,
+            &amp;p_sel, &amp;num);
+<a name="anchor-52"></a>        if (status != PRO_TK_NO_ERROR || num != 1)
+            return (PRO_TK_GENERAL_ERROR);
+        status = ProSelectionModelitemGet (p_sel[0], &amp;part_item);
+        if (status != PRO_TK_NO_ERROR)
+            return (PRO_TK_GENERAL_ERROR);
+<a name="anchor-53"></a>        status = ProModelitemMdlGet (&amp;part_item, (ProMdl*)p_part);
+        if (status != PRO_TK_NO_ERROR)
+            return (PRO_TK_GENERAL_ERROR);
+        *p_asm_comp_path = (ProAsmcomppath*) calloc (1, 
+            sizeof (ProAsmcomppath));
+<a name="anchor-54"></a>        status = ProSelectionAsmcomppathGet (p_sel[0], *p_asm_comp_path);
+        TEST_CALL_REPORT (&quot;ProSelectionAsmcomppathGet()&quot;,
+            &quot;ProUtilPartSelec()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+    }
+<a name="anchor-55"></a>    else
+    {
+        *p_asm_comp_path = NULL;
+        *p_part = (ProPart)model;
+    }
+<a name="anchor-56"></a>    return (PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+    FUNCTION :  ProTestSldVolumes
+<a name="anchor-57"></a>    PURPOSE  :  Tests ProSldsurfaceVolumesFind function
+\*====================================================================*/
+int ProTestSldVolumes (
+    ProMdl *model)
+{
+<a name="anchor-58"></a>    ProPart part;
+    ProError status;
+    int num, i, j;
+    ProSelection sel_surf;
+    ProModelitem surf_item;
+<a name="anchor-59"></a>    ProAsmcomppath *p_asm_comp_path;
+    int *p_count;
+    int **p_surf_id_arr;
+    FILE *fptr;
+    ProCharLine line, str;
+<a name="anchor-60"></a>
+    fptr = (FILE *)PTApplsUnicodeFopen (QCR_NAME, &quot;a&quot;);
+
+    status = ProUtilPartSelect (*model, &amp;part, &amp;p_asm_comp_path);
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-61"></a>        return (0);
+
+    status = ProSldsurfaceVolumesFind (part, &amp;num, &amp;p_count, &amp;p_surf_id_arr);
+    TEST_CALL_REPORT (&quot;ProSldsurfaceVolumesFind()&quot;, &quot;ProTestSldVolumes()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+<a name="anchor-62"></a>    if (status != PRO_TK_NO_ERROR)
+        return (0);
+    
+    if (fptr != NULL)
+        ProTKFprintf (fptr, &quot;Part has %d volumes\n&quot;, num);
+<a name="anchor-63"></a>    for (i = 0; i &lt; num; i++)
+    {
+        if (fptr != NULL)
+            ProTKFprintf (fptr, &quot;Volume %d contains %d surfaces\n&quot;, i, p_count[i]);
+        
+<a name="anchor-64"></a>	line[0] ='\0';
+        for (j = 0; j &lt; p_count[i]; j++)
+        {
+
+            ProTKSprintf (str, &quot;%d&quot;, p_surf_id_arr[i][j]);
+<a name="anchor-65"></a>   	    if (j &lt; p_count[i]-1)
+		ProUtilstrcat(str, &quot;, &quot;);		
+	    ProUtilstrcat(line, (const char *) str);
+	    if (strlen(line) >=72 || j == p_count[i]-1)
+	    {
+<a name="anchor-66"></a>		ProTKFprintf(fptr, &quot;%s\n&quot;, line);
+		line[0] = '\0';
+	    }
+	
+            ProModelitemInit ((ProMdl)part, p_surf_id_arr[i][j], PRO_SURFACE,
+<a name="anchor-67"></a>                &amp;surf_item);
+            ProSelectionAlloc (p_asm_comp_path, &amp;surf_item, &amp;sel_surf);
+            ProSelectionHighlight (sel_surf, PRO_COLOR_EDGE_HIGHLIGHT);
+        }
+        ProArrayFree ((ProArray*)&amp;p_surf_id_arr[i]);
+<a name="anchor-68"></a>    }
+    ProArrayFree ((ProArray*)&amp;p_surf_id_arr);
+    ProArrayFree ((ProArray*)&amp;p_count);
+    if (p_asm_comp_path != NULL)
+        free (p_asm_comp_path);
+<a name="anchor-69"></a>    if (fptr != NULL)
+        fclose (fptr);
+
+    return (0);
+}
+<a name="anchor-70"></a>    
+
+/*====================================================================*\
+    FUNCTION :  ProTestPointGeom
+    PURPOSE  :  Tests point geometry functions
+<a name="anchor-71"></a>\*====================================================================*/
+int ProTestPointGeom (
+    ProMdl *model)
+{
+    ProError status;
+<a name="anchor-72"></a>    ProSelection *p_sel;
+    int num;
+    ProModelitem surf_item;
+    ProMatrix matrix;
+    ProPoint3d point, free_point, closest_point;
+<a name="anchor-73"></a>    ProSurface surface;
+    ProBoolean on_surface;
+    ProMdl surf_item_owner; 
+    ProMdlType type;
+    ProAsmcomppath asm_comp_path;
+<a name="anchor-74"></a>    char test_msg[PRO_PATH_SIZE];
+    FILE *fptr;
+
+    fptr = PTApplsUnicodeFopen (QCR_NAME, &quot;a&quot;);
+
+<a name="anchor-75"></a>    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Select surface&quot;);
+    status = ProSelect ((char*)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL,
+        &amp;p_sel, &amp;num);
+    if (status != PRO_TK_NO_ERROR || num != 1)
+        return (0);
+<a name="anchor-76"></a>    status = ProSelectionModelitemGet (p_sel[0], &amp;surf_item);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestPointGeom()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    status = ProModelitemMdlGet (&amp;surf_item, &amp;surf_item_owner);
+    TEST_CALL_REPORT(&quot;ProModelitemMdlGet()&quot;, &quot;ProTestPointGeom()&quot;,
+<a name="anchor-77"></a>        status, status != PRO_TK_NO_ERROR);
+    status = ProSurfaceInit (surf_item_owner, surf_item.id, &amp;surface);
+    TEST_CALL_REPORT(&quot;ProSurfaceInit()&quot;, &quot;ProTestPointGeom()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    ProSelectionPoint3dGet (p_sel[0], free_point);
+<a name="anchor-78"></a>    status = ProPoint3dOnsurfaceFind (free_point, surface, &amp;on_surface,
+        closest_point);
+    TEST_CALL_REPORT(&quot;ProPoint3dOnsurfaceFind()&quot;, &quot;ProTestPointGeom()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+    ProMdlTypeGet (*model, &amp;type);
+<a name="anchor-79"></a>    if (type != PRO_MDL_PART)
+    {
+        ProSelectionAsmcomppathGet (p_sel[0], &amp;asm_comp_path);
+        ProAsmcomppathTrfGet (&amp;asm_comp_path, PRO_B_TRUE, matrix);
+        ProUtilPointTrans (matrix, closest_point, point);
+<a name="anchor-80"></a>    }
+    else
+    {
+        point[0] = closest_point[0];
+        point[1] = closest_point[1];
+<a name="anchor-81"></a>        point[2] = closest_point[2];
+    }
+    ProGraphicsCircleDraw (point, 10.0);
+    
+    ProTKSprintf (test_msg, 
+<a name="anchor-82"></a>        &quot;Point is %s on the surface, closest point is (%3.2f, %3.2f, %3.2f)&quot;,
+        (on_surface == PRO_B_FALSE)? &quot;not&quot;:&quot;&quot;,
+        point[0], point[1], point[2]);
+    ProUtilMsgPrint(&quot;gen&quot;, &quot;TEST %0s&quot;, test_msg);
+
+<a name="anchor-83"></a>    if (fptr != NULL)
+    {
+        ProTKFprintf (fptr, &quot;%s \n&quot;, test_msg);
+        fclose (fptr);
+    }
+<a name="anchor-84"></a>        
+    return (0);
+}
+
+/*====================================================================*\
+<a name="anchor-85"></a>    FUNCTION :  ProTestEdgeCurveGeom
+    PURPOSE  :  Edge/Curve geometry
+\*====================================================================*/
+int ProTestEdgeCurveGeom (
+    ProMdl *model,
+<a name="anchor-86"></a>    int action)
+{
+    ProName msg_file;
+    ProError status;
+    ProSelection *p_sel;
+<a name="anchor-87"></a>    int n_sel;
+    ProMdl owner;
+    ProModelitem modelitem;
+    ProEdge edge;
+    ProCurve curve;
+<a name="anchor-88"></a>    double t1, t2, length;
+    char crv_msg[PRO_NAME_SIZE];
+    ProVector point1, point2, der1, der2, dir;
+    FILE *fptr;
+
+<a name="anchor-89"></a>    fptr = PTApplsUnicodeFopen (QCR_NAME, &quot;a&quot;);
+
+    ProStringToWstring (msg_file, (char*)SURFAREA_TXT);
+
+    ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, &quot;Select edge or curve&quot;);
+<a name="anchor-90"></a>
+    status = ProSelect ((char*)&quot;edge,curve&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel,
+        &amp;n_sel);
+    if (status != PRO_TK_NO_ERROR || n_sel != 1)
+        return (0);
+<a name="anchor-91"></a>
+    status = ProSelectionModelitemGet (p_sel[0], &amp;modelitem);
+    TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestEdgeCurveGeom()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-92"></a>    status = ProModelitemMdlGet (&amp;modelitem, &amp;owner);
+    TEST_CALL_REPORT (&quot;ProModelitemMdlGet()&quot;, &quot;ProTestEdgeCurveGeom()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, &quot;Enter start parameter t:&quot;);
+<a name="anchor-93"></a>    status = ProMessageDoubleRead (NULL, &amp;t1);
+    if (status != PRO_TK_NO_ERROR)
+        return (0);
+
+    if (action == TEST_CURV_LEN)
+<a name="anchor-94"></a>    {
+        ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, &quot;Enter end parameter t:&quot;);
+        status = ProMessageDoubleRead (NULL, &amp;t2);
+        if (status != PRO_TK_NO_ERROR)
+            return (0);
+<a name="anchor-95"></a>    }
+    else if (action == TEST_CURV_PAR)
+    {
+        ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, &quot;Enter length:&quot;);
+        status = ProMessageDoubleRead (NULL, &amp;length);
+<a name="anchor-96"></a>        if (status != PRO_TK_NO_ERROR)
+            return (0);
+    }
+
+    switch (action)
+<a name="anchor-97"></a>    {
+#ifndef PT_PRODUCTS_BUILD
+    case TEST_CURV_LEN:
+        if (modelitem.type == PRO_EDGE)
+        {
+<a name="anchor-98"></a>            status = ProEdgeInit ((ProSolid)owner, modelitem.id, &amp;edge);
+            TEST_CALL_REPORT (&quot;ProEdgeInit()&quot;,
+                &quot;ProTestEdgeCurveGeom()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+            ProEdgeXyzdataEval (edge, t1, point1, der1, der2, dir);
+<a name="anchor-99"></a>            ProEdgeXyzdataEval (edge, t2, point2, der1, der2, dir);
+            status = ProEdgeLengthT1T2Eval (edge, t1, t2, &amp;length);
+            TEST_CALL_REPORT (&quot;ProEdgeLengthT1T2Eval()&quot;, 
+                &quot;ProTestEdgeCurveGeom()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-100"></a>        }
+        else if (modelitem.type == PRO_CURVE)
+        {
+            status = ProCurveInit ((ProSolid)owner, modelitem.id, &amp;curve);
+            TEST_CALL_REPORT (&quot;ProCurveInit()&quot;,
+<a name="anchor-101"></a>                &quot;ProTestEdgeCurveGeom()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+            ProCurveXyzdataEval (curve, t1, point1, der1, der2);
+            ProCurveXyzdataEval (curve, t2, point2, der1, der2);
+            status = ProCurveLengthT1T2Eval (curve, t1, t2, &amp;length);
+<a name="anchor-102"></a>            TEST_CALL_REPORT (&quot;ProCurveLengthT1T2Eval()&quot;, 
+                &quot;ProTestEdgeCurveGeom()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+        }
+        ProGraphicsCircleDraw (point1, 0.1);
+<a name="anchor-103"></a>        ProGraphicsCircleDraw (point2, 0.1);
+        ProTKSprintf (crv_msg, &quot;Length %4.2f&quot;, length);
+        break;
+    case TEST_CURV_PAR:
+        if (modelitem.type == PRO_EDGE)
+<a name="anchor-104"></a>        {
+            status = ProEdgeInit ((ProSolid)owner, modelitem.id, &amp;edge);
+            TEST_CALL_REPORT (&quot;ProEdgeInit()&quot;,
+                &quot;ProTestEdgeCurveGeom()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-105"></a>            ProEdgeXyzdataEval (edge, t1, point1, der1, der2, dir);
+            status = ProEdgeParamByLengthEval (edge, t1, length, &amp;t2, point2);
+            TEST_CALL_REPORT (&quot;ProEdgeParamByLengthEval()&quot;,
+                &quot;ProTestEdgeCurveGeom()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+<a name="anchor-106"></a>        }
+        else if (modelitem.type == PRO_CURVE)
+        {
+            status = ProCurveInit ((ProSolid)owner, modelitem.id, &amp;curve);
+            TEST_CALL_REPORT (&quot;ProCurveInit()&quot;,
+<a name="anchor-107"></a>                &quot;ProTestEdgeCurveGeom()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+            ProCurveXyzdataEval (curve, t1, point1, der1, der2);
+            status = ProCurveParamByLengthEval (curve, t1, length, &amp;t2, point2);
+            TEST_CALL_REPORT (&quot;ProCurveParamByLengthEval()&quot;,
+<a name="anchor-108"></a>                &quot;ProTestEdgeCurveGeom()&quot;,
+                status, status != PRO_TK_NO_ERROR);
+        }
+        ProGraphicsCircleDraw (point1, 0.1);
+        ProGraphicsCircleDraw (point2, 0.1);
+<a name="anchor-109"></a>        ProTKSprintf (crv_msg, &quot;End parameter: %4.2f&quot;, t2);
+        break;
+#endif
+    default:
+        ProTKSprintf (crv_msg, &quot;Unknown action&quot;);
+<a name="anchor-110"></a>        break;
+    }
+
+    ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, crv_msg);
+    if (fptr != NULL)
+<a name="anchor-111"></a>    {
+        ProTKFprintf (fptr, &quot;%s \n&quot;, crv_msg);
+        fclose (fptr);
+    }
+
+<a name="anchor-112"></a>    return (0);
+}
+
+/*====================================================================*\
+    FUNCTION :  ProTestSurfaceGeom
+<a name="anchor-113"></a>    PURPOSE  :  Surface geometry
+\*====================================================================*/
+int ProTestSurfaceGeom (
+    ProMdl *model,
+    int action)
+<a name="anchor-114"></a>{
+    ProError status;
+    ProMdl owner;
+    ProSelection *p_sel_surf, sel_surf;
+    ProModelitem srf_modelitem;
+<a name="anchor-115"></a>    ProSurface surface, *p_same_surf;
+    ProContour contour;
+    int i, n_sel, num, surf_id;
+    ProName msg_file;
+    double surf_area;
+<a name="anchor-116"></a>    char area_msg[PRO_LINE_SIZE], area_msg2[PRO_LINE_SIZE] = &quot;&quot;;
+    Pro2dPnt points[2], uv_point;
+    ProUvStatus uv_status;
+    ProVector point, der1[2], der2[3], norm;
+    ProAsmcomppath *p_asm_comp_path;
+<a name="anchor-117"></a>    ProSolid solid;
+    ProMdlType type;
+    FILE *fptr;
+    Pro3dPnt points3d[2];
+
+<a name="anchor-118"></a>    fptr = PTApplsUnicodeFopen (QCR_NAME, &quot;a&quot;);
+
+    p_asm_comp_path = NULL;
+    if (action == TEST_SURF_SAME)
+    {
+<a name="anchor-119"></a>        ProMdlTypeGet (*model, &amp;type);
+        if (type == PRO_MDL_PART)
+            solid = (ProSolid) *model;
+        else
+        {
+<a name="anchor-120"></a>            status = ProUtilPartSelect (*model, 
+                (ProPart*)&amp;solid, &amp;p_asm_comp_path);
+            if (status != PRO_TK_NO_ERROR)
+                return (0);
+        }
+<a name="anchor-121"></a>    }
+
+    ProStringToWstring (msg_file, (char*)SURFAREA_TXT);
+
+    ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, &quot;Select surface&quot;);
+<a name="anchor-122"></a>
+    status = ProSelect ((char*)&quot;surface&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel_surf,
+        &amp;n_sel);
+    if (status != PRO_TK_NO_ERROR || n_sel != 1)
+        return (0);
+<a name="anchor-123"></a>
+    status = ProSelectionModelitemGet (p_sel_surf[0], &amp;srf_modelitem); 
+    TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestSurfaceGeom()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-124"></a>    status = ProModelitemMdlGet (&amp;srf_modelitem, &amp;owner); 
+    TEST_CALL_REPORT (&quot;ProModelitemMdlGet()&quot;, &quot;ProTestSurfaceGeom()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProSurfaceInit (owner, srf_modelitem.id, &amp;surface);
+<a name="anchor-125"></a>    TEST_CALL_REPORT (&quot;ProSurfaceInit()&quot;, &quot;ProTestSurfaceGeom()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    if (action != TEST_CONT_CURV &amp;&amp; action != TEST_SURF_SAME)
+    {
+<a name="anchor-126"></a>        ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, &quot;Select contour&quot;);
+    
+        status = ProUtilContourSelect (surface, &amp;contour);
+        if (status == PRO_TK_E_NOT_FOUND) 
+        {
+<a name="anchor-127"></a>            ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, 
+                &quot;Contour must be on specified surface&quot;);
+            return (0);
+        }
+        if (status != PRO_TK_NO_ERROR)
+<a name="anchor-128"></a>        {
+            ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, 
+                &quot;Error while contour selection&quot;);
+            return (0);
+        }
+<a name="anchor-129"></a>    }
+
+    if (action == TEST_CONT_PNT || action == TEST_CONT_CURV)
+    {
+        ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, &quot;Enter U parameter:&quot;);
+<a name="anchor-130"></a>        status = ProMessageDoubleRead (NULL, &amp;uv_point[0]);
+        if (status != PRO_TK_NO_ERROR)
+            return (0);
+        ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, &quot;Enter V parameter:&quot;);
+        status = ProMessageDoubleRead (NULL, &amp;uv_point[1]);
+<a name="anchor-131"></a>        if (status != PRO_TK_NO_ERROR)
+            return (0);
+    }
+
+    switch (action)
+<a name="anchor-132"></a>    {
+#ifndef PT_PRODUCTS_BUILD
+
+    case TEST_SURF_SAME:
+        ProArrayAlloc (0, sizeof (ProSurface), 1, (ProArray*)&amp;p_same_surf);
+<a name="anchor-133"></a>        status = ProSurfaceSameSrfsFind (solid, surface, 
+            &amp;p_same_surf, &amp;num);
+        TEST_CALL_REPORT (&quot;ProSurfaceSameSrfsFind()&quot;, &quot;ProTestSurfaceGeom()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        ProSurfaceIdGet (surface, &amp;surf_id);
+<a name="anchor-134"></a>        ProTKSprintf (area_msg, &quot;Found %d same surfaces for surface %d\n&quot;,
+            num, surf_id);
+        for (i = 0; i &lt; num; i++)
+        {
+            ProSurfaceIdGet (p_same_surf[i], &amp;surf_id);
+<a name="anchor-135"></a>            ProModelitemInit ((ProMdl)solid, surf_id, PRO_SURFACE,
+                &amp;srf_modelitem);
+            ProSelectionAlloc (p_asm_comp_path, &amp;srf_modelitem, &amp;sel_surf);
+            ProSelectionHighlight (sel_surf, PRO_COLOR_EDGE_HIGHLIGHT);
+        }
+<a name="anchor-136"></a>        ProArrayFree ((ProArray*)&amp;p_same_surf);
+        break;
+    case TEST_CONT_AREA:
+        status = ProContourAreaEval (surface, contour, &amp;surf_area);
+        TEST_CALL_REPORT (&quot;ProContourAreaEval()&quot;, &quot;ProTestSurfaceGeom()&quot;,
+<a name="anchor-137"></a>            status, status != PRO_TK_NO_ERROR);
+        ProTKSprintf (area_msg, &quot;Surface area inside of outer contour: %4.2f&quot;, 
+            surf_area);
+        break;
+    case TEST_CONT_BOX:
+<a name="anchor-138"></a>        status = ProContourBoundbox2dCompute (surface, contour, points);
+        TEST_CALL_REPORT (&quot;ProContourBoundbox2dCompute()&quot;, 
+            &quot;ProTestSurfaceGeom()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        ProTKSprintf (area_msg, &quot;2d Box ( %.2f, %.2f), ( %.2f, %.2f)&quot;,
+<a name="anchor-139"></a>            points[0][0], points[0][1], points[1][0], points[1][1]);
+	status=ProContourBoundbox3dCompute(surface,contour,points3d);
+	TEST_CALL_REPORT(&quot;ProContourBoundbox3dCompute()&quot;,
+		&quot;ProTestSurfaceGeom()&quot;, status, status != PRO_TK_NO_ERROR);
+	ProTKSprintf(area_msg2,&quot;3d Box ( %.2f, %.2f, %.2f), ( %.2f, %.2f, %.2f)&quot;,
+<a name="anchor-140"></a>		points3d[0][0], points3d[0][1], points3d[0][2],
+		points3d[1][0], points3d[1][1], points3d[1][2]);
+        break;
+    case TEST_CONT_PNT:
+        status = ProContourUvpntVerify (surface, contour, uv_point, &amp;uv_status);
+<a name="anchor-141"></a>        TEST_CALL_REPORT (&quot;ProContourUvpntVerify()&quot;, &quot;ProTestSurfaceGeom()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        ProSurfaceXyzdataEval (surface, uv_point, point, der1, der2, norm);
+        ProGraphicsCircleDraw (point, 0.1);
+        if (uv_status == PRO_UV_AMBIGUOUS)
+<a name="anchor-142"></a>            ProTKSprintf (area_msg, &quot;Point is on the contour&quot;);
+        else if (uv_status == PRO_UV_OUTSIDE)
+            ProTKSprintf (area_msg, &quot;Point is outside the contour&quot;);
+        else if (uv_status == PRO_UV_INSIDE)
+            ProTKSprintf (area_msg, &quot;Point is inside the contour&quot;);
+<a name="anchor-143"></a>        else return (0);
+        break;
+    case TEST_CONT_CURV:
+        status = ProSurfacePrincipalCrvtEval (surface, uv_point, &amp;point[0],
+            &amp;point[1], der1);
+<a name="anchor-144"></a>        TEST_CALL_REPORT (&quot;ProSurfacePrincipalCrvtEval()&quot;, 
+            &quot;ProTestSurfaceGeom()&quot;,
+            status, status != PRO_TK_NO_ERROR);
+        ProTKSprintf (area_msg,
+   &quot;Curvature max= %4.2f, min= %4.2f, dirs (%4.2f,%4.2f,%4.2f;%4.2f,%4.2f,%4.2f)&quot;,
+<a name="anchor-145"></a>   point[0], point[1], der1[0][0], der1[0][1], der1[0][2],
+   der1[1][0], der1[1][1], der1[1][2]);
+        ProSurfaceXyzdataEval (surface, uv_point, point, der1, der2, norm);
+        ProGraphicsCircleDraw (point, 0.1);
+        break;
+<a name="anchor-146"></a>#endif
+
+    default:
+        ProTKSprintf (area_msg, &quot;Unknown action&quot;);
+        break;
+<a name="anchor-147"></a>    }
+
+    ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, area_msg);
+
+    if (area_msg2[0]!='\0') 
+<a name="anchor-148"></a>	ProMessageDisplay (msg_file, (char*)&quot;TEST %0s&quot;, area_msg2);
+
+    if (p_asm_comp_path != NULL)
+        free (p_asm_comp_path);
+    if (fptr != NULL)
+<a name="anchor-149"></a>    {
+        ProTKFprintf (fptr, &quot;%s \n&quot;, area_msg);
+	if( area_msg2[0] != '\0' ) 
+	    ProTKFprintf( fptr, &quot;%s \n&quot;, area_msg2 );
+
+<a name="anchor-150"></a>        fclose (fptr);
+    }
+
+    area_msg2[0] = '\0';
+
+<a name="anchor-151"></a>    return (0);
+}
+
+
+/*====================================================================*\
+<a name="anchor-152"></a>    FUNCTION :  ProUtilContourSelect
+    PURPOSE  :  Selects contour and returns it
+\*====================================================================*/
+ProError ProUtilContourSelect (
+    ProSurface surface,
+<a name="anchor-153"></a>    ProContour *p_contour)
+{
+    ProError status;
+    int n_sel, i, cont_num, j, edge_num, edge_id;
+    ProSelection *p_edge_sel;
+<a name="anchor-154"></a>    ProContour *p_contours;
+    ProEdge    *p_edges;
+    ProModelitem edge_modelitem;
+    ProMdl     owner, current;
+    ProBoolean is_contour_found;
+<a name="anchor-155"></a>    ProMdlType type;
+    ProAsmcomppath asmcomp_path, *p_asmcomp_path;
+
+    ProMdlCurrentGet (&amp;current);
+    ProMdlTypeGet (current, &amp;type);
+<a name="anchor-156"></a>
+    status = ProSelect ((char*)&quot;edge&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_edge_sel, &amp;n_sel);
+    if (status != PRO_TK_NO_ERROR)
+        return (status);
+    if (n_sel != 1)
+<a name="anchor-157"></a>        return (PRO_TK_GENERAL_ERROR);
+
+    if (type == PRO_MDL_ASSEMBLY)
+    {
+        p_asmcomp_path = &amp;asmcomp_path;
+<a name="anchor-158"></a>        ProSelectionAsmcomppathGet (p_edge_sel[0], p_asmcomp_path);
+    }
+    else
+        p_asmcomp_path = NULL;
+
+<a name="anchor-159"></a>    status = ProSelectionModelitemGet (p_edge_sel[0], &amp;edge_modelitem);
+    TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, &quot;ProUtilContourSelect()&quot;,
+        status, status != PRO_TK_NO_ERROR);
+
+    status = ProModelitemMdlGet (&amp;edge_modelitem, &amp;owner);
+<a name="anchor-160"></a>    TEST_CALL_REPORT (&quot;ProModelitemMdlGet()&quot;, &quot;ProUtilContourSelect()&quot;,
+        status, status != PRO_TK_NO_ERROR); 
+
+    status = ProUtilCollectSurfaceContours (surface, &amp;p_contours);
+    if (status != PRO_TK_NO_ERROR)
+<a name="anchor-161"></a>        return (PRO_TK_GENERAL_ERROR);
+
+    ProArraySizeGet ((ProArray)p_contours, &amp;cont_num);
+
+    is_contour_found = PRO_B_FALSE;
+<a name="anchor-162"></a>    for (i = 0; i &lt; cont_num; i++)
+    {
+        status = ProUtilCollectContourEdges (surface, p_contours[i],
+            &amp;p_edges);
+        ProArraySizeGet ((ProArray)p_edges, &amp;edge_num);
+<a name="anchor-163"></a>        for (j = 0; j &lt; edge_num; j++)
+        {
+            status = ProEdgeIdGet (p_edges[j], &amp;edge_id);
+	    TEST_CALL_REPORT (&quot;ProEdgeIdGet()&quot;,
+		&quot;ProUtilContourSelect()&quot;, status, status != PRO_TK_NO_ERROR); 
+<a name="anchor-164"></a>            if (edge_modelitem.id == edge_id)
+            {
+                is_contour_found = PRO_B_TRUE;
+                break;
+            }
+<a name="anchor-165"></a>        }
+        ProArrayFree ((ProArray*)&amp;p_edges);
+        if (is_contour_found == PRO_B_TRUE)
+            break;
+    }
+<a name="anchor-166"></a>    if (is_contour_found != PRO_B_TRUE)
+        return (PRO_TK_E_NOT_FOUND);
+
+    *p_contour = p_contours[i];
+    ProTestContourHighlight (owner, 
+<a name="anchor-167"></a>        p_asmcomp_path, surface, *p_contour, PRO_B_TRUE);
+
+    return (PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-168"></a>/*====================================================================*\
+    FUNCTION : ProTestContourHighlight
+    PURPOSE  : Highlight/unhighlights specified contour
+\*====================================================================*/
+ProError ProTestContourHighlight (
+<a name="anchor-169"></a>    ProMdl model,
+    ProAsmcomppath *p_asmcomp_path,
+    ProSurface surface,
+    ProContour contour, 
+    ProBoolean flag)
+<a name="anchor-170"></a>{
+    ProEdge *p_edges;
+    int edge_num, i;
+    ProError status;
+    ProSelection selection;
+<a name="anchor-171"></a>    ProModelitem edge_item;
+
+    status = ProUtilCollectContourEdges (surface,
+        contour, &amp;p_edges);
+    ProArraySizeGet ((ProArray)p_edges, &amp;edge_num);
+<a name="anchor-172"></a>    for (i = 0; i &lt; edge_num; i++)
+    {
+        ProEdgeToGeomitem((ProSolid)model, p_edges[i], 
+	    (ProGeomitem*)&amp;edge_item);
+        ProSelectionAlloc (p_asmcomp_path, &amp;edge_item, &amp;selection);
+<a name="anchor-173"></a>        if (flag == PRO_B_TRUE)
+            ProSelectionHighlight (selection, PRO_COLOR_EDGE_HIGHLIGHT);
+        else
+            ProSelectionUnhighlight (selection);
+        ProSelectionFree (&amp;selection);
+<a name="anchor-174"></a>
+    }
+    ProArrayFree ((ProArray*)&amp;p_edges);
+    return (PRO_TK_NO_ERROR);
+} 
+<a name="anchor-175"></a>
+
+/*====================================================================*\
+    FUNCTION :	ProTestEdgeAct()
+    PURPOSE  :  General action function for an edge	
+<a name="anchor-176"></a>\*====================================================================*/
+ProError ProTestEdgeAct(
+    ProEdge edge,
+    ProError instatus,
+    ProAppData tmp_app_data)
+<a name="anchor-177"></a>{
+    ProTestGeomData *app_data = (ProTestGeomData *) tmp_app_data;
+    ProError status;
+    int action;
+    FILE *fp;
+<a name="anchor-178"></a>    ProEnttype etype;
+    ProUtilCname type_str;
+    ProEdge edge1, edge2;
+    ProSurface surface, face1, face2;
+    int dir, end, n_tess;
+<a name="anchor-179"></a>    ProColor old_color;
+	ProColor edge_hlite_color;
+    char *dir_str;
+    int count;
+    ProName w_name;
+<a name="anchor-180"></a>    ProUtilCname name;
+    ProVector xyz, der1, der2, direction;
+    double t;
+    ProModelitem modeledge;
+    int face1_id, face2_id, edge1_id, edge2_id, edge_id;
+<a name="anchor-181"></a>    ProType itype;
+    ProEdge *vertexlist;
+    ProType *paramlist;
+    ProSurface *surflist;
+    int c;
+<a name="anchor-182"></a>    int surf_id;
+ 
+/*--------------------------------------------------------------------*\
+    Decode the action we have to perform
+\*--------------------------------------------------------------------*/
+<a name="anchor-183"></a>    action = app_data->action;
+    switch(action)
+    {
+    case TRAVERSE :
+/*--------------------------------------------------------------------*\
+<a name="anchor-184"></a>	Just dump the edge data to the current file...
+\*--------------------------------------------------------------------*/
+	fp      = app_data->fp;
+	surface = *(app_data->surface);
+
+<a name="anchor-185"></a>/*--------------------------------------------------------------------*\
+	Get the edge type
+\*--------------------------------------------------------------------*/
+	status = ProEdgeTypeGet(edge, &amp;etype);
+	TEST_CALL_REPORT(&quot;ProEdgeTypeGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+<a name="anchor-186"></a>					status, status != PRO_TK_NO_ERROR);
+	ProUtilEnttypeStr(etype, type_str);
+
+/*--------------------------------------------------------------------*\
+	Get the edge name
+<a name="anchor-187"></a>\*--------------------------------------------------------------------*/
+
+        ProEdgeIdGet(edge, &amp;modeledge.id);
+	TEST_CALL_REPORT(&quot;ProEdgeIdGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+				    status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-188"></a>        modeledge.type = ProEdgeDatatypeGet();
+        modeledge.owner = *(app_data->model);
+
+	status = ProModelitemNameGet(&amp;modeledge, w_name);
+	TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+<a name="anchor-189"></a>				    status, ((status != PRO_TK_NO_ERROR) &amp;&amp;
+					     (status != PRO_TK_E_NOT_FOUND)));
+	if(status == PRO_TK_NO_ERROR)
+	    ProWstringToString(name, w_name);
+	else
+<a name="anchor-190"></a>	    ProUtilstrcpy(name, &quot;&quot;);
+
+/*--------------------------------------------------------------------*\
+	Print id, name, and type
+\*--------------------------------------------------------------------*/
+<a name="anchor-191"></a>	if(strlen(name))
+	    ProTKFprintf(fp,&quot;%36s%d-%s\n%44s%-10s&quot;, &quot; &quot;, 
+                           modeledge.id, name, &quot; &quot;, type_str);
+	else
+	    ProTKFprintf(fp,&quot;%36s%-7d %-10s&quot;, &quot; &quot;, modeledge.id, type_str);
+<a name="anchor-192"></a>
+/*--------------------------------------------------------------------*\
+	Direction (&quot;->&quot; means parameterized in the same direction as
+			the contour)
+\*--------------------------------------------------------------------*/
+<a name="anchor-193"></a>	status = ProEdgeDirGet(edge, surface, &amp;dir);
+	TEST_CALL_REPORT(&quot;ProEdgeDirGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	switch(dir)
+	{
+<a name="anchor-194"></a>	case  1 : dir_str = (char*)&quot;->&quot;; break;
+	case -1 : dir_str = (char*)&quot;&lt;-&quot;; break;
+	default : dir_str = (char*)&quot;**&quot;; break;
+	}
+	ProTKFprintf(fp, &quot;%s&quot;, dir_str);
+<a name="anchor-195"></a>
+/*--------------------------------------------------------------------*\
+	Neighboring faces and the corresponding next edges
+\*--------------------------------------------------------------------*/
+	status = ProEdgeNeighborsGet(edge, &amp;edge1, &amp;edge2, &amp;face1, &amp;face2);
+<a name="anchor-196"></a>	TEST_CALL_REPORT(&quot;ProEdgeNeighborsGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+        status = ProSurfaceIdGet(face1, &amp;face1_id);
+	TEST_CALL_REPORT(&quot;ProSurfaceIdGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+<a name="anchor-197"></a>					status, status != PRO_TK_NO_ERROR);
+        status = ProSurfaceIdGet(face2, &amp;face2_id);
+	TEST_CALL_REPORT(&quot;ProSurfaceIdGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-198"></a>        status = ProEdgeIdGet(edge1, &amp;edge1_id);
+	TEST_CALL_REPORT(&quot;ProEdgeIdGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+        status = ProEdgeIdGet(edge2, &amp;edge2_id);
+	TEST_CALL_REPORT(&quot;ProEdgeIdGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+<a name="anchor-199"></a>					status, status != PRO_TK_NO_ERROR);
+
+	ProTKFprintf(fp, &quot;%d/%d,%d/%d\n&quot;,
+			face1_id, edge1_id, face2_id, edge2_id);
+
+<a name="anchor-200"></a>/*--------------------------------------------------------------------*\
+	Vertex data
+\*--------------------------------------------------------------------*/
+	for(end=0; end&lt;2; end++)
+	{
+<a name="anchor-201"></a>            count = 0;
+	    itype = end==0 ? PRO_EDGE_START : PRO_EDGE_END;
+	    status = ProEdgeVertexdataGet(edge, itype, 
+                             &amp;vertexlist, &amp;paramlist, &amp;surflist, &amp;count);
+	    TEST_CALL_REPORT(&quot;ProEdgeVertexdataGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+<a name="anchor-202"></a>					status, status != PRO_TK_NO_ERROR);
+
+            if ( status == PRO_TK_NO_ERROR )
+            {
+	       ProTKFprintf(fp, &quot;%s\n&quot;, end == 0 ? &quot;First vertex&quot; : &quot;Last vertex&quot;);
+<a name="anchor-203"></a>	       for(c=0; c&lt;count; c++)
+               {
+                   status = ProEdgeIdGet(vertexlist[c], &amp;edge_id);
+	           TEST_CALL_REPORT(&quot;ProEdgeIdGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+		   			status, status != PRO_TK_NO_ERROR);
+<a name="anchor-204"></a>	   	   ProTKFprintf(fp, &quot;edge %d = %d %s\n&quot;, c, edge_id, 
+                        paramlist[c] == PRO_EDGE_START ? &quot;First vertex&quot; :
+                          &quot;Last vertex&quot; );
+               }
+	       for(c=0; c&lt;count; c++)
+<a name="anchor-205"></a>               {
+                   status = ProSurfaceIdGet(surflist[c], &amp;surf_id);
+	           TEST_CALL_REPORT(&quot;ProSurfaceIdGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+		   ProTKFprintf(fp, &quot;surf %d = %d\n&quot;, c, surf_id);
+<a name="anchor-206"></a>               }
+               if ( count > 0 )
+               {
+                  status = ProArrayFree( (ProArray *) &amp;vertexlist);
+	          TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestEdgeAct()&quot;,
+<a name="anchor-207"></a>		   			status, status != PRO_TK_NO_ERROR);
+                  status = ProArrayFree( (ProArray *) &amp;paramlist);
+	          TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestEdgeAct()&quot;,
+		   			status, status != PRO_TK_NO_ERROR);
+                  status = ProArrayFree( (ProArray *) &amp;surflist);
+<a name="anchor-208"></a>	          TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestEdgeAct()&quot;,
+		   			status, status != PRO_TK_NO_ERROR);
+               }
+            }
+	}
+<a name="anchor-209"></a>
+	break;
+    case TESSELLATE :
+	fp      = app_data->fp;
+	n_tess  = app_data->data.tessdata.n_tess;
+<a name="anchor-210"></a>
+	for(t=0.0;t&lt;=1.0;t+= 1.0 / n_tess)
+	{
+	    status = ProEdgeXyzdataEval(edge, t, xyz, der1, der2, direction);
+	    TEST_CALL_REPORT(&quot;ProEdgeXyzdataEval()&quot;, &quot;ProTestEdgeAct()&quot;,
+<a name="anchor-211"></a>					    status, status != PRO_TK_NO_ERROR);
+
+            status = ProEdgeIdGet(edge, &amp;edge_id);
+	    TEST_CALL_REPORT(&quot;ProEdgeIdGet()&quot;, &quot;ProTestEdgeAct()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-212"></a>            
+	    ProTKFprintf(fp, &quot;Edge %3d, pos  (%5.2f, %5.2f, %5.2f)\n&quot;,
+			edge_id, xyz[0], xyz[1], xyz[2]);
+	    ProTKFprintf(fp, &quot;          der1 (%5.2f, %5.2f, %5.2f)\n&quot;,
+			der1[0], der1[1], der1[2]);
+<a name="anchor-213"></a>	    ProTKFprintf(fp, &quot;          der2 (%5.2f, %5.2f, %5.2f)\n&quot;,
+			der2[0], der2[1], der2[2]);
+	    ProTKFprintf(fp, &quot;          dir  (%5.2f, %5.2f, %5.2f)\n&quot;,
+			direction[0], direction[1], direction[2]);
+
+<a name="anchor-214"></a>	    edge_hlite_color.method = PRO_COLOR_METHOD_TYPE;
+		edge_hlite_color.value.type = PRO_COLOR_EDGE_HIGHLIGHT;
+		
+		status = ProGraphicsColorModify(&amp;edge_hlite_color, &amp;old_color);
+            TEST_CALL_REPORT(&quot;ProGraphicsColorModify()&quot;, &quot;ProTestSurfaceAct()&quot;,
+<a name="anchor-215"></a>					status, status != PRO_TK_NO_ERROR);
+
+	    if(t&lt;0.01)
+            {
+		ProGraphicsPenPosition(xyz);
+<a name="anchor-216"></a>                TEST_CALL_REPORT(&quot;ProGraphicsPenPosition()&quot;, &quot;ProTestEdgeAct()&quot;, 
+                    status, status != PRO_TK_NO_ERROR);
+            }
+	    else
+            {
+<a name="anchor-217"></a>		ProGraphicsLineDraw(xyz);
+            }
+	    status = ProGraphicsColorModify(&amp;old_color, NULL);
+            TEST_CALL_REPORT(&quot;ProGraphicsColorModify()&quot;, &quot;ProTestEdgeAct()&quot;,
+	       status, status != PRO_TK_NO_ERROR);
+<a name="anchor-218"></a>	}
+    }
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-219"></a>
+/*====================================================================*\
+    FUNCTION :	user_dummy_fun()
+    PURPOSE  :  General action function for a contour
+\*====================================================================*/
+<a name="anchor-220"></a>ProError ProTestContourAct(
+    ProContour contour,
+    ProError instatus,
+    ProAppData tmp_app_data)
+{
+<a name="anchor-221"></a>    ProError status;
+    int action;
+    FILE *fp;
+    ProContourTraversal traversal;
+    char *trav_str;
+<a name="anchor-222"></a>    ProTestGeomData *app_data = (ProTestGeomData *) tmp_app_data;
+    ProSurface surface;
+    ProEdge *edges;
+    int edges_num, i;
+    ProContour cont_contour;
+<a name="anchor-223"></a>
+/*--------------------------------------------------------------------*\
+    Decode the action to be performed
+\*--------------------------------------------------------------------*/
+    action = app_data->action;
+<a name="anchor-224"></a>    surface = *(app_data->surface);
+    switch(action)
+    {
+    case TRAVERSE :
+/*--------------------------------------------------------------------*\
+<a name="anchor-225"></a>	Write contour data to the file ..
+\*--------------------------------------------------------------------*/
+	fp = app_data->fp;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-226"></a>	Internal or external
+\*--------------------------------------------------------------------*/
+	status = ProContourTraversalGet(contour, &amp;traversal);
+	TEST_CALL_REPORT(&quot;ProContourTraversalGet()&quot;, &quot;ProTestContourAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-227"></a>
+	status = ProContainingContourFind((ProSolid)*app_data->model,
+	    contour, &amp;cont_contour);
+	TEST_CALL_REPORT(&quot;ProContainingContourFind()&quot;, &quot;ProTestContourAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-228"></a>	switch(traversal)
+	{
+	case PRO_CONTOUR_TRAV_INTERNAL : trav_str = (char*)&quot;Internal&quot;; break;
+	case PRO_CONTOUR_TRAV_NONE : trav_str = (char*)&quot;Erroneous&quot;; break;
+	case PRO_CONTOUR_TRAV_EXTERNAL : trav_str = (char*)&quot;External&quot;; break;
+<a name="anchor-229"></a>	default : trav_str = (char*)&quot;Undefined&quot;; break;
+	}
+
+	ProTKFprintf(fp,&quot;%18s %7s %-20s\n&quot;, &quot; &quot;, &quot; &quot;, trav_str);
+
+<a name="anchor-230"></a>	break;
+    }
+
+/*--------------------------------------------------------------------*\
+    Remember the contour (so that the lower Act functions know the
+<a name="anchor-231"></a>    context)
+\*--------------------------------------------------------------------*/
+    app_data->contour = &amp;contour;
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-232"></a>    Now visit all the contour edges
+\*--------------------------------------------------------------------*/
+					
+    status = ProUtilCollectContourEdges (surface, contour, &amp;edges);
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-233"></a>    {
+        status = ProArraySizeGet ((ProArray)edges, &amp;edges_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestContourAct()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; edges_num; i++)
+<a name="anchor-234"></a>        {
+            status = ProTestEdgeAct (edges[i],
+	        PRO_TK_NO_ERROR, (ProAppData)app_data);
+        }
+        status = ProArrayFree ((ProArray*)&amp;edges);
+<a name="anchor-235"></a>        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestContourAct()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+    }
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-236"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestMeshAct()
+    PURPOSE  :	Test function (to be called at each surface mesh point)
+<a name="anchor-237"></a>		to draw and dump mesh coordinates.
+\*====================================================================*/
+int ProTestMeshAct(
+    ProSurface *surface,/* I - The surface */
+    double uv[2],	/* I - The UV values */
+<a name="anchor-238"></a>    int start,		/* I - 1 if this is the start of a new mesh line */
+    ProAppData tmp_app_data)/* I - General data */
+			/* Return 0        - continue,
+				  non-zero - terminate meshing */
+{
+<a name="anchor-239"></a>    ProError status;
+    ProVector xyz, der1[2], der2[3], normal;
+    ProTestGeomData *app_data = (ProTestGeomData *) tmp_app_data;
+    FILE *fp = (FILE*)app_data->fp;
+    int surface_id;
+<a name="anchor-240"></a>
+/*--------------------------------------------------------------------*\
+    Get the xyz location for this surface point.
+\*--------------------------------------------------------------------*/
+    status = ProSurfaceXyzdataEval(*surface, uv, xyz, der1, der2, normal);
+<a name="anchor-241"></a>    TEST_CALL_REPORT(&quot;ProSurfaceXyzdataEval()&quot;, &quot;ProTestMeshAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+/*--------------------------------------------------------------------*\
+    Draw (or start) a line
+<a name="anchor-242"></a>\*--------------------------------------------------------------------*/
+    if(start)
+    {
+	ProGraphicsPenPosition(xyz);
+    }
+<a name="anchor-243"></a>    else
+    {
+	ProGraphicsLineDraw(xyz);
+    }
+
+<a name="anchor-244"></a>    if ( status == PRO_TK_NO_ERROR )
+    {
+/*--------------------------------------------------------------------*\
+    Write the data to the file
+\*--------------------------------------------------------------------*/
+<a name="anchor-245"></a>       status = ProSurfaceIdGet(*surface, &amp;surface_id);
+       TEST_CALL_REPORT(&quot;ProSurfaceIdGet()&quot;, &quot;ProTestMeshAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+       ProTKFprintf(fp,&quot;Surf %3d, pos       (%10.2e, %10.2e, %10.2e)\n&quot;,
+				    surface_id, xyz[0], xyz[1], xyz[2]);
+<a name="anchor-246"></a>       ProTKFprintf(fp,&quot;          1st deriv (%10.2e, %10.2e, %10.2e)\n&quot;
+	       &quot;                    (%10.2e, %10.2e, %10.2e)\n&quot;,
+				der1[0][0], der1[0][1], der1[0][2],
+				der1[1][0], der1[1][1], der1[1][2]);
+       ProTKFprintf(fp,&quot;          2nd deriv (%10.2e, %10.2e, %10.2e)\n&quot;
+<a name="anchor-247"></a>	       &quot;                    (%10.2e, %10.2e, %10.2e)\n&quot;
+	       &quot;                    (%10.2e, %10.2e, %10.2e)\n&quot;,
+				der2[0][0], der2[0][1], der2[0][2],
+				der2[1][0], der2[1][1], der2[1][2],
+				der2[2][0], der2[2][1], der2[2][2]);
+<a name="anchor-248"></a>       ProTKFprintf(fp,&quot;          normal    (%10.2e, %10.2e, %10.2e)\n&quot;,
+				    normal[0], normal[1], normal[2]);
+    }
+
+    return(0);
+<a name="anchor-249"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestSurfaceAct()
+    PURPOSE  :  General action function for a surface
+<a name="anchor-250"></a>\*====================================================================*/
+ProError ProTestSurfaceAct(
+    ProSurface surface,
+    ProError instatus,
+    ProAppData tmp_app_data)
+<a name="anchor-251"></a>{
+    ProError status;
+    FILE *fp;
+    ProSrftype stype;
+    int action;
+<a name="anchor-252"></a>    ProUtilCname type_str, name;
+    ProTestGeomData *app_data = (ProTestGeomData *) tmp_app_data;
+    ProName w_name;
+    ProModelitem modelitem_surface;
+    ProColor old_color, highlite_color;
+<a name="anchor-253"></a>    ProContour	    *contours;
+    int contours_num, i;
+/*--------------------------------------------------------------------*\
+    Decode the action to be performed
+\*--------------------------------------------------------------------*/
+<a name="anchor-254"></a>    action = app_data->action;
+    fp     = app_data->fp;
+
+    switch(action)
+    {
+<a name="anchor-255"></a>    case TRAVERSE :
+
+/*--------------------------------------------------------------------*\
+	Get the surface name, if any
+\*--------------------------------------------------------------------*/
+<a name="anchor-256"></a>        status = ProSurfaceIdGet(surface, &amp;modelitem_surface.id);
+	TEST_CALL_REPORT(&quot;ProSurfaceIdGet()&quot;, &quot;ProTestSurfaceAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+        modelitem_surface.type = ProSurfaceDatatypeGet();
+        modelitem_surface.owner = *(app_data->model);
+<a name="anchor-257"></a>
+	status = ProModelitemNameGet(&amp;modelitem_surface, w_name);
+	TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, &quot;ProTestSurfaceAct()&quot;,
+				    status, ((status != PRO_TK_NO_ERROR) &amp;&amp;
+					     (status != PRO_TK_E_NOT_FOUND)));
+<a name="anchor-258"></a>	if(status == PRO_TK_NO_ERROR)
+	    ProWstringToString(name, w_name);
+	else
+	    ProUtilstrcpy(name, &quot;&quot;);
+
+<a name="anchor-259"></a>/*--------------------------------------------------------------------*\
+	Get the surface type
+\*--------------------------------------------------------------------*/
+	status = ProSurfaceTypeGet(surface, &amp;stype);
+	TEST_CALL_REPORT(&quot;ProSurfaceTypeGet()&quot;, &quot;ProTestSurfaceAct()&quot;,
+<a name="anchor-260"></a>					status, status != PRO_TK_NO_ERROR);
+	ProUtilSrftypeStr(stype, type_str);
+
+/*--------------------------------------------------------------------*\
+	Print the id, type, and name
+<a name="anchor-261"></a>\*--------------------------------------------------------------------*/
+	if(strlen(name))
+	    ProTKFprintf(fp,&quot;%d-%s\n        %s&quot;, modelitem_surface.id, 
+                         name, type_str);
+	else
+<a name="anchor-262"></a>	    ProTKFprintf(fp,&quot;%-8d%s\n&quot;, modelitem_surface.id, type_str);
+
+	break;
+    case TEST_MESH :
+/*--------------------------------------------------------------------*\
+<a name="anchor-263"></a>	Make a UV mesh over the surface
+\*--------------------------------------------------------------------*/
+	highlite_color.method = PRO_COLOR_METHOD_TYPE;
+	highlite_color.value.type = PRO_COLOR_HIGHLITE;
+
+<a name="anchor-264"></a>	status = ProGraphicsColorModify(&amp;highlite_color, &amp;old_color);
+        TEST_CALL_REPORT(&quot;ProGraphicsColorModify()&quot;, &quot;ProTestSurfaceAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+	ProUtilSurfaceMesh(&amp;surface,
+<a name="anchor-265"></a>			app_data->data.meshdata.resolution,
+			app_data->data.meshdata.nlines,
+			ProTestMeshAct,
+			(ProAppData)tmp_app_data);
+	
+<a name="anchor-266"></a>	status = ProGraphicsColorModify(&amp;old_color, NULL);
+        TEST_CALL_REPORT(&quot;ProGraphicsColorModify()&quot;, &quot;ProTestSurfaceAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	break;
+    default :;
+<a name="anchor-267"></a>    }
+
+/*--------------------------------------------------------------------*\
+    Remember the surface (so that the lower Act functions know the
+    context)
+<a name="anchor-268"></a>\*--------------------------------------------------------------------*/
+    app_data->surface = &amp;surface;
+
+    ProTKPrintf(&quot;ProSurfaceContourVisit Function\n&quot;);
+/*--------------------------------------------------------------------*\
+<a name="anchor-269"></a>    Visit all the face contours
+\*--------------------------------------------------------------------*/
+					
+    status = ProUtilCollectSurfaceContours (surface, &amp;contours);
+    if (status == PRO_TK_NO_ERROR)
+<a name="anchor-270"></a>    {
+        status = ProArraySizeGet ((ProArray)contours, &amp;contours_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestSurfaceAct()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; contours_num; i++)
+<a name="anchor-271"></a>        {
+            status = ProTestContourAct (contours[i],
+	        PRO_TK_NO_ERROR, (ProAppData)app_data);
+        }
+        status = ProArrayFree ((ProArray*)&amp;contours);
+<a name="anchor-272"></a>        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestSurfaceAct()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+    }
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-273"></a>
+ProError ProTestDatumsurfAct(
+    ProSurface datumsurf,
+    ProError instatus,
+    ProAppData app_data)
+<a name="anchor-274"></a>{
+    FILE *fp;
+    int id;
+    ProError status;
+
+<a name="anchor-275"></a>/*--------------------------------------------------------------------*\
+    Decode the action to be performed
+\*--------------------------------------------------------------------*/
+    fp     = ((ProTestGeomData*)app_data)->fp;
+
+<a name="anchor-276"></a>    status = ProSurfaceIdGet(datumsurf, &amp;id);
+    TEST_CALL_REPORT(&quot;ProSurfaceIdGet()&quot;, &quot;ProTestDatumsurfAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp,&quot;DATUM SURFACE %d...\n&quot;, id);
+
+<a name="anchor-277"></a>    return(PRO_TK_NO_ERROR);
+}
+
+#ifndef PT_PRODUCTS_BUILD
+/*====================================================================*\
+<a name="anchor-278"></a>    FUNCTION :	ProTestQuiltAct()
+    PURPOSE  :  General action function for a quilt
+\*====================================================================*/
+ProError ProTestQuiltAct(
+    ProQuilt quilt,
+<a name="anchor-279"></a>    ProError instatus,
+    ProAppData tmp_app_data)
+{
+    FILE *fp;
+    ProTestGeomData *app_data = (ProTestGeomData *) tmp_app_data;
+<a name="anchor-280"></a>    int quilt_id;
+    ProError status;
+    ProSurface	    *surfaces;
+    int surfaces_num, i;
+
+<a name="anchor-281"></a>/*--------------------------------------------------------------------*\
+    Decode the action to be performed
+\*--------------------------------------------------------------------*/
+    fp     = app_data->fp;
+
+<a name="anchor-282"></a>    status = ProQuiltIdGet(quilt, &amp;quilt_id);
+    TEST_CALL_REPORT(&quot;ProQuiltIdGet()&quot;, &quot;ProTestQuiltAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+
+<a name="anchor-283"></a>    ProTKFprintf(fp,&quot;QUILT %d...\n&quot;, quilt_id);
+ 
+    status = ProUtilCollectQuiltSurfaces (quilt, &amp;surfaces);
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-284"></a>        status = ProArraySizeGet ((ProArray)surfaces, &amp;surfaces_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestQuiltAct()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; surfaces_num; i++)
+        {
+<a name="anchor-285"></a>            status = ProTestDatumsurfAct (surfaces[i],
+	        PRO_TK_NO_ERROR, (ProAppData)app_data);
+        }
+        status = ProArrayFree ((ProArray*)&amp;surfaces);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestQuiltAct()&quot;, 
+<a name="anchor-286"></a>            status, status != PRO_TK_NO_ERROR );
+    }
+
+    return(PRO_TK_NO_ERROR);
+}
+<a name="anchor-287"></a>#endif /* #ifndef PT_PRODUCTS_BUILD */
+
+/*====================================================================*\
+    FUNCTION :	ProTestAxisAct()
+    PURPOSE  :  General action function for an axis
+<a name="anchor-288"></a>\*====================================================================*/
+ProError ProTestAxisAct(
+    ProAxis axis,
+    ProError instatus,
+    ProAppData tmp_app_data)
+<a name="anchor-289"></a>{
+    ProError status;
+    ProName w_name;
+    ProUtilCname name;
+    FILE *fp;
+<a name="anchor-290"></a>    ProTestGeomData *app_data = (ProTestGeomData *) tmp_app_data;
+    ProModelitem axis_model_item;
+
+    fp = app_data->fp;
+
+<a name="anchor-291"></a>    axis_model_item.type = PRO_AXIS;
+    axis_model_item.owner = *(app_data->model);
+    status = ProAxisIdGet(axis, &amp;(axis_model_item.id));
+    TEST_CALL_REPORT(&quot;ProAxisIdGet()&quot;, &quot;ProTestAxisAct()&quot;,
+				status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-292"></a>    status = ProModelitemNameGet(&amp;axis_model_item, w_name);
+    TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, &quot;ProTestAxisAct()&quot;,
+				status, ((status != PRO_TK_NO_ERROR) &amp;&amp;
+					 (status != PRO_TK_E_NOT_FOUND)));
+    if(status == PRO_TK_NO_ERROR)
+<a name="anchor-293"></a>	ProWstringToString(name, w_name);
+    else
+	ProUtilstrcpy(name, &quot;**(NOT FOUND)**&quot;);
+
+    ProTKFprintf(fp, &quot;%-8d%s\n&quot;, axis_model_item.id, name);
+<a name="anchor-294"></a>
+    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+<a name="anchor-295"></a>    FUNCTION :	ProTestCsysAct()
+    PURPOSE  :  General action function for an axis
+\*====================================================================*/
+ProError ProTestCsysAct(
+	ProCsys csys,
+<a name="anchor-296"></a>	ProError instatus,
+        ProAppData tmp_app_data)
+{
+    ProError status;
+    ProName w_name;
+<a name="anchor-297"></a>    ProUtilCname name;
+    FILE *fp;
+    int id ;
+    ProTestGeomData *app_data = (ProTestGeomData *) tmp_app_data;
+    ProModelitem modelitem;
+<a name="anchor-298"></a>
+    fp = app_data->fp;
+
+
+    modelitem.type = ProCsysDatatypeGet();
+<a name="anchor-299"></a>    status = ProCsysIdGet(csys, &amp;modelitem.id);
+    TEST_CALL_REPORT(&quot;ProCsysIdGet()&quot;, &quot;ProTestCsysAct()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+    modelitem.owner = *(app_data->model);
+
+<a name="anchor-300"></a>    status = ProModelitemNameGet(&amp;modelitem, w_name);
+    TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, &quot;ProTestCsysAct()&quot;,
+				status, ((status != PRO_TK_NO_ERROR) &amp;&amp;
+					 (status != PRO_TK_E_NOT_FOUND)));
+    if(status == PRO_TK_NO_ERROR)
+<a name="anchor-301"></a>	ProWstringToString(name, w_name);
+    else
+	ProUtilstrcpy(name, &quot;*****&quot;);
+
+    status = ProCsysIdGet(csys,&amp;id);
+<a name="anchor-302"></a>    TEST_CALL_REPORT(&quot;ProCsysIdGet()&quot;, &quot;ProTestCsysAct()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp, &quot;%-8d%s\n&quot;,id, name);
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-303"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestCurveAct()
+    PURPOSE  :  General action function for a datum curve
+<a name="anchor-304"></a>\*====================================================================*/
+ProError ProTestCurveAct(
+    ProModelitem *curve,
+    ProError instatus,
+    ProAppData app_data)
+<a name="anchor-305"></a>{
+    ProError status;
+    FILE *fp;
+    int action;
+    ProEnttype etype;
+<a name="anchor-306"></a>    ProName w_name;
+    ProUtilCname name;
+    ProUtilCname type_str;
+    ProTestGeomData *geomdata;
+    int n_tess;
+<a name="anchor-307"></a>    int  i, n;
+    double t;
+    ProVector xyz, der1, der2;
+    ProEnttype curve_type;
+    ProBool visibility;
+<a name="anchor-308"></a>    ProColor old_color, red_color;
+    ProCurve curvePtr = NULL;
+    CurveComponent *curvecomps;
+    ProModelitem(model_item);
+
+<a name="anchor-309"></a>/*--------------------------------------------------------------------*\
+	Work only with visible curves
+\*--------------------------------------------------------------------*/
+    status = ProGeomitemIsInactive(curve, &amp;visibility);
+    TEST_CALL_REPORT(&quot;ProGeomitemIsInactive()&quot;, &quot;ProTestCurveAct()&quot;,
+<a name="anchor-310"></a>				status, status != PRO_TK_NO_ERROR);
+    if (visibility == PRO_B_TRUE)
+	return PRO_TK_NO_ERROR;
+
+
+<a name="anchor-311"></a>    geomdata = (ProTestGeomData*)app_data;
+
+    action = geomdata->action;
+
+    ProTKPrintf(&quot;Curve id (%d) Type (%d)\n&quot;, curve->id, curve->type);
+<a name="anchor-312"></a>
+    status = ProCurveInit( (ProSolid) curve->owner, curve->id, &amp;curvePtr);
+    TEST_CALL_REPORT(&quot;ProCurveInit()&quot;, &quot;ProTestCurveAct()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+    switch(action)
+<a name="anchor-313"></a>    {
+    case TRAVERSE :
+/*--------------------------------------------------------------------*\
+	Just dump the curve data to the current file...
+\*--------------------------------------------------------------------*/
+<a name="anchor-314"></a>	fp      = geomdata->fp;
+
+/*--------------------------------------------------------------------*\
+	Get the curve type
+\*--------------------------------------------------------------------*/
+<a name="anchor-315"></a>	status = ProCurveTypeGet(curvePtr, &amp;etype);
+	TEST_CALL_REPORT(&quot;ProCurveTypeGet()&quot;, &quot;ProTestCurveAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	ProUtilEnttypeStr(etype, type_str);
+
+<a name="anchor-316"></a>/*--------------------------------------------------------------------*\
+	Get the curve name
+\*--------------------------------------------------------------------*/
+	status = ProModelitemNameGet(curve, w_name);
+	TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, &quot;ProTestCurveAct()&quot;,
+<a name="anchor-317"></a>				    status, ((status != PRO_TK_NO_ERROR) &amp;&amp;
+					     (status != PRO_TK_E_NOT_FOUND)));
+	if(status == PRO_TK_NO_ERROR)
+	    ProWstringToString(name, w_name);
+	else
+<a name="anchor-318"></a>	    ProUtilstrcpy(name, &quot;&quot;);
+
+/*--------------------------------------------------------------------*\
+	Print id, name, and type
+\*--------------------------------------------------------------------*/
+<a name="anchor-319"></a>	if(strlen(name))
+	    ProTKFprintf(fp,&quot;    Id : %d, type %s, name : %s\n&quot;,
+				curve->id, type_str, name);
+	else
+	    ProTKFprintf(fp,&quot;    Id : %d, type %s\n&quot;, curve->id, type_str);
+<a name="anchor-320"></a>
+
+/*--------------------------------------------------------------------*\
+	Try to traverse members in case it is a compound
+\*--------------------------------------------------------------------*/
+<a name="anchor-321"></a>	status = ProCurveTypeGet(curvePtr, &amp;curve_type);
+        TEST_CALL_REPORT(&quot;ProCurveTypeGet()&quot;, &quot;ProTestCurveAct()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+
+        ProTKPrintf(&quot;Curve Type (%d) (%d)\n&quot;, curve_type, status);
+<a name="anchor-322"></a>
+#ifndef PT_PRODUCTS_BUILD
+        if (curve_type == PRO_ENT_CMP_CRV)	
+	{
+	    status = ProUtilCollectCurveComponents(curvePtr, &amp;curvecomps);
+<a name="anchor-323"></a>	    if (status!=PRO_TK_NO_ERROR)
+		break;
+
+	    status = ProArraySizeGet((ProArray)curvecomps, &amp;n);
+	    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestCurveAct()&quot;,
+<a name="anchor-324"></a>					    status, status != PRO_TK_NO_ERROR);
+	    for (i=0; i&lt;n; i++)
+	    {
+		status = ProCurveToGeomitem((ProSolid)curve->owner,
+		    curvecomps[i].p_curve, &amp;model_item);	 
+<a name="anchor-325"></a>		TEST_CALL_REPORT(&quot;ProCurveToGeomitem()&quot;, &quot;ProTestCurveAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+		ProTestCurveAct(&amp;model_item, status, app_data);
+	    }
+	    status = ProArrayFree((ProArray*)&amp;curvecomps);
+<a name="anchor-326"></a>	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestCurveAct()&quot;,
+			    		    status, status != PRO_TK_NO_ERROR);
+	  }
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+			  
+<a name="anchor-327"></a>
+	break;
+    case TESSELLATE :
+/*--------------------------------------------------------------------*\
+	Just dump the curve data to the current file...
+<a name="anchor-328"></a>\*--------------------------------------------------------------------*/
+	fp      = geomdata->fp;
+
+	n_tess  = geomdata->data.tessdata.n_tess;
+
+<a name="anchor-329"></a>	status = ProCurveTypeGet(curvePtr, &amp;curve_type);
+	TEST_CALL_REPORT(&quot;ProCurveTypeGet()&quot;, &quot;ProTestCurveAct()&quot;,
+                          status, status != PRO_TK_NO_ERROR);
+
+#ifndef PT_PRODUCTS_BUILD
+<a name="anchor-330"></a>	if (curve_type == PRO_ENT_CMP_CRV)
+	{
+	    status = ProUtilCollectCurveComponents(curvePtr, &amp;curvecomps);
+	    if (status!=PRO_TK_NO_ERROR)
+		break;
+<a name="anchor-331"></a>
+	    status = ProArraySizeGet((ProArray)curvecomps, &amp;n);
+	    TEST_CALL_REPORT(&quot;ProArraySizeGet()&quot;, &quot;ProTestCurveAct()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+	    for (i=0; i&lt;n; i++)
+<a name="anchor-332"></a>	    {
+		status = ProCurveToGeomitem((ProSolid)curve->owner,
+		    curvecomps[i].p_curve, &amp;model_item);	 
+		TEST_CALL_REPORT(&quot;ProCurveToGeomitem()&quot;, &quot;ProTestCurveAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-333"></a>		ProTestCurveAct(&amp;model_item, status, app_data);
+	    }
+	    status = ProArrayFree((ProArray*)&amp;curvecomps);
+	    TEST_CALL_REPORT(&quot;ProArrayFree()&quot;, &quot;ProTestCurveAct()&quot;,
+			    		    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-334"></a>	    return (PRO_TK_NO_ERROR);
+	}
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+
+	for(t=0.0;t&lt;=1.0;t+= 1.0 / n_tess)
+<a name="anchor-335"></a>	{
+	    status = ProCurveXyzdataEval(curvePtr, t, xyz, der1, der2);
+	    TEST_CALL_REPORT(&quot;ProCurveXyzdataEval()&quot;, &quot;ProTestCurveAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-336"></a>	    ProTKFprintf(fp, &quot;Edge %3d, pos  (%5.2f, %5.2f, %5.2f)\n&quot;,
+			curve->id, xyz[0], xyz[1], xyz[2]);
+	    ProTKFprintf(fp, &quot;          der1 (%5.2f, %5.2f, %5.2f)\n&quot;,
+			der1[0], der1[1], der1[2]);
+	    ProTKFprintf(fp, &quot;          der2 (%5.2f, %5.2f, %5.2f)\n&quot;,
+<a name="anchor-337"></a>			der2[0], der2[1], der2[2]);
+
+	    red_color.method = PRO_COLOR_METHOD_RGB;
+		red_color.value.map.red = 1.0;
+		red_color.value.map.green = 0.0;
+<a name="anchor-338"></a>		red_color.value.map.blue = 0.0;
+		
+		status = ProGraphicsColorModify(&amp;red_color, &amp;old_color);
+            TEST_CALL_REPORT(&quot;ProGraphicsColorModify()&quot;, &quot;ProTestCurveAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-339"></a>
+	    if(t&lt;0.01)
+            {
+		ProGraphicsPenPosition(xyz);
+            }
+<a name="anchor-340"></a>	    else
+		ProGraphicsLineDraw(xyz);
+	    status = ProGraphicsColorModify(&amp;old_color, NULL);
+            TEST_CALL_REPORT(&quot;ProGraphicsColorModify()&quot;, &quot;ProTestCurveAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+<a name="anchor-341"></a>	}
+
+    default :;
+    }
+
+<a name="anchor-342"></a>    return(PRO_TK_NO_ERROR);
+}
+/*====================================================================*\
+    FUNCTION :	ProTestCurvefeatVisit()
+    PURPOSE  :	Utility function to visit features of type DATUM curve.
+<a name="anchor-343"></a>\*====================================================================*/
+ProError ProTestCurvefeatVisit(
+    ProFeature *feature,
+    ProError instatus,
+    ProAppData app_data)
+<a name="anchor-344"></a>{
+    ProError status;
+    ProGeomitem	    *geomitems;
+    int geomitems_num, i;
+
+<a name="anchor-345"></a>/*--------------------------------------------------------------------*\
+    Visit the CURVES in the feature
+\*--------------------------------------------------------------------*/
+				     
+    status = ProUtilCollectFeatureGeomitems (feature, PRO_CURVE, &amp;geomitems);
+<a name="anchor-346"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)geomitems, &amp;geomitems_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestCurvefeatVisit()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-347"></a>        for (i = 0; i &lt; geomitems_num; i++)
+        {
+            status = ProTestCurveAct (&amp;geomitems[i],
+	        PRO_TK_NO_ERROR, (ProAppData)app_data);
+        }
+<a name="anchor-348"></a>        status = ProArrayFree ((ProArray*)&amp;geomitems);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestCurvefeatVisit()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+    }
+
+<a name="anchor-349"></a>    return(PRO_TK_NO_ERROR);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestCurvefeatFilter()
+<a name="anchor-350"></a>    PURPOSE  :	To act as a filter to visit only features which are datum curves.
+\*====================================================================*/
+ProError ProTestCurvefeatFilter(
+    ProFeature *feature)
+{
+<a name="anchor-351"></a>    ProError status;
+    ProFeattype ftype;
+
+    status = ProFeatureTypeGet(feature, &amp;ftype);
+    TEST_CALL_REPORT(&quot;ProFeatureTypeGet()&quot;, &quot;ProTestCurvefeatFilter()&quot;,
+<a name="anchor-352"></a>			    status, status != PRO_TK_NO_ERROR);
+
+    return(ftype == PRO_FEAT_CURVE ? PRO_TK_NO_ERROR : PRO_TK_CONTINUE);
+}
+
+<a name="anchor-353"></a>/*====================================================================*\
+    FUNCTION :	ProTestPartTraverse()
+    PURPOSE  :	Traverse all the geometry items on a part, and perform
+		the specified action.
+\*====================================================================*/
+<a name="anchor-354"></a>int ProTestPartTraverse(
+    ProMdl *model,
+    int action)
+{
+    ProError status;
+<a name="anchor-355"></a>    ProUtilCname fname;
+    ProName w_fname;
+    FILE *fp;
+    double resolution;
+    static double def_res = 0.1;
+<a name="anchor-356"></a>    static int def_nlines[2]={10,10};
+    int n_u, n_v, def_tess, n_tess;
+    ProTestGeomData app_data;
+    ProSurface	    *surfaces;
+    int i, surfaces_num, quilts_num, axis_num, csys_num;
+<a name="anchor-357"></a>    ProQuilt	    *quilts;
+    ProAxis	    *axis;
+    ProCsys	    *csys;
+    ProFeature	    *features;
+    int		    features_num;
+<a name="anchor-358"></a>
+/*--------------------------------------------------------------------*\
+    Get the name of the output file
+\*--------------------------------------------------------------------*/
+    ProTestQcrName(model, (char*)TRAVERSAL, fname);
+<a name="anchor-359"></a>    fp = PTApplsUnicodeFopen(fname,&quot;w&quot;);
+
+/*--------------------------------------------------------------------*\
+    Set up the general data with the action and the file
+\*--------------------------------------------------------------------*/
+<a name="anchor-360"></a>    app_data.action = action;
+    app_data.fp = fp;
+    app_data.model = model;
+
+    if(action == TRAVERSE)
+<a name="anchor-361"></a>    {
+/*--------------------------------------------------------------------*\
+	Set up a header for the file
+\*--------------------------------------------------------------------*/
+	ProTKFprintf(fp,&quot;SURFACES..\n&quot;);
+<a name="anchor-362"></a>	ProTKFprintf(fp,&quot;Id      Type      Contour Type      &quot;
+		   &quot;Edge    Type      Neighbors (srf/edge)\n&quot;);
+    }
+    else if(action == TEST_MESH)
+    {
+<a name="anchor-363"></a>/*--------------------------------------------------------------------*\
+	Get the mesh parameters
+\*--------------------------------------------------------------------*/
+        ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Enter resolution [%0f] : &quot;, &amp;def_res);
+	ProUtilDoubleGet(NULL, &amp;def_res, &amp;resolution);
+<a name="anchor-364"></a>	def_res = app_data.data.meshdata.resolution = resolution;
+
+        ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Enter number of %0s lines [%1d]  : &quot;,
+					&quot;U&quot;, &amp;def_nlines[0]);
+	ProUtilIntGet(NULL, &amp;def_nlines[0], &amp;n_u);
+<a name="anchor-365"></a>	def_nlines[0] = app_data.data.meshdata.nlines[0] = n_u;
+
+        ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Enter number of %0s lines [%1d]  : &quot;,
+					&quot;V&quot;, &amp;def_nlines[1]);
+	ProUtilIntGet(NULL, &amp;def_nlines[1], &amp;n_v);
+<a name="anchor-366"></a>	def_nlines[1] = app_data.data.meshdata.nlines[1] = n_v;
+    }
+    else if(action == TESSELLATE)
+    {
+/*--------------------------------------------------------------------*\
+<a name="anchor-367"></a>	Get the tesselation parameters
+\*--------------------------------------------------------------------*/
+	def_tess = 10;
+        ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Enter number of tesselations [%0d] : &quot;,
+		    &amp;def_tess);
+<a name="anchor-368"></a>	ProUtilIntGet(NULL, &amp;def_tess, &amp;n_tess);
+	def_tess = app_data.data.tessdata.n_tess = n_tess;
+    }
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-369"></a>    Visit all the solid surfaces
+\*--------------------------------------------------------------------*/
+    status = ProUtilCollectSolidSurfaces ((ProSolid) *model, &amp;surfaces);
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-370"></a>        status = ProArraySizeGet ((ProArray)surfaces, &amp;surfaces_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestPartTraverse()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; surfaces_num; i++)
+        {
+<a name="anchor-371"></a>            status = ProTestSurfaceAct (surfaces[i],
+	        PRO_TK_NO_ERROR, (ProAppData)&amp;app_data);
+        }
+        status = ProArrayFree ((ProArray*)&amp;surfaces);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestPartTraverse()&quot;, 
+<a name="anchor-372"></a>            status, status != PRO_TK_NO_ERROR );
+    }
+    
+    if(status == PRO_TK_E_NOT_FOUND)
+	ProTKFprintf(fp, &quot; -- (No surfaces found) --\n&quot;);
+<a name="anchor-373"></a>
+#ifndef PT_PRODUCTS_BUILD
+/*--------------------------------------------------------------------*\
+    Visit all the quilt surfaces
+\*--------------------------------------------------------------------*/
+<a name="anchor-374"></a>
+    status = ProUtilCollectSolidQuilts ((ProSolid) *model, &amp;quilts);
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)quilts, &amp;quilts_num);
+<a name="anchor-375"></a>        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestPartTraverse()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; quilts_num; i++)
+        {
+            status = ProTestQuiltAct (quilts[i],
+<a name="anchor-376"></a>	        PRO_TK_NO_ERROR, (ProAppData)&amp;app_data);
+        }
+        status = ProArrayFree ((ProArray*)&amp;quilts);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestPartTraverse()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-377"></a>    }
+     
+    if(status == PRO_TK_E_NOT_FOUND)
+	ProTKFprintf(fp, &quot; -- (No quilts found) --\n&quot;);
+#endif /* #ifndef PT_PRODUCTS_BUILD */
+<a name="anchor-378"></a>
+/*--------------------------------------------------------------------*\
+    If we are TRAVERSING, visit all the other geometry elements
+\*--------------------------------------------------------------------*/
+    if(action == TRAVERSE)
+<a name="anchor-379"></a>    {
+/*--------------------------------------------------------------------*\
+	Visit all the axes
+\*--------------------------------------------------------------------*/
+	ProTKFprintf(fp, &quot;AXES ..\n&quot;);
+<a name="anchor-380"></a>	ProTKFprintf(fp,&quot;Id      Name\n&quot;);
+					 
+	status = ProUtilCollectSolidAxis ((ProSolid) *model, &amp;axis);
+        if (status == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-381"></a>            status = ProArraySizeGet ((ProArray)axis, &amp;axis_num);
+            TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestPartTraverse()&quot;, 
+                status, status != PRO_TK_NO_ERROR );
+            for (i = 0; i &lt; axis_num; i++)
+            {
+<a name="anchor-382"></a>                status = ProTestAxisAct (axis[i],
+                    PRO_TK_NO_ERROR, (ProAppData)&amp;app_data);
+            }
+            status = ProArrayFree ((ProArray*)&amp;axis);
+            TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestPartTraverse()&quot;, 
+<a name="anchor-383"></a>                status, status != PRO_TK_NO_ERROR );
+        }
+	
+	if(status == PRO_TK_E_NOT_FOUND)
+	    ProTKFprintf(fp, &quot; -- (No axes found) --\n&quot;);
+<a name="anchor-384"></a>
+/*--------------------------------------------------------------------*\
+	Visit all the csys's
+\*--------------------------------------------------------------------*/
+	ProTKFprintf(fp, &quot;CSYSs ..\n&quot;);
+<a name="anchor-385"></a>	ProTKFprintf(fp,&quot;Id      Name\n&quot;);
+					 
+	status = ProUtilCollectSolidCsys ((ProSolid) *model, &amp;csys);
+        if (status == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-386"></a>            status = ProArraySizeGet ((ProArray)csys, &amp;csys_num);
+            TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestPartTraverse()&quot;, 
+                status, status != PRO_TK_NO_ERROR );
+            for (i = 0; i &lt; csys_num; i++)
+            {
+<a name="anchor-387"></a>                status = ProTestCsysAct (csys[i],
+                    PRO_TK_NO_ERROR, (ProAppData)&amp;app_data);
+            }
+            status = ProArrayFree ((ProArray*)&amp;csys);
+            TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestPartTraverse()&quot;, 
+<a name="anchor-388"></a>                status, status != PRO_TK_NO_ERROR );
+        }
+	if(status == PRO_TK_E_NOT_FOUND)
+	    ProTKFprintf(fp, &quot; -- (No csys found) --\n&quot;);
+    }
+<a name="anchor-389"></a>
+/*--------------------------------------------------------------------*\
+    Visit all the datum curves
+\*--------------------------------------------------------------------*/
+    ProTKFprintf(fp,&quot;DATUM CURVES..\n&quot;);
+<a name="anchor-390"></a>
+    status = ProUtilCollectDtmCurveFeat ((ProSolid) *model, &amp;features);
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArraySizeGet ((ProArray)features, &amp;features_num);
+<a name="anchor-391"></a>        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestPartTraverse()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; features_num; i++)
+        {
+            status = ProTestCurvefeatVisit (&amp;features[i],
+<a name="anchor-392"></a>                PRO_TK_NO_ERROR, (ProAppData)&amp;app_data);
+        }
+        status = ProArrayFree ((ProArray*)&amp;features);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestPartTraverse()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+<a name="anchor-393"></a>        }
+
+/*--------------------------------------------------------------------*\
+    Close and display the file
+\*--------------------------------------------------------------------*/
+<a name="anchor-394"></a>    fclose(fp);
+    ProStringToWstring(w_fname, fname);
+    if(action == TRAVERSE)
+    {
+	status = ProInfoWindowDisplay(w_fname, NULL, NULL);
+<a name="anchor-395"></a>	TEST_CALL_REPORT(&quot;ProInfoWindowDisplay()&quot;, &quot;ProTestPartTraverse()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+    }
+    return(0);
+}
+<a name="anchor-396"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestAsmTravAct()
+    PURPOSE  :	General action function for assembly components
+\*====================================================================*/
+<a name="anchor-397"></a>ProError ProTestAsmTravAct(
+    ProAsmcomppath *comp_path,
+    ProTestGeomData *app_data)
+{
+    ProError status;
+<a name="anchor-398"></a>    ProMdl model;
+    int i;
+    ProUtilCname name, type;
+    FILE *fp = app_data->fp;
+
+<a name="anchor-399"></a>
+    status = ProAsmcomppathMdlGet(comp_path, &amp;model);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathMdlGet()&quot;, &quot;ProTestAsmTravAct()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+
+<a name="anchor-400"></a>    ProUtilModelnameGet(&amp;model, name, type);
+
+    for(i=0;i&lt;comp_path->table_num;i++)
+	ProTKFprintf(fp,&quot;    &quot;);
+    ProTKFprintf(fp,&quot;%-12d%s.%s\n&quot;, comp_path->comp_id_table[comp_path->table_num-1],
+<a name="anchor-401"></a>					name, type);
+
+    return(PRO_TK_NO_ERROR);
+}
+
+<a name="anchor-402"></a>/*====================================================================*\
+    FUNCTION :	ProTestAsmCompAct()
+    PURPOSE  :	General action function for assembly components
+\*====================================================================*/
+ProError ProTestAsmCompAct(
+<a name="anchor-403"></a>    ProFeature *component,
+    ProError instatus,
+    ProTestGeomData *app_data)
+{
+    ProError status;
+<a name="anchor-404"></a>    ProMdl model;
+    ProUtilCname name, type;
+    ProAsmcomppath comp_path;
+    ProIdTable comp_id_table;
+    ProMatrix matrix;
+<a name="anchor-405"></a>    int i,j;
+
+    FILE *fp = app_data->fp;
+
+    status = ProAsmcompMdlGet(component, &amp;model);
+<a name="anchor-406"></a>    TEST_CALL_REPORT(&quot;ProAsmcompMdlGet()&quot;, &quot;ProTestAsmCompAct()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+
+    ProUtilModelnameGet(&amp;model, name, type);
+
+<a name="anchor-407"></a>    ProTKFprintf(fp,&quot;%-12d%s.%s\n&quot;, component->id, name, type);
+
+/*--------------------------------------------------------------------*\
+    Get the transformation matrix
+\*--------------------------------------------------------------------*/
+<a name="anchor-408"></a>    comp_id_table[0] = component->id;
+    comp_id_table[1] = -1;
+    status = ProAsmcomppathInit( (ProSolid) *app_data->model, comp_id_table, 1, &amp;comp_path);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathInit()&quot;, &quot;ProTestAsmCompAct()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+<a name="anchor-409"></a>
+/*--------------------------------------------------------------------*\
+    Top down
+\*--------------------------------------------------------------------*/
+    status = ProAsmcomppathTrfGet(&amp;comp_path, PRO_B_FALSE, matrix);
+<a name="anchor-410"></a>    TEST_CALL_REPORT(&quot;ProAsmcomppathTrfGet()&quot;, &quot;ProTestAsmCompAct()&quot;,
+				status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp,&quot;Top down matrix ..\n&quot;);
+    for(i=0;i&lt;4;i++)
+    {
+<a name="anchor-411"></a>	for(j=0;j&lt;4;j++)
+	    ProTKFprintf(fp,&quot;%6.2f &quot;, matrix[i][j]);
+	ProTKFprintf(fp,&quot;\n&quot;);
+    }
+
+<a name="anchor-412"></a>/*--------------------------------------------------------------------*\
+    Bottom up
+\*--------------------------------------------------------------------*/
+    status = ProAsmcomppathTrfGet(&amp;comp_path, PRO_B_TRUE, matrix);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathTrfGet()&quot;, &quot;ProTestAsmCompAct()&quot;,
+<a name="anchor-413"></a>				status, status != PRO_TK_NO_ERROR);
+    ProTKFprintf(fp,&quot;Bottom up matrix ..\n&quot;);
+    for(i=0;i&lt;4;i++)
+    {
+	for(j=0;j&lt;4;j++)
+<a name="anchor-414"></a>	    ProTKFprintf(fp,&quot;%6.2f &quot;, matrix[i][j]);
+	ProTKFprintf(fp,&quot;\n&quot;);
+    }
+
+    return(PRO_TK_NO_ERROR);
+<a name="anchor-415"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProTestAsmTraverse()
+    PURPOSE  :	Traverse all the geometry items on an assembly, and
+<a name="anchor-416"></a>		perform the specified action.
+\*====================================================================*/
+int ProTestAsmTraverse(
+    ProMdl *model,
+    int action)
+<a name="anchor-417"></a>{
+    ProError status;
+    ProUtilCname fname;
+    ProName w_fname;
+    FILE *fp;
+<a name="anchor-418"></a>    ProTestGeomData app_data;
+    ProAxis *axis;
+    int axis_num, i;
+    ProFeature *features;
+    int features_num;
+<a name="anchor-419"></a>
+/*--------------------------------------------------------------------*\
+    Temporary get out for tests not implemented for assmblies yet -
+		MESH and TESSELLATE
+\*--------------------------------------------------------------------*/
+<a name="anchor-420"></a>    if(action != TRAVERSE)
+    {
+	ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST This test not implement for assemblies yet&quot;);
+	return(0);
+    }
+<a name="anchor-421"></a>
+/*--------------------------------------------------------------------*\
+    Get the name of the output file
+\*--------------------------------------------------------------------*/
+    ProTestQcrName(model, (char*)TRAVERSAL, fname);
+<a name="anchor-422"></a>    fp = PTApplsUnicodeFopen(fname,&quot;w&quot;);
+
+/*--------------------------------------------------------------------*\
+    Set up the general data with the action and the file
+\*--------------------------------------------------------------------*/
+<a name="anchor-423"></a>    app_data.action = action;
+    app_data.fp = fp;
+    app_data.model = model;
+
+    if(action == TRAVERSE)
+<a name="anchor-424"></a>    {
+/*--------------------------------------------------------------------*\
+	Traverse the components of the assembly
+\*--------------------------------------------------------------------*/
+	ProTKFprintf(fp,&quot;COMPONENTS..\n&quot;);
+<a name="anchor-425"></a>	ProTKFprintf(fp,&quot;Feat id     Model name\n&quot;);
+	status = ProUtilAsmTraverse((ProAssembly)*model, 
+		    (ProFunction)ProTestAsmTravAct, (ProAppData*)&amp;app_data);
+	if(status == PRO_TK_E_NOT_FOUND)
+	    ProTKFprintf(fp, &quot;--- (No assembly components) ---\n&quot;);
+<a name="anchor-426"></a>
+/*--------------------------------------------------------------------*\
+	Visit all the axes
+\*--------------------------------------------------------------------*/
+	ProTKFprintf(fp, &quot;AXES ..\n&quot;);
+<a name="anchor-427"></a>	ProTKFprintf(fp,&quot;Id      Name\n&quot;);
+					 
+	status = ProUtilCollectSolidAxis ((ProSolid) *model, &amp;axis);
+        if (status == PRO_TK_NO_ERROR)
+        {
+<a name="anchor-428"></a>            status = ProArraySizeGet ((ProArray)axis, &amp;axis_num);
+            TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestAsmTraverse()&quot;, 
+                status, status != PRO_TK_NO_ERROR );
+            for (i = 0; i &lt; axis_num; i++)
+            {
+<a name="anchor-429"></a>                status = ProTestAxisAct (axis[i],
+                    PRO_TK_NO_ERROR, (ProAppData)&amp;app_data);
+            }
+            status = ProArrayFree ((ProArray*)&amp;axis);
+            TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestAsmTraverse()&quot;, 
+<a name="anchor-430"></a>                status, status != PRO_TK_NO_ERROR );
+        }
+
+	if(status == PRO_TK_E_NOT_FOUND)
+	    ProTKFprintf(fp, &quot; -- (No axes found) --\n&quot;);
+<a name="anchor-431"></a>    }
+
+/*--------------------------------------------------------------------*\
+    Visit all the datum curves
+\*--------------------------------------------------------------------*/
+<a name="anchor-432"></a>    ProTKFprintf(fp,&quot;DATUM CURVES..\n&quot;);
+
+    status = ProUtilCollectDtmCurveFeat ((ProSolid) *model, &amp;features);
+    if (status == PRO_TK_NO_ERROR)
+    {
+<a name="anchor-433"></a>        status = ProArraySizeGet ((ProArray)features, &amp;features_num);
+        TEST_CALL_REPORT( &quot;ProArraySizeGet()&quot;, &quot;ProTestAsmTraverse()&quot;, 
+            status, status != PRO_TK_NO_ERROR );
+        for (i = 0; i &lt; features_num; i++)
+        {
+<a name="anchor-434"></a>            status = ProTestCurvefeatVisit (&amp;features[i],
+                PRO_TK_NO_ERROR, (ProAppData)&amp;app_data);
+        }
+        status = ProArrayFree ((ProArray*)&amp;features);
+        TEST_CALL_REPORT( &quot;ProArrayFree()&quot;, &quot;ProTestAsmTraverse()&quot;, 
+<a name="anchor-435"></a>            status, status != PRO_TK_NO_ERROR );
+    }
+
+/*--------------------------------------------------------------------*\
+    Close and display the file
+<a name="anchor-436"></a>\*--------------------------------------------------------------------*/
+    fclose(fp);
+    ProStringToWstring(w_fname, fname);
+    if(action == TRAVERSE)
+    {
+<a name="anchor-437"></a>	status = ProInfoWindowDisplay(w_fname, NULL, NULL);
+        TEST_CALL_REPORT(&quot;ProInfoWindowDisplay()&quot;, &quot;ProTestAsmTraverse()&quot;,
+	    status, status != PRO_TK_NO_ERROR);
+    }
+    
+<a name="anchor-438"></a>    return(0);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestGeomTraverse()
+<a name="anchor-439"></a>    PURPOSE  :	Command Traversal for listing all geometry items in a model
+\*====================================================================*/
+int ProTestGeomTraverse(
+    ProMdl *model,
+    int action)
+<a name="anchor-440"></a>{
+    ProError status;
+	ProMdlExtension modelExtension;
+    ProMdldata mdata;
+    ProUtilCname type;
+<a name="anchor-441"></a>
+/*--------------------------------------------------------------------*\
+    Find out the model type
+\*--------------------------------------------------------------------*/
+    status = ProMdlExtensionGet(*model, modelExtension);
+<a name="anchor-442"></a>    TEST_CALL_REPORT(&quot;ProMdlExtensionGet()&quot;, &quot;ProTestGeomTraverse()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+    ProWstringToString(type, modelExtension);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-443"></a>    Use the appropriate traversal function
+\*--------------------------------------------------------------------*/
+    if(!ProUtilStrcmp(type, (char*)&quot;PRT&quot;))
+
+	ProTestPartTraverse(model, action);
+<a name="anchor-444"></a>
+    else if(!ProUtilStrcmp(type, (char*)&quot;ASM&quot;))
+
+	ProTestAsmTraverse(model, action);
+
+<a name="anchor-445"></a>    return(0);
+}
+
+/*====================================================================*\
+    FUNCTION :	ProTestGeomShape()
+<a name="anchor-446"></a>    PURPOSE  :	Command to dump the geometry of selected geometry items
+\*====================================================================*/
+int ProTestGeomShape(
+    ProMdl *model)
+{
+<a name="anchor-447"></a>    ProError status;
+    FILE *temp_fp, *qcr_fp;
+    ProSelection *sel;
+    ProUtilCname type_str, qcrname;
+    char *temp;
+<a name="anchor-448"></a>    int n_sel, cont=1;
+    ProUtilCname cname;
+    ProName name;
+    ProName w_fname;
+    char sel_opt[] = &quot;edge,axis,csys,curve,point,dtmqlt,comp_crv,surface,datum&quot;;
+<a name="anchor-449"></a>    ProModelitem model_item;
+
+/*--------------------------------------------------------------------*\
+    Open the QCR file
+\*--------------------------------------------------------------------*/
+<a name="anchor-450"></a>    ProTestQcrName(model, (char*)TRAVERSAL, qcrname);
+    qcr_fp = PTApplsUnicodeFopen(qcrname,&quot;w&quot;);
+
+/*--------------------------------------------------------------------*\
+    While the user selects geometry items
+<a name="anchor-451"></a>\*--------------------------------------------------------------------*/
+    ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Select a geometrical item&quot;);
+    while(cont)
+    {
+	status = ProSelect(sel_opt, 1, NULL, NULL, NULL, NULL,
+<a name="anchor-452"></a>                              &amp;sel, &amp;n_sel);
+	TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestGeomShape()&quot;, status,
+			((status != PRO_TK_NO_ERROR &amp;&amp;
+			  status != PRO_TK_USER_ABORT)));
+	if(status == PRO_TK_USER_ABORT || n_sel &lt; 1)
+<a name="anchor-453"></a>	   break;
+
+/*--------------------------------------------------------------------*\
+	Get a string for the item type
+\*--------------------------------------------------------------------*/
+<a name="anchor-454"></a>	status = ProSelectionModelitemGet(sel[0], &amp;model_item);
+	TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestGeomShape()&quot;,
+			status, status != PRO_TK_NO_ERROR);
+	ProUtilObjtypeStr(model_item.type, type_str);
+
+<a name="anchor-455"></a>/*--------------------------------------------------------------------*\
+	Get the name of the item, and report the item
+\*--------------------------------------------------------------------*/
+	status = ProModelitemNameGet(&amp;model_item, name);
+	TEST_CALL_REPORT(&quot;ProModelitemNameGet()&quot;, &quot;ProTestGeomShape()&quot;,
+<a name="anchor-456"></a>		status, (status != PRO_TK_NO_ERROR &amp;&amp;
+			 status != PRO_TK_E_NOT_FOUND));
+	if(status == PRO_TK_NO_ERROR)
+	{
+	    ProUtilMsgPrint(&quot;geom&quot;,
+<a name="anchor-457"></a>			    &quot;TEST Item selected was %0s id %1d, named %2w&quot;,
+			    type_str, &amp;model_item.id, name);
+	    ProWstringToString(cname, name);
+	    ProTKFprintf(qcr_fp, &quot;Item selected was %s, id %d, name %s\n&quot;,
+				type_str, model_item.id, cname);
+<a name="anchor-458"></a>	}
+	else
+	{
+	    ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Item selected was %0s id %1d&quot;,
+					type_str, &amp;model_item.id);
+<a name="anchor-459"></a>	    ProTKFprintf(qcr_fp, &quot;Item selected was %s, id %d\n&quot;,
+				type_str, model_item.id);
+	}
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-460"></a>	Open a temporary file for the information window
+\*--------------------------------------------------------------------*/
+	temp = (char*)&quot;temp&quot;;
+	temp_fp = PTApplsUnicodeFopen(temp,&quot;w&quot;);
+
+<a name="anchor-461"></a>/*--------------------------------------------------------------------*\
+	Dump the geometry to the QCR file
+\*--------------------------------------------------------------------*/
+	ProUtilGeomitemDump(qcr_fp, &amp;sel[0]);
+	ProTKFprintf(qcr_fp,
+<a name="anchor-462"></a>&quot;========================================================================\n&quot;);
+
+/*--------------------------------------------------------------------*\
+	Dump to the temporary info file
+\*--------------------------------------------------------------------*/
+<a name="anchor-463"></a>	ProUtilGeomitemDump(temp_fp, &amp;sel[0]);
+
+/*--------------------------------------------------------------------*\
+	Close and display the info file.
+\*--------------------------------------------------------------------*/
+<a name="anchor-464"></a>	fclose(temp_fp);
+	ProStringToWstring(w_fname, temp);
+	status = ProInfoWindowDisplay(w_fname, NULL, NULL);
+	TEST_CALL_REPORT(&quot;ProInfoWindowDisplay()&quot;, &quot;ProTestGeomShape()&quot;,
+					    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-465"></a>    }
+
+    fclose(qcr_fp);
+    return(0);
+}
+<a name="anchor-466"></a>
+/*====================================================================*\
+    FUNCTION :	ProTestGeomMindist()
+    PURPOSE  :	Command to calculate the minimum distance between a
+		selected csys, datum point, or vertex, and selected
+<a name="anchor-467"></a>		edges, curves, and surfaces.
+		This uses inverse evaluation.
+\*====================================================================*/
+int ProTestGeomMindist(
+    ProMdl *model)
+<a name="anchor-468"></a>{
+    ProError status;
+    ProSelection *sel;
+    ProCsys p_csys; 
+    ProCurve p_curve ;
+<a name="anchor-469"></a>    ProUtilCname type_str, qcrname;
+    FILE *qcr_fp;
+    int n_sel, m, cont=1;
+    ProColor old_color, highlite_color;
+    ProGeomitemdata *geomdata;
+<a name="anchor-470"></a>    ProVector point, closest, point2;
+    double dist;
+    ProMatrix transform;
+    ProPoint p_point;
+    ProEdge p_edge;
+<a name="anchor-471"></a>    char sel_opt[] = &quot;csys,point,edge_end,curve_end&quot;;
+    ProModelitem model_item;
+    ProUvParam uv_param;
+    ProAsmcomppath comp_path;
+    ProAsmcomppath sel_comp_path;
+<a name="anchor-472"></a>
+/*--------------------------------------------------------------------*\
+    Open the QCR file
+\*--------------------------------------------------------------------*/
+    ProTestQcrName(model, (char*)TRAVERSAL, qcrname);
+<a name="anchor-473"></a>    qcr_fp = PTApplsUnicodeFopen(qcrname,&quot;w&quot;);
+
+/*--------------------------------------------------------------------*\
+    Ask the user to select a csys, datum point, or vertex.
+\*--------------------------------------------------------------------*/
+<a name="anchor-474"></a>    ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Select an item to specify the distance point&quot;);
+    status = ProSelect(sel_opt, 1, NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+    TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestGeomMindist()&quot;, status,
+	((status != PRO_TK_NO_ERROR &amp;&amp; status != PRO_TK_USER_ABORT)));
+    if(status == PRO_TK_USER_ABORT || n_sel &lt; 1)
+<a name="anchor-475"></a>       return(0);
+
+    status = ProSelectionModelitemGet(sel[0], &amp;model_item);
+    TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestGeomMindist()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-476"></a>
+/*--------------------------------------------------------------------*\
+    Get the location of the point for each type of item
+\*--------------------------------------------------------------------*/
+    switch(model_item.type)
+<a name="anchor-477"></a>    {
+
+    case PRO_CSYS :
+	status = ProCsysInit( (ProSolid) model_item.owner,model_item.id, &amp;p_csys);
+	TEST_CALL_REPORT(&quot;ProCsysInit()&quot;, &quot;ProTestGeomMindist()&quot;,
+<a name="anchor-478"></a>                status, status != PRO_TK_NO_ERROR );
+	status = ProCsysDataGet(p_csys, &amp;geomdata);
+	TEST_CALL_REPORT(&quot;ProCsysDataGet()&quot;, &quot;ProTestGeomMindist()&quot;,
+		status, status != PRO_TK_NO_ERROR );
+
+<a name="anchor-479"></a>	if(status != PRO_TK_NO_ERROR)
+	{
+	    ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Failed to get geometry&quot;);
+	    return(0);
+	}
+<a name="anchor-480"></a>
+	ProUtilVectorCopy(geomdata->data.p_csys_data->origin, point);
+	break;
+
+    case PRO_POINT :
+<a name="anchor-481"></a>	status = ProPointInit( (ProSolid) model_item.owner,model_item.id,&amp;p_point);
+	TEST_CALL_REPORT(&quot;ProPointInit()&quot;, &quot;ProTestGeomMindist()&quot;,
+		status, status != PRO_TK_NO_ERROR );
+	status = ProPointCoordGet(p_point, point);
+	TEST_CALL_REPORT(&quot;ProPointCoordGet()&quot;, &quot;ProTestGeomMindist()&quot;,
+<a name="anchor-482"></a>		status, status != PRO_TK_NO_ERROR );
+
+	if(status != PRO_TK_NO_ERROR)
+	{
+	    ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Failed to get geometry&quot;);
+<a name="anchor-483"></a>	    return(0);
+	}
+
+	break;
+
+<a name="anchor-484"></a>    case PRO_EDGE_START :
+    case PRO_EDGE_END :
+        status = ProEdgeInit( (ProSolid) model_item.owner, model_item.id, &amp;p_edge);
+	TEST_CALL_REPORT(&quot;ProEdgeInit()&quot;, &quot;ProTestGeomMindist()&quot;,
+		status, status != PRO_TK_NO_ERROR );
+<a name="anchor-485"></a>
+	status = ProSelectionUvParamGet(sel[0], uv_param);
+	TEST_CALL_REPORT(&quot;ProSelectionUvParamGet()&quot;, &quot;ProTestGeomMindist()&quot;,
+		status, status != PRO_TK_NO_ERROR );
+	status = ProEdgeXyzdataEval(p_edge, uv_param[0], 
+<a name="anchor-486"></a>					point, NULL, NULL, NULL);
+	TEST_CALL_REPORT(&quot;ProEdgeXyzdataEval()&quot;, &quot;ProTestGeomMindist()&quot;,
+		status, status != PRO_TK_NO_ERROR );
+
+	if(status != PRO_TK_NO_ERROR)
+<a name="anchor-487"></a>	{
+	    ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Failed to get geometry&quot;);
+	    return(0);
+	}
+	break;
+<a name="anchor-488"></a>
+    case PRO_CRV_START :
+    case PRO_CRV_END :
+	status = ProCurveInit( (ProSolid) model_item.owner,model_item.id,&amp;p_curve) ;
+	status = ProSelectionUvParamGet(sel[0], uv_param);
+<a name="anchor-489"></a>	TEST_CALL_REPORT(&quot;ProSelectionUvParamGet()&quot;, &quot;ProTestGeomMindist()&quot;,
+		status, status != PRO_TK_NO_ERROR );
+	status = ProCurveXyzdataEval(p_curve, uv_param[0], point, NULL, NULL);
+	TEST_CALL_REPORT(&quot;ProCurveXyzdataEval()&quot;, &quot;ProTestGeomMindist()&quot;,
+		status, status != PRO_TK_NO_ERROR );
+<a name="anchor-490"></a>
+	if(status != PRO_TK_NO_ERROR)
+	{
+	    ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Failed to get geometry&quot;);
+	    return(0);
+<a name="anchor-491"></a>	}
+	break;
+
+    default :;
+    }
+<a name="anchor-492"></a>
+/*--------------------------------------------------------------------*\
+    Transform to root coordinates (for assembly mode)
+\*--------------------------------------------------------------------*/
+    status = ProSelectionAsmcomppathGet(sel[0], &amp;comp_path);
+<a name="anchor-493"></a>    TEST_CALL_REPORT(&quot;ProSelectionAsmcomppathGet()&quot;, &quot;ProTestGeomMindist()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+    status = ProAsmcomppathTrfGet(&amp;comp_path, PRO_B_TRUE, transform);
+    TEST_CALL_REPORT(&quot;ProAsmcomppathTrfGet()&quot;, &quot;ProTestGeomMindist()&quot;,
+		    status, status != PRO_TK_NO_ERROR);
+<a name="anchor-494"></a>    ProUtilPointTrans(transform, point, point2);
+
+    ProTKFprintf(qcr_fp, &quot;Closest point to %6.2f, %6.2f, %6.2f to ...\n&quot;,
+				point2[0], point2[1], point2[2]);
+
+<a name="anchor-495"></a>/*--------------------------------------------------------------------*\
+    Select edges, curves, and surfaces for the min dist check
+\*--------------------------------------------------------------------*/
+    ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Select a surface, edge, or curve&quot;);
+
+<a name="anchor-496"></a>    while(cont)
+    {
+	status = ProSelect((char*)&quot;edge,curve,surface&quot;, 1,
+			    NULL, NULL, NULL, NULL, &amp;sel, &amp;n_sel);
+	TEST_CALL_REPORT(&quot;ProSelect()&quot;, &quot;ProTestGeomMindist()&quot;, status,
+<a name="anchor-497"></a>			    ((status != PRO_TK_NO_ERROR &amp;&amp;
+			      status != PRO_TK_USER_ABORT)));
+	if(status == PRO_TK_USER_ABORT || n_sel &lt; 1)
+	   break;
+
+<a name="anchor-498"></a>	status = ProSelectionModelitemGet(sel[0], &amp;model_item);
+	TEST_CALL_REPORT(&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestGeomMindist()&quot;,
+                    status, status != PRO_TK_NO_ERROR);
+
+        status = ProSelectionAsmcomppathGet(sel[0], &amp;sel_comp_path);
+<a name="anchor-499"></a>/*--------------------------------------------------------------------*\
+	Report the selected item
+\*--------------------------------------------------------------------*/
+	ProUtilObjtypeStr(model_item.type, type_str);
+	ProTKFprintf(qcr_fp, &quot;\n    %s id %d\n&quot;, type_str,  model_item.id);
+<a name="anchor-500"></a>	for(m=0;m&lt;sel_comp_path.table_num;m++)
+	    ProTKFprintf(qcr_fp,&quot;        comp_id_table[%d] = %d\n&quot;,
+				    m, sel_comp_path.comp_id_table[m]);
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-501"></a>	Get the minimum distance
+\*--------------------------------------------------------------------*/
+	if(ProUtilPointMindist(point2, &amp;sel[0], &amp;dist, closest) == 0)
+	{
+/*--------------------------------------------------------------------*\
+<a name="anchor-502"></a>	    Draw a line to closest point.
+\*--------------------------------------------------------------------*/
+	    highlite_color.method = PRO_COLOR_METHOD_TYPE;
+		highlite_color.value.type = PRO_COLOR_HIGHLITE;
+
+<a name="anchor-503"></a>		status = ProGraphicsColorModify(&amp;highlite_color, &amp;old_color);
+		TEST_CALL_REPORT(&quot;ProGraphicsColorModify()&quot;, &quot;ProTestGeomMindist()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	    ProGraphicsPenPosition(point);
+	    ProGraphicsLineDraw(closest);
+<a name="anchor-504"></a>	    status = ProGraphicsColorModify(&amp;old_color, NULL);
+            TEST_CALL_REPORT(&quot;ProGraphicsColorModify()&quot;, &quot;ProTestSurfaceAct()&quot;,
+					status, status != PRO_TK_NO_ERROR);
+	    ProUtilMsgPrint(&quot;geom&quot;,&quot;TEST Distance = %0(6.2)f&quot;, &amp;dist);
+	}
+<a name="anchor-505"></a>
+	ProTKFprintf(qcr_fp,&quot;    = (%6.2f, %6.2f, %6.2f) (distance %6.2f)\n&quot;,
+			closest[0], closest[1], closest[2], dist);
+    }
+
+<a name="anchor-506"></a>    fclose(qcr_fp);
+    
+    return(0);
+}
+
+<a name="anchor-507"></a>/*====================================================================*\
+    FUNCTION :	ProTestTesselCurve()
+    PURPOSE  :  Retrieves the curve tessellation
+\*====================================================================*/
+int ProTestTesselCurve(ProMdl *mdl)
+<a name="anchor-508"></a>{
+    ProError err;
+    ProMdl owner;
+    ProModelitem modelitem;
+    ProCurve curve;
+<a name="anchor-509"></a>    ProSelection *p_sel;
+    int n_sel;
+    double tolerance = 0;
+    Pro3dPnt *p_points;
+    int count_pnt, i;
+<a name="anchor-510"></a>    ProUtilCname fname;
+    FILE *qcr_fp;
+    
+    ProTestQcrName(mdl, (char*)&quot;.tsl&quot;, fname);
+    qcr_fp = PTApplsUnicodeFopen(fname,&quot;w&quot;);
+<a name="anchor-511"></a>    
+    ProUtilMsgPrint(&quot;gen&quot;, (char*)&quot;TEST %0s&quot;, &quot;Select curve&quot;);
+    err = ProSelect ((char*)&quot;curve&quot;, 1, NULL, NULL, NULL, NULL, &amp;p_sel,
+        &amp;n_sel);
+    if (err != PRO_TK_NO_ERROR || n_sel != 1)
+<a name="anchor-512"></a>        return (0);
+
+    err = ProSelectionModelitemGet (p_sel[0], &amp;modelitem);
+    TEST_CALL_REPORT (&quot;ProSelectionModelitemGet()&quot;, &quot;ProTestTesselCurve()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-513"></a>        
+    
+    err = ProModelitemMdlGet (&amp;modelitem, &amp;owner);
+    TEST_CALL_REPORT (&quot;ProModelitemMdlGet()&quot;, &quot;ProTestTesselCurve()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-514"></a>        
+
+    err = ProCurveInit ((ProSolid)owner, modelitem.id, &amp;curve);
+    TEST_CALL_REPORT (&quot;ProCurveInit()&quot;, &quot;ProTestTesselCurve()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+<a name="anchor-515"></a>        
+    ProUtilMsgPrint ( &quot;gen&quot;, &quot;TEST %0s&quot;, &quot;Enter tolerance&quot; );
+    err = ProMessageDoubleRead (NULL, &amp;tolerance);
+        
+    err = ProCurveTessellationGet (curve, tolerance, &amp;p_points, &amp;count_pnt);
+<a name="anchor-516"></a>    TEST_CALL_REPORT (&quot;ProCurveTessellationGet()&quot;, &quot;ProTestTesselCurve()&quot;,
+        err, err != PRO_TK_NO_ERROR);
+        
+    ProTKFprintf(qcr_fp, &quot;Tessellation points: \n&quot;);   
+    for(i = 0; i&lt;count_pnt; i++)
+<a name="anchor-517"></a>    {
+        ProGraphicsCircleDraw( p_points[i], 1 );
+        ProTKFprintf(qcr_fp, &quot;point %d : %f, %f, %f \n&quot;, i,
+			p_points[i][0], p_points[i][1], p_points[i][2]);
+    }
+<a name="anchor-518"></a>    ProArrayFree((ProArray*)&amp;p_points);
+    fclose(qcr_fp);    
+    return(0);
+}
+</pre>
+</body>
+</html>

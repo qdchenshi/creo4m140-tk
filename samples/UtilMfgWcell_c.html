@@ -1,0 +1,200 @@
+<html>
+<head>
+<title>UtilMfgWcell.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>#ifndef lint
+static char UtilMfgWcell_h [] = &quot;@(#)UtilMfgWcell.c	1.4 11/26/96&quot;;
+#endif
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-2"></a>System includes
+\*--------------------------------------------------------------------*/
+#include &lt;math.h>
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-3"></a>Pro/Toolkit  includes
+\*--------------------------------------------------------------------*/
+#include &quot;ProToolkit.h&quot;
+#include &quot;ProNcseq.h&quot;
+#include &quot;ProElement.h&quot;
+<a name="anchor-4"></a>#include &quot;ProModelitem.h&quot;
+#include &quot;ProNcseqElem.h&quot;
+#include &quot;ProFeature.h&quot;
+#include &quot;ProSelection.h&quot;
+#include &quot;ProMdl.h&quot;
+<a name="anchor-5"></a>#include &quot;ProParamval.h&quot;
+#include &quot;ProToolElem.h&quot;
+#include &quot;ProWcell.h&quot;
+#include &quot;ProElement.h&quot;
+#include &quot;ProElemId.h&quot;
+<a name="anchor-6"></a>#include &quot;ProElempath.h&quot;
+#include &quot;ProFeature.h&quot;
+#include &quot;ProFeatType.h&quot;
+#include &quot;ProSolid.h&quot;
+#include &quot;ProCsys.h&quot;
+<a name="anchor-7"></a>#include &lt;ProTKRunTime.h>
+
+/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+<a name="anchor-8"></a>#include &quot;TestConsts.h&quot;
+#include &quot;UtilString.h&quot;
+#include &quot;UtilGeom.h&quot;
+#include &quot;TestError.h&quot;
+#include &quot;UtilTree.h&quot;
+<a name="anchor-9"></a>#include &quot;MfgMenu.h&quot;
+#include &quot;TestMfgNew.h&quot;
+
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-10"></a>Application macros
+\*--------------------------------------------------------------------*/
+#define PARAM_FIELD_WIDTH 21
+
+/*--------------------------------------------------------------------*\
+<a name="anchor-11"></a>Application data types
+\*--------------------------------------------------------------------*/
+
+
+/*====================================================================*\
+<a name="anchor-12"></a>Function: ProTempCreateWkcell
+Purpose : Create Workcell
+\*====================================================================*/
+ProError ProTempCreateWkcell(
+    Workcell wcell,
+<a name="anchor-13"></a>    ProFeature *p_wc_feature)
+{
+    ProElement     wc_elem_tree = (ProElement)NULL; /* Workcell element tree. */
+    ProElement     wc_elem      = (ProElement)NULL; /* Individual element. */
+    ProValue       value        = (ProValue)NULL;
+<a name="anchor-14"></a>    ProValueData   value_data;
+    ProSelection   selection;
+    ProErrorlist   errors;
+    ProError       status = PRO_TK_NO_ERROR;
+    char           name[PRO_LINE_SIZE];
+<a name="anchor-15"></a>    int            i = 0;
+    ProFeatureCreateOptions *opts = 0;
+
+        /* Set up the top level element values and sizes. */
+    static ElemTable  workcell_elem_table[] =  {
+<a name="anchor-16"></a>            { PRO_E_FEATURE_TYPE,   PRO_VALUE_TYPE_INT },
+            { PRO_E_WCELL_TYPE,     PRO_VALUE_TYPE_INT },
+            { PRO_E_NUM_AXES,       PRO_VALUE_TYPE_INT },
+            { PRO_E_FEAT_NAME,      PRO_VALUE_TYPE_WSTRING}};
+    int wc_elem_type_size = sizeof(workcell_elem_table)/ sizeof(ElemTable);
+<a name="anchor-17"></a>
+
+/*--------------------------------------------------------------------*\
+    Allocate space for workcell element tree
+\*--------------------------------------------------------------------*/
+<a name="anchor-18"></a>    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProElementAlloc ( PRO_E_FEATURE_TREE, &amp;wc_elem_tree );
+        TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;, &quot;ProTestCreateWkcell()&quot;,
+                          status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-19"></a>    }
+
+ProTKFprintf(stderr, (char*)&quot;wcell.type:   %d\n&quot;, wcell.type);
+ProTKFprintf(stderr, (char*)&quot;wcell.n_axis: %d\n&quot;, wcell.n_axis);
+ProTKFprintf(stderr, (char*)&quot;wcell.wname:  %s\n&quot;, pro_wstr_to_str(name, wcell.wname));
+<a name="anchor-20"></a>
+/*--------------------------------------------------------------------*\
+    Set all of the top level elements
+\*--------------------------------------------------------------------*/
+    for (i =0; i &lt; wc_elem_type_size; i++)
+<a name="anchor-21"></a>    {
+    	if (status == PRO_TK_NO_ERROR)
+    	{
+    	    status = ProElementAlloc(workcell_elem_table[i].elem_type,&amp;wc_elem);
+    	    TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;, &quot;ProTestCreateWkcell()&quot;,
+<a name="anchor-22"></a>    				    status, (status != PRO_TK_NO_ERROR));
+    	}
+
+        switch (workcell_elem_table[i].elem_type)
+    	{
+<a name="anchor-23"></a>            case PRO_E_FEATURE_TYPE:
+                value_data.v.i = PRO_FEAT_WORKCELL;
+				status = ProElementIntegerSet(wc_elem, PRO_FEAT_WORKCELL);
+                TEST_CALL_REPORT(&quot;ProElementIntegerSet()&quot;, &quot;ProTestCreateWkcell()&quot;,
+    				    status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-24"></a>            break;
+            case PRO_E_WCELL_TYPE:
+                value_data.v.i = wcell.type;
+				status = ProElementIntegerSet(wc_elem, wcell.type);
+                TEST_CALL_REPORT(&quot;ProElementIntegerSet()&quot;, &quot;ProTestCreateWkcell()&quot;,
+<a name="anchor-25"></a>    				    status, (status != PRO_TK_NO_ERROR));
+    		break;
+    	    case PRO_E_NUM_AXES:
+    	        value_data.v.i = wcell.n_axis;
+				status = ProElementIntegerSet(wc_elem, wcell.n_axis);
+<a name="anchor-26"></a>                TEST_CALL_REPORT(&quot;ProElementIntegerSet()&quot;, &quot;ProTestCreateWkcell()&quot;,
+    				    status, (status != PRO_TK_NO_ERROR));
+    		break;
+    	    case PRO_E_FEAT_NAME:
+			    status=ProElementWstringSet(wc_elem, wcell.wname);
+<a name="anchor-27"></a>				TEST_CALL_REPORT(&quot;ProElementWstringSet()&quot;, &quot;ProTestCreateWkcell()&quot;,
+    				    status, (status != PRO_TK_NO_ERROR));
+    		break;
+
+    	    default:
+<a name="anchor-28"></a>                ProTKFprintf(stderr, (char*)&quot;Error setting element type\n&quot;);
+                return (PRO_TK_GENERAL_ERROR);
+    	}
+
+
+<a name="anchor-29"></a>    	if ( status == PRO_TK_NO_ERROR )
+    	{
+    	    status = ProElemtreeElementAdd (wc_elem_tree, NULL, wc_elem );
+    	    TEST_CALL_REPORT(&quot;ProElemtreeElementAdd()&quot;,&quot;ProTestCreateWkcell()&quot;,
+    				status, (status != PRO_TK_NO_ERROR));
+<a name="anchor-30"></a>    	}
+    }
+
+    status = ProUtilElementtreePrint(wc_elem_tree, PRO_TEST_INFO_WINDOW, NULL);
+/*
+<a name="anchor-31"></a>    status = ProElementAlloc( PRO_E_TOOLING, &amp;wc_elem );
+    TEST_CALL_REPORT(&quot;ProElementAlloc()&quot;,
+	&quot;ProTestCreateWkcell()&quot;, status,
+	(status != PRO_TK_NO_ERROR));
+
+<a name="anchor-32"></a>    status = ProTestCreateTools( tool_id_default, p_param_file, bitmask,
+                                                     tool_type, wc_elem ); 
+    status = ProFeatinputElemAdd((ProFeatinputPtr) wc_input, wc_elem);
+    TEST_CALL_REPORT(&quot;ProFeatinputElemAdd()&quot;,
+        &quot;ProTestCreateWkcell()&quot;, status,
+<a name="anchor-33"></a>        (status != PRO_TK_NO_ERROR));
+*/
+
+    status = ProTestCreateSelection(PRO_TK_NOT_USED,
+                                    PRO_TYPE_UNUSED, &amp;selection);
+<a name="anchor-34"></a>    
+    if (status == PRO_TK_NO_ERROR)
+    {
+        status = ProArrayAlloc(1,sizeof(ProFeatureCreateOptions),
+                1, (ProArray*)&amp;opts);
+<a name="anchor-35"></a>
+        opts[0]= PRO_FEAT_CR_NO_OPTS;
+
+        status = ProFeatureWithoptionsCreate( selection, wc_elem_tree,
+                opts, PRO_REGEN_NO_FLAGS, p_wc_feature, &amp;errors);
+<a name="anchor-36"></a>        TEST_CALL_REPORT(&quot;ProFeatureWithoptionsCreate()&quot;, &quot;ProTestCreateWkcell()&quot;,
+                          status, (status != PRO_TK_NO_ERROR));
+
+        status = ProArrayFree((ProArray*)&amp;opts);
+    }
+<a name="anchor-37"></a>    
+    status = ProElementFree(&amp;wc_elem_tree);
+    TEST_CALL_REPORT(&quot;ProElementFree()&quot;, &quot;ProTestCreateWkcell()&quot;,
+                      status, (status != PRO_TK_NO_ERROR));
+
+<a name="anchor-38"></a>    return(status);
+}
+</pre>
+</body>
+</html>

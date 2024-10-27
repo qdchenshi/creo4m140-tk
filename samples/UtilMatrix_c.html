@@ -1,0 +1,255 @@
+<html>
+<head>
+<title>UtilMatrix.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*--------------------------------------------------------------------*\
+Pro/DEVELOP includes
+\*--------------------------------------------------------------------*/
+#include &lt;ProToolkit.h>
+<a name="anchor-2"></a>#include &lt;ProAssembly.h>
+#include &lt;ProGeomitemdata.h>
+#include &lt;ProMdl.h>
+#include &lt;ProSolid.h>
+#include &lt;ProSelection.h>
+<a name="anchor-3"></a>/*--------------------------------------------------------------------*\
+C System includes
+\*--------------------------------------------------------------------*/
+#include &lt;math.h>
+
+<a name="anchor-4"></a>/*--------------------------------------------------------------------*\
+Application includes
+\*--------------------------------------------------------------------*/
+#include &quot;UtilMath.h&quot;
+#include &quot;UtilMatrix.h&quot;
+<a name="anchor-5"></a>#include &quot;TestError.h&quot;
+
+/*--------------------------------------------------------------------*\
+Application global/external data
+\*--------------------------------------------------------------------*/
+<a name="anchor-6"></a>
+static double identity_matrix[4][4] = { {1.0, 0.0, 0.0, 0.0},
+					{0.0, 1.0, 0.0, 0.0},
+					{0.0, 0.0, 1.0, 0.0},
+					{0.0, 0.0, 0.0, 1.0} };
+<a name="anchor-7"></a>
+/*====================================================================*\
+    FUNCTION :	ProUtilMatrixCopy()
+    PURPOSE  :	Copy one matrix to another, or initialize a matrix to
+		be the unitary matrix
+<a name="anchor-8"></a>\*====================================================================*/
+void ProUtilMatrixCopy(
+    double input[4][4],
+    double output[4][4])
+{
+<a name="anchor-9"></a>    int i,j;
+
+    if(input == NULL)
+    {
+	for(i=0;i&lt;4;i++)
+<a name="anchor-10"></a>	    for(j=0;j&lt;4;j++)
+		output[i][j] = identity_matrix[i][j];
+    }
+    else
+    {
+<a name="anchor-11"></a>	for(i=0;i&lt;4;i++)
+	    for(j=0;j&lt;4;j++)
+		output[i][j] = input[i][j];
+    }
+}
+<a name="anchor-12"></a>
+/*====================================================================*\
+    FUNCTION :	ProUtilPointTrans()
+    PURPOSE  :	Transform a 3d point by a matrix
+\*====================================================================*/
+<a name="anchor-13"></a>void ProUtilPointTrans(
+    double m[4][4],
+    double p[3],
+    double output[3])
+{
+<a name="anchor-14"></a>    double buff[4];
+    ProError status;
+
+    if(m == NULL)
+    {
+<a name="anchor-15"></a>	ProUtilVectorCopy(p, output);
+	return;
+    }
+
+    status = ProPntTrfEval(p, m, buff);
+<a name="anchor-16"></a>    TEST_CALL_REPORT(&quot;ProPntTrfEval()&quot;, &quot;ProUtilPointTrans()&quot;, 
+			status, status!=PRO_TK_NO_ERROR);
+    ProUtilVectorCopy(buff, output);
+
+}
+<a name="anchor-17"></a>
+/*====================================================================*\
+    FUNCTION :	ProUtilVectorTrans()
+    PURPOSE  :	Transform a 3d vector by a matrix
+\*====================================================================*/
+<a name="anchor-18"></a>void ProUtilVectorTrans(
+    double m[4][4],
+    double v[3],
+    double output[3])
+{
+<a name="anchor-19"></a>    ProError status;
+    
+    if(m == NULL)
+    {
+	ProUtilVectorCopy(v, output);
+<a name="anchor-20"></a>	return;
+    }
+
+    status = ProVectorTrfEval(v, m, output);
+    TEST_CALL_REPORT(&quot;ProVectorTrfEval()&quot;, &quot;ProUtilPointTrans()&quot;, 
+<a name="anchor-21"></a>			status, status!=PRO_TK_NO_ERROR);
+
+}
+
+/*====================================================================*\
+<a name="anchor-22"></a>    FUNCTION :	ProUtilMatrixProduct()
+    PURPOSE  :	Multiply two transformation matrices
+\*====================================================================*/
+void ProUtilMatrixProduct(
+    double m1[4][4],
+<a name="anchor-23"></a>    double m2[4][4],
+    double output[4][4])
+{
+    int i,j,k;
+
+<a name="anchor-24"></a>/*--------------------------------------------------------------------*\
+    If the first matrix is zero, just copy the second
+    (So, if the second is zero, copy the identity matrix.)
+\*--------------------------------------------------------------------*/
+    if(m1 == NULL)
+<a name="anchor-25"></a>    {
+	ProUtilMatrixCopy(m2, output);
+	return;
+    }
+/*--------------------------------------------------------------------*\
+<a name="anchor-26"></a>    If the second matrix is zero, just copy the first
+\*--------------------------------------------------------------------*/
+    if(m2 == NULL)
+    {
+	ProUtilMatrixCopy(m1, output);
+<a name="anchor-27"></a>	return;
+    }
+
+/*--------------------------------------------------------------------*\
+    Do the multiplication
+<a name="anchor-28"></a>\*--------------------------------------------------------------------*/
+    for(i=0;i&lt;4;i++)
+    {
+	for(j=0;j&lt;4;j++)
+	{
+<a name="anchor-29"></a>	    output[i][j] = 0.0;
+	    for(k=0;k&lt;4;k++)
+		output[i][j] += m1[i][k] * m2[k][j];
+	}
+    }
+<a name="anchor-30"></a>}
+
+/*====================================================================*\
+    FUNCTION :	ProUtilMatrixInvert()
+    PURPOSE  :	Find the inverse of a transformation matrix
+<a name="anchor-31"></a>\*====================================================================*/
+int ProUtilMatrixInvert(
+    double m[4][4],
+    double output[4][4])
+{
+<a name="anchor-32"></a>    double vec[3], scale_sq, inv_sq_scale;
+    int i,j;
+
+/*--------------------------------------------------------------------*\
+    If the matrix is null, return the identity matrix
+<a name="anchor-33"></a>\*--------------------------------------------------------------------*/
+    if(m == NULL)
+    {
+	ProUtilMatrixCopy(NULL, output);
+	return(1);
+<a name="anchor-34"></a>    }
+
+/*--------------------------------------------------------------------*\
+    Obtain the matrix scale
+\*--------------------------------------------------------------------*/
+<a name="anchor-35"></a>    vec[0] = m[0][0];
+    vec[1] = m[0][1];
+    vec[2] = m[0][2];
+    scale_sq = vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2];
+
+<a name="anchor-36"></a>/*--------------------------------------------------------------------*\
+    Check whether there is an inverse, and if not, return 0
+\*--------------------------------------------------------------------*/
+    if(scale_sq &lt; (.000000001 * .000000001))
+	return(0);
+<a name="anchor-37"></a>
+/*--------------------------------------------------------------------*\
+    Need the inverse scale squared 
+\*--------------------------------------------------------------------*/
+    inv_sq_scale = 1.0 / scale_sq;
+<a name="anchor-38"></a>
+/*--------------------------------------------------------------------*\
+    The orientation vectors
+\*--------------------------------------------------------------------*/
+    for(j=0;j&lt;3;j++)
+<a name="anchor-39"></a>    {
+	for(i=0;i&lt;3;i++)
+	    output[j][i] = m[i][j] * inv_sq_scale;
+	output[j][3] = 0.0;
+    }
+<a name="anchor-40"></a>
+/*--------------------------------------------------------------------*\
+    The shift vectors
+\*--------------------------------------------------------------------*/
+    for(i=0;i&lt;3;i++)
+<a name="anchor-41"></a>    {
+	output[3][i] = 0.0;
+	for(j=0;j&lt;3;j++)
+	    output[3][i] -= m[i][j] * m[3][j] * inv_sq_scale;
+    }
+<a name="anchor-42"></a>    output[3][3] = 1.0;
+
+    return(1);
+}
+
+<a name="anchor-43"></a>/*=============================================================*\
+  FUNCTION: ProUtilInvertCsysMatrix()
+  PURPOSE:  Develop the inverted selection csys transform
+\*=============================================================*/
+ProError ProUtilInvertCsysMatrix( 
+<a name="anchor-44"></a>	ProSelection sel, ProGeomitemdata *p_data, ProMatrix tmatrix )
+{
+    ProError            err;
+    ProMatrix           matrix, csysmat;
+    ProAsmcomppath path;
+<a name="anchor-45"></a>
+	/*  Get the &quot;Asmcomppath transform&quot;  */
+	err = ProSelectionAsmcomppathGet(sel, &amp;path);
+	err = ProAsmcomppathTrfGet(&amp;path, PRO_B_TRUE, matrix);
+
+<a name="anchor-46"></a>	/*  Create the csys transform  */
+	ProUtilMatrixCopy( NULL, csysmat );
+        ProUtilVectorCopy(p_data->data.p_csys_data->x_vector, csysmat[0]);
+        ProUtilVectorCopy(p_data->data.p_csys_data->y_vector, csysmat[1]);
+        ProUtilVectorCopy(p_data->data.p_csys_data->z_vector, csysmat[2]);
+<a name="anchor-47"></a>        ProUtilVectorCopy(p_data->data.p_csys_data->origin,   csysmat[3]);
+
+	/*  Transform the csys 'vectors' by the &quot;Asmcomppath&quot; transform */
+	ProUtilMatrixProduct( csysmat, matrix, tmatrix );
+        ProUtilMatrixCopy  ( tmatrix, matrix );
+<a name="anchor-48"></a>
+	/*  Invert the &quot;selection csys&quot; transform  */
+        ProUtilMatrixInvert( matrix, tmatrix );
+
+    return (PRO_TK_NO_ERROR);
+<a name="anchor-49"></a>}
+
+</pre>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<html>
+<head>
+<title>UgSheetDelete.c</title>
+</head>
+<body bgcolor="#ffffff">
+<pre><a name="anchor-0"></a>
+/*
+	Copyright (c) 2019 PTC Inc. and/or Its Subsidiary Companies. All Rights Reserved.
+*/
+
+<a name="anchor-1"></a>
+/*-------------------------- Pro/Toolkit includes ---------------------------*/
+#include &lt;ProToolkit.h>
+#include &lt;ProMdl.h>
+#include &lt;ProCsys.h>
+<a name="anchor-2"></a>#include &lt;ProDrawing.h>
+
+/*-------------------------- Application includes ---------------------------*/
+#include &lt;TestError.h>
+
+<a name="anchor-3"></a>
+
+/*================================================================*\
+FUNCTION  : UserSheetDelete
+PURPOSE   : Deletes a drawing sheet from the current drawing-type
+<a name="anchor-4"></a>            object.
+\*================================================================*/
+int UserSheetDelete ()
+{
+    int		   status;
+<a name="anchor-5"></a>    int 	   i_range[2], num_sheets, sheet_num;
+    ProDrawing     p_draw;
+    ProCharLine    astr;
+    int 	   win_id;
+    ProFileName WMSGFIL = {'m','s','g','_','u','g','d','w','g','.','t','x','t','\0'};
+<a name="anchor-6"></a>
+    /*------------------------------------------------------------*\
+      Get the current model
+    \*------------------------------------------------------------*/
+    status = ProMdlCurrentGet((ProMdl*)&amp;p_draw);
+<a name="anchor-7"></a>    ERROR_CHECK(&quot;UserSheetDelete&quot;,&quot;ProMdlCurrentGet&quot;,status);
+    if (status != PRO_TK_NO_ERROR) return(status);
+
+    /*----------------------------------------------------------------*\
+      Get the total number of sheets of the current drawing-type object
+<a name="anchor-8"></a>    \*----------------------------------------------------------------*/
+    status = ProDrawingSheetsCount(p_draw, &amp;num_sheets);
+    ERROR_CHECK(&quot;UserSheetDelete&quot;,&quot;ProDrawingSheetsCount&quot;,status);
+    if (num_sheets &lt;= 0) return(PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-9"></a>    /*----------------------------------------------------------------*\
+      Prompt for a sheet number or use the current one
+    \*----------------------------------------------------------------*/
+    i_range[0] = 1;
+    i_range[1] = num_sheets;
+<a name="anchor-10"></a>    ProTKSprintf (astr, &quot;Enter sheet number [1-%d] [CUR] : &quot;, num_sheets);
+    status = ProMessageDisplay(WMSGFIL, &quot;USER %0s&quot;, astr);
+    ERROR_CHECK(&quot;UserSheetDelete&quot;,&quot;ProMessageDisplay&quot;,status);
+
+    status = ProMessageIntegerRead(i_range, &amp;sheet_num);
+<a name="anchor-11"></a>    ERROR_CHECK(&quot;UserSheetDelete&quot;,&quot;ProMessageIntRead&quot;,status);
+    if (status != PRO_TK_NO_ERROR)
+      {
+    status = ProDrawingCurrentSheetGet(p_draw, &amp;sheet_num);
+   	ERROR_CHECK(&quot;UserSheetDelete&quot;,&quot;ProDrawingCurrentSheetGet&quot;,status);
+<a name="anchor-12"></a>	if (sheet_num &lt; 1) return (PRO_TK_GENERAL_ERROR);
+      } 
+
+    /*----------------------------------------------------------------*\
+      Delete the specified sheet from the current drawing-type object.
+<a name="anchor-13"></a>    \*----------------------------------------------------------------*/
+    status = ProDrawingSheetDelete(p_draw, sheet_num);
+    ERROR_CHECK(&quot;UserSheetDelete&quot;,&quot;ProDrawingSheetDelete&quot;,status);
+    if (status !=PRO_TK_NO_ERROR) return (PRO_TK_GENERAL_ERROR);
+
+<a name="anchor-14"></a> 
+    ProTKSprintf(astr, &quot;Sheet No. %0d deleted from drawing.&quot;,  sheet_num);
+    status = ProMessageDisplay(WMSGFIL, &quot;USER %0s&quot;, astr);
+    ERROR_CHECK(&quot;UserSheetDelete&quot;,&quot;ProMessageDisplay&quot;,status);
+    
+<a name="anchor-15"></a>    /*------------------------------------------------------------*\
+      Update the changes by repainting the window
+    \*------------------------------------------------------------*/
+    status = ProWindowCurrentGet(&amp;win_id);
+    ERROR_CHECK(&quot;UserSheetDelete&quot;,&quot;ProWindowCurrentGet&quot;,status);
+<a name="anchor-16"></a>
+    status = ProWindowRepaint (win_id);
+    ERROR_CHECK(&quot;UserSheetDelete&quot;,&quot;ProWindowRepaint&quot;,status);
+
+    return (sheet_num);
+<a name="anchor-17"></a>}
+
+</pre>
+</body>
+</html>
